@@ -1,6 +1,6 @@
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
-use std::{fs, str::FromStr};
+use std::{fs, path::PathBuf, str::FromStr};
 use surrealdb::{engine::local::{Db, SurrealKv}, Surreal};
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::OnceCell;
@@ -23,6 +23,13 @@ struct ConfigRecord {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+struct DatabaseRecord {
+    #[serde(rename(deserialize = "resource_key", serialize = "id"))]
+    id: String,
+    value: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
 struct ProxyHeader {
     name: String,
     value: String,
@@ -41,6 +48,21 @@ struct ProxyFetchResponse {
     status: u16,
     headers: Vec<ProxyHeader>,
     body: Vec<u8>,
+}
+
+fn normalize_table_name(table: &str) -> Result<String, String> {
+    if table
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || character == '_')
+    {
+        Ok(table.to_string())
+    } else {
+        Err(format!("Invalid table name: {table}"))
+    }
+}
+
+fn strip_file_url(value: &str) -> &str {
+    value.strip_prefix("file://").unwrap_or(value)
 }
 
 async fn app_db<'a>(app: &AppHandle, state: &'a AppState) -> Result<&'a Surreal<Db>, String> {
@@ -185,6 +207,107 @@ async fn config_delete(app: AppHandle, state: State<'_, AppState>, key: String) 
 }
 
 #[tauri::command]
+async fn database_select_all(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    table: String,
+) -> Result<Vec<DatabaseRecord>, String> {
+    let db = app_db(&app, &state).await?;
+    let table = normalize_table_name(&table)?;
+    let sql = format!("SELECT resource_key, value FROM {table} ORDER BY resource_key");
+    let mut result = db.query(sql).await.map_err(|error| error.to_string())?;
+    result.take(0).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn database_select_one(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    table: String,
+    id: String,
+) -> Result<Option<serde_json::Value>, String> {
+    let db = app_db(&app, &state).await?;
+    let table = normalize_table_name(&table)?;
+    let sql = format!("SELECT resource_key, value FROM {table} WHERE resource_key = $id LIMIT 1");
+    let mut result = db
+        .query(sql)
+        .bind(("id", id))
+        .await
+        .map_err(|error| error.to_string())?;
+    let rows: Vec<DatabaseRecord> = result.take(0).map_err(|error| error.to_string())?;
+    Ok(rows.into_iter().next().map(|record| record.value))
+}
+
+#[tauri::command]
+async fn database_upsert(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    table: String,
+    id: String,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    let db = app_db(&app, &state).await?;
+    let table = normalize_table_name(&table)?;
+    let sql = format!("DELETE {table} WHERE resource_key = $id; CREATE {table} CONTENT {{ resource_key: $id, value: $value }};");
+    db.query(sql)
+        .bind(("id", id))
+        .bind(("value", value))
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn database_delete(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    table: String,
+    id: String,
+) -> Result<(), String> {
+    let db = app_db(&app, &state).await?;
+    let table = normalize_table_name(&table)?;
+    let sql = format!("DELETE {table} WHERE resource_key = $id");
+    db.query(sql)
+        .bind(("id", id))
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn resource_save_image(
+    app: AppHandle,
+    bytes: Vec<u8>,
+    extension: Option<String>,
+) -> Result<String, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    let image_dir = data_dir.join("resources").join("images");
+    fs::create_dir_all(&image_dir).map_err(|error| error.to_string())?;
+
+    let extension = extension
+        .unwrap_or_else(|| "png".to_string())
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .collect::<String>();
+    let extension = if extension.is_empty() { "png".to_string() } else { extension };
+    let file_name = format!("{}.{}", uuid::Uuid::new_v4(), extension);
+    let file_path: PathBuf = image_dir.join(file_name);
+    fs::write(&file_path, bytes).map_err(|error| error.to_string())?;
+
+    Ok(format!("file://{}", file_path.to_string_lossy().replace('\\', "/")))
+}
+
+#[tauri::command]
+async fn resource_delete_file(file_url: String) -> Result<(), String> {
+    let path = strip_file_url(&file_url);
+    fs::remove_file(path).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn model_proxy_fetch(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -254,6 +377,12 @@ pub fn run() {
             config_get,
             config_set,
             config_delete,
+            database_select_all,
+            database_select_one,
+            database_upsert,
+            database_delete,
+            resource_save_image,
+            resource_delete_file,
             model_proxy_fetch,
         ])
         .run(tauri::generate_context!())

@@ -4,20 +4,18 @@ export interface WorkspaceTab {
   id: string;
   title: string;
   closable?: boolean;
+  packageId?: string;
+  conversationId?: string;
 }
 
-const defaultTabs: WorkspaceTab[] = [
-  { id: "conversation", title: "Conversation", closable: false },
-  { id: "providers", title: "Providers" },
-  { id: "resources", title: "Resources" },
-];
+const defaultTabs: WorkspaceTab[] = [];
 
 export const useLayoutStore = defineStore("layout", {
   state: () => ({
     leftSidebarOpen: true,
     rightSidebarOpen: true,
     settingsOpen: false,
-    activeTabId: "conversation",
+    activeTabId: "",
     tabs: [...defaultTabs] as WorkspaceTab[],
   }),
   getters: {
@@ -47,16 +45,26 @@ export const useLayoutStore = defineStore("layout", {
     openTab(tab: WorkspaceTab) {
       const existing = this.tabs.find((item) => item.id === tab.id);
 
-      if (!existing) {
+      if (existing) {
+        Object.assign(existing, tab);
+      } else {
         this.tabs.push({ closable: true, ...tab });
       }
 
       this.activeTabId = tab.id;
     },
+    openConversationTab(input: { packageId: string; conversationId: string; title: string }) {
+      this.openTab({
+        id: `conversation:${input.conversationId}`,
+        title: input.title,
+        packageId: input.packageId,
+        conversationId: input.conversationId,
+      });
+    },
     closeTab(tabId: string) {
       const index = this.tabs.findIndex((tab) => tab.id === tabId);
 
-      if (index === -1 || this.tabs[index]?.closable === false) {
+      if (index === -1) {
         return;
       }
 
@@ -64,6 +72,20 @@ export const useLayoutStore = defineStore("layout", {
 
       if (this.activeTabId === tabId) {
         this.activeTabId = this.tabs[Math.max(0, index - 1)]?.id ?? "";
+      }
+    },
+    closeTabsByConversation(conversationId: string) {
+      for (const tab of [...this.tabs]) {
+        if (tab.conversationId === conversationId) {
+          this.closeTab(tab.id);
+        }
+      }
+    },
+    closeTabsByPackage(packageId: string) {
+      for (const tab of [...this.tabs]) {
+        if (tab.packageId === packageId) {
+          this.closeTab(tab.id);
+        }
       }
     },
   },

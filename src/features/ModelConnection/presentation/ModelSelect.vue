@@ -9,14 +9,17 @@ import {
 } from "@/components/ui/popover";
 import { useModelConnectionStore } from "../application/model-connection-store";
 import ModelPicker from "./ModelPicker.vue";
+import ProviderAvatar from "./ProviderAvatar.vue";
 
 const props = withDefaults(
   defineProps<{
     modelValue: string;
     buttonClass?: string;
+    iconOnly?: boolean;
   }>(),
   {
     buttonClass: "",
+    iconOnly: false,
   },
 );
 
@@ -35,6 +38,7 @@ const label = computed(() => {
 
   return provider && model ? `${provider.name} · ${model.name}` : props.modelValue;
 });
+const selectedProvider = computed(() => store.providers.find((item) => item.id === props.modelValue.split("/")[0]));
 
 function updateModel(value: string) {
   emit("update:modelValue", value);
@@ -45,9 +49,10 @@ function updateModel(value: string) {
 <template>
   <Popover v-model:open="open">
     <PopoverTrigger as-child>
-      <Button :class="buttonClass" variant="outline">
-        <span class="min-w-0 truncate">{{ label }}</span>
-        <ChevronDown class="size-4 shrink-0 opacity-70" />
+      <Button :class="buttonClass" :variant="iconOnly ? 'ghost' : 'outline'" :title="label">
+        <ProviderAvatar v-if="iconOnly" :name="selectedProvider?.name || label" :src="selectedProvider?.iconUrl" />
+        <span v-else class="min-w-0 truncate">{{ label }}</span>
+        <ChevronDown v-if="!iconOnly" class="size-4 shrink-0 opacity-70" />
       </Button>
     </PopoverTrigger>
     <PopoverContent align="start" side="bottom" class="w-[min(400px,calc(100vw-32px))] p-0">

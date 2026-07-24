@@ -25,3 +25,4 @@ serde_json = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 surrealdb = { version = "2", default-features = false, features = ["kv-surrealkv"] }
 tokio = { version = "1", features = ["sync"] }
+uuid = { version = "1", features = ["v4"] }

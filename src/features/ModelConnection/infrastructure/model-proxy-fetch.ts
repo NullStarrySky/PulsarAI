@@ -52,6 +52,6 @@ export const modelProxyFetch: typeof fetch = async (input, init) => {
 
   return new Response(new Uint8Array(response.body), {
     status: response.status,
-    headers: response.headers.map((header) => [header.name, header.value]),
+    headers: response.headers.map((header): [string, string] => [header.name, header.value]),
   });
 };

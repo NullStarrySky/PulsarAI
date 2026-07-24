@@ -13,15 +13,39 @@ import {
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 import { useLayoutStore } from "../application/layout-store";
 
 const layout = useLayoutStore();
+const conversation = useConversationStore();
 const { activeTabId, leftSidebarOpen, rightSidebarOpen, tabs } = storeToRefs(layout);
-const compactTabs = computed(() => tabs.value.length > 4);
+const compactTabs = computed(() => tabs.value.length > 8);
 const appWindow = getCurrentWindow();
+
+async function minimizeWindow() {
+  await appWindow.minimize();
+}
 
 async function toggleMaximize() {
   await appWindow.toggleMaximize();
+}
+
+async function closeWindow() {
+  await appWindow.close();
+}
+
+function activateTab(tab: typeof tabs.value[number]) {
+  layout.activateTab(tab.id);
+  if (tab.conversationId) {
+    conversation.openConversation(tab.conversationId);
+  }
+}
+
+function closeWithMiddleButton(event: MouseEvent, tabId: string) {
+  if (event.button === 1) {
+    event.preventDefault();
+    layout.closeTab(tabId);
+  }
 }
 </script>
 
@@ -53,7 +77,8 @@ async function toggleMaximize() {
           )
         "
         type="button"
-        @click="layout.activateTab(tab.id)"
+        @click="activateTab(tab)"
+        @auxclick="closeWithMiddleButton($event, tab.id)"
       >
         <span :class="cn('truncate', compactTabs && 'hidden xl:inline')">{{ tab.title }}</span>
         <button
@@ -78,13 +103,13 @@ async function toggleMaximize() {
         <PanelRight v-if="rightSidebarOpen" />
         <ChevronsLeft v-else />
       </Button>
-      <Button variant="ghost" size="icon-sm" title="最小化" @click="appWindow.minimize">
+      <Button variant="ghost" size="icon-sm" title="最小化" @click="minimizeWindow">
         <Minus />
       </Button>
       <Button variant="ghost" size="icon-sm" title="全屏" @click="toggleMaximize">
         <Maximize2 />
       </Button>
-      <Button variant="ghost" size="icon-sm" title="关闭" @click="appWindow.close">
+      <Button variant="ghost" size="icon-sm" title="关闭" @click="closeWindow">
         <X />
       </Button>
     </div>

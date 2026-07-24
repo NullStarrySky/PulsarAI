@@ -25,10 +25,10 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 
 ## Core Types
 
-- `Conversation`, `ConversationMessage`, `ConversationId`: `src/features/Resources/Conversation/domain/`
+- `PackageCategory`, `CharacterPackage`, `Conversation`, `ChatMessageContainer`, `ChatMessage`: `src/features/Resources/Conversation/domain/conversation-types.ts`
 - `ModelApiType`, `ModelDefinition`, `ModelProviderDefinition`: `src/features/ModelConnection/domain/model-provider.ts`
 - `DefaultConfigs`: `src/features/defaultConfigs/domain/default-config.ts`
-- `DatabaseConnection`, `RepositoryRecord`: `src/features/Database/domain/`
+- `DatabaseRecord`: `src/features/Database/application/database-service.ts`
 - `SettingGroup`, `SettingItem`: `src/features/Setting/domain/setting-page.ts`
 - `WorkspaceTab`: `src/features/UI/application/layout-store.ts`
 
@@ -42,9 +42,10 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Secret command adapter: `src/features/ModelConnection/application/secret-service.ts`
 - Tauri proxy fetch adapter: `src/features/ModelConnection/infrastructure/model-proxy-fetch.ts`
 - Default config service/store: `src/features/defaultConfigs/application/`
-- Tauri SurrealDB commands and model proxy: `src-tauri/src/lib.rs`
-- SurrealDB local adapter: `src/features/Database/infrastructure/`
-- Conversation persistence repository: `src/features/Resources/Conversation/infrastructure/`
+- Tauri SurrealDB commands, resource database commands, image resource commands, and model proxy: `src-tauri/src/lib.rs`
+- Resource database adapter: `src/features/Database/application/database-service.ts`
+- Resource file adapter: `src/features/Resources/application/resource-file-service.ts`
+- Conversation resource store: `src/features/Resources/Conversation/application/conversation-store.ts`
 - UI layout state: `src/features/UI/application/layout-store.ts`
 - Settings registry: `src/features/Setting/application/setting-registry.ts`
 
@@ -62,6 +63,7 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - External model picker: `src/features/ModelConnection/presentation/ModelPicker.vue`
 - Model select popover: `src/features/ModelConnection/presentation/ModelSelect.vue`
 - Settings form skeleton: `src/features/Setting/presentation/SettingForm.vue`, `src/features/Setting/presentation/SettingFormField.vue`
+- Inline edit popover input: `src/features/UI/presentation/InlineEditInput.vue`
 
 ## Phase 2 Model Access
 
@@ -70,6 +72,19 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Wrapped calls hydrate string models through provider config and model type maps, then call AI SDK providers such as `createOpenAI().chat(modelId)`.
 - Provider API keys are stored by Tauri commands in local SurrealDB, never in frontend state.
 - AI SDK provider `fetch` is replaced by `modelProxyFetch`, which invokes Tauri `model_proxy_fetch`; the backend replaces `<<API_KEY_NAME>>` placeholders before sending the real HTTP request.
+
+## Phase 3 Packages And Conversation
+
+- Character packages are conversation containers stored through `src/features/Resources/Conversation/application/conversation-store.ts`.
+- Package categories and packages are ordered resources. Packages may belong to one category or to the virtual uncategorized group.
+- A package owns display metadata, plugin slots, and reverse links to conversations with `lastContainerid` anchors.
+- A conversation can be marked as the package template. Creating a conversation clones that template's active container path; without a template it creates a minimal empty system container.
+- Conversations are paths of linked `ChatMessageContainer` records. Each container stores one role, sibling messages, active message index, previous container id, available next containers, and active next container.
+- The active conversation path is derived from the current container by walking `previousContainer` links.
+- Generation appends a user container and an assistant container, hydrates the default chat model through ModelConnection, and writes the AI SDK response into the assistant message.
+- Regeneration creates an alternative message inside the current assistant container. It does not create a new container branch.
+- Container branches are sibling containers linked from the previous container through `availableNextContainer`; a single next container is the normal path and is not shown as a branch badge.
+- Resource images are uploaded as bytes to Tauri, renamed to UUID files under app data, stored with a `file://` prefix, and displayed through Tauri `convertFileSrc`.
 
 ## Working Principle
 

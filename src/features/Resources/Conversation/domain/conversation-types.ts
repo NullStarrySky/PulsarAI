@@ -1,0 +1,118 @@
+export type Role = "assistant" | "user" | "system";
+
+export interface Plugin {
+  id: string;
+  name: string;
+  enabled?: boolean;
+}
+
+export interface CharacterPackageConversationLink {
+  id: string;
+  lastContainerid: string;
+  title: string;
+}
+
+export interface CharacterPackage {
+  id: string;
+  name: string;
+  icon: string;
+  description?: string;
+  categoryId?: string | null;
+  order: number;
+  conversations: CharacterPackageConversationLink[];
+  plugins: Plugin[];
+}
+
+export interface PackageCategory {
+  id: string;
+  name: string;
+  order: number;
+}
+
+export interface Conversation {
+  id: string;
+  packageId: string;
+  title: string;
+  isTemplate?: boolean;
+  rootContainerId: string | null;
+  lastContainerId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ToolCallResult {
+  type: "tool-result";
+  toolCallId: string;
+  toolName: string;
+  input: unknown;
+  output: unknown;
+}
+
+export interface LocalStep {
+  name: string;
+  message: string;
+}
+
+export interface SubAgentStep {
+  type: "sub-agent";
+  name: string;
+  status: "pending" | "running" | "done" | "failed";
+  message?: string;
+}
+
+export type DataContent = string | Uint8Array | ArrayBuffer;
+
+export interface TextPart {
+  type: "text";
+  text: string;
+}
+
+export interface ImagePart {
+  type: "image";
+  image: DataContent | URL;
+  mediaType?: string;
+}
+
+export interface FilePart {
+  type: "file";
+  data: DataContent | URL;
+  filename?: string;
+  mediaType: string;
+}
+
+export type AdditionalParts = TextPart | ImagePart | FilePart;
+
+export type ChatMessageMeta = {
+  generateInfo?: {
+    modelName: string;
+    startTime: string;
+    timeUsed?: number;
+  };
+  environmentInfo?: {
+    pluginId: string;
+    pluginName: string;
+    characterId: string;
+    characterName: string;
+  };
+  steps: (LocalStep | ToolCallResult | SubAgentStep)[];
+};
+
+export type ChatMessage = {
+  id: string;
+  content: string;
+  meta: ChatMessageMeta;
+  parts?: AdditionalParts[];
+};
+
+export type ChatMessageContainer = {
+  id: string;
+  role: Role;
+  conversationid: string;
+  content: ChatMessage[];
+  activeMessage: number | null;
+  availableNextContainer: string[];
+  activeNextContainer: string | null;
+  previousContainer: string | null;
+};
+
+export type MessageDraftClosure = (message: ChatMessage, container: ChatMessageContainer) => void | Promise<void>;
