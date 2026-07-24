@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { builtinModelProviders } from "./builtin-providers";
+import { loadPersistedProviders, persistProvider } from "./model-provider-persistence";
 import { providerIconUrl } from "./provider-icons";
 import { registerOpenAICompatibleProvider } from "./model-ai";
 import {
@@ -23,6 +24,22 @@ function cloneProviders() {
   }));
 }
 
+function mergeProvider(base: ModelProviderDefinition | undefined, persisted: ModelProviderDefinition): ModelProviderDefinition {
+  const models = new Map<string, ModelDefinition>();
+  for (const model of base?.models ?? []) {
+    models.set(model.id, { ...model });
+  }
+  for (const model of persisted.models ?? []) {
+    models.set(model.id, { ...models.get(model.id), ...model });
+  }
+
+  return {
+    ...base,
+    ...persisted,
+    models: [...models.values()],
+  };
+}
+
 export const modelTypeLabels: Record<ModelApiType, string> = {
   chat: "对话",
   image: "图片",
@@ -42,6 +59,7 @@ export const useModelConnectionStore = defineStore("modelConnection", {
     activeModelTab: "all" as ModelApiType | "all",
     apiKeyStatus: {} as Record<string, boolean>,
     providers: cloneProviders() as ModelProviderDefinition[],
+    loaded: false,
   }),
   getters: {
     activeProvider: (state) =>
@@ -100,12 +118,37 @@ export const useModelConnectionStore = defineStore("modelConnection", {
     },
   },
   actions: {
+    async initialize() {
+      if (this.loaded) {
+        return;
+      }
+
+      const builtinProviders = cloneProviders();
+      const persistedProviders = await loadPersistedProviders();
+      const merged = new Map<string, ModelProviderDefinition>();
+
+      for (const provider of builtinProviders) {
+        merged.set(provider.id, provider);
+      }
+      for (const provider of persistedProviders) {
+        merged.set(provider.id, mergeProvider(merged.get(provider.id), provider));
+      }
+
+      this.providers = [...merged.values()];
+      if (!this.providers.some((provider) => provider.id === this.activeProviderId)) {
+        this.activeProviderId = this.providers[0]?.id ?? "";
+      }
+      for (const provider of this.providers) {
+        registerOpenAICompatibleProvider(provider.id, provider.baseUrl, provider.apiKeyName);
+      }
+      this.loaded = true;
+    },
     activateProvider(providerId: string) {
       if (this.providers.some((provider) => provider.id === providerId)) {
         this.activeProviderId = providerId;
       }
     },
-    patchProvider(providerId: string, patch: Partial<ModelProviderDefinition>) {
+    async patchProvider(providerId: string, patch: Partial<ModelProviderDefinition>) {
       const provider = this.providers.find((item) => item.id === providerId);
       if (!provider) {
         return;
@@ -114,6 +157,7 @@ export const useModelConnectionStore = defineStore("modelConnection", {
       Object.assign(provider, patch);
 
       registerOpenAICompatibleProvider(provider.id, provider.baseUrl, provider.apiKeyName);
+      await persistProvider(provider);
     },
     async refreshSecretStatus(providerId?: string) {
       providerId ??= this.activeProviderId;
@@ -171,12 +215,13 @@ export const useModelConnectionStore = defineStore("modelConnection", {
       this.providers.push(provider);
       this.activeProviderId = id;
       registerOpenAICompatibleProvider(provider.id, provider.baseUrl, provider.apiKeyName);
+      await persistProvider(provider);
 
       if (input.apiKey) {
         await this.saveProviderApiKey(id, input.apiKey);
       }
     },
-    addModel(providerId: string, input: NewModelInput) {
+    async addModel(providerId: string, input: NewModelInput) {
       const provider = this.providers.find((item) => item.id === providerId);
       if (!provider) {
         return;
@@ -195,8 +240,9 @@ export const useModelConnectionStore = defineStore("modelConnection", {
         iconUrl: input.iconUrl,
         enabled: true,
       });
+      await persistProvider(provider);
     },
-    upsertModels(providerId: string, models: ModelDefinition[]) {
+    async upsertModels(providerId: string, models: ModelDefinition[]) {
       const provider = this.providers.find((item) => item.id === providerId);
       if (!provider) {
         return 0;
@@ -216,16 +262,21 @@ export const useModelConnectionStore = defineStore("modelConnection", {
         added += 1;
       }
 
+      await persistProvider(provider);
       return added;
     },
-    patchModel(providerId: string, modelId: string, patch: Partial<ModelDefinition>) {
+    async patchModel(providerId: string, modelId: string, patch: Partial<ModelDefinition>) {
+      const provider = this.providers.find((item) => item.id === providerId);
       const model = this.providers
         .find((provider) => provider.id === providerId)
         ?.models.find((item) => item.id === modelId);
 
-      if (model) {
-        Object.assign(model, patch);
+      if (!provider || !model) {
+        return;
       }
+
+      Object.assign(model, patch);
+      await persistProvider(provider);
     },
   },
 });

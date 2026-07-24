@@ -93,3 +93,61 @@
     font: inherit;
   }
 }
+
+.milkdown {
+  --crepe-color-background: var(--background);
+  --crepe-color-on-background: var(--foreground);
+  --crepe-color-surface: var(--card);
+  --crepe-color-surface-low: var(--muted);
+  --crepe-color-on-surface: var(--foreground);
+  --crepe-color-on-surface-variant: var(--muted-foreground);
+  --crepe-color-outline: var(--border);
+  --crepe-color-primary: var(--primary);
+  --crepe-color-secondary: var(--secondary);
+  --crepe-color-on-secondary: var(--secondary-foreground);
+  --crepe-color-inverse: var(--foreground);
+  --crepe-color-on-inverse: var(--background);
+  --crepe-color-inline-code: var(--destructive);
+  --crepe-color-error: var(--destructive);
+  --crepe-color-hover: var(--accent);
+  --crepe-color-selected: color-mix(in srgb, var(--primary), transparent 82%);
+  --crepe-color-inline-area: var(--muted);
+  --crepe-font-title: var(--font-sans, Inter, ui-sans-serif, system-ui, sans-serif);
+  --crepe-font-default: var(--font-sans, Inter, ui-sans-serif, system-ui, sans-serif);
+  --crepe-font-code: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  color: var(--foreground);
+}
+
+.milkdown .ProseMirror-focused {
+  --prosemirror-virtual-cursor-color: var(--foreground);
+  caret-color: var(--foreground);
+}
+
+.milkdown .ProseMirror .prosemirror-virtual-cursor {
+  border-left-width: 3px;
+}
+
+.milkdown .crepe-drop-cursor {
+  background-color: var(--foreground) !important;
+  opacity: 0.7 !important;
+}
+
+.dark .milkdown {
+  --crepe-color-background: var(--background);
+  --crepe-color-on-background: var(--foreground);
+  --crepe-color-surface: var(--card);
+  --crepe-color-surface-low: var(--muted);
+  --crepe-color-on-surface: var(--foreground);
+  --crepe-color-on-surface-variant: var(--muted-foreground);
+  --crepe-color-outline: var(--border);
+  --crepe-color-primary: var(--primary);
+  --crepe-color-secondary: var(--secondary);
+  --crepe-color-on-secondary: var(--secondary-foreground);
+  --crepe-color-inverse: var(--foreground);
+  --crepe-color-on-inverse: var(--background);
+  --crepe-color-inline-code: var(--destructive);
+  --crepe-color-error: var(--destructive);
+  --crepe-color-hover: var(--accent);
+  --crepe-color-selected: color-mix(in srgb, var(--primary), transparent 78%);
+  --crepe-color-inline-area: var(--muted);
+}

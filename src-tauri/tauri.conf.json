@@ -13,9 +13,9 @@
 		"windows": [
 			{
 				"title": "pulsarai",
-				"width": 900,
+				"width": 970,
 				"height": 600,
-				"minWidth": 800,
+				"minWidth": 600,
 				"minHeight": 400,
 				"decorations": false,
 				"dragDropEnabled": false

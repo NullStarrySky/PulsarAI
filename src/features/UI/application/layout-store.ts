@@ -3,9 +3,11 @@ import { defineStore } from "pinia";
 export interface WorkspaceTab {
   id: string;
   title: string;
+  resourceType: string;
+  resourceId: string;
   closable?: boolean;
   packageId?: string;
-  conversationId?: string;
+  resourceParams?: Record<string, unknown>;
 }
 
 const defaultTabs: WorkspaceTab[] = [];
@@ -53,12 +55,14 @@ export const useLayoutStore = defineStore("layout", {
 
       this.activeTabId = tab.id;
     },
-    openConversationTab(input: { packageId: string; conversationId: string; title: string }) {
+    openResourceTab(input: { resourceType: string; resourceId: string; title: string; packageId?: string; resourceParams?: Record<string, unknown> }) {
       this.openTab({
-        id: `conversation:${input.conversationId}`,
+        id: `${input.resourceType}:${input.resourceId}`,
         title: input.title,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
         packageId: input.packageId,
-        conversationId: input.conversationId,
+        resourceParams: input.resourceParams,
       });
     },
     closeTab(tabId: string) {
@@ -74,9 +78,9 @@ export const useLayoutStore = defineStore("layout", {
         this.activeTabId = this.tabs[Math.max(0, index - 1)]?.id ?? "";
       }
     },
-    closeTabsByConversation(conversationId: string) {
+    closeTabsByResource(resourceType: string, resourceId: string) {
       for (const tab of [...this.tabs]) {
-        if (tab.conversationId === conversationId) {
+        if (tab.resourceType === resourceType && tab.resourceId === resourceId) {
           this.closeTab(tab.id);
         }
       }

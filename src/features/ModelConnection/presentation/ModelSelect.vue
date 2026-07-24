@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { ChevronDown } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,6 +29,10 @@ const emit = defineEmits<{
 
 const store = useModelConnectionStore();
 const open = ref(false);
+
+onMounted(() => {
+  void store.initialize();
+});
 
 const label = computed(() => {
   const [providerId, ...modelIdParts] = props.modelValue.split("/");

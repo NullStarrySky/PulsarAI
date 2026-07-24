@@ -22,6 +22,9 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Setting: `src/features/Setting/`
 - UI ownership: `src/features/UI/`
 - Model connections: `src/features/ModelConnection/`
+- Agent runtime: `src/features/Agent/`
+- Sandbox: `src/features/Sandbox/`
+- About: `src/features/About/`
 
 ## Core Types
 
@@ -31,6 +34,9 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - `DatabaseRecord`: `src/features/Database/application/database-service.ts`
 - `SettingGroup`, `SettingItem`: `src/features/Setting/domain/setting-page.ts`
 - `WorkspaceTab`: `src/features/UI/application/layout-store.ts`
+- `SandboxEnvironment`, `SandboxExecutionResult`, `ResolveTextOptions`: `src/features/Sandbox/domain/sandbox.ts`
+- `FontDefinition`: `src/features/UI/font/domain/font-registry.ts`
+- `ThemeDefinition`, `ThemeMode`: `src/features/UI/theme/domain/theme-registry.ts`
 
 ## External Interfaces
 
@@ -41,21 +47,30 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Provider/settings state: `src/features/ModelConnection/application/model-connection-store.ts`
 - Secret command adapter: `src/features/ModelConnection/application/secret-service.ts`
 - Tauri proxy fetch adapter: `src/features/ModelConnection/infrastructure/model-proxy-fetch.ts`
+- Default agent runner: `src/features/Agent/application/default-agent.ts`
+- Sandbox execution and macro resolution: `src/features/Sandbox/domain/sandbox.ts`
 - Default config service/store: `src/features/defaultConfigs/application/`
 - Tauri SurrealDB commands, resource database commands, image resource commands, and model proxy: `src-tauri/src/lib.rs`
 - Resource database adapter: `src/features/Database/application/database-service.ts`
 - Resource file adapter: `src/features/Resources/application/resource-file-service.ts`
 - Conversation resource store: `src/features/Resources/Conversation/application/conversation-store.ts`
 - UI layout state: `src/features/UI/application/layout-store.ts`
+- Workspace resource registry: `src/features/UI/application/workspace-resource-registry.ts`
+- Shell sidebar registry: `src/features/UI/application/sidebar-registry.ts`
 - Settings registry: `src/features/Setting/application/setting-registry.ts`
+- Appearance store: `src/features/UI/theme/application/appearance-store.ts`
 
 ## Phase 1 UI
 
 - App shell: `src/features/UI/presentation/AppShell.vue`
-- Left sidebar: `src/features/UI/presentation/ShellLeftSidebar.vue`
+- Left sidebar host: `src/features/UI/presentation/ShellLeftSidebar.vue`
 - Top bar and tabs: `src/features/UI/presentation/ShellTopBar.vue`
-- Right sidebar: `src/features/UI/presentation/ShellRightSidebar.vue`
-- Minimal chat workspace: `src/features/UI/presentation/MainWorkspace.vue`
+- Right sidebar host: `src/features/UI/presentation/ShellRightSidebar.vue`
+- Workspace resource host: `src/features/UI/presentation/MainWorkspace.vue`
+- Conversation left sidebar: `src/features/Resources/Conversation/presentation/ConversationLeftSidebar.vue`
+- Conversation right sidebar: `src/features/Resources/Conversation/presentation/ConversationRightSidebar.vue`
+- Conversation workspace page: `src/features/Resources/Conversation/presentation/ConversationWorkspacePage.vue`
+- Conversation workspace/sidebar registration: `src/features/Resources/Conversation/presentation/register-conversation-workspace.ts`
 - Settings dialog: `src/features/Setting/presentation/SettingsDialog.vue`
 - General settings page: `src/features/Setting/presentation/pages/GeneralSettingsPage.vue`
 - Default config settings page: `src/features/defaultConfigs/presentation/DefaultConfigSettingsPage.vue`
@@ -64,6 +79,8 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Model select popover: `src/features/ModelConnection/presentation/ModelSelect.vue`
 - Settings form skeleton: `src/features/Setting/presentation/SettingForm.vue`, `src/features/Setting/presentation/SettingFormField.vue`
 - Inline edit popover input: `src/features/UI/presentation/InlineEditInput.vue`
+- Appearance settings page: `src/features/UI/presentation/AppearanceSettingsPage.vue`
+- About settings page: `src/features/About/presentation/AboutSettingsPage.vue`
 
 ## Phase 2 Model Access
 
@@ -85,6 +102,18 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Regeneration creates an alternative message inside the current assistant container. It does not create a new container branch.
 - Container branches are sibling containers linked from the previous container through `availableNextContainer`; a single next container is the normal path and is not shown as a branch badge.
 - Resource images are uploaded as bytes to Tauri, renamed to UUID files under app data, stored with a `file://` prefix, and displayed through Tauri `convertFileSrc`.
+
+## Phase 4 Agent, Sandbox, Appearance, And Rendering
+
+- Conversation generation now enters `runDefaultAgent` in `src/features/Agent/application/default-agent.ts`.
+- The default agent hydrates `defaultChatModel` through ModelConnection, runs AI SDK `ToolLoopAgent`, and records visible process steps into `ChatMessage.meta.steps`.
+- Built-in tools currently include current-time lookup and JavaScript execution through the frontend sandbox.
+- The sandbox in `src/features/Sandbox/domain/sandbox.ts` accepts an environment object and JavaScript source, returns either a value or error, and resolves `{{...}}` / `[[...]]` macros for text and message arrays.
+- Conversation messages render markdown through `ConversationMarkdown.vue`; the bottom composer uses `ConversationComposerEditor.vue`. Both use Milkdown/Crepe.
+- UI opens tabs with `resourceType`, `resourceId`, optional `packageId`, and optional `resourceParams`; `MainWorkspace.vue` resolves the component through `workspace-resource-registry.ts` and keeps active resource pages alive with `KeepAlive`.
+- Feature-specific sidebar content is registered through `sidebar-registry.ts`; UI shell files do not import conversation stores or message renderers directly.
+- Appearance settings are owned by `appearance-store.ts`, theme registry CSS under `src/features/UI/theme/`, and font registry under `src/features/UI/font/`.
+- About settings are registered as a normal settings page under `src/features/About/`.
 
 ## Working Principle
 

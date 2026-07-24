@@ -36,7 +36,8 @@ const models = computed(() => {
   });
 });
 
-onMounted(() => {
+onMounted(async () => {
+  await store.initialize();
   const [providerId] = props.modelValue.split("/");
   if (providerId) {
     store.activateProvider(providerId);

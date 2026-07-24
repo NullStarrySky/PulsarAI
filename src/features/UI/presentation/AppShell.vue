@@ -1,10 +1,18 @@
 <script setup lang="ts">
+import { onMounted } from "vue";
 import { Notivue, Notification } from "notivue";
 import MainWorkspace from "./MainWorkspace.vue";
 import SettingsDialog from "@/features/Setting/presentation/SettingsDialog.vue";
+import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
 import ShellLeftSidebar from "./ShellLeftSidebar.vue";
 import ShellRightSidebar from "./ShellRightSidebar.vue";
 import ShellTopBar from "./ShellTopBar.vue";
+
+const appearance = useAppearanceStore();
+
+onMounted(() => {
+  appearance.initialize();
+});
 </script>
 
 <template>

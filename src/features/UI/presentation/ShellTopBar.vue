@@ -13,11 +13,9 @@ import {
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 import { useLayoutStore } from "../application/layout-store";
 
 const layout = useLayoutStore();
-const conversation = useConversationStore();
 const { activeTabId, leftSidebarOpen, rightSidebarOpen, tabs } = storeToRefs(layout);
 const compactTabs = computed(() => tabs.value.length > 8);
 const appWindow = getCurrentWindow();
@@ -32,13 +30,6 @@ async function toggleMaximize() {
 
 async function closeWindow() {
   await appWindow.close();
-}
-
-function activateTab(tab: typeof tabs.value[number]) {
-  layout.activateTab(tab.id);
-  if (tab.conversationId) {
-    conversation.openConversation(tab.conversationId);
-  }
 }
 
 function closeWithMiddleButton(event: MouseEvent, tabId: string) {
@@ -77,7 +68,7 @@ function closeWithMiddleButton(event: MouseEvent, tabId: string) {
           )
         "
         type="button"
-        @click="activateTab(tab)"
+        @click="layout.activateTab(tab.id)"
         @auxclick="closeWithMiddleButton($event, tab.id)"
       >
         <span :class="cn('truncate', compactTabs && 'hidden xl:inline')">{{ tab.title }}</span>

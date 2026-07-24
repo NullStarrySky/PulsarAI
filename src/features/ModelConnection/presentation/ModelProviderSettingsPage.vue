@@ -66,6 +66,7 @@ const activeProviderHasKey = computed(() => Boolean(store.apiKeyStatus[activePro
 const providerChatModels = computed(() => activeProvider.value.models.filter((model) => model.enabled && model.apiType === "chat"));
 
 onMounted(async () => {
+  await store.initialize();
   await store.refreshSecretStatus(activeProvider.value.id);
   syncApiKeyDraft();
   syncConnectivityModel();
@@ -137,9 +138,9 @@ async function addProvider() {
   }
 }
 
-function addModel() {
+async function addModel() {
   try {
-    store.addModel(activeProvider.value.id, {
+    await store.addModel(activeProvider.value.id, {
       ...modelForm,
       contextSize: modelForm.contextSize ? Number(modelForm.contextSize) : undefined,
       iconUrl: modelForm.iconUrl.trim() || undefined,
@@ -195,7 +196,7 @@ async function fetchModelList() {
   fetchingModels.value = true;
   try {
     const models = await fetchOpenAICompatibleModels(activeProvider.value);
-    const added = store.upsertModels(activeProvider.value.id, models);
+    const added = await store.upsertModels(activeProvider.value.id, models);
     syncConnectivityModel();
     push.success(added > 0 ? `已添加 ${added} 个模型。` : "模型列表已是最新。");
   } catch (error) {

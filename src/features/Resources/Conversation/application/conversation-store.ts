@@ -1,8 +1,7 @@
 import { defineStore } from "pinia";
 import type { ModelMessage } from "ai";
 import { remove, selectAll, upsert } from "@/features/Database/application/database-service";
-import { getDefaultChatModel } from "@/features/defaultConfigs/application/default-config-service";
-import { generateText } from "@/features/ModelConnection/application/ai";
+import { runDefaultAgent } from "@/features/Agent/application/default-agent";
 import type {
   CharacterPackage,
   ChatMessage,
@@ -681,19 +680,28 @@ export const useConversationStore = defineStore("conversation", {
 
       this.generating = true;
       const start = Date.now();
-      const modelName = await getDefaultChatModel();
       message.meta.generateInfo = {
-        modelName,
+        modelName: "default-agent",
         startTime: new Date(start).toISOString(),
       };
       await mutate?.(message, container);
       await this.persistContainer(container);
 
       try {
-        const result = await generateText({
-          model: modelName,
+        const result = await runDefaultAgent({
           messages: this.modelMessagesBefore(container),
+          environment: {
+            now: () => new Date().toISOString(),
+            conversationId: container.conversationid,
+            containerId: container.id,
+          },
+          onStep: async (step) => {
+            message.meta.steps.push(step);
+            await mutate?.(message, container);
+            await this.persistContainer(container);
+          },
         });
+        message.meta.generateInfo.modelName = result.modelName;
         message.content = result.text;
       } catch (error) {
         message.content = error instanceof Error ? error.message : "生成失败";

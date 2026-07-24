@@ -15,14 +15,20 @@ Pulsar is an open LLM frontend built with Tauri, TypeScript, Vue 3, shadcn-vue, 
 
 The frontend follows a DDD-inspired feature layout under `src/features`. Each feature should own its domain types, application services, infrastructure adapters, and presentation components when those layers become necessary.
 
+`src/features/UI` owns only shell, tab, sidebar host, and generic resource-hosting mechanics. Feature-specific resource pages and sidebar contents must live in their owning feature and register into UI through the resource/sidebar registries.
+
 ## Current Phase
 
-The app is moving through early model-access work:
+The app is moving through the basic agent and conversation-runtime phase:
 
 - one minimal conversation shell;
 - model provider settings and default model selection;
 - local SurrealDB-backed settings and secrets;
 - AI SDK wrappers that hydrate provider/model references;
+- a default AI SDK `ToolLoopAgent` path for conversation generation;
+- a frontend sandbox for macro expansion and controlled JavaScript execution;
+- appearance, font, and about settings;
+- Milkdown/Crepe markdown rendering for messages and composer input;
 - `design.md` as the project index.
 
-MCP, Skill, plugin resources, and richer generation orchestration are later-phase additions.
+MCP, Skill, plugin resources, and richer tool orchestration are later-phase additions.
