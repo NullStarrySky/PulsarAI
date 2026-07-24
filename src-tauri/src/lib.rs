@@ -1,14 +1,261 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use serde::{Deserialize, Serialize};
+use std::{fs, str::FromStr};
+use surrealdb::{engine::local::{Db, SurrealKv}, Surreal};
+use tauri::{AppHandle, Manager, State};
+use tokio::sync::OnceCell;
+
+struct AppState {
+    db: OnceCell<Surreal<Db>>,
+    http: reqwest::Client,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SecretRecord {
+    name: String,
+    value: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ConfigRecord {
+    key: String,
+    value: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct ProxyHeader {
+    name: String,
+    value: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ProxyFetchRequest {
+    url: String,
+    method: String,
+    headers: Vec<ProxyHeader>,
+    body: Option<Vec<u8>>,
+}
+
+#[derive(Debug, Serialize)]
+struct ProxyFetchResponse {
+    status: u16,
+    headers: Vec<ProxyHeader>,
+    body: Vec<u8>,
+}
+
+async fn app_db<'a>(app: &AppHandle, state: &'a AppState) -> Result<&'a Surreal<Db>, String> {
+    state
+        .db
+        .get_or_try_init(|| async {
+            let data_dir = app
+                .path()
+                .app_data_dir()
+                .map_err(|error| error.to_string())?;
+            fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
+            let db_dir = data_dir.join("surrealdb");
+            let db = Surreal::new::<SurrealKv>(db_dir.to_string_lossy().as_ref())
+                .await
+                .map_err(|error| error.to_string())?;
+            db.use_ns("pulsar")
+                .use_db("app")
+                .await
+                .map_err(|error| error.to_string())?;
+            Ok(db)
+        })
+        .await
+}
+
+async fn get_secret_value(db: &Surreal<Db>, name: &str) -> Result<Option<String>, String> {
+    let mut result = db
+        .query("SELECT name, value FROM secret WHERE name = $name LIMIT 1")
+        .bind(("name", name.to_string()))
+        .await
+        .map_err(|error| error.to_string())?;
+    let rows: Vec<SecretRecord> = result.take(0).map_err(|error| error.to_string())?;
+    Ok(rows.into_iter().next().map(|record| record.value))
+}
+
+async fn hydrate_placeholders(db: &Surreal<Db>, input: &str) -> Result<String, String> {
+    let mut output = String::with_capacity(input.len());
+    let mut rest = input;
+
+    while let Some(start) = rest.find("<<") {
+        output.push_str(&rest[..start]);
+        let after_start = &rest[start + 2..];
+
+        if let Some(end) = after_start.find(">>") {
+            let key = &after_start[..end];
+            let value = get_secret_value(db, key)
+                .await?
+                .ok_or_else(|| format!("Missing secret: {key}"))?;
+            output.push_str(&value);
+            rest = &after_start[end + 2..];
+        } else {
+            output.push_str(&rest[start..]);
+            rest = "";
+        }
+    }
+
+    output.push_str(rest);
+    Ok(output)
+}
+
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+async fn secret_has(app: AppHandle, state: State<'_, AppState>, name: String) -> Result<bool, String> {
+    let db = app_db(&app, &state).await?;
+    Ok(get_secret_value(db, &name).await?.is_some_and(|value| !value.is_empty()))
+}
+
+#[tauri::command]
+async fn secret_set(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+    value: String,
+) -> Result<(), String> {
+    let db = app_db(&app, &state).await?;
+    db.query("DELETE secret WHERE name = $name; CREATE secret CONTENT { name: $name, value: $value };")
+        .bind(("name", name))
+        .bind(("value", value))
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn secret_clear_value(app: AppHandle, state: State<'_, AppState>, name: String) -> Result<(), String> {
+    let db = app_db(&app, &state).await?;
+    db.query("UPDATE secret SET value = '' WHERE name = $name")
+        .bind(("name", name))
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn secret_delete(app: AppHandle, state: State<'_, AppState>, name: String) -> Result<(), String> {
+    let db = app_db(&app, &state).await?;
+    db.query("DELETE secret WHERE name = $name")
+        .bind(("name", name))
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn config_get(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    key: String,
+) -> Result<Option<serde_json::Value>, String> {
+    let db = app_db(&app, &state).await?;
+    let mut result = db
+        .query("SELECT key, value FROM config WHERE key = $key LIMIT 1")
+        .bind(("key", key))
+        .await
+        .map_err(|error| error.to_string())?;
+    let rows: Vec<ConfigRecord> = result.take(0).map_err(|error| error.to_string())?;
+    Ok(rows.into_iter().next().map(|record| record.value))
+}
+
+#[tauri::command]
+async fn config_set(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    key: String,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    let db = app_db(&app, &state).await?;
+    db.query("DELETE config WHERE key = $key; CREATE config CONTENT { key: $key, value: $value };")
+        .bind(("key", key))
+        .bind(("value", value))
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn config_delete(app: AppHandle, state: State<'_, AppState>, key: String) -> Result<(), String> {
+    let db = app_db(&app, &state).await?;
+    db.query("DELETE config WHERE key = $key")
+        .bind(("key", key))
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn model_proxy_fetch(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: ProxyFetchRequest,
+) -> Result<ProxyFetchResponse, String> {
+    let db = app_db(&app, &state).await?;
+    let method = reqwest::Method::from_bytes(request.method.as_bytes())
+        .map_err(|error| error.to_string())?;
+    let mut headers = HeaderMap::new();
+
+    for header in request.headers {
+        let value = hydrate_placeholders(db, &header.value).await?;
+        headers.insert(
+            HeaderName::from_str(&header.name).map_err(|error| error.to_string())?,
+            HeaderValue::from_str(&value).map_err(|error| error.to_string())?,
+        );
+    }
+
+    let body = match request.body {
+        Some(bytes) => {
+            let text = String::from_utf8(bytes.clone()).ok();
+            match text {
+                Some(text) => hydrate_placeholders(db, &text).await?.into_bytes(),
+                None => bytes,
+            }
+        }
+        None => Vec::new(),
+    };
+
+    let response = state
+        .http
+        .request(method, request.url)
+        .headers(headers)
+        .body(body)
+        .send()
+        .await
+        .map_err(|error| error.to_string())?;
+    let status = response.status().as_u16();
+    let headers = response
+        .headers()
+        .iter()
+        .filter_map(|(name, value)| {
+            value.to_str().ok().map(|value| ProxyHeader {
+                name: name.to_string(),
+                value: value.to_string(),
+            })
+        })
+        .collect();
+    let body = response.bytes().await.map_err(|error| error.to_string())?.to_vec();
+
+    Ok(ProxyFetchResponse { status, headers, body })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(AppState {
+            db: OnceCell::const_new(),
+            http: reqwest::Client::new(),
+        })
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![
+            secret_has,
+            secret_set,
+            secret_clear_value,
+            secret_delete,
+            config_get,
+            config_set,
+            config_delete,
+            model_proxy_fetch,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

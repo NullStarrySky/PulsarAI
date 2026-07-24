@@ -1,15 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from "vue";
 import { storeToRefs } from "pinia";
+import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import {
@@ -24,6 +22,8 @@ ensureDefaultSettingPages();
 const layout = useLayoutStore();
 const { settingsOpen } = storeToRefs(layout);
 const activePageId = ref("");
+const sidebarOpen = ref(true);
+const settingsSearch = ref("");
 
 const groups = computed(() => getSettingGroups());
 const pages = computed(() => getSettingPages());
@@ -38,21 +38,32 @@ watchEffect(() => {
 
 <template>
   <Dialog :open="settingsOpen" @update:open="layout.setSettingsOpen">
-    <DialogContent class="flex h-[min(720px,86vh)] w-[min(980px,92vw)] max-w-none flex-col p-0">
-      <DialogHeader class="border-b px-5 py-4">
-        <DialogTitle>设置</DialogTitle>
-        <DialogDescription>管理 Pulsar 的基础行为、模型连接和后续扩展入口。</DialogDescription>
-      </DialogHeader>
-
-      <div class="grid min-h-0 flex-1 grid-cols-[15rem_minmax(0,1fr)]">
-        <ScrollArea class="border-r">
-          <nav class="flex flex-col gap-5 p-3">
+    <DialogContent class="flex h-[min(820px,90vh)] w-[min(1320px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none">
+      <div
+        :class="
+          cn(
+            'grid min-h-0 flex-1 overflow-hidden transition-[grid-template-columns] duration-200',
+            sidebarOpen ? 'grid-cols-[12rem_minmax(0,1fr)]' : 'grid-cols-[0_minmax(0,1fr)]',
+          )
+        "
+      >
+        <aside class="min-h-0 overflow-hidden border-r">
+          <nav class="flex h-full flex-col gap-5 overflow-y-auto p-3 pt-4">
+            <div class="flex items-center gap-2">
+              <div class="relative min-w-0 flex-1">
+                <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input v-model="settingsSearch" class="h-8 pl-8" placeholder="搜索设置" />
+              </div>
+              <Button size="icon" variant="ghost" class="size-8" title="折叠设置导航" @click="sidebarOpen = false">
+                <PanelLeftClose class="size-4" />
+              </Button>
+            </div>
             <section v-for="group in groups" :key="group.id" class="flex flex-col gap-1">
               <h3 class="px-2 text-xs font-medium text-muted-foreground">{{ group.title }}</h3>
               <Button
                 v-for="page in pages.filter((item) => item.meta.group === group.id)"
                 :key="page.meta.id"
-                :class="cn('justify-start', activePage?.meta.id === page.meta.id && 'bg-accent text-accent-foreground')"
+                :class="cn('h-9 justify-start px-2', activePage?.meta.id === page.meta.id && 'bg-accent text-accent-foreground')"
                 variant="ghost"
                 @click="activePageId = page.meta.id"
               >
@@ -61,11 +72,21 @@ watchEffect(() => {
               </Button>
             </section>
           </nav>
-        </ScrollArea>
+        </aside>
 
-        <ScrollArea class="min-w-0">
+        <main class="relative min-h-0 min-w-0 overflow-hidden">
+          <Button
+            v-if="!sidebarOpen"
+            class="absolute left-3 top-3 z-20 size-8 shadow-sm"
+            size="icon"
+            variant="outline"
+            title="展开设置导航"
+            @click="sidebarOpen = true"
+          >
+            <PanelLeftOpen class="size-4" />
+          </Button>
           <component :is="activePage?.component" v-if="activePage" />
-        </ScrollArea>
+        </main>
       </div>
     </DialogContent>
   </Dialog>

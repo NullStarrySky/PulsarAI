@@ -1,17 +1,40 @@
-export type BuiltinModelProviderId = "openai" | "deepseek";
+export type ModelApiType = "chat" | "image" | "video" | "embedding" | "asr" | "tts";
 
-export interface ModelProviderDefinition {
-  id: BuiltinModelProviderId;
-  title: string;
-  description: string;
-  baseUrl: string;
-  defaultModel: string;
+export interface ModelDefinition {
+  id: string;
+  name: string;
+  apiType: ModelApiType;
+  contextSize?: number;
+  iconUrl?: string;
+  enabled: boolean;
 }
 
-export interface ModelProviderConnection {
-  providerId: BuiltinModelProviderId;
-  enabled: boolean;
-  apiKey: string;
+export interface ModelProviderDefinition {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  iconUrl?: string;
   baseUrl: string;
-  model: string;
+  apiKeyName: string;
+  enabled: boolean;
+  builtIn?: boolean;
+  models: ModelDefinition[];
+}
+
+export interface NewModelProviderInput {
+  id: string;
+  name?: string;
+  description?: string;
+  iconUrl?: string;
+  baseUrl?: string;
+  apiKey?: string;
+}
+
+export interface NewModelInput {
+  id: string;
+  name?: string;
+  apiType: ModelApiType;
+  contextSize?: number;
+  iconUrl?: string;
 }

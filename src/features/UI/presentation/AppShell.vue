@@ -8,15 +8,14 @@ import ShellTopBar from "./ShellTopBar.vue";
 </script>
 
 <template>
-  <div class="flex h-screen min-w-0 overflow-hidden bg-background text-foreground">
-    <ShellLeftSidebar />
+  <div class="flex h-[100dvh] min-w-0 flex-col overflow-hidden bg-background text-foreground">
+    <ShellTopBar />
 
-    <div class="flex min-w-0 flex-1 flex-col">
-      <ShellTopBar />
+    <div class="flex min-h-0 min-w-0 flex-1 bg-muted/10">
+      <ShellLeftSidebar />
       <MainWorkspace />
+      <ShellRightSidebar />
     </div>
-
-    <ShellRightSidebar />
     <SettingsDialog />
     <Notivue v-slot="item">
       <Notification :item="item" />

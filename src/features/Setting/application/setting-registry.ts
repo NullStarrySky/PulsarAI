@@ -2,6 +2,7 @@ import type { Component } from "vue";
 import { Brain, Settings, SlidersHorizontal } from "lucide-vue-next";
 import GeneralSettingsPage from "../presentation/pages/GeneralSettingsPage.vue";
 import ModelProviderSettingsPage from "@/features/ModelConnection/presentation/ModelProviderSettingsPage.vue";
+import DefaultConfigSettingsPage from "@/features/defaultConfigs/presentation/DefaultConfigSettingsPage.vue";
 
 export interface SettingPageMeta {
   id: string;
@@ -63,21 +64,21 @@ export function ensureDefaultSettingPages() {
 
   registerSettingPage({
     meta: {
+      id: "general.defaults",
+      icon: SlidersHorizontal,
+      title: "默认项",
+      group: "general",
+    },
+    component: DefaultConfigSettingsPage,
+  });
+
+  registerSettingPage({
+    meta: {
       id: "provider.models",
       icon: Brain,
       title: "模型提供商",
       group: "provider",
     },
     component: ModelProviderSettingsPage,
-  });
-
-  registerSettingPage({
-    meta: {
-      id: "general.test",
-      icon: SlidersHorizontal,
-      title: "测试页面",
-      group: "general",
-    },
-    component: GeneralSettingsPage,
   });
 }

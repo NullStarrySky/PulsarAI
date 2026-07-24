@@ -11,11 +11,11 @@ const { rightSidebarOpen } = storeToRefs(layout);
   <aside
     :class="
       cn(
-        'shrink-0 overflow-hidden border-l bg-card transition-[width,opacity] duration-300 ease-out',
-        rightSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0',
+        'shrink-0 overflow-hidden border-l bg-background transition-[width,opacity] duration-300 ease-out',
+        rightSidebarOpen ? 'w-68 opacity-100' : 'w-0 opacity-0',
       )
     "
   >
-    <div class="min-w-72" />
+    <div class="min-w-68" />
   </aside>
 </template>

@@ -10,9 +10,9 @@ const enableAnimations = ref(true);
 </script>
 
 <template>
-  <SettingPage title="通用设置" description="用于验证设置页面注册、分组与统一 item 样式。">
-    <SettingGroup title="界面" description="这些选项暂时只作为 UI 状态样例。">
-      <SettingItem title="紧凑模式" description="后续会影响侧栏和列表密度。">
+  <SettingPage title="通用设置" description="管理 Pulsar 的基础界面行为。">
+    <SettingGroup title="界面">
+      <SettingItem title="紧凑模式" description="降低侧栏和列表密度，适合更小窗口。">
         <SettingSwitch v-model="compactMode" />
       </SettingItem>
       <SettingItem title="启用动画" description="侧栏、弹窗和交互反馈默认保留平滑过渡。">
