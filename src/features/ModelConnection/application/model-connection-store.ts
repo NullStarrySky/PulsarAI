@@ -26,10 +26,11 @@ function cloneProviders() {
 
 function mergeProvider(base: ModelProviderDefinition | undefined, persisted: ModelProviderDefinition): ModelProviderDefinition {
   const models = new Map<string, ModelDefinition>();
+  const persistedModels = migratePersistedModels(persisted);
   for (const model of base?.models ?? []) {
     models.set(model.id, { ...model });
   }
-  for (const model of persisted.models ?? []) {
+  for (const model of persistedModels) {
     models.set(model.id, { ...models.get(model.id), ...model });
   }
 
@@ -38,6 +39,23 @@ function mergeProvider(base: ModelProviderDefinition | undefined, persisted: Mod
     ...persisted,
     models: [...models.values()],
   };
+}
+
+function migratePersistedModels(provider: ModelProviderDefinition) {
+  if (provider.id !== "deepseek") {
+    return provider.models ?? [];
+  }
+
+  return (provider.models ?? [])
+    .filter((model) => !["deepseek-chat", "deepseek-reasoner"].includes(model.id))
+    .concat(
+      (provider.models ?? [])
+        .filter((model) => model.id === "deepseek-chat")
+        .map((model) => ({ ...model, id: "deepseek-v4-flash", name: "DeepSeek V4 Flash" })),
+      (provider.models ?? [])
+        .filter((model) => model.id === "deepseek-reasoner")
+        .map((model) => ({ ...model, id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" })),
+    );
 }
 
 export const modelTypeLabels: Record<ModelApiType, string> = {
@@ -135,6 +153,12 @@ export const useModelConnectionStore = defineStore("modelConnection", {
       }
 
       this.providers = [...merged.values()];
+      await Promise.all(
+        persistedProviders
+          .map((provider) => this.providers.find((item) => item.id === provider.id))
+          .filter((provider): provider is ModelProviderDefinition => Boolean(provider))
+          .map((provider) => persistProvider(provider)),
+      );
       if (!this.providers.some((provider) => provider.id === this.activeProviderId)) {
         this.activeProviderId = this.providers[0]?.id ?? "";
       }

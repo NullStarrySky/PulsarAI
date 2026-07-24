@@ -12,6 +12,7 @@ import {
   LayoutGrid,
   List,
   MoreHorizontal,
+  Package,
   Plug,
   Plus,
   Search,
@@ -44,9 +45,11 @@ import { saveImageFile } from "@/features/Resources/application/resource-file-se
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 import ResourceAvatar from "@/features/Resources/Conversation/presentation/ResourceAvatar.vue";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
+import { useCommandStore } from "@/features/Hotkey/application/command-store";
 import InlineEditInput from "@/features/UI/presentation/InlineEditInput.vue";
 
 const layout = useLayoutStore();
+const commandStore = useCommandStore();
 const conversation = useConversationStore();
 const { leftSidebarOpen } = storeToRefs(layout);
 const mode = ref<"packages" | "tasks" | "plugins">("packages");
@@ -171,20 +174,42 @@ async function uploadIcon(event: Event) {
     "
   >
     <div class="min-w-72 border-b p-2">
-      <div class="flex items-center justify-between gap-2 rounded-md bg-muted p-1">
-        <div class="flex items-center gap-1">
-          <Button :variant="mode === 'packages' ? 'secondary' : 'ghost'" size="icon" class="size-8" title="角色包" @click="mode = 'packages'">
-            <Search class="size-4" />
-          </Button>
-          <Button :variant="mode === 'tasks' ? 'secondary' : 'ghost'" size="icon" class="size-8" title="定时任务" @click="mode = 'tasks'">
-            <Clock class="size-4" />
-          </Button>
-          <Button :variant="mode === 'plugins' ? 'secondary' : 'ghost'" size="icon" class="size-8" title="插件" @click="mode = 'plugins'">
-            <Plug class="size-4" />
-          </Button>
-        </div>
+      <nav class="grid gap-1">
+        <Button class="h-9 justify-start gap-2" variant="ghost" @click="commandStore.openPalette()">
+          <Search class="size-4" />
+          搜索
+        </Button>
         <Button
-          v-if="mode === 'packages'"
+          class="h-9 justify-start gap-2"
+          :variant="mode === 'packages' ? 'secondary' : 'ghost'"
+          @click="mode = 'packages'"
+        >
+          <Package class="size-4" />
+          角色包
+        </Button>
+        <Button
+          class="h-9 justify-start gap-2"
+          :variant="mode === 'tasks' ? 'secondary' : 'ghost'"
+          @click="mode = 'tasks'"
+        >
+          <Clock class="size-4" />
+          定时任务
+        </Button>
+        <Button
+          class="h-9 justify-start gap-2"
+          :variant="mode === 'plugins' ? 'secondary' : 'ghost'"
+          @click="mode = 'plugins'"
+        >
+          <Plug class="size-4" />
+          插件
+        </Button>
+      </nav>
+    </div>
+
+    <div v-if="mode === 'packages'" class="min-w-72 flex-1 overflow-y-auto p-2">
+      <div class="mb-2 flex items-center justify-between px-1">
+        <span class="text-xs font-medium text-muted-foreground">角色包</span>
+        <Button
           variant="ghost"
           size="icon"
           class="size-8"
@@ -195,9 +220,6 @@ async function uploadIcon(event: Event) {
           <List v-else class="size-4" />
         </Button>
       </div>
-    </div>
-
-    <div v-if="mode === 'packages'" class="min-w-72 flex-1 overflow-y-auto p-2">
       <section v-for="section in categorySections" :key="section.id" class="group/category mb-2">
         <div
           class="relative flex h-8 cursor-pointer items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent/60"
@@ -359,8 +381,13 @@ async function uploadIcon(event: Event) {
       </section>
     </div>
 
-    <div v-else class="min-w-72 flex-1 p-4 text-sm text-muted-foreground">
-      {{ mode === "tasks" ? "定时任务将在后续阶段接入。" : "插件将在后续阶段接入。" }}
+    <div v-else class="min-w-72 flex-1 p-4">
+      <div class="flex h-full flex-col items-center justify-center rounded-md border border-dashed text-center text-sm text-muted-foreground">
+        <Clock v-if="mode === 'tasks'" class="mb-2 size-5" />
+        <Plug v-else class="mb-2 size-5" />
+        <p class="font-medium text-foreground">{{ mode === "tasks" ? "定时任务" : "插件" }}</p>
+        <p class="mt-1 text-xs">{{ mode === "tasks" ? "后续阶段接入任务列表。" : "后续阶段接入插件列表。" }}</p>
+      </div>
     </div>
 
     <div class="min-w-72 border-t p-2">

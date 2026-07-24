@@ -15,7 +15,7 @@ const defaultTabs: WorkspaceTab[] = [];
 export const useLayoutStore = defineStore("layout", {
   state: () => ({
     leftSidebarOpen: true,
-    rightSidebarOpen: true,
+    rightSidebarOpen: false,
     settingsOpen: false,
     activeTabId: "",
     tabs: [...defaultTabs] as WorkspaceTab[],
@@ -91,6 +91,20 @@ export const useLayoutStore = defineStore("layout", {
           this.closeTab(tab.id);
         }
       }
+    },
+    closeActiveTab() {
+      if (this.activeTabId) {
+        this.closeTab(this.activeTabId);
+      }
+    },
+    activateAdjacentTab(direction: -1 | 1) {
+      if (this.tabs.length === 0) {
+        return;
+      }
+
+      const currentIndex = Math.max(0, this.tabs.findIndex((tab) => tab.id === this.activeTabId));
+      const nextIndex = (currentIndex + direction + this.tabs.length) % this.tabs.length;
+      this.activeTabId = this.tabs[nextIndex]?.id ?? "";
     },
   },
 });

@@ -7,6 +7,7 @@
 - When reading files with PowerShell `Get-Content`, always pass `-Encoding UTF8`.
 - Prefer scoped implementation, current feature seams, and small verifiable steps.
 - When implementing UI components, reuse shadcn-vue components and theme CSS variables whenever practical so spacing, color, radius, focus, and state styling stay consistent.
+- Commands that expose feature behavior to search or hotkeys should keep their implementation in the owning feature's `actions.ts`; UI may register and route commands but should not own domain behavior.
 - When implementing settings forms, reuse `SettingForm` and `SettingFormField` from `src/features/Setting/presentation/` whenever practical so each field has a clear title, description, and control area.
 
 ## Project Shape

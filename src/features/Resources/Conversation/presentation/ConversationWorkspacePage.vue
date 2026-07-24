@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Copy,
   GitBranch,
+  Languages,
   Maximize2,
   MoreHorizontal,
   Pencil,
@@ -34,6 +35,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/application/default-config-store";
+import { useTranslateStore } from "@/features/Translate/application/translate-store";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 import type { ChatMessageContainer, ChatMessageMeta } from "@/features/Resources/Conversation/domain/conversation-types";
 import ConversationComposerEditor from "@/features/Resources/Conversation/presentation/ConversationComposerEditor.vue";
@@ -47,6 +49,7 @@ const props = defineProps<{
 
 const conversation = useConversationStore();
 const defaults = useDefaultConfigStore();
+const translate = useTranslateStore();
 const input = ref("");
 const fullscreenInputOpen = ref(false);
 const editing = reactive({
@@ -67,6 +70,12 @@ onMounted(async () => {
 });
 
 watch(() => props.resourceId, openResourceConversation);
+watch(() => conversation.lastMessageEditRequestId, () => {
+  const container = conversation.activeContainer;
+  if (container) {
+    startEdit(container);
+  }
+});
 
 function openResourceConversation() {
   if (props.resourceId && conversation.activeConversationId !== props.resourceId) {
@@ -154,6 +163,18 @@ async function send() {
   const content = input.value;
   input.value = "";
   await conversation.send(content);
+}
+
+async function translateInput() {
+  if (!input.value.trim() || translate.translating) {
+    return;
+  }
+  try {
+    const translated = await translate.translateText(input.value, true);
+    input.value = translated;
+  } catch {
+    push.error(translate.errorText || "翻译失败");
+  }
 }
 
 async function switchSiblingMessage(container: ChatMessageContainer, direction: -1 | 1) {
@@ -373,6 +394,16 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
             @update:model-value="defaults.setDefaultChatModel"
           />
           <div class="flex items-center gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              class="size-8"
+              title="翻译输入"
+              :disabled="!input.trim() || translate.translating"
+              @click="translateInput"
+            >
+              <Languages class="size-4" />
+            </Button>
             <Button size="icon" variant="ghost" class="size-8" title="全屏输入" @click="fullscreenInputOpen = true">
               <Maximize2 class="size-4" />
             </Button>

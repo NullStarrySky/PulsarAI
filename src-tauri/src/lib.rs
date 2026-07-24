@@ -1,6 +1,6 @@
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf, str::FromStr};
+use std::{fs, path::{Path, PathBuf}, str::FromStr, time::{SystemTime, UNIX_EPOCH}};
 use surrealdb::{engine::local::{Db, SurrealKv}, Surreal};
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::OnceCell;
@@ -50,6 +50,28 @@ struct ProxyFetchResponse {
     body: Vec<u8>,
 }
 
+#[derive(Debug, Serialize)]
+struct BackupInfo {
+    id: String,
+    name: String,
+    path: String,
+    #[serde(rename = "createdAt")]
+    created_at: String,
+    size: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct BackupManifest {
+    version: u8,
+    created_at: String,
+    kind: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PendingRestore {
+    backup_path: String,
+}
+
 fn normalize_table_name(table: &str) -> Result<String, String> {
     if table
         .chars()
@@ -65,17 +87,124 @@ fn strip_file_url(value: &str) -> &str {
     value.strip_prefix("file://").unwrap_or(value)
 }
 
+fn timestamp_millis() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or_default()
+}
+
+fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    app.path().app_data_dir().map_err(|error| error.to_string())
+}
+
+fn db_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join("surrealdb"))
+}
+
+fn restore_marker_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app_data_dir(app)?.join("restore-pending.json"))
+}
+
+fn backup_dir(app: &AppHandle, directory: String) -> Result<PathBuf, String> {
+    let dir = if directory.trim().is_empty() {
+        app
+            .path()
+            .app_data_dir()
+            .map_err(|error| error.to_string())?
+            .join("backups")
+    } else {
+        PathBuf::from(directory)
+    };
+    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+    Ok(dir)
+}
+
+fn backup_info(path: &Path) -> Result<BackupInfo, String> {
+    let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
+    let id = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_string();
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_string();
+
+    Ok(BackupInfo {
+        id,
+        name,
+        path: path.to_string_lossy().to_string(),
+        created_at: metadata
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+            .map(|duration| duration.as_millis().to_string())
+            .unwrap_or_else(|| "0".to_string()),
+        size: path_size(path)?,
+    })
+}
+
+fn path_size(path: &Path) -> Result<u64, String> {
+    let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
+    if metadata.is_file() {
+        return Ok(metadata.len());
+    }
+
+    let mut total = 0;
+    for entry in fs::read_dir(path).map_err(|error| error.to_string())? {
+        total += path_size(&entry.map_err(|error| error.to_string())?.path())?;
+    }
+    Ok(total)
+}
+
+fn copy_dir_recursive(from: &Path, to: &Path) -> Result<(), String> {
+    fs::create_dir_all(to).map_err(|error| error.to_string())?;
+    for entry in fs::read_dir(from).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let source = entry.path();
+        let target = to.join(entry.file_name());
+        if source.is_dir() {
+            copy_dir_recursive(&source, &target)?;
+        } else {
+            fs::copy(&source, &target).map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+fn apply_pending_restore(app: &AppHandle) -> Result<(), String> {
+    let marker = restore_marker_path(app)?;
+    if !marker.exists() {
+        return Ok(());
+    }
+
+    let pending: PendingRestore =
+        serde_json::from_slice(&fs::read(&marker).map_err(|error| error.to_string())?)
+            .map_err(|error| error.to_string())?;
+    let source = PathBuf::from(pending.backup_path).join("surrealdb");
+    let target = db_dir(app)?;
+    let old_target = app_data_dir(app)?.join(format!("surrealdb-before-restore-{}", timestamp_millis()));
+
+    if target.exists() {
+        fs::rename(&target, &old_target).map_err(|error| error.to_string())?;
+    }
+    copy_dir_recursive(&source, &target)?;
+    let _ = fs::remove_file(marker);
+    Ok(())
+}
+
 async fn app_db<'a>(app: &AppHandle, state: &'a AppState) -> Result<&'a Surreal<Db>, String> {
     state
         .db
         .get_or_try_init(|| async {
-            let data_dir = app
-                .path()
-                .app_data_dir()
-                .map_err(|error| error.to_string())?;
+            apply_pending_restore(app)?;
+            let data_dir = app_data_dir(app)?;
             fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
-            let db_dir = data_dir.join("surrealdb");
-            let db = Surreal::new::<SurrealKv>(db_dir.to_string_lossy().as_ref())
+            let db_path = data_dir.join("surrealdb");
+            let db = Surreal::new::<SurrealKv>(db_path.to_string_lossy().as_ref())
                 .await
                 .map_err(|error| error.to_string())?;
             db.use_ns("pulsar")
@@ -308,6 +437,107 @@ async fn resource_delete_file(file_url: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn backup_list(app: AppHandle, directory: String) -> Result<Vec<BackupInfo>, String> {
+    let dir = backup_dir(&app, directory)?;
+    let mut backups = Vec::new();
+
+    for entry in fs::read_dir(dir).map_err(|error| error.to_string())? {
+        let path = entry.map_err(|error| error.to_string())?.path();
+        if path.is_dir() && path.join("manifest.json").exists() {
+            backups.push(backup_info(&path)?);
+        }
+    }
+
+    backups.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    Ok(backups)
+}
+
+#[tauri::command]
+async fn backup_create(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    directory: String,
+    max_backups: String,
+) -> Result<BackupInfo, String> {
+    let _ = app_db(&app, &state).await?;
+    let created_at = timestamp_millis().to_string();
+    let manifest = BackupManifest {
+        version: 1,
+        created_at: created_at.clone(),
+        kind: "surrealkv-directory".to_string(),
+    };
+    let dir = backup_dir(&app, directory.clone())?;
+    let path = dir.join(format!("pulsarai-db-backup-{created_at}"));
+    fs::create_dir_all(&path).map_err(|error| error.to_string())?;
+    copy_dir_recursive(&db_dir(&app)?, &path.join("surrealdb"))?;
+    fs::write(
+        path.join("manifest.json"),
+        serde_json::to_vec_pretty(&manifest).map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+
+    prune_backups(&app, directory, max_backups)?;
+    backup_info(&path)
+}
+
+fn prune_backups(app: &AppHandle, directory: String, max_backups: String) -> Result<(), String> {
+    if max_backups == "unlimited" {
+        return Ok(());
+    }
+
+    let limit = max_backups.parse::<usize>().unwrap_or(10);
+    let mut backups = backup_list_sync(app, directory)?;
+    backups.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    for backup in backups.into_iter().skip(limit) {
+        let _ = fs::remove_file(backup.path);
+    }
+    Ok(())
+}
+
+fn backup_list_sync(app: &AppHandle, directory: String) -> Result<Vec<BackupInfo>, String> {
+    let dir = backup_dir(app, directory)?;
+    let mut backups = Vec::new();
+    for entry in fs::read_dir(dir).map_err(|error| error.to_string())? {
+        let path = entry.map_err(|error| error.to_string())?.path();
+        if path.is_dir() && path.join("manifest.json").exists() {
+            backups.push(backup_info(&path)?);
+        }
+    }
+    Ok(backups)
+}
+
+#[tauri::command]
+async fn backup_restore(
+    app: AppHandle,
+    _state: State<'_, AppState>,
+    directory: String,
+    backup_id: String,
+) -> Result<(), String> {
+    let dir = backup_dir(&app, directory)?;
+    let path = dir.join(backup_id);
+    if !path.join("surrealdb").exists() {
+        return Err("备份目录中没有 surrealdb 数据。".to_string());
+    }
+    fs::write(
+        restore_marker_path(&app)?,
+        serde_json::to_vec_pretty(&PendingRestore {
+            backup_path: path.to_string_lossy().to_string(),
+        })
+        .map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn backup_delete(app: AppHandle, directory: String, backup_id: String) -> Result<(), String> {
+    let dir = backup_dir(&app, directory)?;
+    let path = dir.join(backup_id);
+    fs::remove_dir_all(path).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 async fn model_proxy_fetch(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -369,6 +599,8 @@ pub fn run() {
             http: reqwest::Client::new(),
         })
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             secret_has,
             secret_set,
@@ -383,6 +615,10 @@ pub fn run() {
             database_delete,
             resource_save_image,
             resource_delete_file,
+            backup_list,
+            backup_create,
+            backup_restore,
+            backup_delete,
             model_proxy_fetch,
         ])
         .run(tauri::generate_context!())

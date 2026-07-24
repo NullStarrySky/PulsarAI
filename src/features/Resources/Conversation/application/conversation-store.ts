@@ -98,6 +98,7 @@ export const useConversationStore = defineStore("conversation", {
     conversations: [] as Conversation[],
     containers: [] as ChatMessageContainer[],
     generating: false,
+    lastMessageEditRequestId: 0,
   }),
   getters: {
     activePackage: (state) =>
@@ -500,6 +501,9 @@ export const useConversationStore = defineStore("conversation", {
     currentMessage(container: ChatMessageContainer) {
       return container.activeMessage === null ? null : container.content[container.activeMessage] ?? null;
     },
+    requestLastMessageEdit() {
+      this.lastMessageEditRequestId += 1;
+    },
     branchIdsFor(containerId: string) {
       const container = this.containers.find((item) => item.id === containerId);
       const previous = container?.previousContainer
@@ -642,6 +646,9 @@ export const useConversationStore = defineStore("conversation", {
       if (!trimmed || this.generating) {
         return;
       }
+      void import("@/features/Statistic/application/statistic-store").then(({ useStatisticStore }) =>
+        useStatisticStore().recordEvent("message.user"),
+      );
 
       const userContainer = await this.appendContainer("user", trimmed);
       if (!userContainer) {
@@ -703,6 +710,9 @@ export const useConversationStore = defineStore("conversation", {
         });
         message.meta.generateInfo.modelName = result.modelName;
         message.content = result.text;
+        void import("@/features/Statistic/application/statistic-store").then(({ useStatisticStore }) =>
+          useStatisticStore().recordEvent("message.assistant"),
+        );
       } catch (error) {
         message.content = error instanceof Error ? error.message : "生成失败";
       } finally {

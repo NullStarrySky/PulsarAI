@@ -10,6 +10,9 @@
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-start-dragging",
-    "opener:default"
+    "opener:default",
+    "os:default",
+    "dialog:default",
+    "dialog:allow-open"
   ]
 }

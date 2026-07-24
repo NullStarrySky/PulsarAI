@@ -1,10 +1,14 @@
 import type { Component } from "vue";
-import { Brain, Info, Palette, Settings, SlidersHorizontal } from "lucide-vue-next";
+import { BarChart3, Brain, HardDriveDownload, Info, Keyboard, Languages, Palette, Settings, SlidersHorizontal } from "lucide-vue-next";
 import GeneralSettingsPage from "../presentation/pages/GeneralSettingsPage.vue";
 import ModelProviderSettingsPage from "@/features/ModelConnection/presentation/ModelProviderSettingsPage.vue";
 import DefaultConfigSettingsPage from "@/features/defaultConfigs/presentation/DefaultConfigSettingsPage.vue";
 import AboutSettingsPage from "@/features/About/presentation/AboutSettingsPage.vue";
 import AppearanceSettingsPage from "@/features/UI/presentation/AppearanceSettingsPage.vue";
+import HotkeySettingsPage from "@/features/Hotkey/presentation/HotkeySettingsPage.vue";
+import BackupSettingsPage from "@/features/Backup/presentation/BackupSettingsPage.vue";
+import StatisticSettingsPage from "@/features/Statistic/presentation/StatisticSettingsPage.vue";
+import TranslateSettingsPage from "@/features/Translate/presentation/TranslateSettingsPage.vue";
 
 export interface SettingPageMeta {
   id: string;
@@ -54,6 +58,8 @@ export function ensureDefaultSettingPages() {
   registerSettingGroup({ id: "general", title: "基础" });
   registerSettingGroup({ id: "appearance", title: "外观" });
   registerSettingGroup({ id: "provider", title: "模型" });
+  registerSettingGroup({ id: "tools", title: "工具" });
+  registerSettingGroup({ id: "data", title: "数据" });
   registerSettingGroup({ id: "about", title: "关于" });
 
   registerSettingPage({
@@ -88,12 +94,52 @@ export function ensureDefaultSettingPages() {
 
   registerSettingPage({
     meta: {
+      id: "tools.hotkey",
+      icon: Keyboard,
+      title: "快捷键",
+      group: "tools",
+    },
+    component: HotkeySettingsPage,
+  });
+
+  registerSettingPage({
+    meta: {
+      id: "tools.translate",
+      icon: Languages,
+      title: "翻译",
+      group: "tools",
+    },
+    component: TranslateSettingsPage,
+  });
+
+  registerSettingPage({
+    meta: {
       id: "provider.models",
       icon: Brain,
       title: "模型提供商",
       group: "provider",
     },
     component: ModelProviderSettingsPage,
+  });
+
+  registerSettingPage({
+    meta: {
+      id: "data.backup",
+      icon: HardDriveDownload,
+      title: "同步与备份",
+      group: "data",
+    },
+    component: BackupSettingsPage,
+  });
+
+  registerSettingPage({
+    meta: {
+      id: "data.statistic",
+      icon: BarChart3,
+      title: "数据统计",
+      group: "data",
+    },
+    component: StatisticSettingsPage,
   });
 
   registerSettingPage({

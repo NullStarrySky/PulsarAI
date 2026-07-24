@@ -59,15 +59,15 @@ export const builtinModelProviders: ModelProviderDefinition[] = [
     builtIn: true,
     models: [
       {
-        id: "deepseek-chat",
-        name: "DeepSeek Chat",
+        id: "deepseek-v4-flash",
+        name: "DeepSeek V4 Flash",
         apiType: "chat",
         contextSize: 64000,
         enabled: true,
       },
       {
-        id: "deepseek-reasoner",
-        name: "DeepSeek Reasoner",
+        id: "deepseek-v4-pro",
+        name: "DeepSeek V4 Pro",
         apiType: "chat",
         contextSize: 64000,
         enabled: true,

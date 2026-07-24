@@ -25,6 +25,11 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Agent runtime: `src/features/Agent/`
 - Sandbox: `src/features/Sandbox/`
 - About: `src/features/About/`
+- Hotkey: `src/features/Hotkey/`
+- Backup: `src/features/Backup/`
+- Statistic: `src/features/Statistic/`
+- Translate: `src/features/Translate/`
+- Misc platform helpers: `src/features/Misc/`
 
 ## Core Types
 
@@ -37,6 +42,10 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - `SandboxEnvironment`, `SandboxExecutionResult`, `ResolveTextOptions`: `src/features/Sandbox/domain/sandbox.ts`
 - `FontDefinition`: `src/features/UI/font/domain/font-registry.ts`
 - `ThemeDefinition`, `ThemeMode`: `src/features/UI/theme/domain/theme-registry.ts`
+- `CommandDefinition`: `src/features/Hotkey/application/command-store.ts`
+- `StatisticEvent`: `src/features/Statistic/domain/statistic.ts`
+- `TranslateState`: `src/features/Translate/domain/translate.ts`
+- `BackupInfo`, `BackupEndpointSettings`, `RemoteBackupSettings`: `src/features/Backup/application/backup-store.ts`
 
 ## External Interfaces
 
@@ -59,6 +68,14 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Shell sidebar registry: `src/features/UI/application/sidebar-registry.ts`
 - Settings registry: `src/features/Setting/application/setting-registry.ts`
 - Appearance store: `src/features/UI/theme/application/appearance-store.ts`
+- Command registry and palette state: `src/features/Hotkey/application/command-store.ts`
+- Hotkey bindings and keyboard normalization: `src/features/Hotkey/application/hotkey-store.ts`
+- Core UI command registration: `src/features/UI/actions.ts`
+- Conversation command actions: `src/features/Resources/Conversation/actions.ts`
+- Runtime platform helpers: `src/features/Misc/domain/platform.ts`
+- Backup store and Tauri backup commands: `src/features/Backup/application/backup-store.ts`, `src-tauri/src/lib.rs`
+- Statistic event store: `src/features/Statistic/application/statistic-store.ts`
+- Translate service store: `src/features/Translate/application/translate-store.ts`
 
 ## Phase 1 UI
 
@@ -81,6 +98,11 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Inline edit popover input: `src/features/UI/presentation/InlineEditInput.vue`
 - Appearance settings page: `src/features/UI/presentation/AppearanceSettingsPage.vue`
 - About settings page: `src/features/About/presentation/AboutSettingsPage.vue`
+- Command search floating dialog: `src/features/UI/search/presentation/CommandSearchDialog.vue`
+- Hotkey settings page: `src/features/Hotkey/presentation/HotkeySettingsPage.vue`
+- Backup settings page: `src/features/Backup/presentation/BackupSettingsPage.vue`
+- Statistic settings page: `src/features/Statistic/presentation/StatisticSettingsPage.vue`
+- Translate settings page: `src/features/Translate/presentation/TranslateSettingsPage.vue`
 
 ## Phase 2 Model Access
 
@@ -114,6 +136,16 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Feature-specific sidebar content is registered through `sidebar-registry.ts`; UI shell files do not import conversation stores or message renderers directly.
 - Appearance settings are owned by `appearance-store.ts`, theme registry CSS under `src/features/UI/theme/`, and font registry under `src/features/UI/font/`.
 - About settings are registered as a normal settings page under `src/features/About/`.
+
+## Phase 5 Misc Tools
+
+- Global search is a floating command palette, not a workspace page. It searches registered commands, character packages, and conversation resources; `tag:` is reserved as a tag-filter query prefix.
+- Commands are registered through `CommandDefinition` and can be executed by search or hotkeys. Feature-owned commands should live in that feature's `actions.ts` and be registered from `src/features/UI/actions.ts` only as shell wiring.
+- Hotkeys persist local overrides in `hotkey-store.ts`; the shell captures keyboard events and dispatches the matched command.
+- `DefaultConfig` owns default model, fast model, embedding model, and image model as string model references.
+- Backup has local JSON backup commands in Tauri for core tables and a WebDAV settings surface for later remote transfer.
+- Statistic records launch and message events in `statistic_events`, while resource counts and estimated data sizes are derived from current Conversation state.
+- Translate exposes a Pinia service. Google public translate is available for quick tests; Microsoft/Azure translation is a configurable provider placeholder until subscription key plumbing is added.
 
 ## Working Principle
 

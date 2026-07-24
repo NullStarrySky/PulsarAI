@@ -21,3 +21,27 @@ export function getDefaultChatModel() {
 export function setDefaultChatModel(model: string) {
   return setDefaultConfig(defaultConfigKeys.defaultChatModel, model);
 }
+
+export function getFastModel() {
+  return getDefaultConfig(defaultConfigKeys.fastModel, fallbackDefaultConfigs.fastModel);
+}
+
+export function setFastModel(model: string) {
+  return setDefaultConfig(defaultConfigKeys.fastModel, model);
+}
+
+export function getEmbeddingModel() {
+  return getDefaultConfig(defaultConfigKeys.embeddingModel, fallbackDefaultConfigs.embeddingModel);
+}
+
+export function setEmbeddingModel(model: string) {
+  return setDefaultConfig(defaultConfigKeys.embeddingModel, model);
+}
+
+export function getImageModel() {
+  return getDefaultConfig(defaultConfigKeys.imageModel, fallbackDefaultConfigs.imageModel);
+}
+
+export function setImageModel(model: string) {
+  return setDefaultConfig(defaultConfigKeys.imageModel, model);
+}
