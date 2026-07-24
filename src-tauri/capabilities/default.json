@@ -96,6 +96,114 @@
     "opener:default",
     "notifications:default",
     "os:default",
+    "fs:default",
+    "fs:allow-app-read-recursive",
+    "fs:allow-app-write-recursive",
+    "fs:allow-appconfig-read-recursive",
+    "fs:allow-appconfig-write-recursive",
+    "fs:allow-appdata-read-recursive",
+    "fs:allow-appdata-write-recursive",
+    "fs:allow-applocaldata-read-recursive",
+    "fs:allow-applocaldata-write-recursive",
+    "fs:allow-document-read-recursive",
+    "fs:allow-document-write-recursive",
+    "fs:allow-download-read-recursive",
+    "fs:allow-download-write-recursive",
+    "fs:allow-picture-read-recursive",
+    "fs:allow-picture-write-recursive",
+    "fs:allow-video-read-recursive",
+    "fs:allow-video-write-recursive",
+    "upload:default",
+    "shell:default",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "node-version",
+          "cmd": "node",
+          "args": ["--version"],
+          "sidecar": false
+        },
+        {
+          "name": "git-version",
+          "cmd": "git",
+          "args": ["--version"],
+          "sidecar": false
+        },
+        {
+          "name": "node-path-windows",
+          "cmd": "where",
+          "args": ["node"],
+          "sidecar": false
+        },
+        {
+          "name": "git-path-windows",
+          "cmd": "where",
+          "args": ["git"],
+          "sidecar": false
+        },
+        {
+          "name": "node-path-unix",
+          "cmd": "which",
+          "args": ["node"],
+          "sidecar": false
+        },
+        {
+          "name": "git-path-unix",
+          "cmd": "which",
+          "args": ["git"],
+          "sidecar": false
+        },
+        {
+          "name": "agent-bun",
+          "cmd": "bun",
+          "args": true,
+          "sidecar": false
+        },
+        {
+          "name": "agent-node",
+          "cmd": "node",
+          "args": true,
+          "sidecar": false
+        },
+        {
+          "name": "agent-npm",
+          "cmd": "npm",
+          "args": true,
+          "sidecar": false
+        },
+        {
+          "name": "agent-npx",
+          "cmd": "npx",
+          "args": true,
+          "sidecar": false
+        },
+        {
+          "name": "agent-git",
+          "cmd": "git",
+          "args": true,
+          "sidecar": false
+        },
+        {
+          "name": "agent-powershell",
+          "cmd": "powershell",
+          "args": true,
+          "sidecar": false
+        },
+        {
+          "name": "agent-pwsh",
+          "cmd": "pwsh",
+          "args": true,
+          "sidecar": false
+        },
+        {
+          "name": "agent-cmd",
+          "cmd": "cmd",
+          "args": true,
+          "sidecar": false
+        }
+      ]
+    },
     "dialog:default",
     "dialog:allow-open"
   ]

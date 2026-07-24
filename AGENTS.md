@@ -9,6 +9,7 @@
 - When implementing UI components, reuse shadcn-vue components and theme CSS variables whenever practical so spacing, color, radius, focus, and state styling stay consistent.
 - Commands that expose feature behavior to search or hotkeys should keep their implementation in the owning feature's `actions.ts`; UI may register and route commands but should not own domain behavior.
 - When implementing settings forms, reuse `SettingForm` and `SettingFormField` from `src/features/Setting/presentation/` whenever practical so each field has a clear title, description, and control area.
+- `todo.md` is a migrated backlog/reference file. Treat it as project context when planning feature work, but do not delete completed or skipped items unless explicitly asked.
 
 ## Project Shape
 

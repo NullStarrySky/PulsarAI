@@ -14,7 +14,6 @@ src-tauri/target
 *.local
 .prompt_history
 .vscode
-src-old
 apikeys
 
 # Editor directories and files

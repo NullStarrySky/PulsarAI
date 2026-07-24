@@ -19,6 +19,8 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 
 - Database: `src/features/Database/`
 - Conversation: `src/features/Resources/Conversation/`
+- Reserved component resources: `src/features/Resources/Component/`
+- Reserved preset resources: `src/features/Resources/Preset/`
 - Setting: `src/features/Setting/`
 - UI ownership: `src/features/UI/`
 - Model connections: `src/features/ModelConnection/`
@@ -50,6 +52,7 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - `BackupInfo`, `BackupEndpointSettings`, `RemoteBackupSettings`: `src/features/Backup/application/backup-store.ts`
 - `ScheduleTask`, `SchedulePeriod`: `src/features/UI/schedule/domain/schedule.ts`
 - `SubWindowParams`, `SubWindowTarget`, `SubWindowBridgeMessage`: `src/features/SubWindow/domain/sub-window-protocol.ts`
+- `ComponentResource`: `src/features/Resources/Component/domain/component-resource.ts`
 
 ## External Interfaces
 
@@ -77,6 +80,7 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Core UI command registration: `src/features/UI/actions.ts`
 - Conversation command actions: `src/features/Resources/Conversation/actions.ts`
 - Runtime platform helpers: `src/features/Misc/domain/platform.ts`
+- About environment detection: `src/features/About/application/environment-check.ts`
 - Android battery optimization adapter: `src/features/Misc/application/android-battery-optimization.ts`
 - Reply completion notification adapter: `src/features/Misc/application/reply-completion-notifier.ts`
 - Runtime preference store: `src/features/Misc/application/runtime-preference-store.ts`
@@ -107,6 +111,8 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Inline edit popover input: `src/features/UI/presentation/InlineEditInput.vue`
 - Appearance settings page: `src/features/UI/presentation/AppearanceSettingsPage.vue`
 - About settings page: `src/features/About/presentation/AboutSettingsPage.vue`
+- Reserved component preview renderer: `src/features/Resources/Component/presentation/ComponentResourcePreview.vue`
+- Reserved JavaScript preset editor: `src/features/Resources/Preset/presentation/JavaScriptCodeMirrorEditor.vue`
 - Command search floating dialog: `src/features/UI/search/presentation/CommandSearchDialog.vue`
 - Hotkey settings page: `src/features/Hotkey/presentation/HotkeySettingsPage.vue`
 - Backup settings page: `src/features/Backup/presentation/BackupSettingsPage.vue`
@@ -149,6 +155,7 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Feature-specific sidebar content is registered through `sidebar-registry.ts`; UI shell files do not import conversation stores or message renderers directly.
 - Appearance settings are owned by `appearance-store.ts`, theme registry CSS under `src/features/UI/theme/`, and font registry under `src/features/UI/font/`.
 - About settings are registered as a normal settings page under `src/features/About/`.
+- About settings include lightweight environment checks for command-line tools used by later plugin and agent workflows.
 
 ## Phase 5 Misc Tools
 
