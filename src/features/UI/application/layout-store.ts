@@ -17,6 +17,7 @@ export const useLayoutStore = defineStore("layout", {
     leftSidebarOpen: true,
     rightSidebarOpen: false,
     settingsOpen: false,
+    shellMode: "normal" as "normal" | "simplified",
     activeTabId: "",
     tabs: [...defaultTabs] as WorkspaceTab[],
   }),
@@ -38,6 +39,13 @@ export const useLayoutStore = defineStore("layout", {
     },
     setSettingsOpen(open: boolean) {
       this.settingsOpen = open;
+    },
+    setShellMode(mode: "normal" | "simplified") {
+      this.shellMode = mode;
+      if (mode === "simplified") {
+        this.leftSidebarOpen = false;
+        this.rightSidebarOpen = false;
+      }
     },
     activateTab(tabId: string) {
       if (this.tabs.some((tab) => tab.id === tabId)) {

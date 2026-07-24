@@ -5,7 +5,9 @@ import { useLayoutStore } from "../application/layout-store";
 
 const layout = useLayoutStore();
 const activeTab = computed(() => layout.activeTab);
-const activeComponent = computed(() => getWorkspaceResourceComponent(activeTab.value?.resourceType));
+const activeComponent = computed(() =>
+  getWorkspaceResourceComponent(activeTab.value?.resourceType, activeTab.value?.resourceId),
+);
 </script>
 
 <template>

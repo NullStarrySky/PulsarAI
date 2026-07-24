@@ -30,6 +30,8 @@ The app is moving through the basic agent and conversation-runtime phase:
 - a frontend sandbox for macro expansion and controlled JavaScript execution;
 - appearance, font, and about settings;
 - Milkdown/Crepe markdown rendering for messages and composer input;
+- built-in workspace pages opened through the UI resource registry rather than sidebar-local mode switching;
+- SubWindow protocol and WebviewWindow adapters isolated under `src/features/SubWindow`;
 - `design.md` as the project index.
 
 MCP, Skill, plugin resources, and richer tool orchestration are later-phase additions.

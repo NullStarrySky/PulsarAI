@@ -709,10 +709,16 @@ export const useConversationStore = defineStore("conversation", {
           },
         });
         message.meta.generateInfo.modelName = result.modelName;
-        message.content = result.text;
-        void import("@/features/Statistic/application/statistic-store").then(({ useStatisticStore }) =>
-          useStatisticStore().recordEvent("message.assistant"),
-        );
+          message.content = result.text;
+          void import("@/features/Statistic/application/statistic-store").then(({ useStatisticStore }) =>
+            useStatisticStore().recordEvent("message.assistant"),
+          );
+          void import("@/features/Misc/application/reply-completion-notifier").then(({ notifyReplyCompleted }) =>
+            notifyReplyCompleted({
+              title: "Pulsar",
+              body: result.text.slice(0, 120) || "回复已完成。",
+            }),
+          );
       } catch (error) {
         message.content = error instanceof Error ? error.message : "生成失败";
       } finally {

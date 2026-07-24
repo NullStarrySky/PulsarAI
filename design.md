@@ -30,6 +30,8 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Statistic: `src/features/Statistic/`
 - Translate: `src/features/Translate/`
 - Misc platform helpers: `src/features/Misc/`
+- Subwindow: `src/features/SubWindow/`
+- Scheduled tasks: `src/features/UI/schedule/`
 
 ## Core Types
 
@@ -46,6 +48,8 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - `StatisticEvent`: `src/features/Statistic/domain/statistic.ts`
 - `TranslateState`: `src/features/Translate/domain/translate.ts`
 - `BackupInfo`, `BackupEndpointSettings`, `RemoteBackupSettings`: `src/features/Backup/application/backup-store.ts`
+- `ScheduleTask`, `SchedulePeriod`: `src/features/UI/schedule/domain/schedule.ts`
+- `SubWindowParams`, `SubWindowTarget`, `SubWindowBridgeMessage`: `src/features/SubWindow/domain/sub-window-protocol.ts`
 
 ## External Interfaces
 
@@ -73,9 +77,14 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Core UI command registration: `src/features/UI/actions.ts`
 - Conversation command actions: `src/features/Resources/Conversation/actions.ts`
 - Runtime platform helpers: `src/features/Misc/domain/platform.ts`
+- Android battery optimization adapter: `src/features/Misc/application/android-battery-optimization.ts`
+- Reply completion notification adapter: `src/features/Misc/application/reply-completion-notifier.ts`
+- Runtime preference store: `src/features/Misc/application/runtime-preference-store.ts`
 - Backup store and Tauri backup commands: `src/features/Backup/application/backup-store.ts`, `src-tauri/src/lib.rs`
 - Statistic event store: `src/features/Statistic/application/statistic-store.ts`
 - Translate service store: `src/features/Translate/application/translate-store.ts`
+- Schedule store: `src/features/UI/schedule/application/schedule-store.ts`
+- Subwindow service: `src/features/SubWindow/application/sub-window-service.ts`
 
 ## Phase 1 UI
 
@@ -103,6 +112,10 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Backup settings page: `src/features/Backup/presentation/BackupSettingsPage.vue`
 - Statistic settings page: `src/features/Statistic/presentation/StatisticSettingsPage.vue`
 - Translate settings page: `src/features/Translate/presentation/TranslateSettingsPage.vue`
+- Runtime settings page: `src/features/Misc/presentation/RuntimeSettingsPage.vue`
+- Scheduled task workspace page: `src/features/UI/schedule/presentation/SchedulePage.vue`
+- Built-in plugin placeholder page: `src/features/UI/builtin/presentation/PluginPlaceholderPage.vue`
+- Subwindow bridge container: `src/features/SubWindow/presentation/SubWindowContainer.vue`
 
 ## Phase 2 Model Access
 
@@ -146,6 +159,22 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Backup has local JSON backup commands in Tauri for core tables and a WebDAV settings surface for later remote transfer.
 - Statistic records launch and message events in `statistic_events`, while resource counts and estimated data sizes are derived from current Conversation state.
 - Translate exposes a Pinia service. Google public translate is available for quick tests; Microsoft/Azure translation is a configurable provider placeholder until subscription key plumbing is added.
+
+## Phase 6 Schedule, Subwindows, And Whiteboard
+
+- Built-in workspace pages use `resourceType: "builtin"` plus `resourceId` and register through `workspace-resource-registry.ts`. The left sidebar opens these pages as links while keeping the character package list visible.
+- Schedule tasks persist in `ui_schedule_tasks`, support daily or weekly periods, random execution inside a time range, prompt text, and a target conversation selected through a searchable conversation selector.
+- The schedule store owns runtime ticking and immediate execution. Execution opens the target conversation and sends the configured prompt through the normal conversation path.
+- Subwindows are described by `SubWindowParams` and opened by `sub-window-service.ts` through Tauri `WebviewWindow`. Simplified mode hides sidebars and opens the requested resource from URL parameters.
+- `SubWindowContainer.vue` is the reusable local-IPC bridge wrapper for future component-level popout surfaces.
+- Conversation composer includes an Excalidraw iframe whiteboard entry in the input toolbar.
+
+## Runtime Notifications And Android Power
+
+- Runtime settings expose reply-completion sound, reply-completion system notifications, and a foreground guard so alerts only fire when Pulsar is not focused by default.
+- Reply completion notification logic lives in `reply-completion-notifier.ts` and is triggered after successful assistant generation in `conversation-store.ts`.
+- Android battery optimization controls are hidden outside Android through `Misc` platform helpers. On Android they wrap `tauri-plugin-android-battery-optimization-api` for status, exemption request, and opening system settings.
+- Tauri registers `tauri-plugin-notifications` on all platforms and `tauri-plugin-android-battery-optimization` only for Android target builds.
 
 ## Working Principle
 

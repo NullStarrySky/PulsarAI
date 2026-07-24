@@ -123,10 +123,6 @@
   caret-color: var(--foreground);
 }
 
-.milkdown .ProseMirror .prosemirror-virtual-cursor {
-  border-left-width: 3px;
-}
-
 .milkdown .crepe-drop-cursor {
   background-color: var(--foreground) !important;
   opacity: 0.7 !important;

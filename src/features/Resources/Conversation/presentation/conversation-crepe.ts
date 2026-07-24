@@ -21,8 +21,8 @@ export const conversationCrepeFeatures: Record<CrepeFeature, boolean> = {
 export const conversationCrepeFeatureConfigs: NonNullable<CrepeConfig["featureConfigs"]> = {
   [CrepeFeature.Cursor]: {
     color: "var(--foreground)",
-    width: 5,
-    virtual: true,
+    width: 2,
+    virtual: false,
   },
   [CrepeFeature.AI]: {
     provider: conversationAIProvider,

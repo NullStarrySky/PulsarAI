@@ -12,7 +12,6 @@ import {
   LayoutGrid,
   List,
   MoreHorizontal,
-  Package,
   Plug,
   Plus,
   Search,
@@ -52,7 +51,6 @@ const layout = useLayoutStore();
 const commandStore = useCommandStore();
 const conversation = useConversationStore();
 const { leftSidebarOpen } = storeToRefs(layout);
-const mode = ref<"packages" | "tasks" | "plugins">("packages");
 const packageViewMode = ref<"list" | "grid">("list");
 const collapsedCategoryIds = ref<string[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -91,6 +89,14 @@ async function openPackage(packageId: string) {
       title: active.title,
     });
   }
+}
+
+function openBuiltinPage(resourceId: "schedule" | "plugins", title: string) {
+  layout.openResourceTab({
+    resourceType: "builtin",
+    resourceId,
+    title,
+  });
 }
 
 async function createPackage(categoryId: string | null) {
@@ -179,34 +185,18 @@ async function uploadIcon(event: Event) {
           <Search class="size-4" />
           搜索
         </Button>
-        <Button
-          class="h-9 justify-start gap-2"
-          :variant="mode === 'packages' ? 'secondary' : 'ghost'"
-          @click="mode = 'packages'"
-        >
-          <Package class="size-4" />
-          角色包
-        </Button>
-        <Button
-          class="h-9 justify-start gap-2"
-          :variant="mode === 'tasks' ? 'secondary' : 'ghost'"
-          @click="mode = 'tasks'"
-        >
+        <Button class="h-9 justify-start gap-2" variant="ghost" @click="openBuiltinPage('schedule', '定时任务')">
           <Clock class="size-4" />
           定时任务
         </Button>
-        <Button
-          class="h-9 justify-start gap-2"
-          :variant="mode === 'plugins' ? 'secondary' : 'ghost'"
-          @click="mode = 'plugins'"
-        >
+        <Button class="h-9 justify-start gap-2" variant="ghost" @click="openBuiltinPage('plugins', '插件')">
           <Plug class="size-4" />
           插件
         </Button>
       </nav>
     </div>
 
-    <div v-if="mode === 'packages'" class="min-w-72 flex-1 overflow-y-auto p-2">
+    <div class="min-w-72 flex-1 overflow-y-auto p-2">
       <div class="mb-2 flex items-center justify-between px-1">
         <span class="text-xs font-medium text-muted-foreground">角色包</span>
         <Button
@@ -379,15 +369,6 @@ async function uploadIcon(event: Event) {
           </div>
         </div>
       </section>
-    </div>
-
-    <div v-else class="min-w-72 flex-1 p-4">
-      <div class="flex h-full flex-col items-center justify-center rounded-md border border-dashed text-center text-sm text-muted-foreground">
-        <Clock v-if="mode === 'tasks'" class="mb-2 size-5" />
-        <Plug v-else class="mb-2 size-5" />
-        <p class="font-medium text-foreground">{{ mode === "tasks" ? "定时任务" : "插件" }}</p>
-        <p class="mt-1 text-xs">{{ mode === "tasks" ? "后续阶段接入任务列表。" : "后续阶段接入插件列表。" }}</p>
-      </div>
     </div>
 
     <div class="min-w-72 border-t p-2">

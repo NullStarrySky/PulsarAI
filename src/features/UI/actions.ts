@@ -1,8 +1,10 @@
 import {
   Copy,
+  CalendarClock,
   PanelLeft,
   PanelRight,
   Pencil,
+  Plug,
   RefreshCw,
   Search,
   Settings,
@@ -44,6 +46,30 @@ function createCoreCommands(): CommandDefinition[] {
       icon: Search,
       run: () => useCommandStore().openPalette(),
       closeOnRun: false,
+    },
+    {
+      id: "ui.builtin.schedule.open",
+      title: "打开定时任务",
+      category: "界面",
+      icon: CalendarClock,
+      run: () =>
+        useLayoutStore().openResourceTab({
+          resourceType: "builtin",
+          resourceId: "schedule",
+          title: "定时任务",
+        }),
+    },
+    {
+      id: "ui.builtin.plugins.open",
+      title: "打开插件",
+      category: "界面",
+      icon: Plug,
+      run: () =>
+        useLayoutStore().openResourceTab({
+          resourceType: "builtin",
+          resourceId: "plugins",
+          title: "插件",
+        }),
     },
     {
       id: "ui.sidebar.left.toggle",

@@ -5,6 +5,7 @@ import { storeToRefs } from "pinia";
 import {
   ChevronsLeft,
   ChevronsRight,
+  ExternalLink,
   Maximize2,
   Minus,
   PanelLeft,
@@ -12,11 +13,19 @@ import {
   X,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { popOutWorkspaceTab } from "@/features/SubWindow/application/sub-window-service";
 import { cn } from "@/lib/utils";
 import { useLayoutStore } from "../application/layout-store";
 
 const layout = useLayoutStore();
-const { activeTabId, leftSidebarOpen, rightSidebarOpen, tabs } = storeToRefs(layout);
+const { activeTabId, leftSidebarOpen, rightSidebarOpen, shellMode, tabs } = storeToRefs(layout);
 const compactTabs = computed(() => tabs.value.length > 8);
 const appWindow = getCurrentWindow();
 
@@ -38,6 +47,14 @@ function closeWithMiddleButton(event: MouseEvent, tabId: string) {
     layout.closeTab(tabId);
   }
 }
+
+async function popOutTab(tabId: string) {
+  const tab = tabs.value.find((item) => item.id === tabId);
+  if (!tab) {
+    return;
+  }
+  await popOutWorkspaceTab(tab);
+}
 </script>
 
 <template>
@@ -45,6 +62,7 @@ function closeWithMiddleButton(event: MouseEvent, tabId: string) {
     class="flex h-10 shrink-0 select-none items-center gap-1.5 border-b bg-background px-2"
   >
     <Button
+      v-if="shellMode !== 'simplified'"
       class="relative z-10"
       variant="ghost"
       size="icon-sm"
@@ -56,32 +74,50 @@ function closeWithMiddleButton(event: MouseEvent, tabId: string) {
     </Button>
 
     <nav class="relative z-10 flex min-w-0 max-w-[58vw] items-center gap-0.5 overflow-hidden">
-      <button
+      <ContextMenu
         v-for="tab in tabs"
         :key="tab.id"
-        :class="
-          cn(
-            'group flex h-7 min-w-7 max-w-36 items-center gap-1 rounded-md px-2 text-sm transition-colors',
-            activeTabId === tab.id
-              ? 'bg-muted text-foreground shadow-[inset_0_0_0_1px_var(--border)]'
-              : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground',
-          )
-        "
-        type="button"
-        @click="layout.activateTab(tab.id)"
-        @auxclick="closeWithMiddleButton($event, tab.id)"
       >
-        <span :class="cn('truncate', compactTabs && 'hidden xl:inline')">{{ tab.title }}</span>
-        <button
-          v-if="tab.closable !== false"
-          class="inline-flex size-3.5 shrink-0 items-center justify-center rounded-[3px] text-muted-foreground opacity-55 transition hover:bg-background hover:text-foreground hover:opacity-100"
-          type="button"
-          title="关闭标签页"
-          @click.stop="layout.closeTab(tab.id)"
-        >
-          <X class="size-2.5" />
-        </button>
-      </button>
+        <ContextMenuTrigger as-child>
+          <div
+            :class="
+              cn(
+                'group flex h-7 min-w-7 max-w-36 items-center gap-1 rounded-md px-2 text-sm transition-colors',
+                activeTabId === tab.id
+                  ? 'bg-muted text-foreground shadow-[inset_0_0_0_1px_var(--border)]'
+                  : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground',
+              )
+            "
+            role="button"
+            tabindex="0"
+            @click="layout.activateTab(tab.id)"
+            @auxclick="closeWithMiddleButton($event, tab.id)"
+            @keydown.enter.prevent="layout.activateTab(tab.id)"
+          >
+            <span :class="cn('truncate', compactTabs && 'hidden xl:inline')">{{ tab.title }}</span>
+            <button
+              v-if="tab.closable !== false"
+              class="inline-flex size-3.5 shrink-0 items-center justify-center rounded-[3px] text-muted-foreground opacity-55 transition hover:bg-background hover:text-foreground hover:opacity-100"
+              type="button"
+              title="关闭标签页"
+              @click.stop="layout.closeTab(tab.id)"
+            >
+              <X class="size-2.5" />
+            </button>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent class="w-44">
+          <ContextMenuItem @click="popOutTab(tab.id)">
+            <ExternalLink class="mr-2 size-4" />
+            弹出到子窗口
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem :disabled="tab.closable === false" @click="layout.closeTab(tab.id)">
+            <X class="mr-2 size-4" />
+            关闭标签页
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     </nav>
 
     <div
@@ -90,7 +126,7 @@ function closeWithMiddleButton(event: MouseEvent, tabId: string) {
     />
 
     <div class="relative z-10 flex items-center gap-0.5">
-      <Button variant="ghost" size="icon-sm" title="切换右侧栏" @click="layout.toggleRightSidebar">
+      <Button v-if="shellMode !== 'simplified'" variant="ghost" size="icon-sm" title="切换右侧栏" @click="layout.toggleRightSidebar">
         <PanelRight v-if="rightSidebarOpen" />
         <ChevronsLeft v-else />
       </Button>

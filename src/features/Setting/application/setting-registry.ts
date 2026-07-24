@@ -1,5 +1,5 @@
 import type { Component } from "vue";
-import { BarChart3, Brain, HardDriveDownload, Info, Keyboard, Languages, Palette, Settings, SlidersHorizontal } from "lucide-vue-next";
+import { BarChart3, BellRing, Brain, HardDriveDownload, Info, Keyboard, Languages, Palette, Settings, SlidersHorizontal } from "lucide-vue-next";
 import GeneralSettingsPage from "../presentation/pages/GeneralSettingsPage.vue";
 import ModelProviderSettingsPage from "@/features/ModelConnection/presentation/ModelProviderSettingsPage.vue";
 import DefaultConfigSettingsPage from "@/features/defaultConfigs/presentation/DefaultConfigSettingsPage.vue";
@@ -9,6 +9,7 @@ import HotkeySettingsPage from "@/features/Hotkey/presentation/HotkeySettingsPag
 import BackupSettingsPage from "@/features/Backup/presentation/BackupSettingsPage.vue";
 import StatisticSettingsPage from "@/features/Statistic/presentation/StatisticSettingsPage.vue";
 import TranslateSettingsPage from "@/features/Translate/presentation/TranslateSettingsPage.vue";
+import RuntimeSettingsPage from "@/features/Misc/presentation/RuntimeSettingsPage.vue";
 
 export interface SettingPageMeta {
   id: string;
@@ -80,6 +81,16 @@ export function ensureDefaultSettingPages() {
       group: "general",
     },
     component: DefaultConfigSettingsPage,
+  });
+
+  registerSettingPage({
+    meta: {
+      id: "general.runtime",
+      icon: BellRing,
+      title: "运行时",
+      group: "general",
+    },
+    component: RuntimeSettingsPage,
   });
 
   registerSettingPage({

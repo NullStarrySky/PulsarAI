@@ -9,15 +9,20 @@ export interface WorkspaceResourceComponentProps {
 
 export interface WorkspaceResourceRegistration {
   type: string;
-  component: Component<WorkspaceResourceComponentProps>;
+  id?: string;
+  component: Component;
 }
 
-const registrations = new Map<string, Component<WorkspaceResourceComponentProps>>();
+const registrations = new Map<string, Component>();
+
+function registrationKey(type: string, id?: string) {
+  return id ? `${type}:${id}` : type;
+}
 
 export function registerWorkspaceResource(registration: WorkspaceResourceRegistration) {
-  registrations.set(registration.type, registration.component);
+  registrations.set(registrationKey(registration.type, registration.id), registration.component);
 }
 
-export function getWorkspaceResourceComponent(type?: string) {
-  return type ? registrations.get(type) : undefined;
+export function getWorkspaceResourceComponent(type?: string, id?: string) {
+  return type ? registrations.get(registrationKey(type, id)) ?? registrations.get(type) : undefined;
 }

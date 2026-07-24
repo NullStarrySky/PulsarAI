@@ -12,6 +12,7 @@
   "dependencies": {
     "@ai-sdk/deepseek": "^3.0.13",
     "@ai-sdk/openai": "^4.0.20",
+    "@choochmeque/tauri-plugin-notifications-api": "0.4.6",
     "@lucide/vue": "^1.26.0",
     "@milkdown/crepe": "^7.21.3",
     "@milkdown/vue": "^7.21.3",
@@ -34,6 +35,7 @@
     "surrealdb": "^2.0.8",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.3",
+    "tauri-plugin-android-battery-optimization-api": "^0.1.0",
     "vaul-vue": "^0.4.1",
     "vee-validate": "^4.15.1",
     "vue": "^3.5.13",

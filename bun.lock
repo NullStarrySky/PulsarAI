@@ -7,6 +7,7 @@
       "dependencies": {
         "@ai-sdk/deepseek": "^3.0.13",
         "@ai-sdk/openai": "^4.0.20",
+        "@choochmeque/tauri-plugin-notifications-api": "0.4.6",
         "@lucide/vue": "^1.26.0",
         "@milkdown/crepe": "^7.21.3",
         "@milkdown/vue": "^7.21.3",
@@ -29,6 +30,7 @@
         "surrealdb": "^2.0.8",
         "tailwind-merge": "^3.6.0",
         "tailwindcss": "^4.3.3",
+        "tauri-plugin-android-battery-optimization-api": "^0.1.0",
         "vaul-vue": "^0.4.1",
         "vee-validate": "^4.15.1",
         "vue": "^3.5.13",
@@ -64,6 +66,8 @@
     "@babel/parser": ["@babel/parser@7.29.7", "https://registry.npmmirror.com/@babel/parser/-/parser-7.29.7.tgz", { "dependencies": { "@babel/types": "^7.29.7" }, "bin": "./bin/babel-parser.js" }, "sha512-hnORnjP/1P/zFEndoeX+n+t1RwWRJiJpM/jO7FW32Kn9r5+sJB2JWOdYo4L6k78j15eCwY3Gm/7364B1EMwtNg=="],
 
     "@babel/types": ["@babel/types@7.29.7", "https://registry.npmmirror.com/@babel/types/-/types-7.29.7.tgz", { "dependencies": { "@babel/helper-string-parser": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7" } }, "sha512-4zBIxpPzowiZpusoFkyGVwakdRJUyuH5PxQ/PrqghfdFWWasvnCdPfQXHrenDai+gyLARulZjZowCOj6fjT4pA=="],
+
+    "@choochmeque/tauri-plugin-notifications-api": ["@choochmeque/tauri-plugin-notifications-api@0.4.6", "https://registry.npmmirror.com/@choochmeque/tauri-plugin-notifications-api/-/tauri-plugin-notifications-api-0.4.6.tgz", { "dependencies": { "@tauri-apps/api": "^2.8.0" } }, "sha512-GMoym90j4kGJ9ygkW2DYZqg3i3UkgrDHX+najen2mxw+HBdF3DOLlbu1L2Z/QdTHb8PP9g3NP+BlowCY1ifNhw=="],
 
     "@codemirror/autocomplete": ["@codemirror/autocomplete@6.20.3", "https://registry.npmmirror.com/@codemirror/autocomplete/-/autocomplete-6.20.3.tgz", { "dependencies": { "@codemirror/language": "^6.0.0", "@codemirror/state": "^6.0.0", "@codemirror/view": "^6.17.0", "@lezer/common": "^1.0.0" } }, "sha512-tlosUqb+3BbxCxZdu4tKeRghPFC+QM7q4X5YhKV2eCmPG+1r2F3f4AaSz5sCrFqUtX4Jh20VFTKecl16MgiV9g=="],
 
@@ -790,6 +794,8 @@
     "tailwindcss": ["tailwindcss@4.3.3", "https://registry.npmmirror.com/tailwindcss/-/tailwindcss-4.3.3.tgz", {}, "sha512-gOhV3P7ufE62QDGg1zVaTgCR+EtPv92k2nIhVcVKcLmxT1sUBsQGhnZj175j+MqRt4zLF7ic+sCYjfhxMxj7YQ=="],
 
     "tapable": ["tapable@2.3.3", "https://registry.npmmirror.com/tapable/-/tapable-2.3.3.tgz", {}, "sha512-uxc/zpqFg6x7C8vOE7lh6Lbda8eEL9zmVm/PLeTPBRhh1xCgdWaQ+J1CUieGpIfm2HdtsUpRv+HshiasBMcc6A=="],
+
+    "tauri-plugin-android-battery-optimization-api": ["tauri-plugin-android-battery-optimization-api@0.1.0", "https://registry.npmmirror.com/tauri-plugin-android-battery-optimization-api/-/tauri-plugin-android-battery-optimization-api-0.1.0.tgz", { "dependencies": { "@tauri-apps/api": "^2.5.0" } }, "sha512-G52vDORre5zfrh61wG6ukQeeUAStuyXMYigbxFuH9SjifQV3VSVRhH4UTCL4vPRn8MWK1eMFewNLM7ZPJ7NQEA=="],
 
     "tinyglobby": ["tinyglobby@0.2.17", "https://registry.npmmirror.com/tinyglobby/-/tinyglobby-0.2.17.tgz", { "dependencies": { "fdir": "^6.5.0", "picomatch": "^4.0.4" } }, "sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g=="],
 

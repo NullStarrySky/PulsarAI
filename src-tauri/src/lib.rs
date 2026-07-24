@@ -593,7 +593,7 @@ async fn model_proxy_fetch(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(AppState {
             db: OnceCell::const_new(),
             http: reqwest::Client::new(),
@@ -601,6 +601,12 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notifications::init());
+
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(tauri_plugin_android_battery_optimization::init());
+
+    builder
         .invoke_handler(tauri::generate_handler![
             secret_has,
             secret_set,

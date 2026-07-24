@@ -13,6 +13,7 @@ import {
   Maximize2,
   MoreHorizontal,
   Pencil,
+  PenTool,
   Plus,
   RefreshCw,
   Send,
@@ -32,6 +33,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/application/default-config-store";
@@ -52,6 +59,7 @@ const defaults = useDefaultConfigStore();
 const translate = useTranslateStore();
 const input = ref("");
 const fullscreenInputOpen = ref(false);
+const whiteboardOpen = ref(false);
 const editing = reactive({
   containerId: "",
   messageId: "",
@@ -159,22 +167,25 @@ async function copyMessage(container: ChatMessageContainer) {
   push.success("已复制");
 }
 
+async function translateMessage(container: ChatMessageContainer) {
+  const message = messageOf(container);
+  if (!message?.content.trim() || translate.translating) {
+    return;
+  }
+
+  try {
+    const translated = await translate.translateText(message.content, true);
+    await conversation.editMessage(container.id, message.id, translated);
+    push.success("已翻译");
+  } catch {
+    push.error(translate.errorText || "翻译失败");
+  }
+}
+
 async function send() {
   const content = input.value;
   input.value = "";
   await conversation.send(content);
-}
-
-async function translateInput() {
-  if (!input.value.trim() || translate.translating) {
-    return;
-  }
-  try {
-    const translated = await translate.translateText(input.value, true);
-    input.value = translated;
-  } catch {
-    push.error(translate.errorText || "翻译失败");
-  }
 }
 
 async function switchSiblingMessage(container: ChatMessageContainer, direction: -1 | 1) {
@@ -373,9 +384,19 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
                   </PopoverContent>
                 </Popover>
 
-                <Button size="icon" variant="ghost" class="size-7">
-                  <MoreHorizontal class="size-3.5" />
-                </Button>
+                <DropdownMenu v-if="container.role !== 'user'">
+                  <DropdownMenuTrigger as-child>
+                    <Button size="icon" variant="ghost" class="size-7">
+                      <MoreHorizontal class="size-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" class="w-40">
+                    <DropdownMenuItem :disabled="translate.translating || !messageOf(container)?.content.trim()" @click="translateMessage(container)">
+                      <Languages class="mr-2 size-4" />
+                      翻译输出
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </div>
@@ -394,15 +415,8 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
             @update:model-value="defaults.setDefaultChatModel"
           />
           <div class="flex items-center gap-1">
-            <Button
-              size="icon"
-              variant="ghost"
-              class="size-8"
-              title="翻译输入"
-              :disabled="!input.trim() || translate.translating"
-              @click="translateInput"
-            >
-              <Languages class="size-4" />
+            <Button size="icon" variant="ghost" class="size-8" title="白板" @click="whiteboardOpen = true">
+              <PenTool class="size-4" />
             </Button>
             <Button size="icon" variant="ghost" class="size-8" title="全屏输入" @click="fullscreenInputOpen = true">
               <Maximize2 class="size-4" />
@@ -436,6 +450,17 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
             发送
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog v-model:open="whiteboardOpen">
+      <DialogContent class="h-[min(820px,92vh)] w-[min(1200px,calc(100vw-32px))] max-w-none overflow-hidden p-0 sm:max-w-none">
+        <iframe
+          class="h-full w-full border-0 bg-background"
+          src="https://excalidraw.com/"
+          title="Excalidraw 白板"
+          allow="clipboard-read; clipboard-write"
+        />
       </DialogContent>
     </Dialog>
   </div>
