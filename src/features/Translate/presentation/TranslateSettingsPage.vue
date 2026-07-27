@@ -105,13 +105,13 @@ onMounted(() => {
         <h2 class="text-sm font-semibold">翻译测试</h2>
         <span class="ml-auto text-xs text-muted-foreground">{{ translate.status }}</span>
       </header>
-      <div class="grid min-h-[320px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] divide-x">
+      <div class="grid min-h-[320px] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] divide-x mobile:grid-cols-1 mobile:grid-rows-[minmax(12rem,1fr)_auto_minmax(12rem,1fr)] mobile:divide-x-0 mobile:divide-y">
         <Textarea
           v-model="translate.sourceText"
           placeholder="输入原文..."
-          class="min-h-[320px] resize-none rounded-none border-0 bg-transparent focus-visible:ring-0"
+          class="min-h-[320px] resize-none rounded-none border-0 bg-transparent focus-visible:ring-0 mobile:min-h-48"
         />
-        <div class="flex w-16 flex-col items-center justify-center gap-2 bg-muted/20 px-2">
+        <div class="flex w-16 flex-col items-center justify-center gap-2 bg-muted/20 px-2 mobile:h-14 mobile:w-full mobile:flex-row mobile:px-3">
           <Button size="icon" :disabled="translate.translating" title="翻译" @click="translate.translateForPanel">
             <Languages class="size-4" />
           </Button>
@@ -123,7 +123,7 @@ onMounted(() => {
           v-model="translate.targetText"
           placeholder="译文..."
           :class="[
-            'min-h-[320px] resize-none rounded-none border-0 bg-transparent focus-visible:ring-0',
+            'min-h-[320px] resize-none rounded-none border-0 bg-transparent focus-visible:ring-0 mobile:min-h-48',
             translate.errorText && 'border-destructive text-destructive focus-visible:ring-destructive',
           ]"
         />

@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { getWorkspaceResourceComponent } from "@/features/UI/application/workspace-resource-registry";
+import {
+  getWorkspaceEmptyComponent,
+  getWorkspaceResourceComponent,
+} from "@/features/UI/application/workspace-resource-registry";
 import { useLayoutStore } from "../application/layout-store";
 
 const layout = useLayoutStore();
 const activeTab = computed(() => layout.activeTab);
+const emptyComponent = getWorkspaceEmptyComponent();
 const activeComponent = computed(() =>
   getWorkspaceResourceComponent(activeTab.value?.resourceType, activeTab.value?.resourceId),
 );
@@ -12,8 +16,10 @@ const activeComponent = computed(() =>
 
 <template>
   <main class="flex min-h-0 flex-1 flex-col bg-background">
+    <component :is="emptyComponent" v-if="!activeTab && emptyComponent" />
+
     <section
-      v-if="!activeTab"
+      v-else-if="!activeTab"
       class="flex min-h-0 flex-1 items-center justify-center bg-muted/10 text-sm text-muted-foreground"
     >
       选择一个资源开始。

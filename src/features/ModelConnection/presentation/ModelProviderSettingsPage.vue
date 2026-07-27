@@ -209,8 +209,8 @@ async function fetchModelList() {
 
 <template>
   <section class="flex h-full min-h-0 flex-col">
-    <div class="grid h-full min-h-0 overflow-hidden lg:grid-cols-[15rem_minmax(0,1fr)]">
-      <aside class="flex min-h-0 flex-col border-r">
+    <div class="grid h-full min-h-0 overflow-hidden lg:grid-cols-[15rem_minmax(0,1fr)] mobile:grid-rows-[10rem_minmax(0,1fr)]">
+      <aside class="flex min-h-0 flex-col border-r mobile:border-b mobile:border-r-0">
         <div class="flex items-center gap-2 border-b p-3">
           <div class="relative min-w-0 flex-1">
             <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -273,7 +273,7 @@ async function fetchModelList() {
       </aside>
 
       <section class="flex min-h-0 flex-col">
-        <header class="flex items-center justify-between gap-3 border-b px-6 pb-5 pt-6">
+        <header class="flex items-center justify-between gap-3 border-b px-6 pb-5 pt-6 mobile:px-4 mobile:py-3">
           <div class="flex min-w-0 items-center gap-3">
             <ProviderAvatar :name="activeProvider.name" :src="activeProvider.iconUrl" />
             <div class="min-w-0">
@@ -287,8 +287,8 @@ async function fetchModelList() {
           />
         </header>
 
-        <div class="min-h-0 flex-1 overflow-y-auto p-6">
-          <div class="grid gap-8">
+        <div class="min-h-0 flex-1 overflow-y-auto p-6 mobile:p-4">
+          <div class="grid gap-8 mobile:gap-6">
             <SettingForm>
               <SettingFormField title="API Key" description="用于连接当前服务商。">
                 <Input
@@ -308,9 +308,9 @@ async function fetchModelList() {
               </SettingFormField>
 
               <SettingFormField title="连通性检查" description="发送一条短消息，确认当前服务可用。">
-                <div class="flex justify-end gap-2">
+                <div class="flex justify-end gap-2 mobile:flex-col">
                   <Select v-model="connectivityModelId">
-                    <SelectTrigger class="w-56">
+                    <SelectTrigger class="w-56 mobile:w-full">
                       <SelectValue placeholder="选择对话模型" />
                     </SelectTrigger>
                     <SelectContent>
@@ -360,8 +360,8 @@ async function fetchModelList() {
                   <h3 class="text-base font-semibold">模型列表</h3>
                   <p class="text-sm text-muted-foreground">{{ store.availableModelCount }} 个模型可用</p>
                 </div>
-                <div class="flex items-center gap-2">
-                  <div class="relative w-52">
+                <div class="flex items-center gap-2 mobile:w-full mobile:flex-wrap">
+                  <div class="relative w-52 mobile:min-w-full">
                     <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                     <Input v-model="store.modelSearch" class="h-8 pl-8" placeholder="搜索模型" />
                   </div>

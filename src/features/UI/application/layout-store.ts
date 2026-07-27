@@ -8,6 +8,12 @@ export interface WorkspaceTab {
   closable?: boolean;
   packageId?: string;
   resourceParams?: Record<string, unknown>;
+  status?: WorkspaceTabStatus;
+}
+
+export interface WorkspaceTabStatus {
+  kind: "loading" | "success" | "warning" | "error";
+  label?: string;
 }
 
 const defaultTabs: WorkspaceTab[] = [];
@@ -30,6 +36,10 @@ export const useLayoutStore = defineStore("layout", {
     },
     toggleRightSidebar() {
       this.rightSidebarOpen = !this.rightSidebarOpen;
+    },
+    closeSidebars() {
+      this.leftSidebarOpen = false;
+      this.rightSidebarOpen = false;
     },
     openSettings() {
       this.settingsOpen = true;
@@ -72,6 +82,23 @@ export const useLayoutStore = defineStore("layout", {
         packageId: input.packageId,
         resourceParams: input.resourceParams,
       });
+    },
+    setTabStatus(tabId: string, status?: WorkspaceTabStatus) {
+      const tab = this.tabs.find((item) => item.id === tabId);
+      if (tab) {
+        tab.status = status;
+      }
+    },
+    setResourceTabStatus(
+      resourceType: string,
+      resourceId: string,
+      status?: WorkspaceTabStatus,
+    ) {
+      for (const tab of this.tabs) {
+        if (tab.resourceType === resourceType && tab.resourceId === resourceId) {
+          tab.status = status;
+        }
+      }
     },
     closeTab(tabId: string) {
       const index = this.tabs.findIndex((tab) => tab.id === tabId);

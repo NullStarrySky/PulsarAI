@@ -21,6 +21,7 @@ import {
   editLastMessageAction,
   regenerateLastMessageAction,
 } from "@/features/Resources/Conversation/actions";
+import { openFirstPluginAction } from "@/features/Resources/Plugin/actions";
 import { useLayoutStore } from "./application/layout-store";
 
 let registered = false;
@@ -60,16 +61,11 @@ function createCoreCommands(): CommandDefinition[] {
         }),
     },
     {
-      id: "ui.builtin.plugins.open",
+      id: "plugin.open",
       title: "打开插件",
-      category: "界面",
+      category: "插件",
       icon: Plug,
-      run: () =>
-        useLayoutStore().openResourceTab({
-          resourceType: "builtin",
-          resourceId: "plugins",
-          title: "插件",
-        }),
+      run: openFirstPluginAction,
     },
     {
       id: "ui.sidebar.left.toggle",

@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onBeforeUnmount, onMounted, watch } from "vue";
 import { Notivue, Notification } from "notivue";
+import { storeToRefs } from "pinia";
 import MainWorkspace from "./MainWorkspace.vue";
 import SettingsDialog from "@/features/Setting/presentation/SettingsDialog.vue";
 import CommandSearchDialog from "@/features/UI/search/presentation/CommandSearchDialog.vue";
 import { useCommandStore } from "@/features/Hotkey/application/command-store";
 import { useHotkeyStore } from "@/features/Hotkey/application/hotkey-store";
+import { registerMiscCommands } from "@/features/Misc/actions";
+import { useResponsiveStore } from "@/features/Misc/application/responsive-store";
 import { useStatisticStore } from "@/features/Statistic/application/statistic-store";
 import { readSubWindowParamsFromLocation } from "@/features/SubWindow/domain/sub-window-protocol";
 import { registerCoreCommands } from "@/features/UI/actions";
@@ -19,13 +22,34 @@ const appearance = useAppearanceStore();
 const commandStore = useCommandStore();
 const hotkeyStore = useHotkeyStore();
 const layout = useLayoutStore();
+const responsive = useResponsiveStore();
+const { isMobileLayout } = storeToRefs(responsive);
+const { activeTabId, settingsOpen } = storeToRefs(layout);
 
 onMounted(() => {
   appearance.initialize();
+  responsive.refreshPlatform();
   applySubWindowParams();
   registerCoreCommands();
+  registerMiscCommands();
   void useStatisticStore().recordAppLaunch();
   window.addEventListener("keydown", onGlobalKeydown, { capture: true });
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onGlobalKeydown, { capture: true });
+});
+
+watch(isMobileLayout, (mobile) => {
+  if (mobile) {
+    layout.closeSidebars();
+  }
+}, { immediate: true });
+
+watch([activeTabId, settingsOpen], () => {
+  if (isMobileLayout.value) {
+    layout.closeSidebars();
+  }
 });
 
 function applySubWindowParams() {
@@ -69,10 +93,20 @@ function onGlobalKeydown(event: KeyboardEvent) {
 </script>
 
 <template>
-  <div class="flex h-[100dvh] min-w-0 flex-col overflow-hidden bg-background text-foreground">
+  <div
+    :class="{ 'mobile-layout': isMobileLayout }"
+    class="flex h-[100dvh] min-w-0 flex-col overflow-hidden bg-background text-foreground"
+  >
     <ShellTopBar />
 
-    <div class="flex min-h-0 min-w-0 flex-1 bg-muted/10">
+    <div class="relative flex min-h-0 min-w-0 flex-1 bg-muted/10">
+      <button
+        v-if="isMobileLayout && (layout.leftSidebarOpen || layout.rightSidebarOpen)"
+        type="button"
+        class="fixed inset-x-0 bottom-0 top-12 z-30 bg-foreground/20 backdrop-blur-[1px]"
+        aria-label="关闭侧栏"
+        @click="layout.closeSidebars"
+      />
       <ShellLeftSidebar v-if="layout.shellMode !== 'simplified'" />
       <MainWorkspace />
       <ShellRightSidebar v-if="layout.shellMode !== 'simplified'" />

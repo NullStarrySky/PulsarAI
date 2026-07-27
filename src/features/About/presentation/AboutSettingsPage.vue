@@ -65,7 +65,7 @@ async function refreshEnvironment() {
       </SettingFormField>
 
       <SettingFormField title="技术栈" description="当前应用使用的主要运行时、框架和组件。">
-        <div class="flex flex-wrap justify-end gap-2">
+        <div class="flex flex-wrap justify-end gap-2 mobile:justify-start">
           <Badge v-for="item in techStack" :key="item" variant="secondary">{{ item }}</Badge>
         </div>
       </SettingFormField>
@@ -83,11 +83,11 @@ async function refreshEnvironment() {
         :title="tool.name"
         :description="tool.error || tool.installPath || '未获取到安装地址'"
       >
-        <div class="flex min-w-0 flex-col items-end gap-1">
+        <div class="flex min-w-0 flex-col items-end gap-1 mobile:items-start">
           <Badge :variant="tool.installed ? 'default' : 'destructive'">
             {{ tool.installed ? "已安装" : "未安装" }}
           </Badge>
-          <span class="max-w-64 truncate text-xs text-muted-foreground">
+          <span class="max-w-64 truncate text-xs text-muted-foreground mobile:max-w-full">
             {{ tool.version || "版本未知" }}
           </span>
         </div>

@@ -9,11 +9,14 @@ import SettingForm from "@/features/Setting/presentation/SettingForm.vue";
 import SettingFormField from "@/features/Setting/presentation/SettingFormField.vue";
 import SettingPage from "@/features/Setting/presentation/SettingPage.vue";
 import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
+import ComposerToolbarLayoutEditor from "@/features/UI/presentation/ComposerToolbarLayoutEditor.vue";
+import { isAndroidPlatform } from "@/features/Misc/domain/platform";
 
 const appearance = useAppearanceStore();
 const themeFileInput = ref<HTMLInputElement | null>(null);
 const fontName = ref("");
 const fontFamily = ref("");
+const showMobileNavigationBar = isAndroidPlatform();
 
 const activeAccent = computed(() => appearance.activeTheme.accent);
 const fontSizeValue = computed({
@@ -128,6 +131,32 @@ function importFont() {
           <Slider v-model="uiScaleValue" :min="80" :max="140" :step="5" />
           <span class="text-right text-sm text-muted-foreground">{{ appearance.uiScale }}%</span>
         </div>
+      </SettingFormField>
+
+      <SettingFormField
+        title="会话输入框工具栏"
+        description="拖拽调整左右顺序，或拖入“未使用”隐藏。预览区域不能输入，点击也不会触发工具。"
+      >
+        <ComposerToolbarLayoutEditor
+          :model-value="appearance.composerToolbar"
+          @update:model-value="appearance.setComposerToolbar"
+        />
+      </SettingFormField>
+
+      <SettingFormField
+        v-if="showMobileNavigationBar"
+        title="系统导航栏颜色"
+        description="仅 Android。默认跟随 Pulsar 顶栏的实际明暗模式。"
+      >
+        <Select v-model="appearance.mobileNavigationBarMode">
+          <SelectTrigger class="ml-auto w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="topbar">跟随顶栏</SelectItem>
+            <SelectItem value="system">跟随系统</SelectItem>
+            <SelectItem value="light">浅色</SelectItem>
+            <SelectItem value="dark">深色</SelectItem>
+          </SelectContent>
+        </Select>
       </SettingFormField>
     </SettingForm>
   </SettingPage>

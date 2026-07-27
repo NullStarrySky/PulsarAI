@@ -4,11 +4,14 @@ import { getDefaultChatModel } from "@/features/defaultConfigs/application/defau
 import { hydrateModel } from "@/features/ModelConnection/application/model-ai";
 import { executeSandboxCodeAsync, stringifySandboxValue, type SandboxEnvironment } from "@/features/Sandbox/domain/sandbox";
 import type { ChatMessage, ChatMessageContainer, LocalStep, ToolCallResult } from "@/features/Resources/Conversation/domain/conversation-types";
+import { createAskUserTool, type AskUserRequester } from "./ask-user-tool";
+import { getAgentExtensionTools } from "./agent-extension-registry";
 
 export interface RunDefaultAgentInput {
   messages: ModelMessage[];
   environment?: SandboxEnvironment;
   onStep?: (step: LocalStep | ToolCallResult) => void | Promise<void>;
+  askUser?: AskUserRequester;
 }
 
 export interface RunDefaultAgentResult {
@@ -20,7 +23,11 @@ const jsInputSchema = z.object({
   code: z.string().describe("JavaScript expression, function, or statement body to execute in the sandbox."),
 });
 
-function createDefaultTools(environment: SandboxEnvironment, onStep?: RunDefaultAgentInput["onStep"]) {
+function createDefaultTools(
+  environment: SandboxEnvironment,
+  onStep?: RunDefaultAgentInput["onStep"],
+  askUser?: AskUserRequester,
+) {
   return {
     getCurrentTime: tool({
       description: "Get the current local time and ISO timestamp.",
@@ -43,7 +50,7 @@ function createDefaultTools(environment: SandboxEnvironment, onStep?: RunDefault
       },
     }),
     executeJavaScript: tool({
-      description: "Execute a JavaScript expression or function in the local sandbox environment.",
+      description: "Execute JavaScript in the current Pulsar sandbox. Use the Feature APIs documented in the system context; unavailable methods are not granted.",
       inputSchema: jsInputSchema,
       execute: async (input) => {
         try {
@@ -70,6 +77,7 @@ function createDefaultTools(environment: SandboxEnvironment, onStep?: RunDefault
         }
       },
     }),
+    ...(askUser ? { askUser: createAskUserTool(askUser, onStep) } : {}),
   };
 }
 
@@ -86,8 +94,13 @@ export async function runDefaultAgent(input: RunDefaultAgentInput): Promise<RunD
       "You are Pulsar's built-in conversation agent.",
       "Use tools when they are useful. Keep final answers concise and grounded in the conversation.",
       "When executing JavaScript, treat the sandbox as local helper logic and explain important errors to the user.",
+      "Feature API permissions and signatures are listed in the system context. Never invent unavailable methods or bypass a missing permission.",
+      "When a user decision is genuinely required, call askUser with one concise question and useful mutually exclusive options. Continue from the returned answer.",
     ].join("\n"),
-    tools: createDefaultTools(input.environment ?? {}, input.onStep),
+    tools: {
+      ...createDefaultTools(input.environment ?? {}, input.onStep, input.askUser),
+      ...getAgentExtensionTools(),
+    },
     stopWhen: isStepCount(8),
     onStepStart: async ({ stepNumber }) => {
       await input.onStep?.({

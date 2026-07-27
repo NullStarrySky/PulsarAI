@@ -5,6 +5,7 @@
   "windows": ["main", "pulsarai-*"],
   "platforms": ["android"],
   "permissions": [
-    "android-battery-optimization:default"
+    "android-battery-optimization:default",
+    "m3:default"
   ]
 }

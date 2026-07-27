@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { javascript } from "@codemirror/lang-javascript";
+import { json } from "@codemirror/lang-json";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorView } from "@codemirror/view";
 import { basicSetup } from "codemirror";
@@ -7,6 +8,8 @@ import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const props = defineProps<{
   modelValue: string;
+  language?: "javascript" | "json";
+  frameless?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -23,7 +26,7 @@ onMounted(() => {
     parent: editorRoot.value,
     extensions: [
       basicSetup,
-      javascript(),
+      props.language === "json" ? json() : javascript(),
       oneDark,
       EditorView.lineWrapping,
       EditorView.updateListener.of((update) => {
@@ -33,9 +36,9 @@ onMounted(() => {
       EditorView.theme({
         "&": {
           height: "100%",
-          backgroundColor: "hsl(var(--background))",
-          border: "1px solid hsl(var(--border))",
-          borderRadius: "0.375rem",
+          backgroundColor: props.frameless ? "transparent" : "hsl(var(--background))",
+          border: props.frameless ? "0" : "1px solid hsl(var(--border))",
+          borderRadius: props.frameless ? "0" : "0.375rem",
           fontSize: "0.875rem",
         },
         ".cm-scroller": {
@@ -46,11 +49,11 @@ onMounted(() => {
           padding: "0.75rem",
         },
         ".cm-gutters": {
-          backgroundColor: "hsl(var(--card))",
-          borderRight: "1px solid hsl(var(--border))",
+          backgroundColor: props.frameless ? "transparent" : "hsl(var(--card))",
+          borderRight: props.frameless ? "0" : "1px solid hsl(var(--border))",
         },
         "&.cm-focused": {
-          outline: "1px solid hsl(var(--ring))",
+          outline: props.frameless ? "0" : "1px solid hsl(var(--ring))",
         },
       }),
     ],

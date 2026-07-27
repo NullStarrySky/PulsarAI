@@ -8,7 +8,7 @@ export const conversationCrepeFeatures: Record<CrepeFeature, boolean> = {
   [CrepeFeature.ListItem]: true,
   [CrepeFeature.LinkTooltip]: true,
   [CrepeFeature.ImageBlock]: true,
-  [CrepeFeature.BlockEdit]: true,
+  [CrepeFeature.BlockEdit]: false,
   [CrepeFeature.Placeholder]: true,
   [CrepeFeature.Toolbar]: true,
   [CrepeFeature.CodeMirror]: true,

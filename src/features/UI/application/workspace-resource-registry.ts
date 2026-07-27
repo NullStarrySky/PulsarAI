@@ -14,6 +14,7 @@ export interface WorkspaceResourceRegistration {
 }
 
 const registrations = new Map<string, Component>();
+let emptyWorkspaceComponent: Component | undefined;
 
 function registrationKey(type: string, id?: string) {
   return id ? `${type}:${id}` : type;
@@ -25,4 +26,12 @@ export function registerWorkspaceResource(registration: WorkspaceResourceRegistr
 
 export function getWorkspaceResourceComponent(type?: string, id?: string) {
   return type ? registrations.get(registrationKey(type, id)) ?? registrations.get(type) : undefined;
+}
+
+export function registerWorkspaceEmptyComponent(component: Component) {
+  emptyWorkspaceComponent = component;
+}
+
+export function getWorkspaceEmptyComponent() {
+  return emptyWorkspaceComponent;
 }

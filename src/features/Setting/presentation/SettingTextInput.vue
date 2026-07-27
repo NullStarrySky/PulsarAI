@@ -14,7 +14,7 @@ defineEmits<{
 
 <template>
   <Input
-    class="w-72"
+    class="w-72 mobile:w-full"
     :model-value="modelValue"
     :placeholder="placeholder"
     :type="type ?? 'text'"

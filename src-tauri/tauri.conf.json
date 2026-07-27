@@ -15,8 +15,8 @@
 				"title": "pulsarai",
 				"width": 970,
 				"height": 600,
-				"minWidth": 600,
-				"minHeight": 400,
+				"minWidth": 320,
+				"minHeight": 480,
 				"decorations": false,
 				"dragDropEnabled": false
 			}

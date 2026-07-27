@@ -69,11 +69,11 @@ async function toggleWeeklyDay(task: ScheduleTask, day: ScheduleWeekday, checked
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background px-8 py-7">
-    <div class="mx-auto flex w-full max-w-5xl flex-col gap-7">
+  <div class="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background px-8 py-7 mobile:px-4 mobile:py-5">
+    <div class="mx-auto flex w-full max-w-5xl flex-col gap-7 mobile:gap-5">
       <header class="flex items-start justify-between gap-4">
         <div>
-          <h1 class="text-3xl font-semibold tracking-normal">已安排的任务</h1>
+          <h1 class="text-3xl font-semibold tracking-normal mobile:text-2xl">已安排的任务</h1>
           <p class="mt-2 text-sm text-muted-foreground">安排周期任务、提醒和对话内自动提示。</p>
         </div>
         <Button size="icon" title="新建任务" @click="createTask">
@@ -87,7 +87,7 @@ async function toggleWeeklyDay(task: ScheduleTask, day: ScheduleWeekday, checked
       </div>
 
       <Tabs v-model="schedule.filter">
-        <TabsList class="w-fit">
+        <TabsList class="w-fit mobile:w-full">
           <TabsTrigger value="all">全部</TabsTrigger>
           <TabsTrigger value="enabled">已开启</TabsTrigger>
           <TabsTrigger value="paused">已暂停</TabsTrigger>
@@ -100,14 +100,14 @@ async function toggleWeeklyDay(task: ScheduleTask, day: ScheduleWeekday, checked
           :key="task.id"
           :class="
             cn(
-              'group grid min-h-20 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:bg-accent/45',
+              'group grid min-h-20 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:bg-accent/45 mobile:grid-cols-[minmax(0,1fr)_auto] mobile:px-3',
               !task.enabled && 'opacity-65',
             )
           "
           role="button"
           @click="openEditor(task.id)"
         >
-          <span :class="cn('size-4 rounded-full border', task.enabled && 'border-primary bg-primary/15')" />
+          <span :class="cn('size-4 rounded-full border mobile:hidden', task.enabled && 'border-primary bg-primary/15')" />
           <div class="min-w-0">
             <div class="truncate text-sm font-semibold">{{ task.title }}</div>
             <div class="mt-1 truncate text-xs text-muted-foreground">
@@ -210,7 +210,7 @@ async function toggleWeeklyDay(task: ScheduleTask, day: ScheduleWeekday, checked
                   每周
                 </Button>
               </div>
-              <div v-if="editingTask.period.type === 'weekly'" class="grid grid-cols-7 gap-2">
+              <div v-if="editingTask.period.type === 'weekly'" class="grid grid-cols-7 gap-2 mobile:grid-cols-4">
                 <label
                   v-for="day in WEEKDAY_OPTIONS"
                   :key="day.id"
@@ -225,7 +225,7 @@ async function toggleWeeklyDay(task: ScheduleTask, day: ScheduleWeekday, checked
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3 text-sm">
+            <div class="grid grid-cols-2 gap-3 text-sm mobile:grid-cols-1">
               <label class="grid gap-2">
                 <span class="font-medium">开始时间</span>
                 <Input

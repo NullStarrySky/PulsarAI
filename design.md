@@ -19,6 +19,8 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 
 - Database: `src/features/Database/`
 - Conversation: `src/features/Resources/Conversation/`
+- Interactive documents: `src/features/Resources/InteractiveDoc/`
+- Plugin resources: `src/features/Resources/Plugin/`
 - Reserved component resources: `src/features/Resources/Component/`
 - Reserved preset resources: `src/features/Resources/Preset/`
 - Setting: `src/features/Setting/`
@@ -28,11 +30,13 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Sandbox: `src/features/Sandbox/`
 - About: `src/features/About/`
 - Hotkey: `src/features/Hotkey/`
-- Backup: `src/features/Backup/`
+- Version management (backup and LAN sync): `src/features/Backup/`
 - Statistic: `src/features/Statistic/`
 - Translate: `src/features/Translate/`
 - Misc platform helpers: `src/features/Misc/`
+- Notification delivery and built-in notification center: `src/features/Notification/`
 - Subwindow: `src/features/SubWindow/`
+- Feature API capabilities and permission assembly: `src/features/Capabilities/`
 - Scheduled tasks: `src/features/UI/schedule/`
 
 ## Core Types
@@ -49,12 +53,18 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - `CommandDefinition`: `src/features/Hotkey/application/command-store.ts`
 - `StatisticEvent`: `src/features/Statistic/domain/statistic.ts`
 - `TranslateState`: `src/features/Translate/domain/translate.ts`
-- `BackupInfo`, `BackupEndpointSettings`, `RemoteBackupSettings`: `src/features/Backup/application/backup-store.ts`
+- `BackupInfo`, `BackupResourceSnapshot`, `LanSyncSnapshot`: `src/features/Backup/application/backup-store.ts`
 - `ScheduleTask`, `SchedulePeriod`: `src/features/UI/schedule/domain/schedule.ts`
 - `SubWindowParams`, `SubWindowTarget`, `SubWindowBridgeMessage`: `src/features/SubWindow/domain/sub-window-protocol.ts`
+- `PulsarNotification`, `NotificationChannel`: `src/features/Notification/domain/notification.ts`
 - `ComponentResource`: `src/features/Resources/Component/domain/component-resource.ts`
+- `InteractiveDocumentData`, `InteractiveDocumentBlock`, `InteractiveValue`: `src/features/Resources/InteractiveDoc/domain/interactive-document.ts`
+- `Plugin`, `PluginResourceContainer`, `PluginResource`: `src/features/Resources/Plugin/domain/plugin-types.ts`
+- `CapabilityDefinition`, `CapabilityGrants`, `CapabilityBuilder`: `src/features/Capabilities/domain/capability.ts`
 
 ## External Interfaces
+
+The VitePress site lives under `docs/`. Each owning feature's `capabilities.ts` is the source of truth for external API permissions, runtime methods, model prompts, and the VitePress API reference.
 
 - AI SDK wrapper export: `src/features/ModelConnection/application/ai.ts`
 - Model hydration map and wrapped AI SDK calls: `src/features/ModelConnection/application/model-ai.ts`
@@ -64,12 +74,20 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Secret command adapter: `src/features/ModelConnection/application/secret-service.ts`
 - Tauri proxy fetch adapter: `src/features/ModelConnection/infrastructure/model-proxy-fetch.ts`
 - Default agent runner: `src/features/Agent/application/default-agent.ts`
+- Built-in user-question tool: `src/features/Agent/application/ask-user-tool.ts`
 - Sandbox execution and macro resolution: `src/features/Sandbox/domain/sandbox.ts`
 - Default config service/store: `src/features/defaultConfigs/application/`
 - Tauri SurrealDB commands, resource database commands, image resource commands, and model proxy: `src-tauri/src/lib.rs`
 - Resource database adapter: `src/features/Database/application/database-service.ts`
 - Resource file adapter: `src/features/Resources/application/resource-file-service.ts`
 - Conversation resource store: `src/features/Resources/Conversation/application/conversation-store.ts`
+- Conversation generation startup and process executor: `src/features/Resources/Conversation/application/conversation-generation.ts`
+- Conversation attachment encoding and preview helpers: `src/features/Resources/Conversation/application/message-attachment.ts`
+- Interactive document wrapper and compiler: `src/features/Resources/InteractiveDoc/domain/interactive-document.ts`
+- Plugin resource store and priority resolver: `src/features/Resources/Plugin/application/plugin-store.ts`
+- Plugin generation environment scanner: `src/features/Resources/Plugin/application/plugin-generation-environment.ts`
+- Agent Skill/MCP tool registry: `src/features/Agent/application/agent-extension-registry.ts`
+- Agent generation components: `src/features/Agent/presentation/`
 - UI layout state: `src/features/UI/application/layout-store.ts`
 - Workspace resource registry: `src/features/UI/application/workspace-resource-registry.ts`
 - Shell sidebar registry: `src/features/UI/application/sidebar-registry.ts`
@@ -79,12 +97,15 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Hotkey bindings and keyboard normalization: `src/features/Hotkey/application/hotkey-store.ts`
 - Core UI command registration: `src/features/UI/actions.ts`
 - Conversation command actions: `src/features/Resources/Conversation/actions.ts`
+- Plugin command actions: `src/features/Resources/Plugin/actions.ts`
 - Runtime platform helpers: `src/features/Misc/domain/platform.ts`
+- Responsive mobile-layout state: `src/features/Misc/application/responsive-store.ts`
+- Temporary mobile preview command: `src/features/Misc/actions.ts`
 - About environment detection: `src/features/About/application/environment-check.ts`
 - Android battery optimization adapter: `src/features/Misc/application/android-battery-optimization.ts`
 - Reply completion notification adapter: `src/features/Misc/application/reply-completion-notifier.ts`
 - Runtime preference store: `src/features/Misc/application/runtime-preference-store.ts`
-- Backup store and Tauri backup commands: `src/features/Backup/application/backup-store.ts`, `src-tauri/src/lib.rs`
+- Version management store, sync metadata, and Tauri backup/LAN commands: `src/features/Backup/application/backup-store.ts`, `src/features/Database/application/sync-metadata.ts`, `src-tauri/src/lib.rs`
 - Statistic event store: `src/features/Statistic/application/statistic-store.ts`
 - Translate service store: `src/features/Translate/application/translate-store.ts`
 - Schedule store: `src/features/UI/schedule/application/schedule-store.ts`
@@ -101,6 +122,12 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Conversation right sidebar: `src/features/Resources/Conversation/presentation/ConversationRightSidebar.vue`
 - Conversation workspace page: `src/features/Resources/Conversation/presentation/ConversationWorkspacePage.vue`
 - Conversation workspace/sidebar registration: `src/features/Resources/Conversation/presentation/register-conversation-workspace.ts`
+- Interactive document workspace and empty-state registration: `src/features/Resources/InteractiveDoc/presentation/register-interactive-document-workspace.ts`
+- Interactive document block editor: `src/features/Resources/InteractiveDoc/presentation/InteractiveDocumentWorkspacePage.vue`
+- Plugin workspace page: `src/features/Resources/Plugin/presentation/PluginWorkspacePage.vue`
+- Plugin right-sidebar panel: `src/features/Resources/Plugin/presentation/PluginRightSidebarPanel.vue`
+- Plugin composer resource menu: `src/features/Resources/Plugin/presentation/PluginResourceMenu.vue`
+- Plugin workspace registration: `src/features/Resources/Plugin/presentation/register-plugin-workspace.ts`
 - Settings dialog: `src/features/Setting/presentation/SettingsDialog.vue`
 - General settings page: `src/features/Setting/presentation/pages/GeneralSettingsPage.vue`
 - Default config settings page: `src/features/defaultConfigs/presentation/DefaultConfigSettingsPage.vue`
@@ -115,12 +142,11 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Reserved JavaScript preset editor: `src/features/Resources/Preset/presentation/JavaScriptCodeMirrorEditor.vue`
 - Command search floating dialog: `src/features/UI/search/presentation/CommandSearchDialog.vue`
 - Hotkey settings page: `src/features/Hotkey/presentation/HotkeySettingsPage.vue`
-- Backup settings page: `src/features/Backup/presentation/BackupSettingsPage.vue`
+- Version management settings and selective restore: `src/features/Backup/presentation/BackupSettingsPage.vue`, `src/features/Backup/presentation/BackupResourceRestoreDialog.vue`
 - Statistic settings page: `src/features/Statistic/presentation/StatisticSettingsPage.vue`
 - Translate settings page: `src/features/Translate/presentation/TranslateSettingsPage.vue`
 - Runtime settings page: `src/features/Misc/presentation/RuntimeSettingsPage.vue`
 - Scheduled task workspace page: `src/features/UI/schedule/presentation/SchedulePage.vue`
-- Built-in plugin placeholder page: `src/features/UI/builtin/presentation/PluginPlaceholderPage.vue`
 - Subwindow bridge container: `src/features/SubWindow/presentation/SubWindowContainer.vue`
 
 ## Phase 2 Model Access
@@ -139,18 +165,35 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - A conversation can be marked as the package template. Creating a conversation clones that template's active container path; without a template it creates a minimal empty system container.
 - Conversations are paths of linked `ChatMessageContainer` records. Each container stores one role, sibling messages, active message index, previous container id, available next containers, and active next container.
 - The active conversation path is derived from the current container by walking `previousContainer` links.
-- Generation appends a user container and an assistant container, hydrates the default chat model through ModelConnection, and writes the AI SDK response into the assistant message.
+- Generation appends a user container and an empty assistant container, scans enabled package plugins, evaluates inserted-resource conditions, expands the selected context structure with the final Sandbox environment, then runs the plugin process or default Agent and writes back into the same assistant message.
+- User messages may persist base64 file parts with media type, filename, and size. Before generation, text and files are converted into AI SDK `UserModelMessage` array content so attachments remain part of branched and regenerated context.
 - Regeneration creates an alternative message inside the current assistant container. It does not create a new container branch.
 - Container branches are sibling containers linked from the previous container through `availableNextContainer`; a single next container is the normal path and is not shown as a branch badge.
 - Resource images are uploaded as bytes to Tauri, renamed to UUID files under app data, stored with a `file://` prefix, and displayed through Tauri `convertFileSrc`.
+
+## Phase 3.5 Plugin Resources
+
+- Plugins are resource packages stored through `src/features/Resources/Plugin/application/plugin-store.ts`. A non-null `packageId` owns a local plugin; `packageId: null` identifies a global plugin managed from DefaultConfig, while `builtIn` additionally marks immutable system fallbacks.
+- Local main plugins sort first, followed by other local plugins. External global plugins follow the current character package's `globalPluginOrder`, and immutable system plugins remain last.
+- Character packages persist only global plugin ids in `globalPluginOrder`. Opening a package filters deleted or duplicate ids and appends newly available global plugins, then saves the normalized order.
+- Resource containers are selected by fixed ids when they affect runtime behavior. If multiple enabled plugins in the current package provide the same container id, the highest-priority plugin wins.
+- Stage 1 built-in containers are background, character, context structure, insertable, and component. Background is integrated into the conversation page as the active visual resource.
+- Plugin descriptions and markdown resources use Milkdown/Crepe WYSIWYG editing. Clicking a resource opens only content; resource metadata is edited from the resource row menu, and container attributes are edited from the container row menu.
+- Background resources are image/video media objects previewed by the Plugin resource editor. The immutable core plugin owns the bundled classroom fallback asset, while the Conversation workspace mounts either an image or muted looping video layer.
+- Insertable resources expose one resource-row injection badge for switch, position, depth, and structured condition rows. Runtime matching merges recent-chat helpers and the selected depth into the Sandbox condition environment; legacy string expressions migrate to custom rows.
+- The fixed Plugin `action` container owns JavaScript slash actions. Conversation stores one leading action part per user message, exposes `{ action, prompt }` to the normal generation environment, and lets an inserted selected action temporarily replace the generation process for one run.
+- Plugins open as `resourceType: "plugin"` workspace resources. The old built-in plugin center page is intentionally removed.
 
 ## Phase 4 Agent, Sandbox, Appearance, And Rendering
 
 - Conversation generation now enters `runDefaultAgent` in `src/features/Agent/application/default-agent.ts`.
 - The default agent hydrates `defaultChatModel` through ModelConnection, runs AI SDK `ToolLoopAgent`, and records visible process steps into `ChatMessage.meta.steps`.
-- Built-in tools currently include current-time lookup and JavaScript execution through the frontend sandbox.
+- Built-in tools include current-time lookup, JavaScript execution through the frontend sandbox, and `askUser`. The question tool pauses the current agent step, renders predefined choices plus a final free-response dialog, then returns the selected answer to the same agent loop.
 - The sandbox in `src/features/Sandbox/domain/sandbox.ts` accepts an environment object and JavaScript source, returns either a value or error, and resolves `{{...}}` / `[[...]]` macros for text and message arrays.
+- Interactive documents wrap serializable text, variable, and component blocks. Their domain wrapper owns id-based CRUD, variable renderer selection, component resolution, Sandbox macro expansion, and pure-Markdown `compile()` / `toString()` output.
+- The main workspace empty state hosts the interactive-document demo editor. The same component is registered for `resourceType: "interactive-doc"` so persisted resources can reuse the editor later.
 - Conversation messages render markdown through `ConversationMarkdown.vue`; the bottom composer uses `ConversationComposerEditor.vue`. Both use Milkdown/Crepe.
+- Conversations persist a `rendererId` selected from the right-sidebar menu. `NovelConversationRenderer.vue` presents assistant messages as centered, navigable chapters and hides each preceding user prompt in a collapsed disclosure; template-created conversations inherit the renderer.
 - UI opens tabs with `resourceType`, `resourceId`, optional `packageId`, and optional `resourceParams`; `MainWorkspace.vue` resolves the component through `workspace-resource-registry.ts` and keeps active resource pages alive with `KeepAlive`.
 - Feature-specific sidebar content is registered through `sidebar-registry.ts`; UI shell files do not import conversation stores or message renderers directly.
 - Appearance settings are owned by `appearance-store.ts`, theme registry CSS under `src/features/UI/theme/`, and font registry under `src/features/UI/font/`.
@@ -163,18 +206,19 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Commands are registered through `CommandDefinition` and can be executed by search or hotkeys. Feature-owned commands should live in that feature's `actions.ts` and be registered from `src/features/UI/actions.ts` only as shell wiring.
 - Hotkeys persist local overrides in `hotkey-store.ts`; the shell captures keyboard events and dispatches the matched command.
 - `DefaultConfig` owns default model, fast model, embedding model, and image model as string model references.
-- Backup has local JSON backup commands in Tauri for core tables and a WebDAV settings surface for later remote transfer.
+- Version management provides full local database history, selective package/conversation/plugin recovery, and paired LAN resource synchronization. WebDAV remains a configuration-only future transport.
 - Statistic records launch and message events in `statistic_events`, while resource counts and estimated data sizes are derived from current Conversation state.
 - Translate exposes a Pinia service. Google public translate is available for quick tests; Microsoft/Azure translation is a configurable provider placeholder until subscription key plumbing is added.
 
 ## Phase 6 Schedule, Subwindows, And Whiteboard
 
-- Built-in workspace pages use `resourceType: "builtin"` plus `resourceId` and register through `workspace-resource-registry.ts`. The left sidebar opens these pages as links while keeping the character package list visible.
+- Built-in workspace pages use `resourceType: "builtin"` plus `resourceId` and register through `workspace-resource-registry.ts`. The left sidebar opens schedule as a built-in page while plugin resources open through their own workspace resource type.
 - Schedule tasks persist in `ui_schedule_tasks`, support daily or weekly periods, random execution inside a time range, prompt text, and a target conversation selected through a searchable conversation selector.
 - The schedule store owns runtime ticking and immediate execution. Execution opens the target conversation and sends the configured prompt through the normal conversation path.
 - Subwindows are described by `SubWindowParams` and opened by `sub-window-service.ts` through Tauri `WebviewWindow`. Simplified mode hides sidebars and opens the requested resource from URL parameters.
 - `SubWindowContainer.vue` is the reusable local-IPC bridge wrapper for future component-level popout surfaces.
 - Conversation composer includes an Excalidraw iframe whiteboard entry in the input toolbar.
+- Mobile layout is driven by either the runtime platform helper or a viewport below 768px. `Ctrl+Shift+M` temporarily overrides the platform result and resizes the desktop window to a 390 x 780 logical mobile preview.
 
 ## Runtime Notifications And Android Power
 
@@ -187,4 +231,4 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 
 The app keeps one visible conversation flow. UI events enter feature application services, application services coordinate domain objects and repositories, repositories use SurrealDB or provider adapters, and presentation components stay thin.
 
-The plugin system is intentionally out of the early path. Future plugins should contribute resources into the generation flow without replacing the core `Conversation -> ModelConnection -> Database` path.
+The plugin system contributes resources into the visible conversation flow without replacing the core `Conversation -> ModelConnection -> Database` path. The first enabled plugin with a non-empty generation-process override controls orchestration; empty overrides inherit the default Agent.

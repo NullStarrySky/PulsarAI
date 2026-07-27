@@ -10,10 +10,9 @@ import {
   Copy,
   GitBranch,
   Languages,
-  Maximize2,
   MoreHorizontal,
+  Paperclip,
   Pencil,
-  PenTool,
   Plus,
   RefreshCw,
   Send,
@@ -44,10 +43,27 @@ import { cn } from "@/lib/utils";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/application/default-config-store";
 import { useTranslateStore } from "@/features/Translate/application/translate-store";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
-import type { ChatMessageContainer, ChatMessageMeta } from "@/features/Resources/Conversation/domain/conversation-types";
+import type {
+  ActionPart,
+  ChatMessage,
+  ChatMessageContainer,
+  ChatMessageMeta,
+  ComponentPart,
+  FilePart,
+} from "@/features/Resources/Conversation/domain/conversation-types";
+import { fileToMessagePart } from "@/features/Resources/Conversation/application/message-attachment";
+import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
+import { pluginMediaSource, pluginMediaType } from "@/features/Resources/Plugin/domain/plugin-media";
 import ConversationComposerEditor from "@/features/Resources/Conversation/presentation/ConversationComposerEditor.vue";
+import ConversationActionPicker from "@/features/Resources/Conversation/presentation/ConversationActionPicker.vue";
 import ConversationMarkdown from "@/features/Resources/Conversation/presentation/ConversationMarkdown.vue";
-import ModelSelect from "@/features/ModelConnection/presentation/ModelSelect.vue";
+import GenerationComponentDialog from "@/features/Resources/Conversation/presentation/GenerationComponentDialog.vue";
+import { getGenerationComponent } from "@/features/Resources/Conversation/presentation/generation-component-registry";
+import MessageAttachmentStrip from "@/features/Resources/Conversation/presentation/MessageAttachmentStrip.vue";
+import MessageActionBadge from "@/features/Resources/Conversation/presentation/MessageActionBadge.vue";
+import NovelConversationRenderer from "@/features/Resources/Conversation/presentation/NovelConversationRenderer.vue";
+import ConversationComposerToolbarTools from "@/features/Resources/Conversation/presentation/ConversationComposerToolbarTools.vue";
+import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
 
 const props = defineProps<{
   packageId?: string;
@@ -57,7 +73,13 @@ const props = defineProps<{
 const conversation = useConversationStore();
 const defaults = useDefaultConfigStore();
 const translate = useTranslateStore();
+const pluginStore = usePluginStore();
+const appearance = useAppearanceStore();
 const input = ref("");
+const attachmentInput = ref<HTMLInputElement | null>(null);
+const pendingAttachments = ref<FilePart[]>([]);
+const selectedAction = ref<ActionPart | null>(null);
+const attachmentTarget = ref<{ containerId: string; messageId: string } | null>(null);
 const fullscreenInputOpen = ref(false);
 const whiteboardOpen = ref(false);
 const editing = reactive({
@@ -71,9 +93,25 @@ const activePath = computed(() =>
   conversation.activePath.filter((container) => container.role !== "system" || conversation.currentMessage(container)?.content),
 );
 const emptyPrompt = computed(() => `今天想和 ${conversation.activePackage?.name ?? "Pulsar"} 聊点什么？`);
+const availableActions = computed(() =>
+  pluginStore.actionResourcesForPackage(
+    conversation.activePackageId,
+    conversation.activePackage?.globalPluginOrder,
+  ),
+);
+const conversationBackground = computed(() => {
+  const resource = pluginStore.activeBackgroundResourceForPackage(
+    conversation.activePackageId,
+    conversation.activePackage?.globalPluginOrder,
+  );
+  const source = pluginMediaSource(resource?.content);
+  return source
+    ? { source, type: pluginMediaType(resource?.content, source) }
+    : null;
+});
 
 onMounted(async () => {
-  await Promise.all([conversation.initialize(), defaults.load()]);
+  await Promise.all([conversation.initialize(), defaults.load(), pluginStore.initialize()]);
   openResourceConversation();
 });
 
@@ -93,6 +131,22 @@ function openResourceConversation() {
 
 function messageOf(container: ChatMessageContainer) {
   return conversation.currentMessage(container);
+}
+
+function componentParts(message?: ChatMessage | null): ComponentPart[] {
+  return (message?.parts ?? []).filter(
+    (part): part is ComponentPart => part.type === "component",
+  );
+}
+
+function fileParts(message?: ChatMessage | null): FilePart[] {
+  return (message?.parts ?? []).filter(
+    (part): part is FilePart => part.type === "file",
+  );
+}
+
+function actionPart(message?: ChatMessage | null) {
+  return message?.parts?.find((part): part is ActionPart => part.type === "action") ?? null;
 }
 
 function messageIndexLabel(container: ChatMessageContainer) {
@@ -183,9 +237,84 @@ async function translateMessage(container: ChatMessageContainer) {
 }
 
 async function send() {
-  const content = input.value;
+  const resolved = resolveComposerAction(input.value);
+  const attachments = [...pendingAttachments.value];
   input.value = "";
-  await conversation.send(content);
+  pendingAttachments.value = [];
+  selectedAction.value = null;
+  await conversation.send(resolved.content, undefined, attachments, resolved.action);
+}
+
+function resolveComposerAction(content: string) {
+  if (selectedAction.value) {
+    return { content, action: selectedAction.value };
+  }
+  const match = content.match(/^\s*\/([^\s]+)(?:\s+([\s\S]*))?$/);
+  const commandName = match?.[1]?.toLocaleLowerCase();
+  const matched = commandName
+    ? availableActions.value.find(
+        ({ resource }) => resource.name.trim().toLocaleLowerCase() === commandName,
+      )
+    : null;
+  if (!matched) {
+    return { content, action: null };
+  }
+  return {
+    content: match?.[2] ?? "",
+    action: {
+      type: "action" as const,
+      actionId: matched.resource.id,
+      pluginId: matched.pluginId,
+      pluginName: matched.pluginName,
+      name: matched.resource.name,
+      description: matched.resource.description,
+    },
+  };
+}
+
+function requestAttachments(container?: ChatMessageContainer) {
+  const message = container ? messageOf(container) : null;
+  attachmentTarget.value = container && message
+    ? { containerId: container.id, messageId: message.id }
+    : null;
+  attachmentInput.value?.click();
+}
+
+async function onAttachmentsSelected(event: Event) {
+  const element = event.target as HTMLInputElement;
+  const files = Array.from(element.files ?? []);
+  element.value = "";
+  if (files.length === 0) {
+    return;
+  }
+
+  try {
+    const attachments = await Promise.all(files.map(fileToMessagePart));
+    if (attachmentTarget.value) {
+      await conversation.addMessageAttachments(
+        attachmentTarget.value.containerId,
+        attachmentTarget.value.messageId,
+        attachments,
+      );
+    } else {
+      pendingAttachments.value.push(...attachments);
+    }
+  } catch (error) {
+    push.error(error instanceof Error ? error.message : "读取附件失败");
+  } finally {
+    attachmentTarget.value = null;
+  }
+}
+
+async function removeMessageAttachment(
+  container: ChatMessageContainer,
+  index: number,
+) {
+  const message = messageOf(container);
+  if (!message) {
+    return;
+  }
+  await conversation.removeMessageAttachment(container.id, message.id, index);
 }
 
 async function switchSiblingMessage(container: ChatMessageContainer, direction: -1 | 1) {
@@ -221,9 +350,31 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col bg-background">
-    <section class="min-h-0 flex-1 overflow-y-auto px-5 pb-28 pt-6">
-      <div class="mx-auto flex max-w-4xl flex-col gap-4">
+  <div
+    class="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+  >
+    <video
+      v-if="conversationBackground?.type === 'video'"
+      :key="conversationBackground.source"
+      :src="conversationBackground.source"
+      class="pointer-events-none absolute inset-0 h-full w-full object-cover"
+      autoplay
+      muted
+      loop
+      playsinline
+    />
+    <img
+      v-else-if="conversationBackground?.source"
+      :src="conversationBackground.source"
+      alt=""
+      class="pointer-events-none absolute inset-0 h-full w-full object-cover"
+    />
+
+    <section
+      v-if="conversation.activeConversation?.rendererId !== 'novel'"
+      class="relative min-h-0 flex-1 overflow-y-auto bg-background/80 px-5 pb-28 pt-6 backdrop-blur-[1px] mobile:px-3 mobile:pb-32 mobile:pt-4"
+    >
+      <div class="mx-auto flex max-w-4xl flex-col gap-4 mobile:gap-3">
         <div
           v-if="activePath.length === 0"
           class="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground"
@@ -234,16 +385,16 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
         <article
           v-for="container in activePath"
           :key="container.id"
-          :class="cn('flex gap-3', container.role === 'user' && 'flex-row-reverse')"
+          :class="cn('flex gap-3 mobile:gap-2', container.role === 'user' && 'flex-row-reverse')"
           @pointerdown="onPointerDown"
           @pointerup="onPointerUp($event, container)"
         >
-          <div class="flex size-9 shrink-0 items-center justify-center rounded-md border bg-card">
+          <div class="flex size-9 shrink-0 items-center justify-center rounded-md border bg-card mobile:size-8">
             <UserRound v-if="container.role === 'user'" class="size-4" />
             <Bot v-else class="size-4" />
           </div>
 
-          <div :class="cn('min-w-0 max-w-[78%]', container.role === 'user' && 'items-end')">
+          <div :class="cn('min-w-0 max-w-[78%] mobile:max-w-[calc(100%_-_2.5rem)]', container.role === 'user' && 'items-end')">
             <div
               :class="
                 cn(
@@ -252,6 +403,10 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
                 )
               "
             >
+              <MessageActionBadge
+                v-if="actionPart(messageOf(container))"
+                :action="actionPart(messageOf(container))!"
+              />
               <details
                 v-if="editing.containerId !== container.id && visibleSteps(container).length"
                 class="mb-2 overflow-hidden rounded-md border bg-muted/35 text-xs text-muted-foreground"
@@ -275,6 +430,13 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
                 </div>
               </details>
 
+              <MessageAttachmentStrip
+                v-if="fileParts(messageOf(container)).length"
+                :attachments="fileParts(messageOf(container))"
+                :removable="container.role === 'user'"
+                class="mb-2"
+                @remove="removeMessageAttachment(container, $event)"
+              />
               <ConversationComposerEditor
                 v-if="editing.containerId === container.id"
                 v-model="editing.content"
@@ -285,10 +447,21 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
                 v-else
                 :model-value="messageOf(container)?.content || (conversation.generating && container.id === conversation.activeContainerId ? '生成中...' : '')"
               />
+              <template
+                v-for="(part, partIndex) in componentParts(messageOf(container))"
+                :key="`${messageOf(container)?.id}:${part.componentId}:${partIndex}`"
+              >
+                <component
+                  :is="getGenerationComponent(part.componentId)"
+                  v-if="getGenerationComponent(part.componentId)"
+                  v-bind="part.props"
+                  class="mt-3"
+                />
+              </template>
             </div>
 
-            <div :class="cn('mt-1 flex items-center gap-1', container.role === 'user' && 'flex-row-reverse')">
-              <div class="flex items-center gap-0.5 rounded-md bg-background/80 p-0.5">
+            <div :class="cn('mt-1 flex min-w-0 items-center gap-1', container.role === 'user' && 'flex-row-reverse')">
+              <div class="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md bg-background/80 p-0.5 [scrollbar-width:none]">
                 <Button size="icon" variant="ghost" class="size-7" @click="switchSiblingMessage(container, -1)">
                   <ChevronLeft class="size-4" />
                 </Button>
@@ -339,6 +512,16 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
                 </Button>
                 <Button v-else size="icon" variant="ghost" class="size-7" @click="startEdit(container)">
                   <Pencil class="size-3.5" />
+                </Button>
+                <Button
+                  v-if="container.role === 'user'"
+                  size="icon"
+                  variant="ghost"
+                  class="size-7"
+                  title="附加文件"
+                  @click="requestAttachments(container)"
+                >
+                  <Paperclip class="size-3.5" />
                 </Button>
                 <Button size="icon" variant="ghost" class="size-7" @click="copyMessage(container)">
                   <Copy class="size-3.5" />
@@ -404,24 +587,52 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
       </div>
     </section>
 
-    <footer class="pointer-events-none px-4 pb-4">
-      <div class="pointer-events-auto mx-auto max-w-3xl rounded-lg border bg-card/95 p-2 shadow-lg shadow-background/20 backdrop-blur">
+    <NovelConversationRenderer
+      v-else
+      :conversation-id="conversation.activeConversation?.id ?? ''"
+      :containers="activePath"
+      :generating="conversation.generating"
+      :active-container-id="conversation.activeContainerId"
+    />
+
+    <footer class="mobile-safe-bottom pointer-events-none relative px-4 pb-4 mobile:px-2 mobile:pb-2">
+      <div class="pointer-events-auto relative mx-auto max-w-3xl rounded-lg border bg-card/95 p-2 shadow-lg shadow-background/20 backdrop-blur mobile:rounded-xl">
+        <ConversationActionPicker
+          v-model="input"
+          v-model:selected-action="selectedAction"
+          :actions="availableActions"
+        />
+        <MessageAttachmentStrip
+          v-if="pendingAttachments.length"
+          :attachments="pendingAttachments"
+          removable
+          class="mb-1"
+          @remove="pendingAttachments.splice($event, 1)"
+        />
         <ConversationComposerEditor v-model="input" @submit="send" />
         <div class="flex items-center justify-between gap-2">
-          <ModelSelect
-            :model-value="defaults.defaultChatModel"
-            icon-only
-            button-class="size-8 p-0"
-            @update:model-value="defaults.setDefaultChatModel"
-          />
-          <div class="flex items-center gap-1">
-            <Button size="icon" variant="ghost" class="size-8" title="白板" @click="whiteboardOpen = true">
-              <PenTool class="size-4" />
-            </Button>
-            <Button size="icon" variant="ghost" class="size-8" title="全屏输入" @click="fullscreenInputOpen = true">
-              <Maximize2 class="size-4" />
-            </Button>
-            <Button size="icon" class="size-8" title="发送" :disabled="!input.trim() || conversation.generating" @click="send">
+          <div class="flex min-w-0 items-center gap-1">
+            <ConversationComposerToolbarTools
+              :tool-ids="appearance.composerToolbar.left"
+              @attach="requestAttachments()"
+              @whiteboard="whiteboardOpen = true"
+              @fullscreen="fullscreenInputOpen = true"
+            />
+          </div>
+          <div class="flex shrink-0 items-center gap-1">
+            <ConversationComposerToolbarTools
+              :tool-ids="appearance.composerToolbar.right"
+              @attach="requestAttachments()"
+              @whiteboard="whiteboardOpen = true"
+              @fullscreen="fullscreenInputOpen = true"
+            />
+            <Button
+              size="icon"
+              class="size-8 mobile:size-10"
+              title="发送"
+              :disabled="(!input.trim() && pendingAttachments.length === 0 && !selectedAction) || conversation.generating"
+              @click="send"
+            >
               <Send class="size-4" />
             </Button>
           </div>
@@ -429,21 +640,52 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
       </div>
     </footer>
 
+    <input
+      ref="attachmentInput"
+      class="hidden"
+      type="file"
+      multiple
+      @change="onAttachmentsSelected"
+    />
+
     <Dialog v-model:open="fullscreenInputOpen">
       <DialogContent class="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>输入消息</DialogTitle>
         </DialogHeader>
-        <Textarea
-          v-model="input"
-          class="min-h-[46vh] resize-none"
-          placeholder="输入消息..."
-          @keydown.enter.exact.prevent="fullscreenInputOpen = false; send()"
+        <MessageAttachmentStrip
+          v-if="pendingAttachments.length"
+          :attachments="pendingAttachments"
+          removable
+          @remove="pendingAttachments.splice($event, 1)"
         />
+        <div class="relative">
+          <ConversationActionPicker
+            v-model="input"
+            v-model:selected-action="selectedAction"
+            :actions="availableActions"
+            menu-placement="below"
+          />
+          <Textarea
+            v-model="input"
+            class="min-h-[46vh] resize-none"
+            placeholder="输入消息..."
+            @keydown.enter.exact.prevent="fullscreenInputOpen = false; send()"
+          />
+        </div>
         <DialogFooter>
+          <Button
+            size="icon"
+            variant="ghost"
+            class="mr-auto"
+            title="附加文件"
+            @click="requestAttachments()"
+          >
+            <Paperclip class="size-4" />
+          </Button>
           <Button variant="outline" @click="fullscreenInputOpen = false">取消</Button>
           <Button
-            :disabled="!input.trim() || conversation.generating"
+            :disabled="(!input.trim() && pendingAttachments.length === 0 && !selectedAction) || conversation.generating"
             @click="fullscreenInputOpen = false; send()"
           >
             <Send data-icon="inline-start" />
@@ -454,7 +696,7 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
     </Dialog>
 
     <Dialog v-model:open="whiteboardOpen">
-      <DialogContent class="h-[min(820px,92vh)] w-[min(1200px,calc(100vw-32px))] max-w-none overflow-hidden p-0 sm:max-w-none">
+      <DialogContent class="h-[min(820px,92vh)] w-[min(1200px,calc(100vw-32px))] max-w-none overflow-hidden p-0 sm:max-w-none mobile:h-[100dvh] mobile:w-screen mobile:rounded-none mobile:border-0">
         <iframe
           class="h-full w-full border-0 bg-background"
           src="https://excalidraw.com/"
@@ -463,5 +705,7 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
         />
       </DialogContent>
     </Dialog>
+
+    <GenerationComponentDialog />
   </div>
 </template>

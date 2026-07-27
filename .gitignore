@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+docs/.vitepress/cache
+docs/.vitepress/dist
 src-tauri/target
 *.local
 .prompt_history

@@ -1,5 +1,5 @@
 import type { Component } from "vue";
-import { BarChart3, BellRing, Brain, HardDriveDownload, Info, Keyboard, Languages, Palette, Settings, SlidersHorizontal } from "lucide-vue-next";
+import { BarChart3, BellRing, Brain, History, Info, Keyboard, Languages, Palette, Settings, SlidersHorizontal } from "lucide-vue-next";
 import GeneralSettingsPage from "../presentation/pages/GeneralSettingsPage.vue";
 import ModelProviderSettingsPage from "@/features/ModelConnection/presentation/ModelProviderSettingsPage.vue";
 import DefaultConfigSettingsPage from "@/features/defaultConfigs/presentation/DefaultConfigSettingsPage.vue";
@@ -136,8 +136,8 @@ export function ensureDefaultSettingPages() {
   registerSettingPage({
     meta: {
       id: "data.backup",
-      icon: HardDriveDownload,
-      title: "同步与备份",
+      icon: History,
+      title: "版本管理",
       group: "data",
     },
     component: BackupSettingsPage,

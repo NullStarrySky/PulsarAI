@@ -2,10 +2,12 @@ import { defineStore } from "pinia";
 import { fallbackDefaultConfigs } from "../domain/default-config";
 import {
   getDefaultChatModel,
+  getDefaultCapabilities,
   getEmbeddingModel,
   getFastModel,
   getImageModel,
   setDefaultChatModel,
+  setDefaultCapabilities,
   setEmbeddingModel,
   setFastModel,
   setImageModel,
@@ -17,20 +19,23 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
     fastModel: fallbackDefaultConfigs.fastModel,
     embeddingModel: fallbackDefaultConfigs.embeddingModel,
     imageModel: fallbackDefaultConfigs.imageModel,
+    defaultCapabilities: structuredClone(fallbackDefaultConfigs.defaultCapabilities),
     loaded: false,
   }),
   actions: {
     async load() {
-      const [defaultChatModel, fastModel, embeddingModel, imageModel] = await Promise.all([
+      const [defaultChatModel, fastModel, embeddingModel, imageModel, defaultCapabilities] = await Promise.all([
         getDefaultChatModel(),
         getFastModel(),
         getEmbeddingModel(),
         getImageModel(),
+        getDefaultCapabilities(),
       ]);
       this.defaultChatModel = migrateModelRef(defaultChatModel);
       this.fastModel = migrateModelRef(fastModel || defaultChatModel);
       this.embeddingModel = migrateModelRef(embeddingModel);
       this.imageModel = migrateModelRef(imageModel);
+      this.defaultCapabilities = structuredClone(defaultCapabilities);
       await Promise.all([
         this.defaultChatModel !== defaultChatModel ? setDefaultChatModel(this.defaultChatModel) : Promise.resolve(),
         this.fastModel !== fastModel ? setFastModel(this.fastModel) : Promise.resolve(),
@@ -54,6 +59,10 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
     async setImageModel(model: string) {
       this.imageModel = model;
       await setImageModel(model);
+    },
+    async setDefaultCapabilities(capabilities: typeof fallbackDefaultConfigs.defaultCapabilities) {
+      this.defaultCapabilities = structuredClone(capabilities);
+      await setDefaultCapabilities(this.defaultCapabilities);
     },
   },
 });

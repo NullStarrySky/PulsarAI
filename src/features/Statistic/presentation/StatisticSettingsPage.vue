@@ -34,16 +34,16 @@ function formatSize(bytes: number) {
 
 <template>
   <SettingPage title="数据统计" description="查看本地数据规模和最近一年的活动情况。">
-    <section class="grid grid-cols-3 gap-3">
-      <div class="rounded-md border bg-card p-4">
+    <section class="grid grid-cols-3 gap-3 mobile:gap-2">
+      <div class="rounded-md border bg-card p-4 mobile:p-3">
         <p class="text-xs text-muted-foreground">角色数</p>
         <p class="mt-2 text-2xl font-semibold">{{ conversation.packages.length }}</p>
       </div>
-      <div class="rounded-md border bg-card p-4">
+      <div class="rounded-md border bg-card p-4 mobile:p-3">
         <p class="text-xs text-muted-foreground">对话数</p>
         <p class="mt-2 text-2xl font-semibold">{{ conversation.conversations.length }}</p>
       </div>
-      <div class="rounded-md border bg-card p-4">
+      <div class="rounded-md border bg-card p-4 mobile:p-3">
         <p class="text-xs text-muted-foreground">消息数</p>
         <p class="mt-2 text-2xl font-semibold">{{ statistic.messageCount }}</p>
       </div>
@@ -79,7 +79,7 @@ function formatSize(bytes: number) {
             :style="{ width: `${Math.max(2, (segment.bytes / totalSize) * 100)}%`, backgroundColor: segment.color }"
           />
         </div>
-        <div class="mt-4 grid grid-cols-2 gap-2">
+        <div class="mt-4 grid grid-cols-2 gap-2 mobile:grid-cols-1">
           <div
             v-for="segment in sizeSegments"
             :key="segment.id"

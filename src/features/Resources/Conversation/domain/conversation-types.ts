@@ -21,6 +21,9 @@ export interface CharacterPackage {
   order: number;
   conversations: CharacterPackageConversationLink[];
   plugins: Plugin[];
+  globalPluginOrder?: string[];
+  capabilities?: CapabilityGrants;
+  syncEnabled?: boolean;
 }
 
 export interface PackageCategory {
@@ -29,11 +32,14 @@ export interface PackageCategory {
   order: number;
 }
 
+export type ConversationRendererId = "chat" | "novel";
+
 export interface Conversation {
   id: string;
   packageId: string;
   title: string;
   isTemplate?: boolean;
+  rendererId?: ConversationRendererId;
   rootContainerId: string | null;
   lastContainerId: string | null;
   createdAt: string;
@@ -78,9 +84,25 @@ export interface FilePart {
   data: DataContent | URL;
   filename?: string;
   mediaType: string;
+  size?: number;
 }
 
-export type AdditionalParts = TextPart | ImagePart | FilePart;
+export interface ComponentPart {
+  type: "component";
+  componentId: string;
+  props?: Record<string, unknown>;
+}
+
+export interface ActionPart {
+  type: "action";
+  actionId: string;
+  pluginId: string;
+  pluginName: string;
+  name: string;
+  description: string;
+}
+
+export type AdditionalParts = TextPart | ImagePart | FilePart | ComponentPart | ActionPart;
 
 export type ChatMessageMeta = {
   generateInfo?: {
@@ -93,6 +115,8 @@ export type ChatMessageMeta = {
     pluginName: string;
     characterId: string;
     characterName: string;
+    insertedResourceIds?: string[];
+    diagnostics?: string[];
   };
   steps: (LocalStep | ToolCallResult | SubAgentStep)[];
 };
@@ -116,3 +140,4 @@ export type ChatMessageContainer = {
 };
 
 export type MessageDraftClosure = (message: ChatMessage, container: ChatMessageContainer) => void | Promise<void>;
+import type { CapabilityGrants } from "@/features/Capabilities/domain/capability";

@@ -4,6 +4,7 @@ import { storeToRefs } from "pinia";
 import {
   ArrowDown,
   ArrowUp,
+  Bell,
   Check,
   ChevronDown,
   ChevronRight,
@@ -40,17 +41,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { useResponsiveStore } from "@/features/Misc/application/responsive-store";
 import { saveImageFile } from "@/features/Resources/application/resource-file-service";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
+import { openFirstPluginAction } from "@/features/Resources/Plugin/actions";
 import ResourceAvatar from "@/features/Resources/Conversation/presentation/ResourceAvatar.vue";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { useCommandStore } from "@/features/Hotkey/application/command-store";
 import InlineEditInput from "@/features/UI/presentation/InlineEditInput.vue";
+import { useNotificationStore } from "@/features/Notification/application/notification-store";
 
 const layout = useLayoutStore();
+const responsive = useResponsiveStore();
 const commandStore = useCommandStore();
 const conversation = useConversationStore();
+const notifications = useNotificationStore();
 const { leftSidebarOpen } = storeToRefs(layout);
+const { isMobileLayout } = storeToRefs(responsive);
 const packageViewMode = ref<"list" | "grid">("list");
 const collapsedCategoryIds = ref<string[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -91,7 +98,7 @@ async function openPackage(packageId: string) {
   }
 }
 
-function openBuiltinPage(resourceId: "schedule" | "plugins", title: string) {
+function openBuiltinPage(resourceId: "schedule" | "notifications", title: string) {
   layout.openResourceTab({
     resourceType: "builtin",
     resourceId,
@@ -174,13 +181,29 @@ async function uploadIcon(event: Event) {
   <aside
     :class="
       cn(
-        'flex shrink-0 flex-col overflow-hidden border-r bg-background transition-[width,opacity] duration-300 ease-out',
-        leftSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0',
+        'flex shrink-0 flex-col overflow-hidden border-r bg-background transition-[width,opacity,transform] duration-300 ease-out',
+        isMobileLayout
+          ? [
+              'fixed bottom-0 left-0 top-12 z-40 shadow-xl',
+              leftSidebarOpen ? 'translate-x-0 opacity-100' : '-translate-x-full pointer-events-none opacity-100',
+            ]
+          : leftSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0',
       )
     "
+    data-mobile-sidebar
   >
     <div class="min-w-72 border-b p-2">
       <nav class="grid gap-1">
+        <Button class="relative h-9 justify-start gap-2" variant="ghost" @click="openBuiltinPage('notifications', '通知')">
+          <Bell class="size-4" />
+          通知
+          <span
+            v-if="notifications.unreadCount"
+            class="ml-auto min-w-5 rounded-full bg-primary px-1.5 text-center text-[10px] leading-5 text-primary-foreground"
+          >
+            {{ notifications.unreadCount > 99 ? "99+" : notifications.unreadCount }}
+          </span>
+        </Button>
         <Button class="h-9 justify-start gap-2" variant="ghost" @click="commandStore.openPalette()">
           <Search class="size-4" />
           搜索
@@ -189,7 +212,7 @@ async function uploadIcon(event: Event) {
           <Clock class="size-4" />
           定时任务
         </Button>
-        <Button class="h-9 justify-start gap-2" variant="ghost" @click="openBuiltinPage('plugins', '插件')">
+        <Button class="h-9 justify-start gap-2" variant="ghost" @click="openFirstPluginAction">
           <Plug class="size-4" />
           插件
         </Button>
@@ -230,7 +253,7 @@ async function uploadIcon(event: Event) {
             v-if="!(editing?.kind === 'category-name' && editing.id === section.id)"
             size="icon"
             variant="ghost"
-            class="size-7 opacity-0 transition-opacity group-hover/category:opacity-100"
+            class="mobile-touch-actions size-7 opacity-0 transition-opacity group-hover/category:opacity-100"
             title="新建角色包"
             @click.stop="createPackage(section.virtual ? null : section.id)"
           >
@@ -242,7 +265,7 @@ async function uploadIcon(event: Event) {
               <Button
                 size="icon"
                 variant="ghost"
-                class="size-7 opacity-0 transition-opacity group-hover/category:opacity-100"
+                class="mobile-touch-actions size-7 opacity-0 transition-opacity group-hover/category:opacity-100"
                 title="分类菜单"
                 @click.stop
               >

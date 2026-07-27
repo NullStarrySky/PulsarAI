@@ -4121,6 +4121,7 @@ dependencies = [
  "tauri-plugin-android-battery-optimization",
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
+ "tauri-plugin-m3",
  "tauri-plugin-notifications",
  "tauri-plugin-opener",
  "tauri-plugin-os",
@@ -6067,6 +6068,18 @@ dependencies = [
  "thiserror 2.0.19",
  "toml 1.1.3+spec-1.1.0",
  "url",
+]
+
+[[package]]
+name = "tauri-plugin-m3"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8049cd4247cc4d18385d129b2695828016f1e18eea701cbc3183336ab1c122aa"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.19",
 ]
 
 [[package]]

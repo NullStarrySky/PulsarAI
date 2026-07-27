@@ -15,6 +15,8 @@ export type RuntimeOsType = OsType | "unknown";
 export type RuntimeArch = Arch | "unknown";
 export type RuntimeFamily = Family | "unknown";
 
+let mobilePlatformOverride: boolean | null = null;
+
 export function getRuntimePlatform(): RuntimePlatform {
   try {
     return platform();
@@ -64,9 +66,21 @@ export function isIosPlatform() {
 }
 
 export function isMobilePlatform() {
-  return isAndroidPlatform() || isIosPlatform();
+  return mobilePlatformOverride ?? isNativeMobilePlatform();
 }
 
 export function isDesktopPlatform() {
-  return ["windows", "macos", "linux"].includes(getRuntimePlatform());
+  return !isMobilePlatform() && ["windows", "macos", "linux"].includes(getRuntimePlatform());
+}
+
+export function isNativeMobilePlatform() {
+  return isAndroidPlatform() || isIosPlatform();
+}
+
+export function setMobilePlatformOverride(value: boolean | null) {
+  mobilePlatformOverride = value;
+}
+
+export function getMobilePlatformOverride() {
+  return mobilePlatformOverride;
 }

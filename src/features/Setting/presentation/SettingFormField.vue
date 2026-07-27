@@ -16,7 +16,7 @@ defineProps<{
       <div v-if="description" class="block max-w-[42rem] text-xs leading-5 text-muted-foreground">{{ description }}</div>
     </div>
     <div class="flex min-w-0 flex-col items-stretch justify-center gap-2 sm:items-end">
-      <div class="flex w-full justify-end">
+      <div class="flex w-full justify-end mobile:justify-start">
         <slot />
       </div>
       <div v-if="$slots.description" class="block w-full text-xs leading-5 text-muted-foreground sm:text-right">

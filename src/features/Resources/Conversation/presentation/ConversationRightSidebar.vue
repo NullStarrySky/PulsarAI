@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { storeToRefs } from "pinia";
-import { FileCheck2, MessageSquare, MoreHorizontal, Plus, Search, Trash2, Wrench } from "lucide-vue-next";
+import { BookOpen, Check, FileCheck2, MessageSquare, MoreHorizontal, Plus, Search, Trash2, Wrench } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
@@ -15,17 +18,25 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { useResponsiveStore } from "@/features/Misc/application/responsive-store";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
+import type { ConversationRendererId } from "@/features/Resources/Conversation/domain/conversation-types";
+import PluginRightSidebarPanel from "@/features/Resources/Plugin/presentation/PluginRightSidebarPanel.vue";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import InlineEditInput from "@/features/UI/presentation/InlineEditInput.vue";
 
 const layout = useLayoutStore();
+const responsive = useResponsiveStore();
 const conversation = useConversationStore();
 const { rightSidebarOpen } = storeToRefs(layout);
+const { isMobileLayout } = storeToRefs(responsive);
 const tab = ref<"conversation" | "plugin">("conversation");
 const editingConversationId = ref("");
 const editingConversationTitle = ref("");
@@ -101,16 +112,26 @@ async function toggleConversationTemplate(conversationId: string) {
 
   await conversation.updateConversation(item.id, { isTemplate: !item.isTemplate });
 }
+
+async function setRenderer(conversationId: string, rendererId: ConversationRendererId) {
+  await conversation.setConversationRenderer(conversationId, rendererId);
+}
 </script>
 
 <template>
   <aside
     :class="
       cn(
-        'flex shrink-0 flex-col overflow-hidden border-l bg-background transition-[width,opacity] duration-300 ease-out',
-        rightSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0',
+        'flex shrink-0 flex-col overflow-hidden border-l bg-background transition-[width,opacity,transform] duration-300 ease-out',
+        isMobileLayout
+          ? [
+              'fixed bottom-0 right-0 top-12 z-40 shadow-xl',
+              rightSidebarOpen ? 'translate-x-0 opacity-100' : 'translate-x-full pointer-events-none opacity-100',
+            ]
+          : rightSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0',
       )
     "
+    data-mobile-sidebar
   >
     <div class="min-w-72 border-b p-2">
       <div class="grid grid-cols-2 rounded-md bg-muted p-1">
@@ -187,6 +208,22 @@ async function toggleConversationTemplate(conversationId: string) {
                     <FileCheck2 class="mr-2 size-4" />
                     {{ item.isTemplate ? "取消模板" : "设为模板" }}
                   </DropdownMenuItem>
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>
+                      <BookOpen class="mr-2 size-4" />
+                      渲染器
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent class="w-40">
+                      <DropdownMenuItem @click="setRenderer(item.id, 'chat')">
+                        标准对话
+                        <Check v-if="(item.rendererId ?? 'chat') === 'chat'" class="ml-auto size-4" />
+                      </DropdownMenuItem>
+                      <DropdownMenuItem @click="setRenderer(item.id, 'novel')">
+                        小说阅读器
+                        <Check v-if="item.rendererId === 'novel'" class="ml-auto size-4" />
+                      </DropdownMenuItem>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem class="text-destructive focus:text-destructive" @click="deleteConversation(item.id)">
                     <Trash2 class="mr-2 size-4" />
@@ -202,6 +239,22 @@ async function toggleConversationTemplate(conversationId: string) {
               <FileCheck2 class="mr-2 size-4" />
               {{ item.isTemplate ? "取消模板" : "设为模板" }}
             </ContextMenuItem>
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <BookOpen class="mr-2 size-4" />
+                渲染器
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent class="w-40">
+                <ContextMenuItem @click="setRenderer(item.id, 'chat')">
+                  标准对话
+                  <Check v-if="(item.rendererId ?? 'chat') === 'chat'" class="ml-auto size-4" />
+                </ContextMenuItem>
+                <ContextMenuItem @click="setRenderer(item.id, 'novel')">
+                  小说阅读器
+                  <Check v-if="item.rendererId === 'novel'" class="ml-auto size-4" />
+                </ContextMenuItem>
+              </ContextMenuSubContent>
+            </ContextMenuSub>
             <ContextMenuSeparator />
             <ContextMenuItem variant="destructive" @click="deleteConversation(item.id)">
               <Trash2 class="mr-2 size-4" />
@@ -212,8 +265,6 @@ async function toggleConversationTemplate(conversationId: string) {
       </div>
     </template>
 
-    <div v-else class="min-w-72 flex-1 p-4 text-sm text-muted-foreground">
-      插件将在后续阶段接入。
-    </div>
+    <PluginRightSidebarPanel v-else />
   </aside>
 </template>

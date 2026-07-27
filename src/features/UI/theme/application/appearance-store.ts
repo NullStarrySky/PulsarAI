@@ -7,6 +7,15 @@ import {
   type ThemeDefinition,
   type ThemeMode,
 } from "../domain/theme-registry";
+import {
+  defaultComposerToolbarLayout,
+  normalizeComposerToolbarLayout,
+  type ComposerToolbarLayout,
+} from "@/features/UI/domain/composer-toolbar";
+import {
+  syncMobileNavigationBar,
+  type MobileNavigationBarMode,
+} from "@/features/Misc/application/mobile-navigation-bar";
 
 interface AppearanceSnapshot {
   themeId: string;
@@ -16,6 +25,8 @@ interface AppearanceSnapshot {
   customFonts: FontDefinition[];
   fontSize: number;
   uiScale: number;
+  composerToolbar: ComposerToolbarLayout;
+  mobileNavigationBarMode: MobileNavigationBarMode;
 }
 
 const storageKey = "pulsarai:appearance:v1";
@@ -32,6 +43,8 @@ export const useAppearanceStore = defineStore("appearance", () => {
   const customFonts = ref<FontDefinition[]>(snapshot.customFonts);
   const fontSize = ref(snapshot.fontSize);
   const uiScale = ref(snapshot.uiScale);
+  const composerToolbar = ref(snapshot.composerToolbar);
+  const mobileNavigationBarMode = ref(snapshot.mobileNavigationBarMode);
 
   const themes = computed(() => [...builtInThemes, ...customThemes.value]);
   const fonts = computed(() => [...builtInFonts, ...customFonts.value]);
@@ -39,7 +52,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
   const activeFont = computed(() => fonts.value.find((font) => font.id === fontId.value) ?? builtInFonts[0]);
 
   watch(
-    [themeId, themeMode, customThemes, fontId, customFonts, fontSize, uiScale],
+    [themeId, themeMode, customThemes, fontId, customFonts, fontSize, uiScale, composerToolbar, mobileNavigationBarMode],
     () => {
       persistSnapshot({
         themeId: themeId.value,
@@ -49,6 +62,8 @@ export const useAppearanceStore = defineStore("appearance", () => {
         customFonts: customFonts.value,
         fontSize: fontSize.value,
         uiScale: uiScale.value,
+        composerToolbar: composerToolbar.value,
+        mobileNavigationBarMode: mobileNavigationBarMode.value,
       });
       applyAppearance();
     },
@@ -71,14 +86,26 @@ export const useAppearanceStore = defineStore("appearance", () => {
     fontId.value = font.id;
   }
 
+  function setComposerToolbar(layout: ComposerToolbarLayout) {
+    composerToolbar.value = normalizeComposerToolbarLayout(layout);
+  }
+
   function applyAppearance() {
     if (typeof document === "undefined") {
       return;
     }
     installCustomThemeStyles(customThemes.value);
-    applyTheme(activeTheme.value, themeMode.value);
+    const topBarIsDark = applyTheme(
+      activeTheme.value,
+      themeMode.value,
+      applyAppearance,
+    );
     applyFont(activeFont.value, fontSize.value);
     document.body.style.setProperty("zoom", String(uiScale.value / 100));
+    void syncMobileNavigationBar(
+      mobileNavigationBarMode.value,
+      topBarIsDark,
+    );
   }
 
   return {
@@ -86,20 +113,27 @@ export const useAppearanceStore = defineStore("appearance", () => {
     activeTheme,
     customFonts,
     customThemes,
+    composerToolbar,
     fontId,
     fontSize,
     fonts,
     themeId,
     themeMode,
+    mobileNavigationBarMode,
     themes,
     uiScale,
     importFont,
     importThemeFile,
     initialize,
+    setComposerToolbar,
   };
 });
 
-function applyTheme(theme: ThemeDefinition, mode: ThemeMode) {
+function applyTheme(
+  theme: ThemeDefinition,
+  mode: ThemeMode,
+  onSystemChange: () => void,
+) {
   const root = document.documentElement;
   for (const className of Array.from(root.classList)) {
     if (className.startsWith(themeClassPrefix)) {
@@ -110,10 +144,11 @@ function applyTheme(theme: ThemeDefinition, mode: ThemeMode) {
     root.classList.add(theme.className);
   }
 
-  installSystemModeListener(mode);
+  installSystemModeListener(mode, onSystemChange);
   const shouldUseDark = mode === "dark" || (mode === "system" && Boolean(systemDarkQuery?.matches));
   root.classList.toggle("dark", shouldUseDark);
   root.style.colorScheme = shouldUseDark ? "dark" : "light";
+  return shouldUseDark;
 }
 
 function applyFont(font: FontDefinition, size: number) {
@@ -136,7 +171,7 @@ function installCustomThemeStyles(themes: ThemeDefinition[]) {
   style.textContent = [...builtInThemes, ...themes].map((theme) => theme.css ?? "").join("\n\n");
 }
 
-function installSystemModeListener(mode: ThemeMode) {
+function installSystemModeListener(mode: ThemeMode, onSystemChange: () => void) {
   if (typeof window === "undefined") {
     return;
   }
@@ -149,9 +184,7 @@ function installSystemModeListener(mode: ThemeMode) {
     return;
   }
   systemDarkListener = () => {
-    const root = document.documentElement;
-    root.classList.toggle("dark", Boolean(systemDarkQuery?.matches));
-    root.style.colorScheme = systemDarkQuery?.matches ? "dark" : "light";
+    onSystemChange();
   };
   systemDarkQuery.addEventListener("change", systemDarkListener);
 }
@@ -165,6 +198,8 @@ function readSnapshot(): AppearanceSnapshot {
     customFonts: [],
     fontSize: 16,
     uiScale: 100,
+    composerToolbar: structuredClone(defaultComposerToolbarLayout),
+    mobileNavigationBarMode: "topbar",
   };
   if (typeof localStorage === "undefined") {
     return fallback;
@@ -174,7 +209,12 @@ function readSnapshot(): AppearanceSnapshot {
     return fallback;
   }
   try {
-    return { ...fallback, ...(JSON.parse(raw) as Partial<AppearanceSnapshot>) };
+    const parsed = JSON.parse(raw) as Partial<AppearanceSnapshot>;
+    return {
+      ...fallback,
+      ...parsed,
+      composerToolbar: normalizeComposerToolbarLayout(parsed.composerToolbar),
+    };
   } catch {
     return fallback;
   }

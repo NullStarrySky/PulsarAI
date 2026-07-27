@@ -1,11 +1,17 @@
 import { defineStore } from "pinia";
 import type { ModelMessage } from "ai";
 import { remove, selectAll, upsert } from "@/features/Database/application/database-service";
-import { runDefaultAgent } from "@/features/Agent/application/default-agent";
+import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
+import { useLayoutStore } from "@/features/UI/application/layout-store";
+import { runConversationGeneration } from "./conversation-generation";
 import type {
   CharacterPackage,
+  ActionPart,
+  AdditionalParts,
   ChatMessage,
   ChatMessageContainer,
+  ConversationRendererId,
+  FilePart,
   Conversation,
   MessageDraftClosure,
   PackageCategory,
@@ -54,12 +60,17 @@ function createContainer(input: {
   conversationId: string;
   previousContainer: string | null;
   content?: string;
+  parts?: AdditionalParts[];
 }): ChatMessageContainer {
+  const message = createMessage(input.content ?? "");
+  if (input.parts?.length) {
+    message.parts = clonePlain(input.parts);
+  }
   return {
     id: crypto.randomUUID(),
     role: input.role,
     conversationid: input.conversationId,
-    content: [createMessage(input.content ?? "")],
+    content: [message],
     activeMessage: 0,
     availableNextContainer: [],
     activeNextContainer: null,
@@ -77,6 +88,8 @@ function createPackage(): CharacterPackage {
     order: 0,
     conversations: [],
     plugins: [],
+    globalPluginOrder: [],
+    syncEnabled: true,
   };
 }
 
@@ -170,7 +183,18 @@ export const useConversationStore = defineStore("conversation", {
 
       this.categories = categories.map((item) => item.value);
       this.packages = packages.map((item) => item.value).sort(comparePackages);
-      this.conversations = conversations.map((item) => item.value);
+      this.packages = this.packages.map((item) => ({
+        ...item,
+        globalPluginOrder: item.globalPluginOrder ?? [],
+        capabilities: item.capabilities
+          ? structuredClone(item.capabilities)
+          : undefined,
+        syncEnabled: item.syncEnabled ?? true,
+      }));
+      this.conversations = conversations.map((item) => ({
+        ...item.value,
+        rendererId: item.value.rendererId ?? "chat",
+      }));
       this.containers = containers.map((item) => item.value);
 
       if (this.packages.length === 0) {
@@ -250,12 +274,14 @@ export const useConversationStore = defineStore("conversation", {
         order: Math.max(-1, ...this.packages.map((packageItem) => packageItem.order ?? -1)) + 1,
         conversations: [],
         plugins: [],
+        globalPluginOrder: [],
+        syncEnabled: true,
       };
       this.packages.push(item);
       await this.persistPackage(item);
       await this.openPackage(item.id);
     },
-    async updatePackage(packageId: string, patch: Partial<Pick<CharacterPackage, "name" | "description" | "icon" | "categoryId">>) {
+    async updatePackage(packageId: string, patch: Partial<Pick<CharacterPackage, "name" | "description" | "icon" | "categoryId" | "syncEnabled" | "capabilities">>) {
       const item = this.packages.find((packageItem) => packageItem.id === packageId);
       if (!item) {
         return;
@@ -282,6 +308,12 @@ export const useConversationStore = defineStore("conversation", {
         return;
       }
 
+      const pluginStore = usePluginStore();
+      await pluginStore.initialize();
+      await this.normalizePackageGlobalPluginOrder(
+        item.id,
+        pluginStore.externalGlobalPlugins.map((plugin) => plugin.id),
+      );
       this.activePackageId = packageId;
       const newest = item.conversations
         .map((link) => this.conversations.find((conversation) => conversation.id === link.id))
@@ -294,6 +326,63 @@ export const useConversationStore = defineStore("conversation", {
         await this.createConversation(packageId);
       }
     },
+    async normalizePackageGlobalPluginOrder(
+      packageId: string,
+      availablePluginIds: string[],
+    ) {
+      const item = this.packages.find((packageItem) => packageItem.id === packageId);
+      if (!item) {
+        return;
+      }
+
+      const available = new Set(availablePluginIds);
+      const seen = new Set<string>();
+      const normalized = [
+        ...(item.globalPluginOrder ?? []).filter((pluginId) => {
+          if (!available.has(pluginId) || seen.has(pluginId)) {
+            return false;
+          }
+          seen.add(pluginId);
+          return true;
+        }),
+        ...availablePluginIds.filter((pluginId) => {
+          if (seen.has(pluginId)) {
+            return false;
+          }
+          seen.add(pluginId);
+          return true;
+        }),
+      ];
+
+      if (JSON.stringify(normalized) === JSON.stringify(item.globalPluginOrder ?? [])) {
+        return;
+      }
+      item.globalPluginOrder = normalized;
+      await this.persistPackage(item);
+    },
+    async movePackageGlobalPluginBefore(
+      packageId: string,
+      pluginId: string,
+      beforePluginId?: string,
+    ) {
+      const item = this.packages.find((packageItem) => packageItem.id === packageId);
+      if (!item) {
+        return;
+      }
+
+      const pluginStore = usePluginStore();
+      const availableIds = pluginStore.externalGlobalPlugins.map((plugin) => plugin.id);
+      await this.normalizePackageGlobalPluginOrder(packageId, availableIds);
+      const ordered = (item.globalPluginOrder ?? []).filter((id) => id !== pluginId);
+      if (!availableIds.includes(pluginId)) {
+        return;
+      }
+
+      const targetIndex = beforePluginId ? ordered.indexOf(beforePluginId) : -1;
+      ordered.splice(targetIndex < 0 ? ordered.length : targetIndex, 0, pluginId);
+      item.globalPluginOrder = ordered;
+      await this.persistPackage(item);
+    },
     async createConversation(packageId?: string) {
       packageId ??= this.activePackageId;
       const template = this.conversations.find((item) => item.packageId === packageId && item.isTemplate);
@@ -302,6 +391,7 @@ export const useConversationStore = defineStore("conversation", {
         packageId,
         title: template?.title ?? "新对话",
         isTemplate: false,
+        rendererId: template?.rendererId ?? "chat",
         rootContainerId: null,
         lastContainerId: null,
         createdAt: now(),
@@ -350,6 +440,7 @@ export const useConversationStore = defineStore("conversation", {
         ...createdContainers.map((container) => this.persistContainer(container)),
       ]);
       this.openConversation(conversation.id);
+      return conversation;
     },
     cloneConversationContainers(templateConversationId: string, conversationId: string) {
       const template = this.conversations.find((item) => item.id === templateConversationId);
@@ -420,16 +511,47 @@ export const useConversationStore = defineStore("conversation", {
       for (const item of this.containerPathTo(container.previousContainer)) {
         const message = this.currentMessage(item);
         const content = message?.content.trim();
-        if (!content) {
+        const fileParts = message?.parts?.filter(
+          (part) => part.type === "file" || part.type === "image",
+        ) ?? [];
+        if (!content && fileParts.length === 0) {
           continue;
         }
 
         if (item.role === "system") {
-          messages.push({ role: "system", content });
+          if (content) {
+            messages.push({ role: "system", content });
+          }
         } else if (item.role === "user") {
-          messages.push({ role: "user", content });
+          if (fileParts.length === 0) {
+            messages.push({ role: "user", content: content ?? "" });
+            continue;
+          }
+          messages.push({
+            role: "user",
+            content: [
+              ...(content ? [{ type: "text" as const, text: content }] : []),
+              ...fileParts.map((part) => {
+                if (part.type === "image") {
+                  return {
+                    type: "image" as const,
+                    image: part.image,
+                    mediaType: part.mediaType,
+                  };
+                }
+                return {
+                  type: "file" as const,
+                  data: part.data,
+                  filename: part.filename,
+                  mediaType: part.mediaType,
+                };
+              }),
+            ],
+          });
         } else {
-          messages.push({ role: "assistant", content });
+          if (content) {
+            messages.push({ role: "assistant", content });
+          }
         }
       }
       return messages;
@@ -445,7 +567,10 @@ export const useConversationStore = defineStore("conversation", {
       this.activeContainerId = conversation.lastContainerId ?? conversation.rootContainerId ?? "";
       this.syncConversationLink(conversation);
     },
-    async updateConversation(conversationId: string, patch: Partial<Pick<Conversation, "title" | "isTemplate">>) {
+    async updateConversation(
+      conversationId: string,
+      patch: Partial<Pick<Conversation, "title" | "isTemplate" | "rendererId">>,
+    ) {
       const conversation = this.conversations.find((item) => item.id === conversationId);
       if (!conversation) {
         return;
@@ -470,6 +595,12 @@ export const useConversationStore = defineStore("conversation", {
         this.persistConversation(conversation),
         packageItem ? this.persistPackage(packageItem) : Promise.resolve(),
       ]);
+    },
+    async setConversationRenderer(
+      conversationId: string,
+      rendererId: ConversationRendererId,
+    ) {
+      await this.updateConversation(conversationId, { rendererId });
     },
     async deleteConversation(conversationId: string) {
       const conversation = this.conversations.find((item) => item.id === conversationId);
@@ -547,6 +678,46 @@ export const useConversationStore = defineStore("conversation", {
       message.content = content;
       await this.persistContainer(container);
     },
+    async addMessageAttachments(
+      containerId: string,
+      messageId: string,
+      attachments: FilePart[],
+    ) {
+      const container = this.containers.find((item) => item.id === containerId);
+      const message = container?.content.find((item) => item.id === messageId);
+      if (!container || !message || attachments.length === 0) {
+        return;
+      }
+
+      message.parts ??= [];
+      message.parts.push(...clonePlain(attachments));
+      await this.persistContainer(container);
+    },
+    async removeMessageAttachment(
+      containerId: string,
+      messageId: string,
+      attachmentIndex: number,
+    ) {
+      const container = this.containers.find((item) => item.id === containerId);
+      const message = container?.content.find((item) => item.id === messageId);
+      if (!container || !message?.parts) {
+        return;
+      }
+
+      let currentAttachmentIndex = -1;
+      const partIndex = message.parts.findIndex((part) => {
+        if (part.type !== "file" && part.type !== "image") {
+          return false;
+        }
+        currentAttachmentIndex += 1;
+        return currentAttachmentIndex === attachmentIndex;
+      });
+      if (partIndex < 0) {
+        return;
+      }
+      message.parts.splice(partIndex, 1);
+      await this.persistContainer(container);
+    },
     async deleteActiveMessage(containerId: string) {
       const container = this.containers.find((item) => item.id === containerId);
       if (!container || container.activeMessage === null) {
@@ -557,7 +728,12 @@ export const useConversationStore = defineStore("conversation", {
       container.activeMessage = container.content.length === 0 ? null : Math.min(container.activeMessage, container.content.length - 1);
       await this.persistContainer(container);
     },
-    async appendContainer(role: Role, content = "", previousContainerId?: string) {
+    async appendContainer(
+      role: Role,
+      content = "",
+      previousContainerId?: string,
+      parts?: AdditionalParts[],
+    ) {
       previousContainerId ??= this.activeContainerId;
       const conversation = this.activeConversation;
       if (!conversation) {
@@ -569,6 +745,7 @@ export const useConversationStore = defineStore("conversation", {
         conversationId: conversation.id,
         previousContainer: previousContainerId || null,
         content,
+        parts,
       });
 
       const previous = previousContainerId ? this.containers.find((item) => item.id === previousContainerId) : null;
@@ -641,16 +818,26 @@ export const useConversationStore = defineStore("conversation", {
         this.syncConversationLink(conversation);
       }
     },
-    async send(content: string, mutate?: MessageDraftClosure) {
+    async send(
+      content: string,
+      mutate?: MessageDraftClosure,
+      attachments: FilePart[] = [],
+      action?: ActionPart | null,
+    ) {
       const trimmed = content.trim();
-      if (!trimmed || this.generating) {
+      if ((!trimmed && attachments.length === 0 && !action) || this.generating) {
         return;
       }
       void import("@/features/Statistic/application/statistic-store").then(({ useStatisticStore }) =>
         useStatisticStore().recordEvent("message.user"),
       );
 
-      const userContainer = await this.appendContainer("user", trimmed);
+      const userContainer = await this.appendContainer(
+        "user",
+        trimmed,
+        undefined,
+        action ? [clonePlain(action), ...attachments] : attachments,
+      );
       if (!userContainer) {
         return;
       }
@@ -673,19 +860,32 @@ export const useConversationStore = defineStore("conversation", {
         return;
       }
 
+      const beforeGenerationMessage = findLastCompleteMessage(
+        container,
+        container.activeMessage ?? container.content.length - 1,
+      );
       const message = createMessage("");
       container.content.push(message);
       container.activeMessage = container.content.length - 1;
       this.activeContainerId = container.id;
-      await this.fillAssistantContainer(container, mutate);
+      await this.fillAssistantContainer(container, mutate, beforeGenerationMessage ?? undefined);
     },
-    async fillAssistantContainer(container: ChatMessageContainer, mutate?: MessageDraftClosure) {
+    async fillAssistantContainer(
+      container: ChatMessageContainer,
+      mutate?: MessageDraftClosure,
+      beforeGenerationMessage?: ChatMessage,
+    ) {
       const message = this.currentMessage(container);
       if (!message) {
         return;
       }
 
       this.generating = true;
+      const layout = useLayoutStore();
+      layout.setResourceTabStatus("conversation", container.conversationid, {
+        kind: "loading",
+        label: "生成中",
+      });
       const start = Date.now();
       message.meta.generateInfo = {
         modelName: "default-agent",
@@ -695,13 +895,50 @@ export const useConversationStore = defineStore("conversation", {
       await this.persistContainer(container);
 
       try {
-        const result = await runDefaultAgent({
-          messages: this.modelMessagesBefore(container),
-          environment: {
-            now: () => new Date().toISOString(),
-            conversationId: container.conversationid,
-            containerId: container.id,
-          },
+        const pluginStore = usePluginStore();
+        await pluginStore.initialize();
+        const conversation = this.conversations.find(
+          (item) => item.id === container.conversationid,
+        );
+        if (!conversation) {
+          throw new Error("当前消息没有所属对话。");
+        }
+        const enabledPlugins = pluginStore.enabledPluginsForPackage(
+          conversation.packageId,
+          this.packages.find((item) => item.id === conversation.packageId)
+            ?.globalPluginOrder,
+        );
+        const previousPath = this.containerPathTo(container.previousContainer);
+        const promptContainer = [...previousPath].reverse().find(
+          (item) => item.role === "user",
+        );
+        const promptMessage = promptContainer
+          ? this.currentMessage(promptContainer)
+          : null;
+        const actionPart = promptMessage?.parts?.find(
+          (part): part is ActionPart => part.type === "action",
+        );
+        const result = await runConversationGeneration({
+          plugins: enabledPlugins,
+          packageId: conversation.packageId,
+          conversationId: container.conversationid,
+          conversation,
+          activePath: this.containerPathTo(container.previousContainer),
+          chat: this.modelMessagesBefore(container),
+          emptyContainer: container,
+          emptyMessage: message,
+          action: actionPart
+            ? {
+                pluginId: actionPart.pluginId,
+                resourceId: actionPart.actionId,
+                name: actionPart.name,
+              }
+            : undefined,
+          prompt: promptMessage?.content ?? "",
+          beforeGenerationMessage,
+          capabilityGrants: this.packages.find(
+            (item) => item.id === conversation.packageId,
+          )?.capabilities,
           onStep: async (step) => {
             message.meta.steps.push(step);
             await mutate?.(message, container);
@@ -726,6 +963,7 @@ export const useConversationStore = defineStore("conversation", {
         await mutate?.(message, container);
         await this.persistContainer(container);
         this.generating = false;
+        layout.setResourceTabStatus("conversation", container.conversationid);
       }
     },
     async generateFromPath(mutate?: MessageDraftClosure, usePreviousPath = false) {
@@ -811,3 +1049,22 @@ export const useConversationStore = defineStore("conversation", {
     },
   },
 });
+
+function findLastCompleteMessage(
+  container: ChatMessageContainer,
+  startIndex: number,
+) {
+  for (let index = startIndex; index >= 0; index -= 1) {
+    const message = container.content[index];
+    if (
+      message?.content.trim()
+      && (
+        !message.meta.generateInfo
+        || typeof message.meta.generateInfo.timeUsed === "number"
+      )
+    ) {
+      return clonePlain(message);
+    }
+  }
+  return null;
+}

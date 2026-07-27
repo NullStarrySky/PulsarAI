@@ -1,0 +1,58 @@
+.capability-reference {
+  display: grid;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.capability-card {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+.capability-card > header > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.capability-card h2,
+.capability-card h3,
+.capability-card h4 {
+  margin-top: 0;
+}
+
+.capability-grants dl {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) 1fr;
+  gap: 0.4rem 1rem;
+}
+
+.capability-grants dd {
+  margin: 0;
+}
+
+.capability-api-group {
+  margin-top: 1.25rem;
+}
+
+.capability-api {
+  border-top: 1px solid var(--vp-c-divider);
+  padding-top: 1rem;
+}
+
+@media (max-width: 767px) {
+  .capability-card {
+    padding: 1rem;
+  }
+
+  .capability-card > header > div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .capability-grants dl {
+    grid-template-columns: 1fr;
+  }
+}

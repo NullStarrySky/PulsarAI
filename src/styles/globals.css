@@ -3,6 +3,7 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant mobile (&:where(.mobile-layout, .mobile-layout *));
 
 @theme inline {
   --color-background: var(--background);
@@ -83,7 +84,8 @@
     @apply bg-background text-foreground;
     margin: 0;
     min-width: 320px;
-    min-height: 100vh;
+    min-height: 100dvh;
+    overscroll-behavior: none;
   }
 
   button,
@@ -91,6 +93,25 @@
   textarea,
   select {
     font: inherit;
+  }
+}
+
+.mobile-layout :where(button, [role="button"], input, textarea, select) {
+  touch-action: manipulation;
+}
+
+.mobile-layout :where(.mobile-touch-actions) {
+  opacity: 1;
+}
+
+.mobile-layout :where([data-mobile-sidebar]) {
+  width: min(20rem, 88vw);
+  max-width: 88vw;
+}
+
+@supports (padding: env(safe-area-inset-bottom)) {
+  .mobile-layout .mobile-safe-bottom {
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
   }
 }
 
@@ -126,6 +147,56 @@
 .milkdown .crepe-drop-cursor {
   background-color: var(--foreground) !important;
   opacity: 0.7 !important;
+}
+
+.milkdown .milkdown-block-handle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: color-mix(in srgb, var(--foreground), transparent 36%);
+  opacity: 0.95;
+}
+
+.milkdown .milkdown-block-handle .operation-item {
+  display: grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 0.35rem;
+  color: color-mix(in srgb, var(--foreground), transparent 36%);
+  background: transparent;
+}
+
+.milkdown .milkdown-block-handle .operation-item:hover,
+.milkdown .milkdown-block-handle .operation-item.active {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--accent), transparent 28%);
+}
+
+.milkdown .milkdown-block-handle svg,
+.milkdown .milkdown-table-handle svg,
+.milkdown .milkdown-table-tooltip svg {
+  fill: currentColor;
+}
+
+.milkdown .milkdown-slash-menu,
+.milkdown .milkdown-link-tooltip,
+.milkdown .milkdown-toolbar,
+.milkdown .milkdown-table-tooltip {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--card), black 4%);
+  border-color: color-mix(in srgb, var(--border), var(--foreground) 18%);
+}
+
+.milkdown .milkdown-table-handle {
+  color: color-mix(in srgb, var(--foreground), transparent 18%);
+  background: color-mix(in srgb, var(--card), var(--foreground) 6%);
+}
+
+.milkdown table,
+.milkdown th,
+.milkdown td {
+  border-color: color-mix(in srgb, var(--border), var(--foreground) 28%) !important;
 }
 
 .dark .milkdown {

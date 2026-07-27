@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { markLocalDatabaseChange } from "./sync-metadata";
 
 export interface DatabaseRecord<T> {
   id: string;
@@ -58,6 +59,7 @@ export async function upsert<T>(table: string, id: string, value: T) {
   const records = readMirror<T>(table).filter((record) => record.id !== id);
   records.push({ id, value });
   writeMirror(table, records);
+  markLocalDatabaseChange(table, id, false, value);
   try {
     await invoke<void>("database_upsert", { table, id, value });
   } catch {
@@ -66,7 +68,10 @@ export async function upsert<T>(table: string, id: string, value: T) {
 }
 
 export async function remove(table: string, id: string) {
-  writeMirror(table, readMirror(table).filter((record) => record.id !== id));
+  const records = readMirror(table);
+  const previous = records.find((record) => record.id === id)?.value;
+  writeMirror(table, records.filter((record) => record.id !== id));
+  markLocalDatabaseChange(table, id, true, previous);
   try {
     await invoke<void>("database_delete", { table, id });
   } catch {

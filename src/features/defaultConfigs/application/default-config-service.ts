@@ -45,3 +45,16 @@ export function getImageModel() {
 export function setImageModel(model: string) {
   return setDefaultConfig(defaultConfigKeys.imageModel, model);
 }
+
+export function getDefaultCapabilities() {
+  return getDefaultConfig(
+    defaultConfigKeys.defaultCapabilities,
+    fallbackDefaultConfigs.defaultCapabilities,
+  );
+}
+
+export function setDefaultCapabilities(
+  capabilities: typeof fallbackDefaultConfigs.defaultCapabilities,
+) {
+  return setDefaultConfig(defaultConfigKeys.defaultCapabilities, capabilities);
+}
