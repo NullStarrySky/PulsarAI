@@ -122,7 +122,7 @@ async function onDrop(target: Plugin) {
       <div class="p-4">
         <CapabilityGrantEditor
           :model-value="defaults.defaultCapabilities"
-          @update:model-value="defaults.setDefaultCapabilities"
+          @update:model-value="defaults.setDefaultCapabilities($event)"
         />
       </div>
     </SettingGroup>

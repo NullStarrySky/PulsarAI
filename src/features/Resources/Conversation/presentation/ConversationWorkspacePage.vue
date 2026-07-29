@@ -267,7 +267,7 @@ function resolveComposerAction(content: string) {
       pluginId: matched.pluginId,
       pluginName: matched.pluginName,
       name: matched.resource.name,
-      description: matched.resource.description,
+      description: "",
     },
   };
 }

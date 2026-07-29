@@ -206,7 +206,7 @@ export async function runConversationGeneration(
 
   const actionSource = pluginEnvironment.actionProcessResource?.toString().trim();
   const source =
-    actionSource || pluginEnvironment.processPlugin?.generationProcess?.trim();
+    actionSource || pluginEnvironment.processResource?.toString().trim();
   const processPluginId = pluginEnvironment.actionProcessResource?.pluginId
     ?? pluginEnvironment.processPlugin?.id;
   const processResult = source
@@ -310,8 +310,8 @@ function fillEnvironmentMetadata(
   message: ChatMessage,
   environment: Awaited<ReturnType<typeof buildPluginGenerationEnvironment>>,
 ) {
-  const character = environment.selectedResources.find(
-    (resource) => resource.containerId === "character",
+  const character = environment.insertedResources.find(
+    (resource) => resource.path.toLocaleLowerCase().startsWith("character/"),
   );
   const processPlugin =
     environment.processPlugin ?? environment.enabledPlugins[0] ?? null;

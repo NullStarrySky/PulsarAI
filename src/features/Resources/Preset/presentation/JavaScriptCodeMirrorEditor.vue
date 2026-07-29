@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
+import { EditorState } from "@codemirror/state";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { EditorView } from "@codemirror/view";
 import { basicSetup } from "codemirror";
@@ -10,6 +11,7 @@ const props = defineProps<{
   modelValue: string;
   language?: "javascript" | "json";
   frameless?: boolean;
+  readonly?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -28,6 +30,8 @@ onMounted(() => {
       basicSetup,
       props.language === "json" ? json() : javascript(),
       oneDark,
+      EditorState.readOnly.of(Boolean(props.readonly)),
+      EditorView.editable.of(!props.readonly),
       EditorView.lineWrapping,
       EditorView.updateListener.of((update) => {
         if (!update.docChanged) return;

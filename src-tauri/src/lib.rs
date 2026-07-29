@@ -352,7 +352,8 @@ fn apply_pending_restore(app: &AppHandle) -> Result<(), String> {
     let pending: PendingRestore =
         serde_json::from_slice(&fs::read(&marker).map_err(|error| error.to_string())?)
             .map_err(|error| error.to_string())?;
-    let source = PathBuf::from(pending.backup_path).join("surrealdb");
+    let backup_path = PathBuf::from(pending.backup_path);
+    let source = backup_path.join("surrealdb");
     let target = db_dir(app)?;
     let old_target = app_data_dir(app)?.join(format!("surrealdb-before-restore-{}", timestamp_millis()));
 
@@ -360,7 +361,7 @@ fn apply_pending_restore(app: &AppHandle) -> Result<(), String> {
         fs::rename(&target, &old_target).map_err(|error| error.to_string())?;
     }
     copy_dir_recursive(&source, &target)?;
-    let resource_source = PathBuf::from(pending.backup_path).join("resources");
+    let resource_source = backup_path.join("resources");
     if resource_source.exists() {
         copy_dir_recursive(
             &resource_source,

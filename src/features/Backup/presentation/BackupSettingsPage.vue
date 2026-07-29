@@ -2,12 +2,16 @@
 import { computed, onMounted, ref } from "vue";
 import {
   ArchiveRestore,
+  Check,
+  ChevronsUpDown,
   DatabaseBackup,
   RefreshCw,
+  Search,
   ShieldCheck,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -32,12 +36,25 @@ import BackupResourceRestoreDialog from "./BackupResourceRestoreDialog.vue";
 const backup = useBackupStore();
 const conversation = useConversationStore();
 const restoreDialogOpen = ref(false);
+const syncScopeOpen = ref(false);
+const syncScopeSearch = ref("");
 const backupOptions = computed(() =>
   backup.backups.map((item) => ({ value: item.id, label: item.name })),
 );
 const syncHistory = computed(() =>
   Object.entries(backup.lastSyncByDevice).sort((a, b) => b[1].localeCompare(a[1])),
 );
+const selectedSyncPackageCount = computed(
+  () => conversation.packages.filter((item) => item.syncEnabled !== false).length,
+);
+const filteredSyncPackages = computed(() => {
+  const keyword = syncScopeSearch.value.trim().toLocaleLowerCase();
+  return conversation.packages
+    .filter(
+      (item) => !keyword || item.name.toLocaleLowerCase().includes(keyword),
+    )
+    .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans"));
+});
 
 onMounted(async () => {
   await Promise.all([backup.initialize(), conversation.initialize()]);
@@ -122,20 +139,52 @@ function formatSyncTime(value: string) {
         title="同步范围"
         description="关闭的角色包及其会话和本地插件不会出现在同步快照中。"
       >
-        <div class="grid w-full gap-2 sm:w-80">
-          <label
-            v-for="item in conversation.packages"
-            :key="item.id"
-            class="flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm"
+        <Popover v-model:open="syncScopeOpen">
+          <PopoverTrigger as-child>
+            <Button variant="outline" class="w-full justify-between font-normal sm:w-80">
+              <span class="truncate">
+                已选择 {{ selectedSyncPackageCount }} / {{ conversation.packages.length }} 个角色包
+              </span>
+              <ChevronsUpDown class="size-4 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="end"
+            class="w-[var(--reka-popover-trigger-width)] p-2"
           >
-            <span class="truncate">{{ item.name }}</span>
-            <Switch
-              size="sm"
-              :model-value="item.syncEnabled !== false"
-              @update:model-value="backup.setPackageSyncEnabled(item.id, Boolean($event))"
-            />
-          </label>
-        </div>
+            <div class="relative mb-2">
+              <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                v-model="syncScopeSearch"
+                class="h-8 pl-8"
+                placeholder="搜索角色包"
+              />
+            </div>
+            <div class="max-h-64 overflow-y-auto">
+              <button
+                v-for="item in filteredSyncPackages"
+                :key="item.id"
+                type="button"
+                class="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors hover:bg-accent"
+                @click="backup.setPackageSyncEnabled(item.id, item.syncEnabled === false)"
+              >
+                <span class="min-w-0 flex-1 truncate">{{ item.name }}</span>
+                <span
+                  class="flex size-4 items-center justify-center rounded border"
+                  :class="item.syncEnabled !== false && 'border-primary bg-primary text-primary-foreground'"
+                >
+                  <Check v-if="item.syncEnabled !== false" class="size-3" />
+                </span>
+              </button>
+              <p
+                v-if="filteredSyncPackages.length === 0"
+                class="px-2 py-6 text-center text-xs text-muted-foreground"
+              >
+                没有匹配的角色包
+              </p>
+            </div>
+          </PopoverContent>
+        </Popover>
       </SettingItem>
       <SettingItem
         v-if="syncHistory.length"

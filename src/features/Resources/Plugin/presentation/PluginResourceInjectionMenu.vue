@@ -13,22 +13,22 @@ import {
 } from "@/features/Resources/Plugin/application/plugin-condition-environment";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
 import type {
-  PluginResource,
+  PluginTreeNode,
   PluginResourceCondition,
 } from "@/features/Resources/Plugin/domain/plugin-types";
 
 const props = defineProps<{
   pluginId: string;
-  containerId: string;
-  resource: PluginResource;
+  node: PluginTreeNode;
+  disabled?: boolean;
 }>();
 
 const pluginStore = usePluginStore();
 const open = ref(false);
-const inserted = ref(props.resource.inserted);
-const insertPosition = ref(props.resource.insertPosition);
-const insertDepth = ref(props.resource.insertDepth);
-const conditions = ref(props.resource.insertCondition.map(cloneCondition));
+const inserted = ref(props.node.inserted);
+const insertPosition = ref(props.node.insertPosition);
+const insertDepth = ref(props.node.insertDepth);
+const conditions = ref(props.node.insertCondition.map(cloneCondition));
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 const depthValue = computed({
@@ -42,6 +42,16 @@ watch(
   [inserted, insertPosition, insertDepth, conditions],
   schedulePersist,
   { deep: true },
+);
+
+watch(
+  () => props.node.id,
+  () => {
+    inserted.value = props.node.inserted;
+    insertPosition.value = props.node.insertPosition;
+    insertDepth.value = props.node.insertDepth;
+    conditions.value = props.node.insertCondition.map(cloneCondition);
+  },
 );
 
 onBeforeUnmount(() => {
@@ -70,10 +80,12 @@ function schedulePersist() {
 }
 
 async function persist() {
-  await pluginStore.updateResource(
+  if (props.disabled) {
+    return;
+  }
+  await pluginStore.updateNode(
     props.pluginId,
-    props.containerId,
-    props.resource.id,
+    props.node.id,
     {
       inserted: inserted.value,
       insertPosition: insertPosition.value.trim(),
@@ -119,17 +131,18 @@ async function updateOpen(nextOpen: boolean) {
   <Popover :open="open" @update:open="updateOpen">
     <PopoverTrigger as-child>
       <Button
-        size="sm"
-        :variant="inserted ? 'secondary' : 'outline'"
-        class="h-7 gap-1.5 rounded-md px-2 text-xs font-medium active:translate-y-px"
+        size="icon"
+        variant="ghost"
+        class="relative size-8"
+        :disabled="disabled"
         :title="inserted ? '编辑注入条件' : '配置注入'"
         @click.stop
       >
-        <ListFilter class="size-3.5" />
-        注入
-        <span v-if="conditions.length" class="font-mono text-[10px] text-muted-foreground">
-          {{ conditions.length }}
-        </span>
+        <ListFilter class="size-4" />
+        <span
+          v-if="inserted"
+          class="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-emerald-500"
+        />
       </Button>
     </PopoverTrigger>
     <PopoverContent

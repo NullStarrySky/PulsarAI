@@ -13,10 +13,20 @@ const emit = defineEmits<{
 }>();
 
 function explicitIds(featureId: string) {
-  const definition = capabilityDefinitions.find((item) => item.id === featureId);
-  const available = Object.keys(definition?.subCaps ?? {}).filter((id) => id !== "all");
+  const available = availableIds(featureId);
   const selected = props.modelValue[featureId] ?? [];
   return selected.includes("all") ? available : selected;
+}
+
+function availableIds(featureId: string) {
+  const definition = capabilityDefinitions.find((item) => item.id === featureId);
+  return Object.keys(definition?.subCaps ?? {}).filter((id) => id !== "all");
+}
+
+function featureAllSelected(featureId: string) {
+  const available = availableIds(featureId);
+  return available.length > 0
+    && available.every((id) => explicitIds(featureId).includes(id));
 }
 
 function setFeatureAll(featureId: string, enabled: boolean) {
@@ -49,7 +59,7 @@ function setSubCap(featureId: string, subCapId: string, enabled: boolean) {
     >
       <div class="flex items-start gap-2.5">
         <Checkbox
-          :model-value="explicitIds(definition.id).length === Object.keys(definition.subCaps).length - 1"
+          :model-value="featureAllSelected(definition.id)"
           :aria-label="`允许 ${definition.title} 全部权限`"
           class="mt-0.5"
           @update:model-value="setFeatureAll(definition.id, Boolean($event))"

@@ -24,7 +24,8 @@ import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-s
 import type {
   Plugin,
   PluginResource,
-  PluginResourceContainer,
+  PluginFolder,
+  PluginTreeNode,
 } from "@/features/Resources/Plugin/domain/plugin-types";
 
 export type BackupInterval = "off" | "10m" | "30m" | "1h" | "6h" | "1d" | "1w";
@@ -205,43 +206,49 @@ function mergePluginResource(
   ];
 }
 
-function mergePluginContainer(
-  local: PluginResourceContainer,
-  remote: PluginResourceContainer,
-) {
-  const resources = local.resources.map(clonePlain);
-  for (const remoteResource of remote.resources) {
-    const index = resources.findIndex((resource) => resource.id === remoteResource.id);
+function mergePluginFolder(local: PluginFolder, remote: PluginFolder): PluginFolder {
+  const children = local.children.map(clonePlain);
+  for (const remoteChild of remote.children) {
+    const index = children.findIndex((child) => child.id === remoteChild.id);
     if (index < 0) {
-      resources.push(clonePlain(remoteResource));
+      children.push(clonePlain(remoteChild));
       continue;
     }
-    const merged = mergePluginResource(
-      resources[index],
-      remoteResource,
-      resources.map((resource) => resource.name),
-    );
-    resources.splice(index, 1, ...merged);
+    const localChild = children[index]!;
+    if (localChild.kind === "folder" && remoteChild.kind === "folder") {
+      children[index] = mergePluginFolder(localChild, remoteChild);
+      continue;
+    }
+    if (localChild.kind === "file" && remoteChild.kind === "file") {
+      const merged = mergePluginResource(
+        localChild,
+        remoteChild,
+        children.map((child) => child.name),
+      );
+      children.splice(index, 1, ...merged);
+      continue;
+    }
+    const duplicate: PluginTreeNode = {
+      ...clonePlain(remoteChild),
+      id: crypto.randomUUID(),
+      name: uniqueRestoredName(
+        remoteChild.name,
+        children.map((child) => child.name),
+      ),
+      order: Math.max(localChild.order ?? 0, remoteChild.order ?? 0) + 1,
+    };
+    children.push(duplicate);
   }
   return {
     ...clonePlain(local),
-    resources,
+    children,
   };
 }
 
 function mergePlugin(local: Plugin, remote: Plugin) {
-  const resources = local.resources.map(clonePlain);
-  for (const remoteContainer of remote.resources) {
-    const index = resources.findIndex((container) => container.id === remoteContainer.id);
-    if (index < 0) {
-      resources.push(clonePlain(remoteContainer));
-    } else {
-      resources[index] = mergePluginContainer(resources[index], remoteContainer);
-    }
-  }
   return {
     ...clonePlain(local),
-    resources,
+    root: mergePluginFolder(local.root, remote.root),
   };
 }
 

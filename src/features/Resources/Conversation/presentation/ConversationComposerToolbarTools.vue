@@ -2,7 +2,6 @@
 import { Maximize2, Paperclip, PenTool } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import ModelSelect from "@/features/ModelConnection/presentation/ModelSelect.vue";
-import PluginResourceMenu from "@/features/Resources/Plugin/presentation/PluginResourceMenu.vue";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/application/default-config-store";
 import type { ComposerToolId } from "@/features/UI/domain/composer-toolbar";
 
@@ -28,7 +27,6 @@ const defaults = useDefaultConfigStore();
       button-class="size-8 p-0 mobile:size-10"
       @update:model-value="defaults.setDefaultChatModel"
     />
-    <PluginResourceMenu v-else-if="toolId === 'plugin'" />
     <Button
       v-else-if="toolId === 'attachment'"
       size="icon"

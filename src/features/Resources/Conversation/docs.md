@@ -6,10 +6,10 @@ The generation sequence is:
 
 1. Convert the active container path to role-preserving AI SDK messages.
 2. Resolve default Feature API grants and the active character package override, then use the built Capability objects as the Sandbox base environment.
-3. Ask `Plugin` to scan enabled package plugins, evaluate inserted-resource conditions in `Sandbox`, resolve effective containers, and assemble the resource environment.
+3. Ask `Plugin` to scan enabled package plugin trees, evaluate injected file/folder conditions in `Sandbox`, and assemble the position-keyed resource environment.
 4. Add the active path, empty container, empty message, registered Skill/MCP tool names, and component-interaction API to the final environment.
-5. Read the selected `context-structure` resource. Headings named `system_prompt`, `user_prompt`, and `assistant_prompt` define message roles; `[[chat]]` splices the active path without flattening roles. With no selected structure, the fallback is `[[chat]]`. The generated Feature API reference is prepended as a system message.
-6. Execute the highest-priority non-empty plugin generation process. The process can call `api.runAgent(messages?)`, authorized Feature APIs, `api.askUserWithComponent(...)`, or `api.renderComponent(componentId, props)`. An empty process runs the default Agent.
+5. Read the first passing file injected at `CONTEXT_STRUCTURE` (normally root `context.imd`). IMD block roles compile to headings named `system_prompt`, `user_prompt`, and `assistant_prompt`; `[[chat]]` splices the active path without flattening roles. With no selected structure, the fallback is `[[chat]]`. The generated Feature API reference is prepended as a system message.
+6. Execute the highest-priority non-empty root `generation.js`. The process can call `api.runAgent(messages?)`, authorized Feature APIs, `api.askUserWithComponent(...)`, or `api.renderComponent(componentId, props)`. An empty or absent process runs the default Agent.
 7. Normalize the process result into the already-created assistant message and persist generation and environment metadata.
 
 Character packages persist an optional `capabilities` map. An omitted map inherits the default configuration; a package map overrides defaults feature by feature, and an explicit empty list denies that Feature.

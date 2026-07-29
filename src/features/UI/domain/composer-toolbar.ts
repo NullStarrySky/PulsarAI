@@ -1,6 +1,5 @@
 export const composerToolDefinitions = [
   { id: "model", label: "模型" },
-  { id: "plugin", label: "插件资源" },
   { id: "attachment", label: "附加文件" },
   { id: "whiteboard", label: "白板" },
   { id: "fullscreen", label: "全屏输入" },
@@ -16,7 +15,7 @@ export interface ComposerToolbarLayout {
 }
 
 export const defaultComposerToolbarLayout: ComposerToolbarLayout = {
-  left: ["model", "plugin", "attachment"],
+  left: ["model", "attachment"],
   right: ["whiteboard", "fullscreen"],
   unused: [],
 };

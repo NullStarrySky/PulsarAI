@@ -13,7 +13,6 @@ import {
   LayoutGrid,
   List,
   MoreHorizontal,
-  Plug,
   Plus,
   Search,
   Settings,
@@ -44,7 +43,6 @@ import { cn } from "@/lib/utils";
 import { useResponsiveStore } from "@/features/Misc/application/responsive-store";
 import { saveImageFile } from "@/features/Resources/application/resource-file-service";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
-import { openFirstPluginAction } from "@/features/Resources/Plugin/actions";
 import ResourceAvatar from "@/features/Resources/Conversation/presentation/ResourceAvatar.vue";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { useCommandStore } from "@/features/Hotkey/application/command-store";
@@ -211,10 +209,6 @@ async function uploadIcon(event: Event) {
         <Button class="h-9 justify-start gap-2" variant="ghost" @click="openBuiltinPage('schedule', '定时任务')">
           <Clock class="size-4" />
           定时任务
-        </Button>
-        <Button class="h-9 justify-start gap-2" variant="ghost" @click="openFirstPluginAction">
-          <Plug class="size-4" />
-          插件
         </Button>
       </nav>
     </div>

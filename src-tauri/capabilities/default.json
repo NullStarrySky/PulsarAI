@@ -94,6 +94,14 @@
     "core:window:allow-unmaximize",
     "core:window:allow-unminimize",
     "opener:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {
+          "url": "https://www.youtube.com/watch?v=hvL1339luv0"
+        }
+      ]
+    },
     "notifications:default",
     "os:default",
     "fs:default",

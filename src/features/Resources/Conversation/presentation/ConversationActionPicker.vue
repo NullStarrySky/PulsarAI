@@ -29,8 +29,8 @@ const filteredActions = computed(() => {
   if (commandQuery.value === null) {
     return [];
   }
-  return props.actions.filter(({ resource }) => {
-    const haystack = `${resource.name}\n${resource.description}`.toLocaleLowerCase();
+  return props.actions.filter(({ resource, pluginName }) => {
+    const haystack = `${resource.name}\n${pluginName}`.toLocaleLowerCase();
     return !commandQuery.value || haystack.includes(commandQuery.value);
   });
 });
@@ -42,7 +42,7 @@ function chooseAction(action: ResolvedPluginAction) {
     pluginId: action.pluginId,
     pluginName: action.pluginName,
     name: action.resource.name,
-    description: action.resource.description,
+    description: "",
   });
   emit("update:modelValue", "");
 }
@@ -90,7 +90,7 @@ function chooseAction(action: ResolvedPluginAction) {
           <span class="min-w-0">
             <span class="block truncate font-mono text-sm font-medium">/{{ action.resource.name }}</span>
             <span class="mt-0.5 block truncate text-xs text-muted-foreground">
-              {{ action.resource.description || "没有描述" }}
+              {{ action.pluginName }}
             </span>
           </span>
         </button>

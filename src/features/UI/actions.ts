@@ -4,7 +4,6 @@ import {
   PanelLeft,
   PanelRight,
   Pencil,
-  Plug,
   RefreshCw,
   Search,
   Settings,
@@ -21,7 +20,6 @@ import {
   editLastMessageAction,
   regenerateLastMessageAction,
 } from "@/features/Resources/Conversation/actions";
-import { openFirstPluginAction } from "@/features/Resources/Plugin/actions";
 import { useLayoutStore } from "./application/layout-store";
 
 let registered = false;
@@ -59,13 +57,6 @@ function createCoreCommands(): CommandDefinition[] {
           resourceId: "schedule",
           title: "定时任务",
         }),
-    },
-    {
-      id: "plugin.open",
-      title: "打开插件",
-      category: "插件",
-      icon: Plug,
-      run: openFirstPluginAction,
     },
     {
       id: "ui.sidebar.left.toggle",

@@ -1,6 +1,7 @@
 import type { Component } from "vue";
-import { BarChart3, BellRing, Brain, History, Info, Keyboard, Languages, Palette, Settings, SlidersHorizontal } from "lucide-vue-next";
+import { BarChart3, BellRing, Brain, CreditCard, History, Info, Keyboard, Languages, Palette, Settings, SlidersHorizontal } from "lucide-vue-next";
 import GeneralSettingsPage from "../presentation/pages/GeneralSettingsPage.vue";
+import SubscriptionSettingsPage from "../presentation/pages/SubscriptionSettingsPage.vue";
 import ModelProviderSettingsPage from "@/features/ModelConnection/presentation/ModelProviderSettingsPage.vue";
 import DefaultConfigSettingsPage from "@/features/defaultConfigs/presentation/DefaultConfigSettingsPage.vue";
 import AboutSettingsPage from "@/features/About/presentation/AboutSettingsPage.vue";
@@ -57,6 +58,7 @@ export function ensureDefaultSettingPages() {
   }
 
   registerSettingGroup({ id: "general", title: "基础" });
+  registerSettingGroup({ id: "account", title: "账户" });
   registerSettingGroup({ id: "appearance", title: "外观" });
   registerSettingGroup({ id: "provider", title: "模型" });
   registerSettingGroup({ id: "tools", title: "工具" });
@@ -91,6 +93,16 @@ export function ensureDefaultSettingPages() {
       group: "general",
     },
     component: RuntimeSettingsPage,
+  });
+
+  registerSettingPage({
+    meta: {
+      id: "account.subscription",
+      icon: CreditCard,
+      title: "订阅方案",
+      group: "account",
+    },
+    component: SubscriptionSettingsPage,
   });
 
   registerSettingPage({

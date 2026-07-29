@@ -59,7 +59,7 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - `PulsarNotification`, `NotificationChannel`: `src/features/Notification/domain/notification.ts`
 - `ComponentResource`: `src/features/Resources/Component/domain/component-resource.ts`
 - `InteractiveDocumentData`, `InteractiveDocumentBlock`, `InteractiveValue`: `src/features/Resources/InteractiveDoc/domain/interactive-document.ts`
-- `Plugin`, `PluginResourceContainer`, `PluginResource`: `src/features/Resources/Plugin/domain/plugin-types.ts`
+- `Plugin`, `PluginFolder`, `PluginFile`: `src/features/Resources/Plugin/domain/plugin-types.ts`
 - `CapabilityDefinition`, `CapabilityGrants`, `CapabilityBuilder`: `src/features/Capabilities/domain/capability.ts`
 
 ## External Interfaces
@@ -84,7 +84,7 @@ The VitePress site lives under `docs/`. Each owning feature's `capabilities.ts` 
 - Conversation generation startup and process executor: `src/features/Resources/Conversation/application/conversation-generation.ts`
 - Conversation attachment encoding and preview helpers: `src/features/Resources/Conversation/application/message-attachment.ts`
 - Interactive document wrapper and compiler: `src/features/Resources/InteractiveDoc/domain/interactive-document.ts`
-- Plugin resource store and priority resolver: `src/features/Resources/Plugin/application/plugin-store.ts`
+- Plugin file-tree store and priority resolver: `src/features/Resources/Plugin/application/plugin-store.ts`
 - Plugin generation environment scanner: `src/features/Resources/Plugin/application/plugin-generation-environment.ts`
 - Agent Skill/MCP tool registry: `src/features/Agent/application/agent-extension-registry.ts`
 - Agent generation components: `src/features/Agent/presentation/`
@@ -126,7 +126,7 @@ The VitePress site lives under `docs/`. Each owning feature's `capabilities.ts` 
 - Interactive document block editor: `src/features/Resources/InteractiveDoc/presentation/InteractiveDocumentWorkspacePage.vue`
 - Plugin workspace page: `src/features/Resources/Plugin/presentation/PluginWorkspacePage.vue`
 - Plugin right-sidebar panel: `src/features/Resources/Plugin/presentation/PluginRightSidebarPanel.vue`
-- Plugin composer resource menu: `src/features/Resources/Plugin/presentation/PluginResourceMenu.vue`
+- Plugin file workspace: `src/features/Resources/Plugin/presentation/PluginWorkspacePage.vue`
 - Plugin workspace registration: `src/features/Resources/Plugin/presentation/register-plugin-workspace.ts`
 - Settings dialog: `src/features/Setting/presentation/SettingsDialog.vue`
 - General settings page: `src/features/Setting/presentation/pages/GeneralSettingsPage.vue`
@@ -176,12 +176,12 @@ The VitePress site lives under `docs/`. Each owning feature's `capabilities.ts` 
 - Plugins are resource packages stored through `src/features/Resources/Plugin/application/plugin-store.ts`. A non-null `packageId` owns a local plugin; `packageId: null` identifies a global plugin managed from DefaultConfig, while `builtIn` additionally marks immutable system fallbacks.
 - Local main plugins sort first, followed by other local plugins. External global plugins follow the current character package's `globalPluginOrder`, and immutable system plugins remain last.
 - Character packages persist only global plugin ids in `globalPluginOrder`. Opening a package filters deleted or duplicate ids and appends newly available global plugins, then saves the normalized order.
-- Resource containers are selected by fixed ids when they affect runtime behavior. If multiple enabled plugins in the current package provide the same container id, the highest-priority plugin wins.
-- Stage 1 built-in containers are background, character, context structure, insertable, and component. Background is integrated into the conversation page as the active visual resource.
-- Plugin descriptions and markdown resources use Milkdown/Crepe WYSIWYG editing. Clicking a resource opens only content; resource metadata is edited from the resource row menu, and container attributes are edited from the container row menu.
-- Background resources are image/video media objects previewed by the Plugin resource editor. The immutable core plugin owns the bundled classroom fallback asset, while the Conversation workspace mounts either an image or muted looping video layer.
-- Insertable resources expose one resource-row injection badge for switch, position, depth, and structured condition rows. Runtime matching merges recent-chat helpers and the selected depth into the Sandbox condition environment; legacy string expressions migrate to custom rows.
-- The fixed Plugin `action` container owns JavaScript slash actions. Conversation stores one leading action part per user message, exposes `{ action, prompt }` to the normal generation environment, and lets an inserted selected action temporarily replace the generation process for one run.
+- Every plugin owns a plain nested file tree. Files and folders share one injection model; files have no separate enable switch and derive their content type from their suffix.
+- Root `info.md` is the plugin documentation and opens by default. Root `generation.js`, role-aware root `context.imd`, `action/`, and `background/` are runtime conventions rather than fixed containers.
+- Markdown files use Milkdown/Crepe WYSIWYG editing, JavaScript and JSON use CodeMirror, and media files use image/video URL content with a direct preview. File properties and injection controls remain separate from content.
+- Injected files contribute one value at their position. Injected folders contribute ordered arrays of condition-passing descendant files. Runtime matching merges recent-chat helpers and the selected depth into the Sandbox condition environment.
+- JavaScript files under `action/` provide slash actions. Conversation stores one leading action part per user message, exposes `{ action, prompt }` to the normal generation environment, and lets an injected selected action temporarily replace `generation.js` for one run.
+- The immutable core plugin owns the bundled classroom media fallback under `background/`. The Conversation workspace mounts it as either an image or muted looping video layer.
 - Plugins open as `resourceType: "plugin"` workspace resources. The old built-in plugin center page is intentionally removed.
 
 ## Phase 4 Agent, Sandbox, Appearance, And Rendering
@@ -231,4 +231,4 @@ The VitePress site lives under `docs/`. Each owning feature's `capabilities.ts` 
 
 The app keeps one visible conversation flow. UI events enter feature application services, application services coordinate domain objects and repositories, repositories use SurrealDB or provider adapters, and presentation components stay thin.
 
-The plugin system contributes resources into the visible conversation flow without replacing the core `Conversation -> ModelConnection -> Database` path. The first enabled plugin with a non-empty generation-process override controls orchestration; empty overrides inherit the default Agent.
+The plugin system contributes injected files into the visible conversation flow without replacing the core `Conversation -> ModelConnection -> Database` path. The first enabled plugin with a non-empty root `generation.js` controls orchestration; empty or absent process files inherit the default Agent.

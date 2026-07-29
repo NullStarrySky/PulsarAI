@@ -3,16 +3,20 @@ import {
   type CapabilityDefinition,
 } from "@/features/Capabilities/domain/capability";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
+import {
+  pluginFileType,
+  type PluginTreeNode,
+} from "./domain/plugin-types";
 import { usePluginStore } from "./application/plugin-store";
 
 export const capabilities: CapabilityDefinition = {
   id: "plugin",
-  title: "插件资源",
-  description: "查询当前角色包可见的插件和资源，或切换资源的启用状态。",
+  title: "插件文件",
+  description: "查询当前角色包可见的插件文件树，或切换节点的注入状态。",
   subCaps: {
-    all: "全部插件资源权限",
-    read: "读取插件与资源",
-    toggle: "切换资源状态",
+    all: "全部插件文件权限",
+    read: "读取插件与文件树",
+    toggle: "切换节点注入",
   },
   api: {
     read: [
@@ -23,20 +27,36 @@ export const capabilities: CapabilityDefinition = {
         example: "plugin.list()",
       },
       {
-        name: "getResources",
-        signature: "getResources(pluginId: string, containerId?: string): PluginResourceSummary[]",
-        description: "列出一个插件中的资源，可按容器过滤。",
-        example: "plugin.getResources('builtin-core-plugin', 'action')",
+        name: "getTree",
+        signature: "getTree(pluginId: string): PluginTreeNodeSummary | null",
+        description: "读取一个插件的嵌套文件树和注入信息。",
+        example: "plugin.getTree('builtin-core-plugin')",
       },
     ],
     toggle: [{
-      name: "setResourceEnabled",
-      signature: "setResourceEnabled(pluginId: string, containerId: string, resourceId: string, enabled: boolean): Promise<void>",
-      description: "启用或禁用一个插件资源。",
-      example: "await plugin.setResourceEnabled(pluginId, 'character', resourceId, true)",
+      name: "setNodeInserted",
+      signature:
+        "setNodeInserted(pluginId: string, nodeId: string, inserted: boolean): Promise<void>",
+      description: "切换文件或文件夹的注入状态。",
+      example: "await plugin.setNodeInserted(pluginId, nodeId, true)",
     }],
   },
 };
+
+function nodeSummary(node: PluginTreeNode): Record<string, unknown> {
+  return {
+    id: node.id,
+    name: node.name,
+    kind: node.kind,
+    icon: node.icon,
+    inserted: node.inserted,
+    insertPosition: node.insertPosition,
+    insertCondition: node.insertCondition,
+    ...(node.kind === "file"
+      ? { type: pluginFileType(node.name) }
+      : { children: node.children.map(nodeSummary) }),
+  };
+}
 
 export const builder = createCapabilityBuilder(capabilities, (granted) => ({
   ...(granted.has("read") ? {
@@ -45,44 +65,25 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
       return usePluginStore().visiblePluginsForPackage(
         conversation.activePackageId,
         conversation.activePackage?.globalPluginOrder,
-      ).map(({ id, name, description, enabled, builtIn, packageId }) => ({
+      ).map(({ id, name, shortDescription, enabled, builtIn, packageId }) => ({
         id,
         name,
-        description,
+        shortDescription,
         enabled,
         builtIn,
         packageId,
       }));
     },
-    getResources: (pluginId: string, containerId?: string) => {
+    getTree: (pluginId: string) => {
       const plugin = usePluginStore().plugins.find((item) => item.id === pluginId);
-      if (!plugin) {
-        return [];
-      }
-      return plugin.resources
-        .filter((container) => !containerId || container.id === containerId)
-        .flatMap((container) => container.resources.map((resource) => ({
-          id: resource.id,
-          name: resource.name,
-          description: resource.description,
-          enabled: resource.enabled,
-          inserted: resource.inserted,
-          containerId: container.id,
-          containerName: container.name,
-        })));
+      return plugin ? nodeSummary(plugin.root) : null;
     },
   } : {}),
   ...(granted.has("toggle") ? {
-    setResourceEnabled: (
+    setNodeInserted: (
       pluginId: string,
-      containerId: string,
-      resourceId: string,
-      enabled: boolean,
-    ) => usePluginStore().toggleResourceEnabled(
-      pluginId,
-      containerId,
-      resourceId,
-      enabled,
-    ),
+      nodeId: string,
+      inserted: boolean,
+    ) => usePluginStore().updateNode(pluginId, nodeId, { inserted }),
   } : {}),
 }));

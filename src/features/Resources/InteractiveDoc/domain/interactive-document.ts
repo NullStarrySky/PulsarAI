@@ -12,6 +12,7 @@ export type InteractiveValue =
   | { [key: string]: InteractiveValue };
 
 export type InteractiveBlockType = "text" | "variable" | "component";
+export type InteractiveBlockRole = "system" | "user" | "assistant";
 
 export interface InteractiveBlockBase {
   id: string;
@@ -19,6 +20,7 @@ export interface InteractiveBlockBase {
   name: string;
   description: string;
   hidden: boolean;
+  role?: InteractiveBlockRole;
 }
 
 export interface InteractiveTextBlock extends InteractiveBlockBase {
@@ -117,6 +119,16 @@ export const defaultInteractiveVariableRenderers: InteractiveVariableRenderer[] 
     id: "json",
     name: "JSON",
     render: (value) => JSON.stringify(value, null, 2) ?? "",
+  },
+  {
+    id: "slider",
+    name: "滑块",
+    render: (value) => typeof value === "number" ? String(value) : "0",
+  },
+  {
+    id: "toggle",
+    name: "开关",
+    render: (value) => value ? "true" : "false",
   },
 ];
 
@@ -225,7 +237,10 @@ export class InteractiveDocument {
   compileDetailed(): InteractiveDocumentCompileResult {
     const errors: InteractiveDocumentCompileError[] = [];
     const environment = this.createEnvironment();
-    const sections: string[] = [];
+    const sections: Array<{
+      role: InteractiveBlockRole;
+      markdown: string;
+    }> = [];
 
     for (const block of this.data.blocks) {
       if (block.hidden || block.type === "variable") {
@@ -235,7 +250,10 @@ export class InteractiveDocument {
       if (block.type === "component") {
         const markdown = this.resolveComponentBlock(block, environment, errors);
         if (markdown.trim()) {
-          sections.push(markdown.trim());
+          sections.push({
+            role: block.role ?? "assistant",
+            markdown: markdown.trim(),
+          });
         }
         continue;
       }
@@ -247,7 +265,10 @@ export class InteractiveDocument {
           keepArraySet2StrDefault: true,
         });
         if (markdown.trim()) {
-          sections.push(markdown.trim());
+          sections.push({
+            role: block.role ?? "assistant",
+            markdown: markdown.trim(),
+          });
         }
       } catch (error) {
         errors.push({
@@ -255,13 +276,16 @@ export class InteractiveDocument {
           message: error instanceof Error ? error.message : String(error),
         });
         if (template.trim()) {
-          sections.push(template.trim());
+          sections.push({
+            role: block.role ?? "assistant",
+            markdown: template.trim(),
+          });
         }
       }
     }
 
     return {
-      markdown: sections.join("\n\n"),
+      markdown: compileRoleSections(sections),
       errors,
     };
   }
@@ -383,6 +407,7 @@ export function createInteractiveBlock(
     name: input.name?.trim() || defaultBlockName(input.type),
     description: input.description ?? "",
     hidden: input.hidden ?? false,
+    role: input.role,
   };
 
   if (input.type === "text") {
@@ -508,4 +533,19 @@ function cloneValue<T extends InteractiveValue | Record<string, InteractiveValue
 
 function isSafeEnvironmentKey(key: string) {
   return /^[A-Za-z_$][\w$]*$/.test(key);
+}
+
+function compileRoleSections(
+  sections: Array<{ role: InteractiveBlockRole; markdown: string }>,
+) {
+  const output: string[] = [];
+  let activeRole: InteractiveBlockRole | null = null;
+  for (const section of sections) {
+    if (section.role !== activeRole) {
+      output.push(`# ${section.role}_prompt`);
+      activeRole = section.role;
+    }
+    output.push(section.markdown);
+  }
+  return output.join("\n\n");
 }

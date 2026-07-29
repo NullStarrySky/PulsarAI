@@ -10,10 +10,15 @@ import {
 } from "@/features/Sandbox/domain/sandbox";
 import { createPluginConditionEnvironment } from "@/features/Resources/Plugin/application/plugin-condition-environment";
 import {
-  builtinPluginContainerIds,
+  findPluginNodeByPath,
+  pluginConventions,
+  pluginFileType,
+  pluginNodePath,
+  sortPluginTreeNodes,
   type Plugin,
-  type PluginResource,
-  type PluginResourceContainer,
+  type PluginFile,
+  type PluginFolder,
+  type PluginTreeNode,
 } from "@/features/Resources/Plugin/domain/plugin-types";
 
 export interface GenerationPathEnvironmentInput {
@@ -44,13 +49,11 @@ export interface GenerationResourceValue {
   id: string;
   name: string;
   icon: string;
-  description: string;
-  meta: Record<string, unknown>;
   content: unknown;
   pluginId: string;
   pluginName: string;
-  containerId: string;
-  containerName: string;
+  path: string;
+  type: ReturnType<typeof pluginFileType>;
   toString(): string;
 }
 
@@ -60,22 +63,13 @@ export interface PluginGenerationEnvironment {
   finalEnvironment: SandboxEnvironment;
   enabledPlugins: Plugin[];
   processPlugin: Plugin | null;
+  processResource: GenerationResourceValue | null;
   contextResource: GenerationResourceValue | null;
   selectedResources: GenerationResourceValue[];
   insertedResources: GenerationResourceValue[];
   actionProcessResource: GenerationResourceValue | null;
   diagnostics: PluginGenerationDiagnostic[];
 }
-
-const containerAliases: Record<string, string> = {
-  [builtinPluginContainerIds.background]: "background",
-  [builtinPluginContainerIds.character]: "character",
-  [builtinPluginContainerIds.contextStructure]: "contextStructure",
-  [builtinPluginContainerIds.insertable]: "insertable",
-  [builtinPluginContainerIds.action]: "actions",
-  [builtinPluginContainerIds.tool]: "tools",
-  [builtinPluginContainerIds.component]: "components",
-};
 
 export async function buildPluginGenerationEnvironment(
   plugins: Plugin[],
@@ -85,85 +79,87 @@ export async function buildPluginGenerationEnvironment(
   const pathEnvironment: SandboxEnvironment = mergeSandboxEnvironments([
     input.baseEnvironment ?? {},
     {
-    activePath: input.activePath,
-    chat: input.chat,
-    CHAT: input.chat,
-    conversationId: input.conversationId,
-    conversation: input.conversation,
-    packageId: input.packageId,
-    containerId: input.containerId,
-    action: input.action?.name ?? "",
-    prompt: input.prompt,
-    now: input.now ?? (() => new Date().toISOString()),
+      activePath: input.activePath,
+      chat: input.chat,
+      CHAT: input.chat,
+      conversationId: input.conversationId,
+      conversation: input.conversation,
+      packageId: input.packageId,
+      containerId: input.containerId,
+      action: input.action?.name ?? "",
+      prompt: input.prompt,
+      now: input.now ?? (() => new Date().toISOString()),
     },
   ]);
   const resourceEnvironment: SandboxEnvironment = {};
-  const selectedResources: GenerationResourceValue[] = [];
   const insertedResources: GenerationResourceValue[] = [];
   const diagnostics: PluginGenerationDiagnostic[] = [];
-  const claimedContainers = new Set<string>();
   let contextResource: GenerationResourceValue | null = null;
   let actionProcessResource: GenerationResourceValue | null = null;
+  let processPlugin: Plugin | null = null;
+  let processResource: GenerationResourceValue | null = null;
 
   for (const plugin of enabledPlugins) {
-    for (const container of plugin.resources) {
-      if (claimedContainers.has(container.id)) {
-        continue;
-      }
-      claimedContainers.add(container.id);
-
-      const values = selectedValues(plugin, container);
-      selectedResources.push(...values);
-      assignContainerValue(resourceEnvironment, container, values);
-
+    if (!processResource) {
+      const generation = findPluginNodeByPath(
+        plugin.root,
+        pluginConventions.generation,
+      );
       if (
-        container.id === builtinPluginContainerIds.contextStructure
-        && values[0]
+        generation?.kind === "file"
+        && pluginFileType(generation.name) === "javascript"
+        && generationContent(generation).trim()
       ) {
-        contextResource = values[0];
+        processPlugin = plugin;
+        processResource = createGenerationResourceValue(plugin, generation);
       }
     }
-  }
 
-  for (const plugin of enabledPlugins) {
-    for (const container of plugin.resources) {
-      for (const resource of sortResources(container.resources)) {
-        if (!resource.inserted) {
-          continue;
+    const insertedNodes = collectInsertedNodes(plugin.root);
+    for (const node of insertedNodes) {
+      const passed = await conditionsPass(
+        plugin,
+        node,
+        pathEnvironment,
+        diagnostics,
+      );
+      if (!passed) continue;
+
+      const position = node.insertPosition.trim();
+      if (!position) {
+        diagnostics.push({
+          pluginId: plugin.id,
+          resourceId: node.id,
+          message: "节点已标记注入，但没有指定注入位置。",
+        });
+        continue;
+      }
+
+      if (node.kind === "file") {
+        const value = createGenerationResourceValue(plugin, node);
+        insertedResources.push(value);
+        appendPosition(resourceEnvironment, position, value);
+
+        if (position === "CONTEXT_STRUCTURE" && !contextResource) {
+          contextResource = value;
         }
-
-        const passed = await conditionsPass(
-          plugin,
-          resource,
-          pathEnvironment,
-          diagnostics,
-        );
-        if (!passed) {
-          continue;
-        }
-
-        const value = createGenerationResourceValue(plugin, container, resource);
         if (
-          container.id === builtinPluginContainerIds.action
-          && input.action?.pluginId === plugin.id
-          && input.action.resourceId === resource.id
+          input.action?.pluginId === plugin.id
+          && input.action.resourceId === node.id
         ) {
           actionProcessResource = value;
         }
-
-        const position = resourcePosition(resource);
-        if (!position) {
-          diagnostics.push({
-            pluginId: plugin.id,
-            resourceId: resource.id,
-            message: "资源已标记插入，但元信息中没有“位置”或 position。",
-          });
-          continue;
-        }
-
-        insertedResources.push(value);
-        appendPosition(resourceEnvironment, position, value);
+        continue;
       }
+
+      const values = await collectFolderValues(
+        plugin,
+        node,
+        pathEnvironment,
+        diagnostics,
+      );
+      insertedResources.push(...values);
+      appendPosition(resourceEnvironment, position, values);
     }
   }
 
@@ -177,49 +173,61 @@ export async function buildPluginGenerationEnvironment(
     resourceEnvironment,
     finalEnvironment,
     enabledPlugins,
-    processPlugin:
-      enabledPlugins.find((plugin) => plugin.generationProcess?.trim()) ?? null,
+    processPlugin,
+    processResource,
     contextResource,
-    selectedResources,
+    selectedResources: [],
     insertedResources,
     actionProcessResource,
     diagnostics,
   };
 }
 
-function selectedValues(plugin: Plugin, container: PluginResourceContainer) {
-  const resources =
-    container.contentControl.selectable === "none"
-      ? sortResources(container.resources)
-      : sortResources(container.resources).filter((resource) => resource.enabled);
-  return resources.map((resource) =>
-    createGenerationResourceValue(plugin, container, resource),
-  );
+function collectInsertedNodes(folder: PluginFolder): PluginTreeNode[] {
+  return [
+    ...(folder.inserted ? [folder] : []),
+    ...sortPluginTreeNodes(folder.children).flatMap((child) =>
+      child.kind === "folder"
+        ? collectInsertedNodes(child)
+        : child.inserted
+          ? [child]
+          : [],
+    ),
+  ];
 }
 
-function assignContainerValue(
+async function collectFolderValues(
+  plugin: Plugin,
+  folder: PluginFolder,
   environment: SandboxEnvironment,
-  container: PluginResourceContainer,
-  values: GenerationResourceValue[],
-) {
-  if (container.id === builtinPluginContainerIds.action) {
-    environment.actions = values;
-    return;
+  diagnostics: PluginGenerationDiagnostic[],
+): Promise<GenerationResourceValue[]> {
+  const values: GenerationResourceValue[] = [];
+  for (const child of sortPluginTreeNodes(folder.children)) {
+    if (
+      !(await conditionsPass(plugin, child, environment, diagnostics))
+    ) {
+      continue;
+    }
+    if (child.kind === "file") {
+      values.push(createGenerationResourceValue(plugin, child));
+    } else {
+      values.push(
+        ...(await collectFolderValues(
+          plugin,
+          child,
+          environment,
+          diagnostics,
+        )),
+      );
+    }
   }
-  const value =
-    container.contentControl.selectable === "single"
-      ? values[0] ?? null
-      : values;
-  environment[container.id] = value;
-  const alias = containerAliases[container.id];
-  if (alias) {
-    environment[alias] = value;
-  }
+  return values;
 }
 
 async function conditionsPass(
   plugin: Plugin,
-  resource: PluginResource,
+  node: PluginTreeNode,
   environment: SandboxEnvironment,
   diagnostics: PluginGenerationDiagnostic[],
 ) {
@@ -229,12 +237,13 @@ async function conditionsPass(
       chat: Array.isArray(environment.chat)
         ? environment.chat as ModelMessage[]
         : [],
-      depth: resource.insertDepth,
+      depth: node.insertDepth,
     }),
   ]);
 
-  for (const condition of resource.insertCondition) {
-    const conditionLabel = `${condition.functionName}(${condition.arguments.join(", ")})`;
+  for (const condition of node.insertCondition) {
+    const conditionLabel =
+      `${condition.functionName}(${condition.arguments.join(", ")})`;
     try {
       let passed: unknown;
       if (condition.functionName === "custom") {
@@ -249,13 +258,11 @@ async function conditionsPass(
         }
         passed = await matcher(...condition.arguments);
       }
-      if (!passed) {
-        return false;
-      }
+      if (!passed) return false;
     } catch (error) {
       diagnostics.push({
         pluginId: plugin.id,
-        resourceId: resource.id,
+        resourceId: node.id,
         condition: conditionLabel,
         message: error instanceof Error ? error.message : String(error),
       });
@@ -268,61 +275,52 @@ async function conditionsPass(
 function appendPosition(
   environment: SandboxEnvironment,
   position: string,
-  value: GenerationResourceValue,
+  value: GenerationResourceValue | GenerationResourceValue[],
 ) {
   const current = environment[position];
   if (current === undefined) {
     environment[position] = value;
     return;
   }
+  const incoming = Array.isArray(value) ? value : [value];
   environment[position] = Array.isArray(current)
-    ? [...current, value]
-    : [current, value];
-}
-
-function resourcePosition(resource: PluginResource) {
-  return resource.insertPosition.trim();
+    ? [...current, ...incoming]
+    : [current, ...incoming];
 }
 
 function createGenerationResourceValue(
   plugin: Plugin,
-  container: PluginResourceContainer,
-  resource: PluginResource,
+  resource: PluginFile,
 ): GenerationResourceValue {
   const interactiveDocument = isInteractiveDocumentData(resource.content)
     ? createInteractiveDocument(resource.content)
     : null;
-
   return {
     id: resource.id,
     name: resource.name,
     icon: resource.icon,
-    description: resource.description,
-    meta: resource.meta,
     content: resource.content,
     pluginId: plugin.id,
     pluginName: plugin.name,
-    containerId: container.id,
-    containerName: container.name,
+    path: pluginNodePath(plugin.root, resource.id).join("/"),
+    type: pluginFileType(resource.name),
     toString() {
-      if (interactiveDocument) {
-        return interactiveDocument.toString();
-      }
-      if (typeof resource.content === "string") {
-        return resource.content;
-      }
-      if (resource.content == null) {
-        return "";
-      }
+      if (interactiveDocument) return interactiveDocument.toString();
+      if (typeof resource.content === "string") return resource.content;
+      if (resource.content == null) return "";
       return JSON.stringify(resource.content);
     },
   };
 }
 
-function isInteractiveDocumentData(value: unknown): value is InteractiveDocumentData {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
+function generationContent(resource: PluginFile) {
+  return typeof resource.content === "string" ? resource.content : "";
+}
+
+function isInteractiveDocumentData(
+  value: unknown,
+): value is InteractiveDocumentData {
+  if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<InteractiveDocumentData>;
   return (
     typeof candidate.id === "string"
@@ -336,14 +334,5 @@ function isInteractiveDocumentData(value: unknown): value is InteractiveDocument
         && "type" in block
         && ["text", "variable", "component"].includes(String(block.type)),
     )
-  );
-}
-
-function sortResources(resources: PluginResource[]) {
-  return [...resources].sort(
-    (a, b) =>
-      (a.order ?? 0) - (b.order ?? 0)
-      || a.name.localeCompare(b.name, "zh-Hans")
-      || a.id.localeCompare(b.id),
   );
 }
