@@ -4,6 +4,7 @@ import { replaceAll } from "@milkdown/kit/utils";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/vue";
 import { computed, defineComponent, h, ref, watch } from "vue";
 import { conversationCrepeFeatureConfigs, conversationCrepeFeatures } from "./conversation-crepe";
+import { pluginReferenceHighlightFeature } from "@/features/Resources/Plugin/presentation/plugin-reference-milkdown";
 
 const props = withDefaults(
   defineProps<{
@@ -11,12 +12,14 @@ const props = withDefaults(
     placeholder?: string;
     enableBlockEdit?: boolean;
     enableAi?: boolean;
+    enableReferenceSyntax?: boolean;
   }>(),
   {
     modelValue: "",
     placeholder: "输入消息...",
     enableBlockEdit: false,
     enableAi: true,
+    enableReferenceSyntax: false,
   },
 );
 
@@ -44,6 +47,10 @@ const ComposerInner = defineComponent({
       type: Boolean,
       default: true,
     },
+    enableReferenceSyntax: {
+      type: Boolean,
+      default: false,
+    },
   },
   emits: {
     "update:modelValue": (_value: string) => true,
@@ -69,6 +76,9 @@ const ComposerInner = defineComponent({
           },
         },
       });
+      if (innerProps.enableReferenceSyntax) {
+        editor.addFeature(pluginReferenceHighlightFeature);
+      }
       editor.on((listener) => {
         listener.markdownUpdated((_ctx, nextMarkdown, previousMarkdown) => {
           if (applyingExternalValue || nextMarkdown === previousMarkdown) {
@@ -128,6 +138,7 @@ const ComposerInner = defineComponent({
         :placeholder="props.placeholder"
         :enable-block-edit="props.enableBlockEdit"
         :enable-ai="props.enableAi"
+        :enable-reference-syntax="props.enableReferenceSyntax"
         @update:model-value="emit('update:modelValue', $event)"
       />
     </div>

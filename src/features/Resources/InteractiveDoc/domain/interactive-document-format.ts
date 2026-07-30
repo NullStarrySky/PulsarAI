@@ -1,0 +1,15 @@
+export const interactiveDocumentFormatPrompt = [
+  "## Interactive Document (.imd)",
+  "An `.imd` file is UTF-8 text using an SFC-like format.",
+  "Wrap each message template in `<prompt_template name=\"...\" role=\"system|user|assistant\">...</prompt_template>`.",
+  "Prompt templates may contain Markdown, Sandbox `{{...}}` expressions, `[[...]]` message splices, and explicit `<@...>` references.",
+  "Wrap local data in one `<data>` block containing any number of `<sub_data name=\"...\">` blocks.",
+  "Every `sub_data` contains `<enable_updater>`, `<description>`, and `<content type=\"json|value\">`.",
+  "`enable_updater` is persisted but currently has no runtime behavior.",
+  "Access local data with `<@local:name>`.",
+  "Use `<@container-name>` for a uniquely visible container. External resources can also use `<@path:./relative.md>`, `<@id:resource-id>`, or `<@container:root|plugin|global/name>`.",
+  "Inside `{{...}}` or `[[...]]`, an explicit reference is compiled to a guarded `ref(...)` call.",
+  "Declare containers with `<container name=\"...\" scope=\"root|plugin|global\">`; nested `<include as=\"alias\">container:scope/name</include>` rows import existing containers without flattening them.",
+  "Declare resource membership with `<member_of container=\"container:scope/name\" as=\"alias\" />`.",
+  "Container values expose `get(alias)`, `use(alias)`, and `list()` and remain lazy namespaces.",
+].join("\n");

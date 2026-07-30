@@ -5,14 +5,16 @@
 The generation sequence is:
 
 1. Convert the active container path to role-preserving AI SDK messages.
-2. Resolve default Feature API grants and the active character package override, then use the built Capability objects as the Sandbox base environment.
-3. Ask `Plugin` to scan enabled package plugin trees, evaluate injected file/folder conditions in `Sandbox`, and assemble the position-keyed resource environment.
-4. Add the active path, empty container, empty message, registered Skill/MCP tool names, and component-interaction API to the final environment.
-5. Read the first passing file injected at `CONTEXT_STRUCTURE` (normally root `context.imd`). IMD block roles compile to headings named `system_prompt`, `user_prompt`, and `assistant_prompt`; `[[chat]]` splices the active path without flattening roles. With no selected structure, the fallback is `[[chat]]`. The generated Feature API reference is prepended as a system message.
-6. Execute the highest-priority non-empty root `generation.js`. The process can call `api.runAgent(messages?)`, authorized Feature APIs, `api.askUserWithComponent(...)`, or `api.renderComponent(componentId, props)`. An empty or absent process runs the default Agent.
-7. Normalize the process result into the already-created assistant message and persist generation and environment metadata.
+2. Resolve default Feature API grants and the active character package override, then use the built Capability objects as the minimal Sandbox base environment.
+3. Ask `Plugin` to index enabled files, scoped container declarations, memberships, and root entry conventions without evaluating or flattening resources.
+4. Add the active path, empty container, empty message, registered Skill/MCP tool names, and component-interaction API to the same minimal environment.
+5. Compile the first root `context.imd`. Repeatable SFC `prompt_template` blocks preserve their roles, `[[chat]]` splices the active path, and `<@...>` links only explicitly requested resources. With no entry document, the fallback is `[[chat]]`. The generated Feature API reference remains a prepended system message.
+6. Preprocess and execute the selected `action/` JavaScript file or highest-priority non-empty root `generation.js` with a source-scoped guarded `ref`. The process can call `api.runAgent(messages?)`, authorized Feature APIs, `api.askUserWithComponent(...)`, or `api.renderComponent(componentId, props)`. An empty or absent process runs the default Agent.
+7. Normalize the process result into the already-created assistant message and persist generation metadata, resolved resource IDs, and linker diagnostics.
 
 Character packages persist an optional `capabilities` map. An omitted map inherits the default configuration; a package map overrides defaults feature by feature, and an explicit empty list denies that Feature.
+
+The immutable `PulsarAI` package is the owner of project-Agent conversations. A project conversation persists an optional `projectPackageId` pointing at the normal character package it may inspect and modify. The workspace empty state does not persist a conversation until the first message is sent; it then creates a `PulsarAI` conversation, derives a collision-safe title from the selected project name, opens its normal conversation workspace, and sends through this same generation sequence.
 
 The current `Conversation` record is available in the generation environment as `conversation`. During regeneration, the store searches backward from the selected assistant page for the most recent completed page. A page is complete when it has content and either no generation metadata or a finished `timeUsed` value. That page is exposed as `beforeGenerationMessage` and inserted as a system message asking the model to reduce unnecessary repetition; if no complete page exists, it is omitted.
 
@@ -34,9 +36,9 @@ A conversation marked as the package template stores the same `rendererId`. `cre
 
 ## Composer Actions
 
-Typing `/` at the beginning of the composer opens the enabled Plugin action list. The menu uses the resource name as the command and the resource description as its supporting copy. Selecting another action replaces the current selection, so each user message can store at most one `ActionPart`; that part is always the first message part and renders before attachments or prompt text.
+Typing `/` at the beginning of the composer opens the enabled Plugin action list. The menu uses the resource name as the command and the owning plugin name as supporting copy. Selecting another action replaces the current selection, so each user message can store at most one `ActionPart`; that part is always the first message part and renders before attachments or prompt text.
 
-`conversation-store.ts` resolves the action only from the latest user container and passes its identity plus the prompt to `runConversationGeneration`. The Plugin environment exposes the command as `action`, the remaining user text as `prompt`, and all available action resources as `actions`. An inserted selected action that passes its structured conditions supplies the temporary process source for that generation only.
+`conversation-store.ts` resolves the action only from the latest user container and passes its identity plus the prompt to `runConversationGeneration`. The minimal environment exposes the command as `action` and the remaining user text as `prompt`. The selected conventional `action/` file supplies the temporary process source for that generation only.
 
 ## Composer Toolbar
 

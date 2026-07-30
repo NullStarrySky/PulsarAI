@@ -1,5 +1,7 @@
 import type { ModelMessage } from "ai";
 import { runDefaultAgent } from "@/features/Agent/application/default-agent";
+import { createProjectAgentRuntime } from "@/features/Agent/application/project-agent-runtime";
+import { isProjectAgentPackage } from "@/features/Agent/domain/project-agent";
 import {
   getAgentExtensionToolNames,
 } from "@/features/Agent/application/agent-extension-registry";
@@ -88,6 +90,9 @@ export async function runConversationGeneration(
       input.capabilityGrants,
     ),
   );
+  const projectAgentRuntime = isProjectAgentPackage(input.conversation.packageId)
+    ? await createProjectAgentRuntime(input.conversationId)
+    : null;
   const pluginEnvironment = await buildPluginGenerationEnvironment(
     input.plugins,
     {
@@ -99,12 +104,15 @@ export async function runConversationGeneration(
       containerId: input.emptyContainer.id,
       action: input.action,
       prompt: input.prompt,
-      baseEnvironment: capabilityRuntime.environment,
+      baseEnvironment: {
+        ...capabilityRuntime.environment,
+        ...(projectAgentRuntime?.environment ?? {}),
+      },
     },
   );
 
-  const finalEnvironment: SandboxEnvironment = {
-    ...pluginEnvironment.finalEnvironment,
+  const finalEnvironment: SandboxEnvironment = pluginEnvironment.environment;
+  Object.assign(finalEnvironment, {
     emptyContainer: input.emptyContainer,
     emptyMessage: input.emptyMessage,
     message: input.emptyMessage,
@@ -118,13 +126,18 @@ export async function runConversationGeneration(
     mcp: {
       tools: getAgentExtensionToolNames("mcp"),
     },
-  };
-  const contextTemplate =
-    pluginEnvironment.contextResource?.toString().trim() || "[[chat]]";
-  const resolvedContextMessages = resolveSandboxMessages(
-    parseContextStructure(contextTemplate),
-    [finalEnvironment],
-  );
+  });
+  const compiledContext = pluginEnvironment.contextResource
+    ? pluginEnvironment.resolver.compileInteractiveDocument(
+        pluginEnvironment.contextResource.id,
+      )
+    : null;
+  const resolvedContextMessages = compiledContext?.messages.length
+    ? compiledContext.messages
+    : resolveSandboxMessages(
+        [{ role: "system", content: "[[chat]]" }],
+        [finalEnvironment],
+      );
   const contextMessages: ModelMessage[] = capabilityRuntime.prompt
     ? [
         { role: "system", content: capabilityRuntime.prompt },
@@ -193,7 +206,7 @@ export async function runConversationGeneration(
   };
 
   Object.assign(finalEnvironment, {
-    contextTemplate,
+    contextTemplate: compiledContext?.markdown ?? "[[chat]]",
     contextMessages,
     api,
     generate: api.generate,
@@ -202,20 +215,25 @@ export async function runConversationGeneration(
     renderComponent: api.renderComponent,
   });
 
-  fillEnvironmentMetadata(input.emptyMessage, pluginEnvironment);
-
-  const actionSource = pluginEnvironment.actionProcessResource?.toString().trim();
-  const source =
-    actionSource || pluginEnvironment.processResource?.toString().trim();
+  const processResource =
+    pluginEnvironment.actionProcessResource ?? pluginEnvironment.processResource;
+  const preparedProcess = processResource
+    ? pluginEnvironment.resolver.prepareJavaScript(processResource.id)
+    : null;
+  const source = preparedProcess?.source.trim();
   const processPluginId = pluginEnvironment.actionProcessResource?.pluginId
     ?? pluginEnvironment.processPlugin?.id;
   const processResult = source
-    ? await executeSandboxCodeAsync(source, [finalEnvironment])
+    ? await executeSandboxCodeAsync(
+        source,
+        [finalEnvironment, preparedProcess?.environment ?? {}],
+      )
     : await runAgent();
   const normalized = normalizeGenerationResult(processResult, input.emptyMessage);
 
   if (!normalized) {
     const fallback = await runAgent();
+    fillEnvironmentMetadata(input.emptyMessage, pluginEnvironment);
     return {
       ...fallback,
       messages: contextMessages,
@@ -224,53 +242,13 @@ export async function runConversationGeneration(
     };
   }
 
+  fillEnvironmentMetadata(input.emptyMessage, pluginEnvironment);
   return {
     ...normalized,
     messages: contextMessages,
     diagnostics: pluginEnvironment.diagnostics,
     processPluginId,
   };
-}
-
-function parseContextStructure(template: string): ModelMessage[] {
-  const headingPattern =
-    /^#{1,6}\s*(system(?:_prompt)?|user(?:_prompt)?|assistant(?:_prompt)?)\s*$/i;
-  const lines = template.split(/\r?\n/);
-  const messages: ModelMessage[] = [];
-  let role: "system" | "user" | "assistant" = "system";
-  let buffer: string[] = [];
-  let hasHeading = false;
-
-  const flush = () => {
-    const content = buffer.join("\n").trim();
-    buffer = [];
-    if (!content) {
-      return;
-    }
-    messages.push({ role, content } as ModelMessage);
-  };
-
-  for (const line of lines) {
-    const heading = line.match(headingPattern);
-    if (!heading) {
-      buffer.push(line);
-      continue;
-    }
-    hasHeading = true;
-    flush();
-    const value = heading[1]?.toLowerCase() ?? "system";
-    role = value.startsWith("user")
-      ? "user"
-      : value.startsWith("assistant")
-        ? "assistant"
-        : "system";
-  }
-  flush();
-
-  if (!hasHeading && messages.length === 0) {
-    return [{ role: "system", content: template }];
-  }
-  return messages;
 }
 
 function normalizeGenerationResult(
@@ -310,7 +288,13 @@ function fillEnvironmentMetadata(
   message: ChatMessage,
   environment: Awaited<ReturnType<typeof buildPluginGenerationEnvironment>>,
 ) {
-  const character = environment.insertedResources.find(
+  const resolvedResources = environment.resolver.resolvedResourceIds.flatMap(
+    (resourceId) => {
+      const resource = environment.resolver.resourceById(resourceId);
+      return resource ? [resource] : [];
+    },
+  );
+  const character = resolvedResources.find(
     (resource) => resource.path.toLocaleLowerCase().startsWith("character/"),
   );
   const processPlugin =
@@ -322,9 +306,7 @@ function fillEnvironmentMetadata(
     pluginName: actionProcess?.pluginName ?? processPlugin?.name ?? "",
     characterId: character?.id ?? "",
     characterName: character?.name ?? "",
-    insertedResourceIds: environment.insertedResources.map(
-      (resource) => resource.id,
-    ),
+    resolvedResourceIds: environment.resolver.resolvedResourceIds,
     diagnostics: environment.diagnostics.map(
       (diagnostic) => diagnostic.message,
     ),

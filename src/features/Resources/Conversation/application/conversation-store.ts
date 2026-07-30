@@ -1,6 +1,10 @@
 import { defineStore } from "pinia";
 import type { ModelMessage } from "ai";
 import { remove, selectAll, upsert } from "@/features/Database/application/database-service";
+import {
+  builtinProjectAgentPackageId,
+  isProjectAgentPackage,
+} from "@/features/Agent/domain/project-agent";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { runConversationGeneration } from "./conversation-generation";
@@ -78,7 +82,7 @@ function createContainer(input: {
   };
 }
 
-function createPackage(): CharacterPackage {
+function createDefaultPackage(): CharacterPackage {
   return {
     id: crypto.randomUUID(),
     name: "默认角色包",
@@ -93,7 +97,28 @@ function createPackage(): CharacterPackage {
   };
 }
 
+function createProjectAgentPackage(
+  conversations: CharacterPackage["conversations"] = [],
+): CharacterPackage {
+  return {
+    id: builtinProjectAgentPackageId,
+    name: "PulsarAI",
+    icon: "",
+    builtIn: true,
+    description: "用于理解和修改角色包项目的内置 Agent。",
+    categoryId: null,
+    order: -10_000,
+    conversations,
+    plugins: [],
+    globalPluginOrder: [],
+    syncEnabled: true,
+  };
+}
+
 function comparePackages(a: CharacterPackage, b: CharacterPackage) {
+  if (Boolean(a.builtIn) !== Boolean(b.builtIn)) {
+    return a.builtIn ? -1 : 1;
+  }
   return (a.order ?? Number.POSITIVE_INFINITY) - (b.order ?? Number.POSITIVE_INFINITY)
     || a.name.localeCompare(b.name, "zh-Hans")
     || a.id.localeCompare(b.id);
@@ -185,6 +210,7 @@ export const useConversationStore = defineStore("conversation", {
       this.packages = packages.map((item) => item.value).sort(comparePackages);
       this.packages = this.packages.map((item) => ({
         ...item,
+        builtIn: item.id === builtinProjectAgentPackageId,
         globalPluginOrder: item.globalPluginOrder ?? [],
         capabilities: item.capabilities
           ? structuredClone(item.capabilities)
@@ -197,11 +223,24 @@ export const useConversationStore = defineStore("conversation", {
       }));
       this.containers = containers.map((item) => item.value);
 
-      if (this.packages.length === 0) {
-        const basePackage = createPackage();
+      const persistedProjectAgentPackage = this.packages.find(
+        (item) => item.id === builtinProjectAgentPackageId,
+      );
+      const projectAgentPackage = createProjectAgentPackage(
+        persistedProjectAgentPackage?.conversations ?? [],
+      );
+      this.packages = this.packages.filter(
+        (item) => item.id !== builtinProjectAgentPackageId,
+      );
+      this.packages.unshift(projectAgentPackage);
+      await this.persistPackage(projectAgentPackage);
+
+      if (!this.packages.some((item) => !item.builtIn)) {
+        const basePackage = createDefaultPackage();
         this.packages.push(basePackage);
         await this.persistPackage(basePackage);
       }
+      this.packages.sort(comparePackages);
 
       this.loaded = true;
       await this.openPackage(this.packages[0].id);
@@ -264,7 +303,12 @@ export const useConversationStore = defineStore("conversation", {
       this.categories = this.categories.filter((item) => item.id !== categoryId);
       await remove(categoryTable, categoryId);
     },
-    async createPackage(input?: Partial<Pick<CharacterPackage, "name" | "description" | "icon" | "categoryId">>) {
+    async createPackage(
+      input?: Partial<
+        Pick<CharacterPackage, "name" | "description" | "icon" | "categoryId">
+      >,
+      options: { activate?: boolean } = {},
+    ) {
       const item: CharacterPackage = {
         id: crypto.randomUUID(),
         name: input?.name?.trim() || "新角色包",
@@ -279,26 +323,35 @@ export const useConversationStore = defineStore("conversation", {
       };
       this.packages.push(item);
       await this.persistPackage(item);
-      await this.openPackage(item.id);
+      if (options.activate !== false) {
+        await this.openPackage(item.id);
+      }
+      return item;
     },
     async updatePackage(packageId: string, patch: Partial<Pick<CharacterPackage, "name" | "description" | "icon" | "categoryId" | "syncEnabled" | "capabilities">>) {
       const item = this.packages.find((packageItem) => packageItem.id === packageId);
-      if (!item) {
+      if (!item || item.builtIn) {
         return;
       }
 
       Object.assign(item, patch);
       await this.persistPackage(item);
     },
-    async deletePackage(packageId: string) {
+    async deletePackage(
+      packageId: string,
+      options: { activateFallback?: boolean } = {},
+    ) {
+      if (this.packages.find((item) => item.id === packageId)?.builtIn) {
+        return;
+      }
       const relatedConversations = this.conversations.filter((item) => item.packageId === packageId);
       for (const conversation of relatedConversations) {
-        await this.deleteConversation(conversation.id);
+        await this.deleteConversation(conversation.id, options);
       }
 
       this.packages = this.packages.filter((item) => item.id !== packageId);
       await remove(packageTable, packageId);
-      if (this.packages[0]) {
+      if (options.activateFallback !== false && this.packages[0]) {
         await this.openPackage(this.packages[0].id);
       }
     },
@@ -322,6 +375,9 @@ export const useConversationStore = defineStore("conversation", {
 
       if (newest) {
         this.openConversation(newest.id);
+      } else if (isProjectAgentPackage(packageId)) {
+        this.activeConversationId = "";
+        this.activeContainerId = "";
       } else {
         await this.createConversation(packageId);
       }
@@ -383,15 +439,24 @@ export const useConversationStore = defineStore("conversation", {
       item.globalPluginOrder = ordered;
       await this.persistPackage(item);
     },
-    async createConversation(packageId?: string) {
+    async createConversation(
+      packageId?: string,
+      input: {
+        activate?: boolean;
+        projectPackageId?: string;
+        rendererId?: ConversationRendererId;
+        title?: string;
+      } = {},
+    ) {
       packageId ??= this.activePackageId;
       const template = this.conversations.find((item) => item.packageId === packageId && item.isTemplate);
       const conversation: Conversation = {
         id: crypto.randomUUID(),
         packageId,
-        title: template?.title ?? "新对话",
+        projectPackageId: input.projectPackageId,
+        title: input.title?.trim() || template?.title || "新对话",
         isTemplate: false,
-        rendererId: template?.rendererId ?? "chat",
+        rendererId: input.rendererId ?? template?.rendererId ?? "chat",
         rootContainerId: null,
         lastContainerId: null,
         createdAt: now(),
@@ -439,7 +504,9 @@ export const useConversationStore = defineStore("conversation", {
         this.persistConversation(conversation),
         ...createdContainers.map((container) => this.persistContainer(container)),
       ]);
-      this.openConversation(conversation.id);
+      if (input.activate !== false) {
+        this.openConversation(conversation.id);
+      }
       return conversation;
     },
     cloneConversationContainers(templateConversationId: string, conversationId: string) {
@@ -569,7 +636,12 @@ export const useConversationStore = defineStore("conversation", {
     },
     async updateConversation(
       conversationId: string,
-      patch: Partial<Pick<Conversation, "title" | "isTemplate" | "rendererId">>,
+      patch: Partial<
+        Pick<
+          Conversation,
+          "title" | "isTemplate" | "rendererId" | "projectPackageId"
+        >
+      >,
     ) {
       const conversation = this.conversations.find((item) => item.id === conversationId);
       if (!conversation) {
@@ -602,7 +674,10 @@ export const useConversationStore = defineStore("conversation", {
     ) {
       await this.updateConversation(conversationId, { rendererId });
     },
-    async deleteConversation(conversationId: string) {
+    async deleteConversation(
+      conversationId: string,
+      options: { activateFallback?: boolean } = {},
+    ) {
       const conversation = this.conversations.find((item) => item.id === conversationId);
       if (!conversation) {
         return;
@@ -622,8 +697,14 @@ export const useConversationStore = defineStore("conversation", {
         packageItem.conversations = packageItem.conversations.filter((item) => item.id !== conversationId);
         await this.persistPackage(packageItem);
         const next = this.conversations.find((item) => item.packageId === packageItem.id);
+        if (options.activateFallback === false) {
+          return;
+        }
         if (next) {
           this.openConversation(next.id);
+        } else if (packageItem.builtIn) {
+          this.activeConversationId = "";
+          this.activeContainerId = "";
         } else {
           await this.createConversation(packageItem.id);
         }
@@ -1046,6 +1127,22 @@ export const useConversationStore = defineStore("conversation", {
         link.lastContainerid = conversation.lastContainerId ?? "";
         void this.persistPackage(packageItem);
       }
+    },
+    uniqueConversationTitle(packageId: string, baseTitle: string) {
+      const normalizedBase = baseTitle.trim() || "临时对话";
+      const existing = new Set(
+        this.conversations
+          .filter((item) => item.packageId === packageId)
+          .map((item) => item.title),
+      );
+      if (!existing.has(normalizedBase)) {
+        return normalizedBase;
+      }
+      let suffix = 2;
+      while (existing.has(`${normalizedBase} · ${suffix}`)) {
+        suffix += 1;
+      }
+      return `${normalizedBase} · ${suffix}`;
     },
   },
 });

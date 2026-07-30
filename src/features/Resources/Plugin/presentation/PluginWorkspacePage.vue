@@ -39,7 +39,12 @@ import ConversationComposerEditor from "@/features/Resources/Conversation/presen
 import ConversationMarkdown from "@/features/Resources/Conversation/presentation/ConversationMarkdown.vue";
 import JavaScriptCodeMirrorEditor from "@/features/Resources/Preset/presentation/JavaScriptCodeMirrorEditor.vue";
 import InteractiveDocumentWorkspacePage from "@/features/Resources/InteractiveDoc/presentation/InteractiveDocumentWorkspacePage.vue";
-import type { InteractiveDocumentData } from "@/features/Resources/InteractiveDoc/domain/interactive-document";
+import {
+  createEmptyInteractiveDocumentSource,
+} from "@/features/Resources/InteractiveDoc/domain/interactive-document";
+import {
+  createPluginReferenceResolver,
+} from "@/features/Resources/Plugin/application/plugin-reference-resolver";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
 import {
   findPluginNodeByPath,
@@ -57,7 +62,6 @@ import {
   pluginMediaSource,
   pluginMediaType,
 } from "@/features/Resources/Plugin/domain/plugin-media";
-import PluginResourceInjectionMenu from "./PluginResourceInjectionMenu.vue";
 
 interface TreeRow {
   node: PluginTreeNode;
@@ -149,6 +153,47 @@ const formattedReadOnlyContent = computed(() => {
 const mediaSource = computed(() => pluginMediaSource(selectedFile.value?.content));
 const mediaKind = computed(() =>
   pluginMediaType(selectedFile.value?.content, mediaSource.value),
+);
+const interactiveDocumentPreviewContext = computed(() => {
+  const currentPlugin = plugin.value;
+  const file = selectedFile.value;
+  if (
+    !currentPlugin
+    || !file
+    || selectedType.value !== "interactive-document"
+  ) {
+    return null;
+  }
+  const visiblePlugins = currentPlugin.packageId
+    ? pluginStore.enabledPluginsForPackage(currentPlugin.packageId)
+    : pluginStore.globalPlugins.filter((item) => item.enabled);
+  const previewPlugins = visiblePlugins.some(
+    (item) => item.id === currentPlugin.id,
+  )
+    ? visiblePlugins
+    : [{ ...currentPlugin, enabled: true }, ...visiblePlugins];
+  const resolver = createPluginReferenceResolver(previewPlugins, {
+    environment: {
+      chat: [],
+      CHAT: [],
+      CAPABILITIES_PROMPT: "[CAPABILITIES_PROMPT]",
+      PROJECT_AGENT_PROMPT: "[PROJECT_AGENT_PROMPT]",
+    },
+    sourceOverrides: {
+      [file.id]: contentDraft.value,
+    },
+  });
+  return {
+    resolveReference: (target: string) =>
+      resolver.resolveFromResource(file.id, target),
+    diagnostics: resolver.diagnostics.map((item) => item.message),
+  };
+});
+const interactiveDocumentReferenceResolver = computed(
+  () => interactiveDocumentPreviewContext.value?.resolveReference,
+);
+const interactiveDocumentReferenceDiagnostics = computed(
+  () => interactiveDocumentPreviewContext.value?.diagnostics ?? [],
 );
 
 onMounted(async () => {
@@ -269,10 +314,6 @@ function scheduleContentSave(value: string) {
   }, 500);
 }
 
-function scheduleInteractiveDocumentSave(value: InteractiveDocumentData) {
-  scheduleContentSave(JSON.stringify(value, null, 2));
-}
-
 async function persistContent() {
   const currentPlugin = plugin.value;
   const file = selectedFile.value;
@@ -280,7 +321,6 @@ async function persistContent() {
   let content: unknown = contentDraft.value;
   if (
     selectedType.value === "json"
-    || selectedType.value === "interactive-document"
   ) {
     try {
       content = JSON.parse(contentDraft.value || "null");
@@ -340,12 +380,7 @@ function newFileTemplate(type: NewPluginFileType) {
   if (type === "interactive-document") {
     return {
       name: "untitled.imd",
-      content: {
-        id: crypto.randomUUID(),
-        name: "新交互式文档",
-        description: "",
-        blocks: [],
-      },
+      content: createEmptyInteractiveDocumentSource(),
     };
   }
   if (type === "javascript") {
@@ -577,17 +612,6 @@ function nodeIcon(node: PluginTreeNode) {
   }
 }
 
-function isInteractiveDocumentContent(
-  value: unknown,
-): value is InteractiveDocumentData {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<InteractiveDocumentData>;
-  return (
-    typeof candidate.id === "string"
-    && typeof candidate.name === "string"
-    && Array.isArray(candidate.blocks)
-  );
-}
 </script>
 
 <template>
@@ -754,24 +778,7 @@ function isInteractiveDocumentContent(
               <span class="min-w-0 flex-1 truncate text-[13px]">
                 {{ row.node.name }}
               </span>
-              <span
-                v-if="row.node.inserted"
-                class="size-1.5 shrink-0 rounded-full bg-emerald-500"
-                title="已注入"
-              />
             </button>
-
-            <div
-              class="mobile-touch-actions opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100"
-              @click.stop
-            >
-              <PluginResourceInjectionMenu
-                :key="`tree-injection:${row.node.id}`"
-                :plugin-id="plugin.id"
-                :node="row.node"
-                :disabled="plugin.builtIn"
-              />
-            </div>
 
             <DropdownMenu v-if="!plugin.builtIn">
               <DropdownMenuTrigger as-child>
@@ -920,11 +927,13 @@ function isInteractiveDocumentContent(
             <ConversationMarkdown
               v-if="plugin.builtIn"
               :model-value="formattedReadOnlyContent"
+              enable-reference-syntax
             />
             <ConversationComposerEditor
               v-else
               :model-value="contentDraft"
               enable-block-edit
+              enable-reference-syntax
               :enable-ai="false"
               placeholder=""
               @update:model-value="scheduleContentSave"
@@ -945,15 +954,18 @@ function isInteractiveDocumentContent(
           </div>
 
           <InteractiveDocumentWorkspacePage
-            v-else-if="selectedType === 'interactive-document' && isInteractiveDocumentContent(selectedFile.content)"
+            v-else-if="selectedType === 'interactive-document'"
             :key="selectedFile.id"
-            :model-value="selectedFile.content"
+            :model-value="contentDraft"
+            :readonly="plugin.builtIn"
+            :resolve-reference="interactiveDocumentReferenceResolver"
+            :reference-diagnostics="interactiveDocumentReferenceDiagnostics"
             class="h-full"
-            @update:model-value="scheduleInteractiveDocumentSave"
+            @update:model-value="scheduleContentSave"
           />
 
           <div
-            v-else-if="selectedType === 'json' || selectedType === 'interactive-document'"
+            v-else-if="selectedType === 'json'"
             class="relative h-full"
           >
             <JavaScriptCodeMirrorEditor

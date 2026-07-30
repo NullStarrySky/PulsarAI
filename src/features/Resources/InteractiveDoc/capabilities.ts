@@ -3,14 +3,13 @@ import {
   type CapabilityDefinition,
 } from "@/features/Capabilities/domain/capability";
 import {
-  createInteractiveDocument,
-  type InteractiveDocumentData,
+  compileInteractiveDocumentSource,
 } from "./domain/interactive-document";
 
 export const capabilities: CapabilityDefinition = {
   id: "interactiveDoc",
   title: "交互式文档",
-  description: "把可序列化的交互式文档数据编译为纯 Markdown。",
+  description: "把 SFC 风格的交互式文档源码编译为角色消息和 Markdown。",
   subCaps: {
     all: "全部交互式文档权限",
     compile: "编译文档",
@@ -18,16 +17,15 @@ export const capabilities: CapabilityDefinition = {
   api: {
     compile: [{
       name: "compile",
-      signature: "compile(document: InteractiveDocumentData): { markdown: string; errors: CompileError[] }",
-      description: "解析变量与组件块并返回 Markdown 和逐块错误。",
-      example: "interactiveDoc.compile(document)",
+      signature: "compile(source: string): { messages: ModelMessage[]; markdown: string; errors: CompileError[] }",
+      description: "解析 prompt_template、本地 sub_data 与显式引用并返回编译结果。",
+      example: "interactiveDoc.compile(source)",
     }],
   },
 };
 
 export const builder = createCapabilityBuilder(capabilities, (granted) => ({
   ...(granted.has("compile") ? {
-    compile: (document: InteractiveDocumentData) =>
-      createInteractiveDocument(document).compileDetailed(),
+    compile: (source: string) => compileInteractiveDocumentSource(source),
   } : {}),
 }));

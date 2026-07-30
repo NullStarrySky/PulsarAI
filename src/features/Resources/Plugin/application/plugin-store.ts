@@ -1,6 +1,16 @@
 import { defineStore } from "pinia";
 import { remove, selectAll, upsert } from "@/features/Database/application/database-service";
 import {
+  builtinProjectAgentPackageId,
+  builtinProjectAgentPluginId,
+} from "@/features/Agent/domain/project-agent";
+import {
+  normalizeInteractiveDocumentSource,
+} from "@/features/Resources/InteractiveDoc/domain/interactive-document";
+import {
+  interactiveDocumentFormatPrompt,
+} from "@/features/Resources/InteractiveDoc/domain/interactive-document-format";
+import {
   findPluginNodeByPath,
   findPluginTreeNode,
   findPluginTreeParent,
@@ -11,16 +21,11 @@ import {
   type Plugin,
   type PluginFile,
   type PluginFolder,
-  type PluginResourceCondition,
   type PluginTreeNode,
   type PluginTreeNodeBase,
   type ResolvedPluginAction,
 } from "@/features/Resources/Plugin/domain/plugin-types";
 import { createPluginMediaContent } from "@/features/Resources/Plugin/domain/plugin-media";
-import {
-  defaultPluginInsertDepth,
-  normalizePluginInsertDepth,
-} from "@/features/Resources/Plugin/application/plugin-condition-environment";
 import builtinClassroomBackgroundUrl from "@/features/Resources/Plugin/assets/builtin-classroom-background.png";
 
 const pluginTable = "resource_plugins";
@@ -43,12 +48,6 @@ function createNodeBase(
     id: input.id ?? crypto.randomUUID(),
     name,
     icon: input.icon ?? "",
-    inserted: input.inserted ?? false,
-    insertPosition: input.insertPosition ?? "",
-    insertDepth: normalizePluginInsertDepth(
-      input.insertDepth ?? defaultPluginInsertDepth,
-    ),
-    insertCondition: normalizeConditions(input.insertCondition),
     order: input.order ?? 0,
   };
 }
@@ -61,7 +60,10 @@ function createFile(
   return {
     ...createNodeBase(name, input),
     kind: "file",
-    content: clonePlain(content),
+    content:
+      pluginFileType(name) === "interactive-document"
+        ? normalizeInteractiveDocumentSource(content)
+        : clonePlain(content),
   };
 }
 
@@ -84,7 +86,7 @@ function starterInfo(name: string) {
     "",
     "在这里记录插件用途、约定和使用方式。",
     "",
-    "文件是否参与生成只由它的注入设置决定；文件类型由名称后缀决定。",
+    "文件通过容器声明和 `<@...>` 显式引用参与解析；文件类型由名称后缀决定。",
   ].join("\n");
 }
 
@@ -94,11 +96,7 @@ function createStarterRoot(name: string): PluginFolder {
     createFile(
       pluginConventions.context,
       createDefaultContextDocument(),
-      {
-        inserted: true,
-        insertPosition: "CONTEXT_STRUCTURE",
-        order: 1,
-      },
+      { order: 1 },
     ),
     createFile(
       pluginConventions.generation,
@@ -109,12 +107,12 @@ function createStarterRoot(name: string): PluginFolder {
     createFolder("character", [
       createFile(
         "default.md",
-        "保持清晰、可靠，并尊重当前对话上下文。",
-        {
-          inserted: true,
-          insertPosition: "character",
-          order: 0,
-        },
+        [
+          '<member_of container="container:plugin/会话上下文" as="character" />',
+          "",
+          "保持清晰、可靠，并尊重当前对话上下文。",
+        ].join("\n"),
+        { order: 0 },
       ),
     ], { order: 4 }),
     createFolder(pluginConventions.actionFolder, [], { order: 5 }),
@@ -123,28 +121,33 @@ function createStarterRoot(name: string): PluginFolder {
 }
 
 function createDefaultContextDocument() {
-  return {
-    id: crypto.randomUUID(),
-    name: "默认上下文结构",
-    description: "",
-    blocks: [
-      {
-        id: crypto.randomUUID(),
-        type: "text" as const,
-        name: "上下文",
-        description: "",
-        hidden: false,
-        role: "system" as const,
-        content: ["{{character}}\n\n[[chat]]"],
-        activeContentIndex: 0,
-        variableIds: [],
-      },
-    ],
-  };
+  return [
+    '<container name="会话上下文" scope="plugin" />',
+    "",
+    '<prompt_template name="main" role="system">',
+    '{{ <@会话上下文>.get("character") }}',
+    "",
+    "[[chat]]",
+    "</prompt_template>",
+    "",
+    "<data>",
+    "</data>",
+  ].join("\n");
 }
 
 function createBuiltinPlugin(): Plugin {
   const root = createStarterRoot("内置会话资源");
+  const context = findPluginNodeByPath(root, pluginConventions.context);
+  if (context?.kind === "file") {
+    context.content = [
+      '<prompt_template name="fallback" role="system">',
+      "[[chat]]",
+      "</prompt_template>",
+      "",
+      "<data>",
+      "</data>",
+    ].join("\n");
+  }
   const background = findPluginNodeByPath(root, pluginConventions.backgroundFolder);
   if (background?.kind === "folder") {
     background.children.push(
@@ -153,8 +156,6 @@ function createBuiltinPlugin(): Plugin {
         createPluginMediaContent(builtinClassroomBackgroundUrl, "image"),
         {
           id: "builtin-background-classroom",
-          inserted: true,
-          insertPosition: "BACKGROUND",
           order: 0,
         },
       ),
@@ -179,8 +180,6 @@ function createBuiltinPlugin(): Plugin {
         ].join("\n"),
         {
           id: "builtin-action-get-time",
-          inserted: true,
-          insertPosition: "ACTION",
           order: 0,
         },
       ),
@@ -190,11 +189,14 @@ function createBuiltinPlugin(): Plugin {
   root.children.push(
     createFile(
       "api-documentation.md",
-      "{{CAPABILITIES_PROMPT}}",
+      [
+        '<container name="基础上下文" scope="global" />',
+        '<member_of container="container:global/基础上下文" as="apiDocumentation" />',
+        "",
+        "{{CAPABILITIES_PROMPT}}",
+      ].join("\n"),
       {
         id: "builtin-api-documentation",
-        inserted: true,
-        insertPosition: "API_DOCUMENTATION",
         order: 7,
       },
     ),
@@ -224,6 +226,94 @@ function createBuiltinPlugin(): Plugin {
     main: false,
     builtIn: true,
     order: 10_000,
+  };
+}
+
+function createProjectAgentPlugin(): Plugin {
+  const root = createFolder("/", [
+    createFile(
+      pluginConventions.info,
+      [
+        "# PulsarAI Project Agent",
+        "",
+        "这个内置插件把项目级 Agent 接入 PulsarAI 角色包。",
+        "项目由会话的 `projectPackageId` 指定，Agent 通过受限的文件系统式 API 读取和修改该项目。",
+      ].join("\n"),
+      { id: "builtin-project-agent-info", order: 0 },
+    ),
+    createFile(
+      pluginConventions.context,
+      [
+        '<container name="项目上下文" scope="plugin">',
+        '  <include as="base">container:global/基础上下文</include>',
+        "</container>",
+        "",
+        '<prompt_template name="project-agent" role="system">',
+        "{{PROJECT_AGENT_PROMPT}}",
+        "",
+        "[[chat]]",
+        "</prompt_template>",
+        "",
+        "<data>",
+        "</data>",
+      ].join("\n"),
+      {
+        id: "builtin-project-agent-context-file",
+        order: 1,
+      },
+    ),
+    createFile(
+      pluginConventions.generation,
+      "",
+      { id: "builtin-project-agent-generation", order: 2 },
+    ),
+    createFile(
+      "AGENTS.md",
+      [
+        "# Project Agent Instructions",
+        "",
+        "- Inspect before editing.",
+        "- Treat a role-playing package as one coherent system.",
+        "- Keep existing ids stable and create UUIDs for new structured nodes.",
+        "- Modify only the selected project's conversations and local plugins.",
+        "- Read back important writes and summarize changed paths.",
+      ].join("\n"),
+      { id: "builtin-project-agent-instructions", order: 3 },
+    ),
+    createFolder("reference", [
+      createFile(
+        "interactive-document.md",
+        interactiveDocumentFormatPrompt,
+        { id: "builtin-project-agent-imd-reference", order: 0 },
+      ),
+      createFile(
+        "plugin-files.md",
+        [
+          "# Plugin file conventions",
+          "",
+          "- `info.md` documents a plugin.",
+          "- Root `context.imd` is the role-aware generation entry document.",
+          "- `generation.js` may override the default Agent process.",
+          "- File semantics come from suffixes such as `.md`, `.imd`, `.js`, `.json`, media, and component files.",
+          "- Cross-resource access uses explicit `<@local:...>`, `<@path:...>`, `<@id:...>`, or `<@container:scope/name>` references.",
+          "- Containers are declared in files and remain lazy namespaces instead of being flattened into the Sandbox environment.",
+        ].join("\n"),
+        { id: "builtin-project-agent-plugin-reference", order: 1 },
+      ),
+    ], { id: "builtin-project-agent-reference", order: 4 }),
+  ], { id: "builtin-project-agent-root" });
+
+  return {
+    id: builtinProjectAgentPluginId,
+    packageId: builtinProjectAgentPackageId,
+    name: "项目 Agent",
+    icon: "",
+    shortDescription: "读取并修改指定角色包项目",
+    root,
+    enabled: true,
+    main: true,
+    builtIn: true,
+    order: -10_000,
   };
 }
 
@@ -271,24 +361,6 @@ function sortGlobalPlugins(plugins: Plugin[], localOrder: string[] = []) {
   });
 }
 
-function normalizeConditions(value: unknown): PluginResourceCondition[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
-    if (!item || typeof item !== "object") return [];
-    const source = item as Partial<PluginResourceCondition>;
-    if (typeof source.functionName !== "string" || !source.functionName.trim()) {
-      return [];
-    }
-    return [{
-      id: typeof source.id === "string" ? source.id : crypto.randomUUID(),
-      functionName: source.functionName.trim(),
-      arguments: Array.isArray(source.arguments)
-        ? source.arguments.map((argument) => String(argument))
-        : [],
-    }];
-  });
-}
-
 function normalizeTreeNode(value: unknown, order = 0): PluginTreeNode | null {
   if (!value || typeof value !== "object") return null;
   const source = value as Partial<PluginTreeNode> & {
@@ -303,11 +375,6 @@ function normalizeTreeNode(value: unknown, order = 0): PluginTreeNode | null {
   const base = createNodeBase(name, {
     id: typeof source.id === "string" ? source.id : crypto.randomUUID(),
     icon: typeof source.icon === "string" ? source.icon : "",
-    inserted: source.inserted === true,
-    insertPosition:
-      typeof source.insertPosition === "string" ? source.insertPosition : "",
-    insertDepth: normalizePluginInsertDepth(source.insertDepth),
-    insertCondition: normalizeConditions(source.insertCondition),
     order: typeof source.order === "number" ? source.order : order,
   });
 
@@ -330,7 +397,10 @@ function normalizeTreeNode(value: unknown, order = 0): PluginTreeNode | null {
   return {
     ...base,
     kind: "file",
-    content: clonePlain(source.content ?? ""),
+    content:
+      pluginFileType(name) === "interactive-document"
+        ? normalizeInteractiveDocumentSource(source.content)
+        : clonePlain(source.content ?? ""),
   };
 }
 
@@ -378,24 +448,6 @@ function normalizeImportedGlobalPlugin(value: unknown, order: number): Plugin {
     main: false,
     order,
   };
-}
-
-function nodeIsAvailableThroughFolder(
-  root: PluginFolder,
-  nodeId: string,
-  inherited = false,
-): boolean {
-  for (const child of root.children) {
-    const active = inherited || root.inserted;
-    if (child.id === nodeId) return active || child.inserted;
-    if (
-      child.kind === "folder"
-      && nodeIsAvailableThroughFolder(child, nodeId, active || child.inserted)
-    ) {
-      return true;
-    }
-  }
-  return false;
 }
 
 export const usePluginStore = defineStore("plugin-resource", {
@@ -479,8 +531,7 @@ export const usePluginStore = defineStore("plugin-resource", {
           if (!folder || folder.kind !== "folder") continue;
           const match = flattenPluginFiles(folder).find(
             (file) =>
-              pluginFileType(file.name) === "media"
-              && nodeIsAvailableThroughFolder(plugin.root, file.id),
+              pluginFileType(file.name) === "media",
           );
           if (match) return match;
         }
@@ -507,7 +558,6 @@ export const usePluginStore = defineStore("plugin-resource", {
               .toLocaleLowerCase();
             if (
               pluginFileType(resource.name) !== "javascript"
-              || !nodeIsAvailableThroughFolder(plugin.root, resource.id)
               || !commandName
               || claimedNames.has(commandName)
             ) {
@@ -547,10 +597,13 @@ export const usePluginStore = defineStore("plugin-resource", {
       this.plugins = records
         .map((record) => record.value)
         .filter(
-          (record) => isPluginRecord(record) && record.id !== builtinCorePluginId,
+          (record) =>
+            isPluginRecord(record)
+            && record.id !== builtinCorePluginId
+            && record.id !== builtinProjectAgentPluginId,
         )
         .map(normalizePlugin);
-      this.plugins.push(createBuiltinPlugin());
+      this.plugins.push(createBuiltinPlugin(), createProjectAgentPlugin());
       await Promise.all(this.plugins.map((plugin) => this.persistPlugin(plugin)));
       this.activePluginId = this.sortedPlugins[0]?.id ?? "";
       this.loaded = true;
@@ -733,18 +786,11 @@ export const usePluginStore = defineStore("plugin-resource", {
         node.name = patch.name.trim();
       }
       if (typeof patch.icon === "string") node.icon = patch.icon;
-      if (typeof patch.inserted === "boolean") node.inserted = patch.inserted;
-      if (typeof patch.insertPosition === "string") {
-        node.insertPosition = patch.insertPosition;
-      }
-      if (patch.insertDepth !== undefined) {
-        node.insertDepth = normalizePluginInsertDepth(patch.insertDepth);
-      }
-      if (patch.insertCondition !== undefined) {
-        node.insertCondition = normalizeConditions(patch.insertCondition);
-      }
       if (node.kind === "file" && "content" in patch) {
-        node.content = clonePlain(patch.content);
+        node.content =
+          pluginFileType(node.name) === "interactive-document"
+            ? normalizeInteractiveDocumentSource(patch.content)
+            : clonePlain(patch.content);
       }
       if (node.kind === "folder" && typeof patch.collapsed === "boolean") {
         node.collapsed = patch.collapsed;

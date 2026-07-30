@@ -1,17 +1,7 @@
-export interface PluginResourceCondition {
-  id: string;
-  functionName: string;
-  arguments: string[];
-}
-
 export interface PluginTreeNodeBase {
   id: string;
   name: string;
   icon: string;
-  inserted: boolean;
-  insertPosition: string;
-  insertDepth: number;
-  insertCondition: PluginResourceCondition[];
   order: number;
 }
 

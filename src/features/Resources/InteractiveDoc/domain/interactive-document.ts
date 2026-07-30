@@ -1,8 +1,17 @@
+import type { ModelMessage } from "ai";
 import {
-  resolveSandboxText,
+  resolveSandboxMessages,
+  stringifySandboxValue,
   type SandboxEnvironment,
 } from "@/features/Sandbox/domain/sandbox";
+import {
+  findPluginReferenceTokens,
+  normalizePluginReferenceTarget,
+  replacePluginReferenceTokens,
+} from "@/features/Resources/Plugin/domain/plugin-reference";
 
+export type InteractivePromptRole = "system" | "user" | "assistant";
+export type InteractiveDataContentType = "json" | "value";
 export type InteractiveValue =
   | string
   | number
@@ -11,541 +20,451 @@ export type InteractiveValue =
   | InteractiveValue[]
   | { [key: string]: InteractiveValue };
 
-export type InteractiveBlockType = "text" | "variable" | "component";
-export type InteractiveBlockRole = "system" | "user" | "assistant";
-
-export interface InteractiveBlockBase {
+export interface InteractivePromptTemplate {
   id: string;
-  type: InteractiveBlockType;
   name: string;
+  role: InteractivePromptRole;
+  content: string;
+}
+
+export interface InteractiveSubData {
+  id: string;
+  name: string;
+  enableUpdater: boolean;
   description: string;
-  hidden: boolean;
-  role?: InteractiveBlockRole;
+  contentType: InteractiveDataContentType;
+  content: string;
 }
 
-export interface InteractiveTextBlock extends InteractiveBlockBase {
-  type: "text";
-  content: string[];
-  activeContentIndex: number;
-  variableIds: string[];
-}
-
-export interface InteractiveVariableBlock extends InteractiveBlockBase {
-  type: "variable";
-  value: InteractiveValue;
-  rendererId: string;
-}
-
-export interface InteractiveComponentBlock extends InteractiveBlockBase {
-  type: "component";
-  componentId: string;
-  props: Record<string, InteractiveValue>;
-  fallbackMarkdown: string;
-}
-
-export type InteractiveDocumentBlock =
-  | InteractiveTextBlock
-  | InteractiveVariableBlock
-  | InteractiveComponentBlock;
-
-export interface InteractiveDocumentData {
-  id: string;
-  name: string;
-  description: string;
-  blocks: InteractiveDocumentBlock[];
-}
-
-export interface InteractiveVariableRenderer {
-  id: string;
-  name: string;
-  render(value: InteractiveValue): string;
+export interface InteractiveDocumentSource {
+  prologue: string;
+  templates: InteractivePromptTemplate[];
+  data: InteractiveSubData[];
 }
 
 export interface InteractiveDocumentCompileError {
-  blockId: string;
+  sourceId: string;
   message: string;
 }
 
 export interface InteractiveDocumentCompileResult {
+  messages: ModelMessage[];
   markdown: string;
+  data: Record<string, InteractiveValue>;
   errors: InteractiveDocumentCompileError[];
+  dependencies: string[];
 }
 
-export type InteractiveComponentResolver = (
-  block: InteractiveComponentBlock,
-  environment: SandboxEnvironment,
-) => string;
-
-export interface InteractiveDocumentOptions {
-  renderers?: InteractiveVariableRenderer[];
-  componentResolver?: InteractiveComponentResolver;
+export interface InteractiveDocumentCompileOptions {
+  environment?: SandboxEnvironment;
+  resolveReference?: (target: string) => unknown;
 }
 
-export type CreateInteractiveBlockInput =
-  | (Partial<Omit<InteractiveTextBlock, "type">> & { type: "text" })
-  | (Partial<Omit<InteractiveVariableBlock, "type">> & { type: "variable" })
-  | (Partial<Omit<InteractiveComponentBlock, "type">> & { type: "component" });
+const promptPattern =
+  /<prompt_template\b([^>]*)>([\s\S]*?)<\/prompt_template\s*>/gi;
+const dataPattern = /<data\b[^>]*>([\s\S]*?)<\/data\s*>/i;
+const subDataPattern =
+  /<sub_data\b([^>]*)>([\s\S]*?)<\/sub_data\s*>/gi;
+const attributePattern =
+  /([A-Za-z_][\w-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
-export type InteractiveDocumentBlockPatch =
-  | Partial<Omit<InteractiveTextBlock, "id" | "type">>
-  | Partial<Omit<InteractiveVariableBlock, "id" | "type">>
-  | Partial<Omit<InteractiveComponentBlock, "id" | "type">>;
+export function parseInteractiveDocumentSource(
+  input: string | unknown,
+): InteractiveDocumentSource {
+  const source = normalizeInteractiveDocumentSource(input);
+  const templates: InteractivePromptTemplate[] = [];
+  const data: InteractiveSubData[] = [];
 
-export const defaultInteractiveVariableRenderers: InteractiveVariableRenderer[] = [
-  {
-    id: "auto",
-    name: "自动",
-    render: renderAuto,
-  },
-  {
-    id: "text",
-    name: "纯文本",
-    render: (value) => {
-      if (typeof value === "string") {
-        return value;
-      }
-      if (value == null) {
-        return "";
-      }
-      return typeof value === "object" ? JSON.stringify(value) ?? "" : String(value);
-    },
-  },
-  {
-    id: "list",
-    name: "Markdown 列表",
-    render: renderList,
-  },
-  {
-    id: "json",
-    name: "JSON",
-    render: (value) => JSON.stringify(value, null, 2) ?? "",
-  },
-  {
-    id: "slider",
-    name: "滑块",
-    render: (value) => typeof value === "number" ? String(value) : "0",
-  },
-  {
-    id: "toggle",
-    name: "开关",
-    render: (value) => value ? "true" : "false",
-  },
-];
-
-export class InteractiveDocument {
-  readonly data: InteractiveDocumentData;
-  private readonly renderers = new Map<string, InteractiveVariableRenderer>();
-  private readonly componentResolver?: InteractiveComponentResolver;
-
-  constructor(data: InteractiveDocumentData, options: InteractiveDocumentOptions = {}) {
-    this.data = data;
-    this.componentResolver = options.componentResolver;
-    for (const renderer of [...defaultInteractiveVariableRenderers, ...(options.renderers ?? [])]) {
-      this.renderers.set(renderer.id, renderer);
-    }
+  for (const match of source.matchAll(promptPattern)) {
+    const attributes = parseAttributes(match[1] ?? "");
+    const index = templates.length;
+    templates.push({
+      id: `prompt:${index}`,
+      name: attributes.name?.trim() || `template-${index + 1}`,
+      role: normalizeRole(attributes.role),
+      content: trimRawBlock(match[2] ?? ""),
+    });
   }
 
-  getBlock(blockId: string) {
-    return this.data.blocks.find((block) => block.id === blockId);
-  }
-
-  createBlock(input: CreateInteractiveBlockInput): InteractiveDocumentBlock {
-    const block = createInteractiveBlock(input);
-    if (this.getBlock(block.id)) {
-      throw new Error(`交互式文档块 id 已存在：${block.id}`);
-    }
-    this.data.blocks.push(block);
-    return block;
-  }
-
-  updateBlock(
-    blockId: string,
-    patch: InteractiveDocumentBlockPatch,
-  ) {
-    const block = this.requireBlock(blockId);
-    Object.assign(block, patch);
-    normalizeBlock(block);
-    return block;
-  }
-
-  deleteBlock(blockId: string) {
-    const index = this.data.blocks.findIndex((block) => block.id === blockId);
-    if (index < 0) {
-      return false;
-    }
-    this.data.blocks.splice(index, 1);
-    for (const block of this.data.blocks) {
-      if (block.type === "text") {
-        block.variableIds = block.variableIds.filter((id) => id !== blockId);
-      }
-    }
-    return true;
-  }
-
-  setBlockHidden(blockId: string, hidden: boolean) {
-    const block = this.requireBlock(blockId);
-    block.hidden = hidden;
-    return block;
-  }
-
-  moveBlock(blockId: string, targetIndex: number) {
-    const currentIndex = this.data.blocks.findIndex((block) => block.id === blockId);
-    if (currentIndex < 0) {
-      return false;
-    }
-    const [block] = this.data.blocks.splice(currentIndex, 1);
-    if (!block) {
-      return false;
-    }
-    const nextIndex = Math.max(0, Math.min(targetIndex, this.data.blocks.length));
-    this.data.blocks.splice(nextIndex, 0, block);
-    return true;
-  }
-
-  setActiveTextContent(blockId: string, index: number) {
-    const block = this.requireTextBlock(blockId);
-    block.activeContentIndex = clampContentIndex(block, index);
-    return block;
-  }
-
-  addTextContent(blockId: string, markdown = "") {
-    const block = this.requireTextBlock(blockId);
-    block.content.push(markdown);
-    block.activeContentIndex = block.content.length - 1;
-    return block.activeContentIndex;
-  }
-
-  updateTextContent(blockId: string, index: number, markdown: string) {
-    const block = this.requireTextBlock(blockId);
-    const normalizedIndex = clampContentIndex(block, index);
-    block.content[normalizedIndex] = markdown;
-    return block;
-  }
-
-  removeTextContent(blockId: string, index: number) {
-    const block = this.requireTextBlock(blockId);
-    if (block.content.length <= 1) {
-      block.content[0] = "";
-      block.activeContentIndex = 0;
-      return block;
-    }
-    block.content.splice(clampContentIndex(block, index), 1);
-    block.activeContentIndex = clampContentIndex(block, block.activeContentIndex);
-    return block;
-  }
-
-  compileDetailed(): InteractiveDocumentCompileResult {
-    const errors: InteractiveDocumentCompileError[] = [];
-    const environment = this.createEnvironment();
-    const sections: Array<{
-      role: InteractiveBlockRole;
-      markdown: string;
-    }> = [];
-
-    for (const block of this.data.blocks) {
-      if (block.hidden || block.type === "variable") {
-        continue;
-      }
-
-      if (block.type === "component") {
-        const markdown = this.resolveComponentBlock(block, environment, errors);
-        if (markdown.trim()) {
-          sections.push({
-            role: block.role ?? "assistant",
-            markdown: markdown.trim(),
-          });
-        }
-        continue;
-      }
-
-      const template = block.content[clampContentIndex(block, block.activeContentIndex)] ?? "";
-      try {
-        const scopedEnvironment = this.createTextBlockEnvironment(block, environment);
-        const markdown = resolveSandboxText(template, [scopedEnvironment], {
-          keepArraySet2StrDefault: true,
-        });
-        if (markdown.trim()) {
-          sections.push({
-            role: block.role ?? "assistant",
-            markdown: markdown.trim(),
-          });
-        }
-      } catch (error) {
-        errors.push({
-          blockId: block.id,
-          message: error instanceof Error ? error.message : String(error),
-        });
-        if (template.trim()) {
-          sections.push({
-            role: block.role ?? "assistant",
-            markdown: template.trim(),
-          });
-        }
-      }
-    }
-
-    return {
-      markdown: compileRoleSections(sections),
-      errors,
-    };
-  }
-
-  compile() {
-    return this.compileDetailed().markdown;
-  }
-
-  toString() {
-    return this.compile();
-  }
-
-  private createEnvironment(): SandboxEnvironment {
-    const variables: Record<string, unknown> = {};
-    const environment: SandboxEnvironment = {
-      $variables: variables,
-      variables,
-    };
-
-    for (const block of this.data.blocks) {
-      if (block.type !== "variable" || block.hidden) {
-        continue;
-      }
-      const renderer = this.renderers.get(block.rendererId) ?? this.renderers.get("auto");
-      const binding = createRenderedBinding(block.value, renderer ?? defaultInteractiveVariableRenderers[0]!);
-      variables[block.id] = binding;
-      variables[block.name] = binding;
-      environment[block.id] = binding;
-      if (isSafeEnvironmentKey(block.name)) {
-        environment[block.name] = binding;
-      }
-    }
-
-    return environment;
-  }
-
-  private createTextBlockEnvironment(
-    block: InteractiveTextBlock,
-    environment: SandboxEnvironment,
-  ): SandboxEnvironment {
-    if (block.variableIds.length === 0) {
-      return environment;
-    }
-
-    const scopedVariables: Record<string, unknown> = {};
-    const scoped: SandboxEnvironment = {
-      $variables: scopedVariables,
-      variables: scopedVariables,
-    };
-    const allVariables = environment.$variables as Record<string, unknown>;
-
-    for (const variableId of block.variableIds) {
-      const variable = this.getBlock(variableId);
-      if (!variable || variable.type !== "variable" || variable.hidden) {
-        continue;
-      }
-      const binding = allVariables[variable.id];
-      scopedVariables[variable.id] = binding;
-      scopedVariables[variable.name] = binding;
-      scoped[variable.id] = binding;
-      if (isSafeEnvironmentKey(variable.name)) {
-        scoped[variable.name] = binding;
-      }
-    }
-
-    return scoped;
-  }
-
-  private resolveComponentBlock(
-    block: InteractiveComponentBlock,
-    environment: SandboxEnvironment,
-    errors: InteractiveDocumentCompileError[],
-  ) {
-    try {
-      const source = this.componentResolver
-        ? this.componentResolver(block, environment)
-        : block.fallbackMarkdown;
-      return resolveSandboxText(source, [environment], {
-        keepArraySet2StrDefault: true,
+  const dataMatch = source.match(dataPattern);
+  if (dataMatch) {
+    for (const match of (dataMatch[1] ?? "").matchAll(subDataPattern)) {
+      const attributes = parseAttributes(match[1] ?? "");
+      const body = match[2] ?? "";
+      const index = data.length;
+      const name = attributes.name?.trim() || `data-${index + 1}`;
+      const contentMatch = body.match(
+        /<content\b([^>]*)>([\s\S]*?)<\/content\s*>/i,
+      );
+      const contentAttributes = parseAttributes(contentMatch?.[1] ?? "");
+      data.push({
+        id: `data:${name}:${index}`,
+        name,
+        enableUpdater:
+          parseRawElement(body, "enable_updater").trim().toLocaleLowerCase()
+          === "true",
+        description: trimRawBlock(parseRawElement(body, "description")),
+        contentType:
+          contentAttributes.type?.toLocaleLowerCase() === "json"
+            ? "json"
+            : "value",
+        content: trimRawBlock(contentMatch?.[2] ?? ""),
       });
+    }
+  }
+
+  const prologue = source
+    .replace(promptPattern, "")
+    .replace(dataPattern, "")
+    .trim();
+
+  return {
+    prologue,
+    templates,
+    data,
+  };
+}
+
+export function serializeInteractiveDocumentSource(
+  document: InteractiveDocumentSource,
+) {
+  const sections: string[] = [];
+  if (document.prologue.trim()) {
+    sections.push(document.prologue.trim());
+  }
+
+  for (const template of document.templates) {
+    sections.push([
+      `<prompt_template name="${escapeAttribute(template.name)}" role="${template.role}">`,
+      template.content.trim(),
+      "</prompt_template>",
+    ].join("\n"));
+  }
+
+  if (document.data.length) {
+    const rows = document.data.map((item) => [
+      `  <sub_data name="${escapeAttribute(item.name)}">`,
+      "    <enable_updater>",
+      `      ${item.enableUpdater ? "true" : "false"}`,
+      "    </enable_updater>",
+      "    <description>",
+      indentRawBlock(item.description, 6),
+      "    </description>",
+      `    <content type="${item.contentType}">`,
+      indentRawBlock(item.content, 6),
+      "    </content>",
+      "  </sub_data>",
+    ].join("\n"));
+    sections.push(["<data>", ...rows, "</data>"].join("\n"));
+  }
+
+  return `${sections.join("\n\n").trim()}\n`;
+}
+
+export function compileInteractiveDocumentSource(
+  input: string | unknown,
+  options: InteractiveDocumentCompileOptions = {},
+): InteractiveDocumentCompileResult {
+  const normalizedSource = normalizeInteractiveDocumentSource(input);
+  const document = parseInteractiveDocumentSource(input);
+  const errors: InteractiveDocumentCompileError[] = [];
+  const dependencies = new Set<string>();
+  const localData: Record<string, InteractiveValue> = {};
+
+  const promptOpenCount =
+    normalizedSource.match(/<prompt_template\b/gi)?.length ?? 0;
+  if (promptOpenCount !== document.templates.length) {
+    errors.push({
+      sourceId: "document",
+      message: "存在未闭合或格式无效的 prompt_template。",
+    });
+  }
+  if (!document.templates.length) {
+    errors.push({
+      sourceId: "document",
+      message: "IMD 至少需要一个 prompt_template。",
+    });
+  }
+  const dataOpenCount = normalizedSource.match(/<data\b/gi)?.length ?? 0;
+  const dataCloseCount =
+    normalizedSource.match(/<\/data\s*>/gi)?.length ?? 0;
+  if (dataOpenCount > 1 || dataOpenCount !== dataCloseCount) {
+    errors.push({
+      sourceId: "data",
+      message: "IMD 只能包含一个成对闭合的 data 区块。",
+    });
+  }
+  const subDataOpenCount =
+    normalizedSource.match(/<sub_data\b/gi)?.length ?? 0;
+  if (subDataOpenCount !== document.data.length) {
+    errors.push({
+      sourceId: "data",
+      message: "存在位于 data 外部、未闭合或格式无效的 sub_data。",
+    });
+  }
+
+  for (const item of document.data) {
+    if (item.name in localData) {
+      errors.push({
+        sourceId: item.id,
+        message: `本地数据名称重复：${item.name}`,
+      });
+      continue;
+    }
+    try {
+      localData[item.name] = parseSubDataContent(item);
     } catch (error) {
       errors.push({
-        blockId: block.id,
+        sourceId: item.id,
         message: error instanceof Error ? error.message : String(error),
       });
-      return block.fallbackMarkdown;
     }
   }
 
-  private requireBlock(blockId: string) {
-    const block = this.getBlock(blockId);
-    if (!block) {
-      throw new Error(`找不到交互式文档块：${blockId}`);
-    }
-    return block;
-  }
+  const messages: ModelMessage[] = [];
+  for (const template of document.templates) {
+    const tokens = findPluginReferenceTokens(template.content);
+    const allowedTargets = new Set(
+      tokens.map((token) => normalizePluginReferenceTarget(token.target)),
+    );
+    allowedTargets.forEach((target) => dependencies.add(target));
 
-  private requireTextBlock(blockId: string) {
-    const block = this.requireBlock(blockId);
-    if (block.type !== "text") {
-      throw new Error(`块 ${blockId} 不是文本块`);
-    }
-    return block;
-  }
-}
-
-export function createInteractiveDocument(
-  data: InteractiveDocumentData,
-  options: InteractiveDocumentOptions = {},
-) {
-  return new InteractiveDocument(data, options);
-}
-
-export function createInteractiveBlock(
-  input: CreateInteractiveBlockInput,
-): InteractiveDocumentBlock {
-  const base = {
-    id: input.id ?? crypto.randomUUID(),
-    name: input.name?.trim() || defaultBlockName(input.type),
-    description: input.description ?? "",
-    hidden: input.hidden ?? false,
-    role: input.role,
-  };
-
-  if (input.type === "text") {
-    const block: InteractiveTextBlock = {
-      ...base,
-      type: "text",
-      content: input.content?.length ? [...input.content] : [""],
-      activeContentIndex: input.activeContentIndex ?? 0,
-      variableIds: [...(input.variableIds ?? [])],
+    const ref = (rawTarget: string) => {
+      const target = normalizePluginReferenceTarget(rawTarget);
+      if (!allowedTargets.has(target)) {
+        throw new Error(`ref() 只能访问模板中显式声明的引用：${target}`);
+      }
+      if (target.startsWith("local:")) {
+        const name = target.slice("local:".length);
+        if (!(name in localData)) {
+          throw new Error(`本地数据不存在：${name}`);
+        }
+        return localData[name];
+      }
+      if (!options.resolveReference) {
+        throw new Error(`当前解析器无法访问外部引用：${target}`);
+      }
+      return options.resolveReference(target);
     };
-    normalizeBlock(block);
-    return block;
-  }
 
-  if (input.type === "variable") {
-    return {
-      ...base,
-      type: "variable",
-      value: cloneValue(input.value ?? ""),
-      rendererId: input.rendererId ?? "auto",
-    };
+    try {
+      const prepared = prepareInteractiveTemplate(template.content, ref);
+      messages.push(
+        ...resolveSandboxMessages(
+          [{ role: template.role, content: prepared } as ModelMessage],
+          [{ ...(options.environment ?? {}), ref }],
+        ),
+      );
+    } catch (error) {
+      errors.push({
+        sourceId: template.id,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      if (template.content.trim()) {
+        messages.push({
+          role: template.role,
+          content: template.content,
+        } as ModelMessage);
+      }
+    }
   }
 
   return {
-    ...base,
-    type: "component",
-    componentId: input.componentId ?? "",
-    props: cloneValue(input.props ?? {}),
-    fallbackMarkdown: input.fallbackMarkdown ?? "",
+    messages,
+    markdown: messagesToMarkdown(messages),
+    data: localData,
+    errors,
+    dependencies: [...dependencies],
   };
 }
 
-function normalizeBlock(block: InteractiveDocumentBlock) {
-  block.name = block.name.trim() || defaultBlockName(block.type);
-  if (block.type !== "text") {
-    return;
+export function normalizeInteractiveDocumentSource(input: unknown): string {
+  if (typeof input === "string") return input;
+  if (!isLegacyInteractiveDocument(input)) {
+    return createEmptyInteractiveDocumentSource();
   }
-  if (block.content.length === 0) {
-    block.content.push("");
-  }
-  block.activeContentIndex = clampContentIndex(block, block.activeContentIndex);
-  block.variableIds = [...new Set(block.variableIds)];
-}
 
-function clampContentIndex(block: InteractiveTextBlock, index: number) {
-  return Math.max(0, Math.min(Math.trunc(index), block.content.length - 1));
-}
-
-function defaultBlockName(type: InteractiveBlockType) {
-  if (type === "text") {
-    return "新文本块";
-  }
-  if (type === "variable") {
-    return "新变量块";
-  }
-  return "新组件块";
-}
-
-function createRenderedBinding(
-  value: InteractiveValue,
-  renderer: InteractiveVariableRenderer,
-): unknown {
-  if (value == null) {
-    return value;
-  }
-  if (typeof value !== "object" && (renderer.id === "auto" || renderer.id === "text")) {
-    return value;
-  }
-  const binding = typeof value === "object"
-    ? cloneValue(value) as InteractiveValue[] | Record<string, InteractiveValue>
-    : Object(value);
-  Object.defineProperty(binding, "toString", {
-    configurable: true,
-    enumerable: false,
-    value: () => renderer.render(value),
-  });
-  if (typeof value !== "object") {
-    Object.defineProperty(binding, "valueOf", {
-      configurable: true,
-      enumerable: false,
-      value: () => value,
-    });
-  }
-  return binding;
-}
-
-function renderAuto(value: InteractiveValue): string {
-  if (value == null) {
-    return "";
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => renderInlineValue(item)).join("\n");
-  }
-  if (typeof value === "object") {
-    return JSON.stringify(value, null, 2) ?? "";
-  }
-  return String(value);
-}
-
-function renderList(value: InteractiveValue): string {
-  if (Array.isArray(value)) {
-    return value.map((item) => `- ${renderInlineValue(item)}`).join("\n");
-  }
-  if (value && typeof value === "object") {
-    return Object.entries(value)
-      .map(([key, item]) => `- **${key}**: ${renderInlineValue(item)}`)
-      .join("\n");
-  }
-  return value == null ? "" : `- ${String(value)}`;
-}
-
-function renderInlineValue(value: InteractiveValue): string {
-  if (value == null) {
-    return "";
-  }
-  return typeof value === "object" ? JSON.stringify(value) ?? "" : String(value);
-}
-
-function cloneValue<T extends InteractiveValue | Record<string, InteractiveValue>>(value: T): T {
-  const source = JSON.stringify(value);
-  return JSON.parse(source ?? "null") as T;
-}
-
-function isSafeEnvironmentKey(key: string) {
-  return /^[A-Za-z_$][\w$]*$/.test(key);
-}
-
-function compileRoleSections(
-  sections: Array<{ role: InteractiveBlockRole; markdown: string }>,
-) {
-  const output: string[] = [];
-  let activeRole: InteractiveBlockRole | null = null;
-  for (const section of sections) {
-    if (section.role !== activeRole) {
-      output.push(`# ${section.role}_prompt`);
-      activeRole = section.role;
+  const templates: InteractivePromptTemplate[] = [];
+  const data: InteractiveSubData[] = [];
+  for (const block of input.blocks) {
+    if (!block || typeof block !== "object" || block.hidden === true) continue;
+    if (block.type === "variable") {
+      data.push({
+        id: `data:${String(block.id ?? data.length)}`,
+        name: String(block.name || block.id || `data-${data.length + 1}`),
+        enableUpdater: false,
+        description: String(block.description ?? ""),
+        contentType: "json",
+        content: JSON.stringify(block.value ?? null, null, 2),
+      });
+      continue;
     }
-    output.push(section.markdown);
+    if (block.type === "text") {
+      const content = Array.isArray(block.content)
+        ? String(block.content[Number(block.activeContentIndex) || 0] ?? "")
+        : "";
+      templates.push({
+        id: `prompt:${String(block.id ?? templates.length)}`,
+        name: String(block.name || `template-${templates.length + 1}`),
+        role: normalizeRole(block.role),
+        content,
+      });
+      continue;
+    }
+    if (block.type === "component") {
+      templates.push({
+        id: `prompt:${String(block.id ?? templates.length)}`,
+        name: String(block.name || `template-${templates.length + 1}`),
+        role: normalizeRole(block.role),
+        content: String(block.fallbackMarkdown ?? ""),
+      });
+    }
   }
-  return output.join("\n\n");
+
+  const legacyLocalNames = data
+    .map((item) => item.name)
+    .filter((name) => /^[A-Za-z_$][\w$]*$/.test(name));
+  for (const template of templates) {
+    template.content = template.content.replace(
+      /(\{\{|\[\[)([\s\S]*?)(\}\}|\]\])/g,
+      (_whole, open: string, expression: string, close: string) => {
+        let migrated = expression;
+        for (const name of legacyLocalNames) {
+          const pattern = new RegExp(
+            `(^|[^.\\w$])${escapeRegExp(name)}\\b`,
+            "g",
+          );
+          migrated = migrated.replace(
+            pattern,
+            (_match, prefix: string) => `${prefix}<@local:${name}>`,
+          );
+        }
+        return `${open}${migrated}${close}`;
+      },
+    );
+  }
+
+  return serializeInteractiveDocumentSource({
+    prologue: "",
+    templates,
+    data,
+  });
+}
+
+export function createEmptyInteractiveDocumentSource() {
+  return serializeInteractiveDocumentSource({
+    prologue: "",
+    templates: [{
+      id: "prompt:0",
+      name: "main",
+      role: "system",
+      content: "",
+    }],
+    data: [],
+  });
+}
+
+function prepareInteractiveTemplate(
+  source: string,
+  resolveReference: (target: string) => unknown,
+) {
+  const macroRanges = findMacroRanges(source);
+  return replacePluginReferenceTokens(source, (token) => {
+    const target = normalizePluginReferenceTarget(token.target);
+    const inMacro = macroRanges.some(
+      ([start, end]) => token.start >= start && token.end <= end,
+    );
+    return inMacro
+      ? `ref(${JSON.stringify(target)})`
+      : stringifySandboxValue(resolveReference(target));
+  });
+}
+
+function findMacroRanges(source: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  const pattern = /(\{\{[\s\S]*?\}\}|\[\[[\s\S]*?\]\])/g;
+  for (const match of source.matchAll(pattern)) {
+    if (match.index == null) continue;
+    ranges.push([match.index, match.index + match[0].length]);
+  }
+  return ranges;
+}
+
+function parseSubDataContent(item: InteractiveSubData): InteractiveValue {
+  if (item.contentType === "value") return item.content;
+  try {
+    return JSON.parse(item.content || "null") as InteractiveValue;
+  } catch (error) {
+    throw new Error(
+      `${item.name} 的 JSON 无效：${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+}
+
+function messagesToMarkdown(messages: ModelMessage[]) {
+  return messages
+    .flatMap((message) => {
+      if (message.role === "tool" || typeof message.content !== "string") {
+        return [];
+      }
+      return [`# ${message.role}_prompt`, "", message.content.trim(), ""];
+    })
+    .join("\n")
+    .trim();
+}
+
+function parseRawElement(source: string, tagName: string) {
+  const pattern = new RegExp(
+    `<${tagName}\\b[^>]*>([\\s\\S]*?)<\\/${tagName}\\s*>`,
+    "i",
+  );
+  return source.match(pattern)?.[1] ?? "";
+}
+
+function parseAttributes(source: string) {
+  const attributes: Record<string, string> = {};
+  for (const match of source.matchAll(attributePattern)) {
+    const key = (match[1] ?? "").toLocaleLowerCase();
+    if (!key) continue;
+    attributes[key] = match[2] ?? match[3] ?? "";
+  }
+  return attributes;
+}
+
+function normalizeRole(value: unknown): InteractivePromptRole {
+  return value === "user" || value === "assistant" ? value : "system";
+}
+
+function trimRawBlock(value: string) {
+  return value.replace(/^\s*\r?\n/, "").replace(/\r?\n\s*$/, "");
+}
+
+function indentRawBlock(value: string, size: number) {
+  const indent = " ".repeat(size);
+  const content = value.trim();
+  return content
+    ? content.split(/\r?\n/).map((line) => `${indent}${line}`).join("\n")
+    : indent;
+}
+
+function escapeAttribute(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isLegacyInteractiveDocument(
+  value: unknown,
+): value is {
+  blocks: Array<Record<string, unknown>>;
+} {
+  return Boolean(
+    value
+    && typeof value === "object"
+    && Array.isArray((value as { blocks?: unknown }).blocks),
+  );
 }

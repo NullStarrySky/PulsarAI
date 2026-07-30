@@ -93,6 +93,13 @@ async function openPackage(packageId: string) {
       packageId: active.packageId,
       title: active.title,
     });
+  } else if (conversation.activePackage?.builtIn) {
+    layout.openResourceTab({
+      resourceType: "builtin",
+      resourceId: "project-agent",
+      packageId,
+      title: "PulsarAI",
+    });
   }
 }
 
@@ -315,7 +322,12 @@ async function uploadIcon(event: Event) {
           >
             <ResourceAvatar :name="item.name" :icon="item.icon" />
             <span :class="packageViewMode === 'grid' ? 'min-w-0 max-w-full' : 'min-w-0'">
-              <span class="block truncate text-sm font-medium">{{ item.name }}</span>
+              <span class="block truncate text-sm font-medium">
+                {{ item.name }}
+                <span v-if="item.builtIn" class="ml-1 text-[10px] font-normal text-muted-foreground">
+                  系统
+                </span>
+              </span>
               <span v-if="packageViewMode === 'list' && item.description" class="block truncate text-xs text-muted-foreground">{{ item.description }}</span>
             </span>
 
@@ -334,7 +346,7 @@ async function uploadIcon(event: Event) {
               @cancel="editing = null"
             />
 
-            <DropdownMenu v-if="editing?.id !== item.id">
+            <DropdownMenu v-if="!item.builtIn && editing?.id !== item.id">
               <DropdownMenuTrigger as-child>
                 <Button
                   size="icon"

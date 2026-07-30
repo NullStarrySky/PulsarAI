@@ -16,6 +16,7 @@ export interface CharacterPackage {
   id: string;
   name: string;
   icon: string;
+  builtIn?: boolean;
   description?: string;
   categoryId?: string | null;
   order: number;
@@ -37,6 +38,7 @@ export type ConversationRendererId = "chat" | "novel";
 export interface Conversation {
   id: string;
   packageId: string;
+  projectPackageId?: string;
   title: string;
   isTemplate?: boolean;
   rendererId?: ConversationRendererId;
@@ -115,7 +117,7 @@ export type ChatMessageMeta = {
     pluginName: string;
     characterId: string;
     characterName: string;
-    insertedResourceIds?: string[];
+    resolvedResourceIds?: string[];
     diagnostics?: string[];
   };
   steps: (LocalStep | ToolCallResult | SubAgentStep)[];
