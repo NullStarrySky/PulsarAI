@@ -9,7 +9,7 @@ export const interactiveDocumentFormatPrompt = [
   "Access local data with `<@local:name>`.",
   "Use `<@container-name>` for a uniquely visible container. External resources can also use `<@path:./relative.md>`, `<@id:resource-id>`, or `<@container:root|plugin|global/name>`.",
   "Inside `{{...}}` or `[[...]]`, an explicit reference is compiled to a guarded `ref(...)` call.",
-  "Declare containers with `<container name=\"...\" scope=\"root|plugin|global\">`; nested `<include as=\"alias\">container:scope/name</include>` rows import existing containers without flattening them.",
-  "Declare resource membership with `<member_of container=\"container:scope/name\" as=\"alias\" />`.",
+  "Declare containers in the owning plugin root `containers.xml` with `<container name=\"...\" scope=\"root|plugin|global\">`; nested `<include as=\"alias\">container:scope/name</include>` rows reference existing container namespaces without flattening them.",
+  "Resource membership is file metadata managed by the Plugin workspace; it is not written into `.imd` content.",
   "Container values expose `get(alias)`, `use(alias)`, and `list()` and remain lazy namespaces.",
 ].join("\n");

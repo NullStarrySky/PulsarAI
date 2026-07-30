@@ -2,9 +2,10 @@
 import { Crepe, CrepeFeature } from "@milkdown/crepe";
 import { replaceAll } from "@milkdown/kit/utils";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/vue";
-import { computed, defineComponent, h, ref, watch } from "vue";
+import { computed, defineComponent, h, ref, watch, type PropType } from "vue";
 import { conversationCrepeFeatureConfigs, conversationCrepeFeatures } from "./conversation-crepe";
-import { pluginReferenceHighlightFeature } from "@/features/Resources/Plugin/presentation/plugin-reference-milkdown";
+import { createPluginReferenceHighlightFeature } from "@/features/Resources/Plugin/presentation/plugin-reference-milkdown";
+import type { PluginReferenceSuggestion } from "@/features/Resources/Plugin/domain/plugin-reference";
 
 const props = withDefaults(
   defineProps<{
@@ -13,6 +14,7 @@ const props = withDefaults(
     enableBlockEdit?: boolean;
     enableAi?: boolean;
     enableReferenceSyntax?: boolean;
+    referenceSuggestions?: PluginReferenceSuggestion[];
   }>(),
   {
     modelValue: "",
@@ -20,6 +22,7 @@ const props = withDefaults(
     enableBlockEdit: false,
     enableAi: true,
     enableReferenceSyntax: false,
+    referenceSuggestions: () => [],
   },
 );
 
@@ -51,6 +54,10 @@ const ComposerInner = defineComponent({
       type: Boolean,
       default: false,
     },
+    referenceSuggestions: {
+      type: Array as PropType<PluginReferenceSuggestion[]>,
+      default: () => [],
+    },
   },
   emits: {
     "update:modelValue": (_value: string) => true,
@@ -77,7 +84,11 @@ const ComposerInner = defineComponent({
         },
       });
       if (innerProps.enableReferenceSyntax) {
-        editor.addFeature(pluginReferenceHighlightFeature);
+        editor.addFeature(
+          createPluginReferenceHighlightFeature(
+            () => innerProps.referenceSuggestions,
+          ),
+        );
       }
       editor.on((listener) => {
         listener.markdownUpdated((_ctx, nextMarkdown, previousMarkdown) => {
@@ -139,6 +150,7 @@ const ComposerInner = defineComponent({
         :enable-block-edit="props.enableBlockEdit"
         :enable-ai="props.enableAi"
         :enable-reference-syntax="props.enableReferenceSyntax"
+        :reference-suggestions="props.referenceSuggestions"
         @update:model-value="emit('update:modelValue', $event)"
       />
     </div>

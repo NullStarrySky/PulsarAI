@@ -6,6 +6,9 @@ import {
   Check,
   ChevronDown,
   FolderKanban,
+  ListTodo,
+  MessageSquare,
+  Plus,
   Search,
   Send,
 } from "lucide-vue-next";
@@ -16,23 +19,27 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { builtinProjectAgentPackageId } from "@/features/Agent/domain/project-agent";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import ConversationComposerEditor from "./ConversationComposerEditor.vue";
 import ResourceAvatar from "./ResourceAvatar.vue";
 
+const props = defineProps<{
+  packageId?: string;
+}>();
 const conversation = useConversationStore();
 const layout = useLayoutStore();
 const input = ref("");
-const selectedProjectId = ref("");
+const selectedPackageId = ref("");
+const createPackageMode = ref(false);
+const newPackageName = ref("");
+const conversationKind = ref<"chat" | "task">("chat");
 const projectPopoverOpen = ref(false);
 const projectSearch = ref("");
 const starting = ref(false);
 
-const projects = computed(() =>
-  conversation.packages
-    .filter((item) => !item.builtIn)
+const packages = computed(() =>
+  [...conversation.packages]
     .sort(
       (a, b) =>
         b.conversations.length - a.conversations.length
@@ -41,25 +48,35 @@ const projects = computed(() =>
 );
 const filteredProjects = computed(() => {
   const keyword = projectSearch.value.trim().toLocaleLowerCase();
-  return projects.value.filter(
+  return packages.value.filter(
     (item) =>
       !keyword
       || item.name.toLocaleLowerCase().includes(keyword)
       || item.description?.toLocaleLowerCase().includes(keyword),
   );
 });
-const selectedProject = computed(() =>
-  projects.value.find((item) => item.id === selectedProjectId.value),
+const selectedPackage = computed(() =>
+  packages.value.find((item) => item.id === selectedPackageId.value),
 );
 
-onMounted(() => {
-  void conversation.initialize();
+onMounted(async () => {
+  await conversation.initialize();
+  if (props.packageId && conversation.packages.some((item) => item.id === props.packageId)) {
+    selectedPackageId.value = props.packageId;
+  }
 });
 
-function selectProject(projectId: string) {
-  selectedProjectId.value = projectId;
+function selectPackage(packageId: string) {
+  selectedPackageId.value = packageId;
+  createPackageMode.value = false;
   projectPopoverOpen.value = false;
   projectSearch.value = "";
+}
+
+function chooseNewPackage() {
+  selectedPackageId.value = "";
+  createPackageMode.value = true;
+  projectPopoverOpen.value = false;
 }
 
 async function startConversation() {
@@ -68,23 +85,47 @@ async function startConversation() {
   starting.value = true;
   try {
     await conversation.initialize();
-    const baseTitle = selectedProject.value?.name ?? "临时对话";
+    let targetPackage = selectedPackage.value;
+    if (createPackageMode.value) {
+      targetPackage = await conversation.createPackage(
+        { name: newPackageName.value.trim() || "新角色包" },
+        { activate: false },
+      );
+    }
+    if (!targetPackage) {
+      push.warning("请先选择角色包，或新建一个角色包。");
+      return;
+    }
+    const baseTitle =
+      conversationKind.value === "task"
+        ? `任务 · ${targetPackage.name}`
+        : targetPackage.name;
     const title = conversation.uniqueConversationTitle(
-      builtinProjectAgentPackageId,
+      targetPackage.id,
       baseTitle,
     );
     const created = await conversation.createConversation(
-      builtinProjectAgentPackageId,
+      targetPackage.id,
       {
         title,
-        projectPackageId: selectedProject.value?.id,
+        kind: conversationKind.value,
+        binding:
+          conversationKind.value === "task"
+            ? {
+                packageId: targetPackage.id,
+                resourceType: "project",
+                resourceId: targetPackage.id,
+                resourcePath: "/project.json",
+                resourceTitle: targetPackage.name,
+              }
+            : undefined,
       },
     );
-    layout.closeTabsByResource("builtin", "project-agent");
+    layout.closeTabsByResource("builtin", "conversation-new");
     layout.openResourceTab({
       resourceType: "conversation",
       resourceId: created.id,
-      packageId: created.packageId,
+      packageId: targetPackage.id,
       title: created.title,
     });
     input.value = "";
@@ -92,7 +133,7 @@ async function startConversation() {
     await conversation.send(prompt);
   } catch (error) {
     push.error(
-      error instanceof Error ? error.message : "无法启动项目 Agent 对话。",
+      error instanceof Error ? error.message : "无法新建对话。",
     );
   } finally {
     starting.value = false;
@@ -108,9 +149,9 @@ async function startConversation() {
           <Bot class="size-4" />
         </div>
         <div class="min-w-0 pt-1">
-          <div class="text-sm font-medium">PulsarAI</div>
+          <div class="text-sm font-medium">新建对话</div>
           <p class="mt-1 text-sm leading-6 text-muted-foreground">
-            你想构建或调整什么？
+            选择角色包和会话类型，然后开始。
           </p>
         </div>
       </div>
@@ -118,7 +159,7 @@ async function startConversation() {
       <section class="overflow-hidden rounded-lg border bg-card shadow-sm">
         <div class="flex min-h-11 items-center gap-2 border-b px-3">
           <FolderKanban class="size-4 shrink-0 text-muted-foreground" />
-          <span class="text-xs text-muted-foreground">项目</span>
+          <span class="text-xs text-muted-foreground">角色包</span>
           <Popover v-model:open="projectPopoverOpen">
             <PopoverTrigger as-child>
               <Button
@@ -126,13 +167,17 @@ async function startConversation() {
                 class="h-8 min-w-0 max-w-full justify-start gap-2 px-2 font-normal"
               >
                 <ResourceAvatar
-                  v-if="selectedProject"
-                  :name="selectedProject.name"
-                  :icon="selectedProject.icon"
+                  v-if="selectedPackage"
+                  :name="selectedPackage.name"
+                  :icon="selectedPackage.icon"
                   class="size-5"
                 />
                 <span class="min-w-0 truncate">
-                  {{ selectedProject?.name ?? "未指定" }}
+                  {{
+                    createPackageMode
+                      ? newPackageName || "新角色包"
+                      : selectedPackage?.name ?? "请选择"
+                  }}
                 </span>
                 <ChevronDown class="size-3.5 shrink-0 text-muted-foreground" />
               </Button>
@@ -153,20 +198,20 @@ async function startConversation() {
                 <button
                   type="button"
                   class="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors hover:bg-accent"
-                  @click="selectProject('')"
+                  @click="chooseNewPackage"
                 >
                   <span class="flex size-6 items-center justify-center rounded bg-muted">
-                    <Bot class="size-3.5 text-muted-foreground" />
+                    <Plus class="size-3.5 text-muted-foreground" />
                   </span>
-                  <span class="min-w-0 flex-1 truncate">未指定项目</span>
-                  <Check v-if="!selectedProjectId" class="size-4" />
+                  <span class="min-w-0 flex-1 truncate">新建角色包并开始</span>
+                  <Check v-if="createPackageMode" class="size-4" />
                 </button>
                 <button
                   v-for="project in filteredProjects"
                   :key="project.id"
                   type="button"
                   class="flex min-h-10 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent"
-                  @click="selectProject(project.id)"
+                  @click="selectPackage(project.id)"
                 >
                   <ResourceAvatar
                     :name="project.name"
@@ -183,7 +228,7 @@ async function startConversation() {
                     </span>
                   </span>
                   <Check
-                    v-if="selectedProjectId === project.id"
+                    v-if="selectedPackageId === project.id"
                     class="size-4 shrink-0"
                   />
                 </button>
@@ -196,6 +241,29 @@ async function startConversation() {
               </div>
             </PopoverContent>
           </Popover>
+        </div>
+        <div v-if="createPackageMode" class="border-b px-3 py-2">
+          <Input v-model="newPackageName" class="h-8" placeholder="新角色包名称" />
+        </div>
+        <div class="flex items-center gap-1 border-b px-3 py-2">
+          <Button
+            size="sm"
+            :variant="conversationKind === 'chat' ? 'secondary' : 'ghost'"
+            class="h-8"
+            @click="conversationKind = 'chat'"
+          >
+            <MessageSquare class="size-4" />
+            普通对话
+          </Button>
+          <Button
+            size="sm"
+            :variant="conversationKind === 'task' ? 'secondary' : 'ghost'"
+            class="h-8"
+            @click="conversationKind = 'task'"
+          >
+            <ListTodo class="size-4" />
+            任务对话
+          </Button>
         </div>
 
         <div class="px-4 pb-2 pt-3 mobile:px-3">

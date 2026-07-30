@@ -1,4 +1,12 @@
-import { ToolLoopAgent, isStepCount, tool, type LanguageModel, type ModelMessage } from "ai";
+import {
+  ToolLoopAgent,
+  generateText,
+  isStepCount,
+  tool,
+  type LanguageModel,
+  type ModelMessage,
+  type ToolSet,
+} from "ai";
 import { z } from "zod";
 import { getDefaultChatModel } from "@/features/defaultConfigs/application/default-config-service";
 import { hydrateModel } from "@/features/ModelConnection/application/model-ai";
@@ -7,16 +15,24 @@ import type { ChatMessage, ChatMessageContainer, LocalStep, ToolCallResult } fro
 import { createAskUserTool, type AskUserRequester } from "./ask-user-tool";
 import { getAgentExtensionTools } from "./agent-extension-registry";
 
-export interface RunDefaultAgentInput {
-  messages: ModelMessage[];
+export interface CreateDefaultAgentResourcesInput {
   environment?: SandboxEnvironment;
   onStep?: (step: LocalStep | ToolCallResult) => void | Promise<void>;
   askUser?: AskUserRequester;
 }
 
-export interface RunDefaultAgentResult {
-  text: string;
+export interface DefaultAgentResources {
+  model: LanguageModel;
   modelName: string;
+  tools: ToolSet;
+  stopWhen: ReturnType<typeof isStepCount>;
+  onStepStart: (input: { stepNumber: number }) => Promise<void>;
+  finish: () => Promise<void>;
+}
+
+export interface AgentResourceProvider {
+  ToolLoopAgent: typeof ToolLoopAgent;
+  prepare: () => Promise<DefaultAgentResources>;
 }
 
 const jsInputSchema = z.object({
@@ -25,7 +41,7 @@ const jsInputSchema = z.object({
 
 function createDefaultTools(
   environment: SandboxEnvironment,
-  onStep?: RunDefaultAgentInput["onStep"],
+  onStep?: CreateDefaultAgentResourcesInput["onStep"],
   askUser?: AskUserRequester,
 ) {
   return {
@@ -81,22 +97,18 @@ function createDefaultTools(
   };
 }
 
-export async function runDefaultAgent(input: RunDefaultAgentInput): Promise<RunDefaultAgentResult> {
+export async function createDefaultAgentResources(
+  input: CreateDefaultAgentResourcesInput,
+): Promise<DefaultAgentResources> {
   const modelName = await getDefaultChatModel();
   await input.onStep?.({
     name: "agent:start",
     message: `使用 ${modelName} 启动内置 agent。`,
   });
 
-  const agent = new ToolLoopAgent({
+  return {
     model: hydrateModel(modelName, "chat") as LanguageModel,
-    instructions: [
-      "You are Pulsar's built-in conversation agent.",
-      "Use tools when they are useful. Keep final answers concise and grounded in the conversation.",
-      "When executing JavaScript, treat the sandbox as local helper logic and explain important errors to the user.",
-      "Feature API permissions and signatures are listed in the system context. Never invent unavailable methods or bypass a missing permission.",
-      "When a user decision is genuinely required, call askUser with one concise question and useful mutually exclusive options. Continue from the returned answer.",
-    ].join("\n"),
+    modelName,
     tools: {
       ...createDefaultTools(input.environment ?? {}, input.onStep, input.askUser),
       ...getAgentExtensionTools(),
@@ -108,17 +120,34 @@ export async function runDefaultAgent(input: RunDefaultAgentInput): Promise<RunD
         message: `开始第 ${stepNumber + 1} 轮推理。`,
       });
     },
-  });
+    finish: async () => {
+      await input.onStep?.({
+        name: "agent:finish",
+        message: "Agent 已完成回复生成。",
+      });
+    },
+  };
+}
 
-  const result = await agent.generate({
-    messages: input.messages,
-  });
+export function createAgentResourceProvider(
+  input: CreateDefaultAgentResourcesInput,
+): AgentResourceProvider {
+  let prepared: Promise<DefaultAgentResources> | null = null;
+  return {
+    ToolLoopAgent,
+    prepare: () => {
+      prepared ??= createDefaultAgentResources(input);
+      return prepared;
+    },
+  };
+}
 
-  await input.onStep?.({
-    name: "agent:finish",
-    message: "Agent 已完成回复生成。",
+export async function generateAuxiliaryText(messages: ModelMessage[]) {
+  const modelName = await getDefaultChatModel();
+  const result = await generateText({
+    model: hydrateModel(modelName, "chat") as LanguageModel,
+    messages,
   });
-
   return {
     text: result.text,
     modelName,

@@ -1,20 +1,19 @@
 import { defineStore } from "pinia";
 import type { ModelMessage } from "ai";
 import { remove, selectAll, upsert } from "@/features/Database/application/database-service";
-import {
-  builtinProjectAgentPackageId,
-  isProjectAgentPackage,
-} from "@/features/Agent/domain/project-agent";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { runConversationGeneration } from "./conversation-generation";
+import { buildConversationResourceContext } from "./conversation-resource-context";
 import type {
   CharacterPackage,
   ActionPart,
   AdditionalParts,
   ChatMessage,
   ChatMessageContainer,
+  ConversationKind,
   ConversationRendererId,
+  ConversationResourceBinding,
   FilePart,
   Conversation,
   MessageDraftClosure,
@@ -97,28 +96,7 @@ function createDefaultPackage(): CharacterPackage {
   };
 }
 
-function createProjectAgentPackage(
-  conversations: CharacterPackage["conversations"] = [],
-): CharacterPackage {
-  return {
-    id: builtinProjectAgentPackageId,
-    name: "PulsarAI",
-    icon: "",
-    builtIn: true,
-    description: "用于理解和修改角色包项目的内置 Agent。",
-    categoryId: null,
-    order: -10_000,
-    conversations,
-    plugins: [],
-    globalPluginOrder: [],
-    syncEnabled: true,
-  };
-}
-
 function comparePackages(a: CharacterPackage, b: CharacterPackage) {
-  if (Boolean(a.builtIn) !== Boolean(b.builtIn)) {
-    return a.builtIn ? -1 : 1;
-  }
   return (a.order ?? Number.POSITIVE_INFINITY) - (b.order ?? Number.POSITIVE_INFINITY)
     || a.name.localeCompare(b.name, "zh-Hans")
     || a.id.localeCompare(b.id);
@@ -135,7 +113,7 @@ export const useConversationStore = defineStore("conversation", {
     categories: [] as PackageCategory[],
     conversations: [] as Conversation[],
     containers: [] as ChatMessageContainer[],
-    generating: false,
+    generatingConversationIds: [] as string[],
     lastMessageEditRequestId: 0,
   }),
   getters: {
@@ -145,6 +123,11 @@ export const useConversationStore = defineStore("conversation", {
       state.conversations.find((item) => item.id === state.activeConversationId),
     activeContainer: (state) =>
       state.containers.find((item) => item.id === state.activeContainerId),
+    generating: (state) => state.generatingConversationIds.length > 0,
+    activeConversationGenerating: (state) =>
+      state.generatingConversationIds.includes(state.activeConversationId),
+    isConversationGenerating: (state) => (conversationId: string) =>
+      state.generatingConversationIds.includes(conversationId),
     sortedCategories(state): PackageCategory[] {
       return [...state.categories].sort((a, b) => a.order - b.order);
     },
@@ -210,7 +193,6 @@ export const useConversationStore = defineStore("conversation", {
       this.packages = packages.map((item) => item.value).sort(comparePackages);
       this.packages = this.packages.map((item) => ({
         ...item,
-        builtIn: item.id === builtinProjectAgentPackageId,
         globalPluginOrder: item.globalPluginOrder ?? [],
         capabilities: item.capabilities
           ? structuredClone(item.capabilities)
@@ -223,19 +205,7 @@ export const useConversationStore = defineStore("conversation", {
       }));
       this.containers = containers.map((item) => item.value);
 
-      const persistedProjectAgentPackage = this.packages.find(
-        (item) => item.id === builtinProjectAgentPackageId,
-      );
-      const projectAgentPackage = createProjectAgentPackage(
-        persistedProjectAgentPackage?.conversations ?? [],
-      );
-      this.packages = this.packages.filter(
-        (item) => item.id !== builtinProjectAgentPackageId,
-      );
-      this.packages.unshift(projectAgentPackage);
-      await this.persistPackage(projectAgentPackage);
-
-      if (!this.packages.some((item) => !item.builtIn)) {
+      if (this.packages.length === 0) {
         const basePackage = createDefaultPackage();
         this.packages.push(basePackage);
         await this.persistPackage(basePackage);
@@ -256,6 +226,37 @@ export const useConversationStore = defineStore("conversation", {
     },
     async persistContainer(item: ChatMessageContainer) {
       await upsert(containerTable, item.id, item);
+    },
+    async resetCharacterPackages() {
+      await this.initialize();
+      const pluginStore = usePluginStore();
+      await pluginStore.initialize();
+      for (const plugin of [...pluginStore.plugins]) {
+        if (plugin.packageId !== null && !plugin.builtIn) {
+          await pluginStore.deletePlugin(plugin.id);
+        }
+      }
+      for (const item of [...this.conversations]) {
+        await this.deleteConversation(item.id, { activateFallback: false });
+      }
+      for (const item of [...this.packages]) {
+        await remove(packageTable, item.id);
+      }
+      for (const item of [...this.categories]) {
+        await remove(categoryTable, item.id);
+      }
+
+      this.categories = [];
+      this.packages = [];
+      this.conversations = [];
+      this.containers = [];
+      this.activePackageId = "";
+      this.activeConversationId = "";
+      this.activeContainerId = "";
+      const basePackage = createDefaultPackage();
+      this.packages.push(basePackage);
+      await this.persistPackage(basePackage);
+      await this.openPackage(basePackage.id);
     },
     async createCategory(name = "新分类") {
       const item: PackageCategory = {
@@ -330,7 +331,7 @@ export const useConversationStore = defineStore("conversation", {
     },
     async updatePackage(packageId: string, patch: Partial<Pick<CharacterPackage, "name" | "description" | "icon" | "categoryId" | "syncEnabled" | "capabilities">>) {
       const item = this.packages.find((packageItem) => packageItem.id === packageId);
-      if (!item || item.builtIn) {
+      if (!item) {
         return;
       }
 
@@ -341,12 +342,17 @@ export const useConversationStore = defineStore("conversation", {
       packageId: string,
       options: { activateFallback?: boolean } = {},
     ) {
-      if (this.packages.find((item) => item.id === packageId)?.builtIn) {
-        return;
-      }
       const relatedConversations = this.conversations.filter((item) => item.packageId === packageId);
       for (const conversation of relatedConversations) {
-        await this.deleteConversation(conversation.id, options);
+        await this.deleteConversation(conversation.id, {
+          activateFallback: false,
+        });
+      }
+      const relatedBindings = this.conversations.filter(
+        (item) => item.packageId !== packageId && item.binding?.packageId === packageId,
+      );
+      for (const item of relatedBindings) {
+        await this.deleteConversation(item.id, { activateFallback: false });
       }
 
       this.packages = this.packages.filter((item) => item.id !== packageId);
@@ -375,11 +381,9 @@ export const useConversationStore = defineStore("conversation", {
 
       if (newest) {
         this.openConversation(newest.id);
-      } else if (isProjectAgentPackage(packageId)) {
+      } else {
         this.activeConversationId = "";
         this.activeContainerId = "";
-      } else {
-        await this.createConversation(packageId);
       }
     },
     async normalizePackageGlobalPluginOrder(
@@ -443,17 +447,23 @@ export const useConversationStore = defineStore("conversation", {
       packageId?: string,
       input: {
         activate?: boolean;
-        projectPackageId?: string;
+        binding?: ConversationResourceBinding;
+        kind?: ConversationKind;
         rendererId?: ConversationRendererId;
         title?: string;
       } = {},
     ) {
       packageId ??= this.activePackageId;
+      const packageItem = this.packages.find((item) => item.id === packageId);
+      if (!packageItem) {
+        throw new Error("无法创建对话：请先选择角色包。");
+      }
       const template = this.conversations.find((item) => item.packageId === packageId && item.isTemplate);
       const conversation: Conversation = {
         id: crypto.randomUUID(),
         packageId,
-        projectPackageId: input.projectPackageId,
+        kind: input.kind ?? "chat",
+        binding: input.binding ? clonePlain(input.binding) : undefined,
         title: input.title?.trim() || template?.title || "新对话",
         isTemplate: false,
         rendererId: input.rendererId ?? template?.rendererId ?? "chat",
@@ -490,15 +500,12 @@ export const useConversationStore = defineStore("conversation", {
       }
 
       this.containers.push(...createdContainers);
-      const packageItem = this.packages.find((item) => item.id === packageId);
-      if (packageItem) {
-        packageItem.conversations.unshift({
-          id: conversation.id,
-          lastContainerid: conversation.lastContainerId ?? "",
-          title: conversation.title,
-        });
-        await this.persistPackage(packageItem);
-      }
+      packageItem.conversations.unshift({
+        id: conversation.id,
+        lastContainerid: conversation.lastContainerId ?? "",
+        title: conversation.title,
+      });
+      await this.persistPackage(packageItem);
 
       await Promise.all([
         this.persistConversation(conversation),
@@ -639,7 +646,11 @@ export const useConversationStore = defineStore("conversation", {
       patch: Partial<
         Pick<
           Conversation,
-          "title" | "isTemplate" | "rendererId" | "projectPackageId"
+          | "title"
+          | "isTemplate"
+          | "kind"
+          | "binding"
+          | "rendererId"
         >
       >,
     ) {
@@ -702,9 +713,6 @@ export const useConversationStore = defineStore("conversation", {
         }
         if (next) {
           this.openConversation(next.id);
-        } else if (packageItem.builtIn) {
-          this.activeConversationId = "";
-          this.activeContainerId = "";
         } else {
           await this.createConversation(packageItem.id);
         }
@@ -820,6 +828,31 @@ export const useConversationStore = defineStore("conversation", {
       if (!conversation) {
         return null;
       }
+      return this.appendContainerToConversation(
+        conversation.id,
+        role,
+        content,
+        previousContainerId,
+        parts,
+        true,
+      );
+    },
+    async appendContainerToConversation(
+      conversationId: string,
+      role: Role,
+      content = "",
+      previousContainerId?: string,
+      parts?: AdditionalParts[],
+      activate = false,
+    ) {
+      const conversation = this.conversations.find(
+        (item) => item.id === conversationId,
+      );
+      if (!conversation) {
+        return null;
+      }
+      previousContainerId ??=
+        conversation.lastContainerId ?? conversation.rootContainerId ?? undefined;
 
       const container = createContainer({
         role,
@@ -839,7 +872,9 @@ export const useConversationStore = defineStore("conversation", {
       this.containers.push(container);
       conversation.lastContainerId = container.id;
       conversation.updatedAt = now();
-      this.activeContainerId = container.id;
+      if (activate) {
+        this.activeContainerId = container.id;
+      }
       this.syncConversationLink(conversation);
       await Promise.all([this.persistContainer(container), this.persistConversation(conversation)]);
       return container;
@@ -906,7 +941,10 @@ export const useConversationStore = defineStore("conversation", {
       action?: ActionPart | null,
     ) {
       const trimmed = content.trim();
-      if ((!trimmed && attachments.length === 0 && !action) || this.generating) {
+      if (
+        (!trimmed && attachments.length === 0 && !action)
+        || this.generatingConversationIds.includes(this.activeConversationId)
+      ) {
         return;
       }
       void import("@/features/Statistic/application/statistic-store").then(({ useStatisticStore }) =>
@@ -925,14 +963,51 @@ export const useConversationStore = defineStore("conversation", {
 
       await this.generateFromPath(mutate);
     },
-    async regenerate(containerId?: string, mutate?: MessageDraftClosure) {
-      containerId ??= this.activeContainerId;
-      if (this.generating) {
+    async sendToConversation(
+      conversationId: string,
+      content: string,
+      mutate?: MessageDraftClosure,
+      attachments: FilePart[] = [],
+      action?: ActionPart | null,
+    ) {
+      const trimmed = content.trim();
+      if (
+        (!trimmed && attachments.length === 0 && !action)
+        || this.generatingConversationIds.includes(conversationId)
+      ) {
         return;
       }
+      void import("@/features/Statistic/application/statistic-store").then(({ useStatisticStore }) =>
+        useStatisticStore().recordEvent("message.user"),
+      );
 
+      const userContainer = await this.appendContainerToConversation(
+        conversationId,
+        "user",
+        trimmed,
+        undefined,
+        action ? [clonePlain(action), ...attachments] : attachments,
+      );
+      if (!userContainer) {
+        return;
+      }
+      const assistant = await this.appendContainerToConversation(
+        conversationId,
+        "assistant",
+        "",
+        userContainer.id,
+      );
+      if (assistant) {
+        await this.fillAssistantContainer(assistant, mutate);
+      }
+    },
+    async regenerate(containerId?: string, mutate?: MessageDraftClosure) {
+      containerId ??= this.activeContainerId;
       const container = this.containers.find((item) => item.id === containerId);
       if (!container) {
+        return;
+      }
+      if (this.generatingConversationIds.includes(container.conversationid)) {
         return;
       }
 
@@ -961,7 +1036,9 @@ export const useConversationStore = defineStore("conversation", {
         return;
       }
 
-      this.generating = true;
+      if (!this.generatingConversationIds.includes(container.conversationid)) {
+        this.generatingConversationIds.push(container.conversationid);
+      }
       const layout = useLayoutStore();
       layout.setResourceTabStatus("conversation", container.conversationid, {
         kind: "loading",
@@ -989,6 +1066,17 @@ export const useConversationStore = defineStore("conversation", {
           this.packages.find((item) => item.id === conversation.packageId)
             ?.globalPluginOrder,
         );
+        if (conversation.kind === "test" && conversation.binding?.pluginId) {
+          const targetPlugin = pluginStore.plugins.find(
+            (item) => item.id === conversation.binding?.pluginId,
+          );
+          if (
+            targetPlugin
+            && !enabledPlugins.some((item) => item.id === targetPlugin.id)
+          ) {
+            enabledPlugins.unshift(targetPlugin);
+          }
+        }
         const previousPath = this.containerPathTo(container.previousContainer);
         const promptContainer = [...previousPath].reverse().find(
           (item) => item.role === "user",
@@ -1016,6 +1104,13 @@ export const useConversationStore = defineStore("conversation", {
               }
             : undefined,
           prompt: promptMessage?.content ?? "",
+          resourceContext: buildConversationResourceContext(
+            conversation,
+            pluginStore.plugins,
+            this.packages,
+            this.conversations,
+            this.containers,
+          ),
           beforeGenerationMessage,
           capabilityGrants: this.packages.find(
             (item) => item.id === conversation.packageId,
@@ -1043,7 +1138,9 @@ export const useConversationStore = defineStore("conversation", {
         message.meta.generateInfo.timeUsed = Date.now() - start;
         await mutate?.(message, container);
         await this.persistContainer(container);
-        this.generating = false;
+        this.generatingConversationIds = this.generatingConversationIds.filter(
+          (id) => id !== container.conversationid,
+        );
         layout.setResourceTabStatus("conversation", container.conversationid);
       }
     },

@@ -121,6 +121,8 @@ The VitePress site lives under `docs/`. Each owning feature's `capabilities.ts` 
 - Workspace resource host: `src/features/UI/presentation/MainWorkspace.vue`
 - Conversation left sidebar: `src/features/Resources/Conversation/presentation/ConversationLeftSidebar.vue`
 - Conversation right sidebar: `src/features/Resources/Conversation/presentation/ConversationRightSidebar.vue`
+- Resource-bound compact conversation panel: `src/features/Resources/Conversation/presentation/ConversationResourceContextPanel.vue`
+- Conversation/resource documentation context builder: `src/features/Resources/Conversation/application/conversation-resource-context.ts`
 - Conversation workspace page: `src/features/Resources/Conversation/presentation/ConversationWorkspacePage.vue`
 - Conversation workspace/sidebar registration: `src/features/Resources/Conversation/presentation/register-conversation-workspace.ts`
 - Interactive document workspace and empty-state registration: `src/features/Resources/InteractiveDoc/presentation/register-interactive-document-workspace.ts`
@@ -163,11 +165,13 @@ The VitePress site lives under `docs/`. Each owning feature's `capabilities.ts` 
 - Character packages are conversation containers stored through `src/features/Resources/Conversation/application/conversation-store.ts`.
 - Package categories and packages are ordered resources. Packages may belong to one category or to the virtual uncategorized group.
 - A package owns display metadata, plugin slots, and reverse links to conversations with `lastContainerid` anchors.
-- The immutable `PulsarAI` package owns project-Agent conversations. The workspace empty state creates one only after the first message; an optional `projectPackageId` binds it to the normal character package selected above the composer.
+- The workspace empty state creates a conversation only after the first message. The user chooses an existing character package or creates a new one, then chooses `chat` or `task`; no built-in character package is used as a storage bucket. `Conversation.kind` carries hard semantics and `Conversation.binding` records the related package, resource, path, and optional plugin.
+- The right sidebar keeps conversation, merged Task, and plugin panels. The Task header manages database-backed conversation files associated with the active resource; generation receives the current resource, owning package, and relevant Feature documentation. Plugin-bound files use `kind: "test"` and stay outside the distributable plugin tree.
+- The existing right-sidebar task panel creates `task` conversations in the related user package. Each task binds the exact Project API resource path from the active workspace tab, and plugin workspaces refine that path when their selected file changes.
 - A conversation can be marked as the package template. Creating a conversation clones that template's active container path; without a template it creates a minimal empty system container.
 - Conversations are paths of linked `ChatMessageContainer` records. Each container stores one role, sibling messages, active message index, previous container id, available next containers, and active next container.
 - The active conversation path is derived from the current container by walking `previousContainer` links.
-- Generation appends a user container and an empty assistant container, builds the authorized minimal runtime environment, indexes enabled Plugin declarations, recursively links only explicit references from root `context.imd`, then runs root `generation.js` or the default Agent and writes back into the same assistant message.
+- Generation appends a user container and an empty assistant container, builds the authorized minimal runtime environment, indexes enabled Plugin declarations, recursively links only explicit references from root `context.imd`, then runs root `agentprocess/index.js` and writes back into the same assistant message. The editable built-in workflow owns the visible `new ToolLoopAgent(...)` example; there is no implicit Agent fallback.
 - User messages may persist base64 file parts with media type, filename, and size. Before generation, text and files are converted into AI SDK `UserModelMessage` array content so attachments remain part of branched and regenerated context.
 - Regeneration creates an alternative message inside the current assistant container. It does not create a new container branch.
 - Container branches are sibling containers linked from the previous container through `availableNextContainer`; a single next container is the normal path and is not shown as a branch badge.
@@ -175,24 +179,25 @@ The VitePress site lives under `docs/`. Each owning feature's `capabilities.ts` 
 
 ## Phase 3.5 Plugin Resources
 
-- Plugins are resource packages stored through `src/features/Resources/Plugin/application/plugin-store.ts`. A non-null `packageId` owns a local plugin; `packageId: null` identifies a global plugin managed from DefaultConfig, while `builtIn` additionally marks immutable system fallbacks.
-- Local main plugins sort first, including the immutable package-local project Agent. External global plugins follow the current character package's `globalPluginOrder`, and immutable global fallbacks remain last.
+- Plugins are resource packages stored through `src/features/Resources/Plugin/application/plugin-store.ts`. A non-null `packageId` owns a local plugin; `packageId: null` identifies a global plugin managed from DefaultConfig, while `builtIn` marks a restorable system snapshot whose files remain editable.
+- Local main plugins sort first. External global plugins follow the current character package's `globalPluginOrder`, and built-in global fallbacks remain last.
 - Character packages persist only global plugin ids in `globalPluginOrder`. Opening a package filters deleted or duplicate ids and appends newly available global plugins, then saves the normalized order.
 - Every plugin owns a plain nested file tree. Files have no enable switch and derive their content type from their suffix.
-- Root `info.md` is the plugin documentation and opens by default. Root `generation.js`, role-aware root `context.imd`, `action/`, and `background/` are runtime entry conventions rather than fixed containers.
-- Resources declare scoped containers and membership in their UTF-8 source. `<@container-name>` resolves an unambiguous visible container; `<@local:...>`, `<@path:...>`, `<@id:...>`, and `<@container:root|plugin|global/name>` provide explicit local, resource, and scoped access.
-- Referenced containers remain lazy namespaces with `get`, `use`, and `list`; imports keep aliases instead of flattening values into the Sandbox. Resolution records dependencies and reports duplicate aliases, missing targets, root escapes, and cycles.
-- Markdown uses Milkdown/Crepe with reference highlighting, IMD provides structured/source/preview tabs, JavaScript and JSON use code-oriented editing, and media files use image/video URL content with a direct preview.
-- JavaScript files under `action/` provide slash actions. Conversation stores one leading action part per user message, exposes `{ action, prompt }` to the minimal generation environment, and lets the selected action temporarily replace `generation.js` for one run.
-- The immutable core plugin owns the bundled classroom media fallback under `background/`. The Conversation workspace mounts it as either an image or muted looping video layer.
-- The immutable package-local `项目 Agent` plugin owns the project-aware context, API instructions, and `.imd`/plugin format references used by `PulsarAI` conversations.
+- Root `info.md` is the plugin documentation and opens by default. Root `manifest.json` is reserved and remains `{}` until its configuration contract is designed. Root `containers.xml`, role-aware root `context.imd`, `instruction/default.md`, `agentprocess/index.js`, `Override.vue`, `components/`, `action/`, and `background/` are exact lookup conventions rather than resource containers.
+- Root `containers.xml` declares scoped containers; member resources persist membership as file metadata. `<@container-name>` resolves an unambiguous visible container; `<@local:...>`, `<@path:...>`, `<@id:...>`, and `<@container:root|plugin|global/name>` provide explicit local, resource, and scoped access.
+- Referenced containers remain lazy namespaces with `get`, `use`, and `list`; namespace aliases do not flatten values into the Sandbox. Resolution records dependencies and reports duplicate aliases, missing targets, root escapes, and cycles.
+- Markdown uses a centered document preview plus raw source highlighting/completion for plugin macros and references. Vue files provide template-only preview, IMD provides structured/source/preview tabs, JavaScript and JSON use code-oriented editing, and media files use image/video URL content with a direct preview.
+- JavaScript files under `action/` provide slash actions. Conversation stores one leading action part per user message, exposes `{ action, prompt }` to the minimal generation environment, and lets the selected action temporarily replace `agentprocess/index.js` for one run.
+- The restorable core plugin owns the bundled classroom media fallback under `background/`. The Conversation workspace mounts it as either an image or muted looping video layer.
+- Project-aware context and APIs are assembled directly for package-bound `task` conversations; they no longer depend on a package-local system plugin.
 - Plugins open as `resourceType: "plugin"` workspace resources. The old built-in plugin center page is intentionally removed.
 
 ## Phase 4 Agent, Sandbox, Appearance, And Rendering
 
-- Conversation generation now enters `runDefaultAgent` in `src/features/Agent/application/default-agent.ts`.
-- The default agent hydrates `defaultChatModel` through ModelConnection, runs AI SDK `ToolLoopAgent`, and records visible process steps into `ChatMessage.meta.steps`.
+- Conversation generation asks `src/features/Agent/application/default-agent.ts` for a hydrated model, tools, constructor, stop condition, and lifecycle hooks.
+- The selected plugin process decides whether to instantiate AI SDK `ToolLoopAgent`; the built-in process does so explicitly and records visible steps into `ChatMessage.meta.steps`.
 - Project-Agent conversations add a scoped filesystem-style `project` Sandbox API for CRUD over the selected package's conversations and local plugin tree. The Agent inspects before writing and treats role identity, setting, relationships, voice, goals, boundaries, continuity, and context assembly as one coherent role-playing system.
+- Project-Agent context includes Plugin API documentation generated from the shared Plugin capability definition, the Project filesystem API, and the InteractiveDocument format. Side tasks additionally inject their bound resource path and start inspection there.
 - Built-in tools include current-time lookup, JavaScript execution through the frontend sandbox, and `askUser`. The question tool pauses the current agent step, renders predefined choices plus a final free-response dialog, then returns the selected answer to the same agent loop.
 - The sandbox in `src/features/Sandbox/domain/sandbox.ts` accepts a minimal environment object and JavaScript source, returns either a value or error, and resolves `{{...}}` / `[[...]]` macros for text and message arrays. Plugin resources are never merged into it.
 - Interactive documents persist SFC-like source. Repeatable `<prompt_template role>` blocks compile to role-preserving messages; `<data>/<sub_data>` provides local JSON or scalar values through explicit local references. The workspace exposes structured Milkdown editing, raw source, and compiled preview.
@@ -236,4 +241,4 @@ The VitePress site lives under `docs/`. Each owning feature's `capabilities.ts` 
 
 The app keeps one visible conversation flow. UI events enter feature application services, application services coordinate domain objects and repositories, repositories use SurrealDB or provider adapters, and presentation components stay thin.
 
-The plugin system links only explicitly referenced files into the visible conversation flow without replacing the core `Conversation -> ModelConnection -> Database` path. The first enabled plugin with a non-empty root `generation.js` controls orchestration; empty or absent process files inherit the default Agent.
+The plugin system links only explicitly referenced files into the visible conversation flow without replacing the core `Conversation -> ModelConnection -> Database` path. The first enabled plugin with a non-empty root `agentprocess/index.js` controls orchestration; an absent process is an explicit error.

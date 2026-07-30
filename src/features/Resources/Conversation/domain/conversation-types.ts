@@ -16,7 +16,6 @@ export interface CharacterPackage {
   id: string;
   name: string;
   icon: string;
-  builtIn?: boolean;
   description?: string;
   categoryId?: string | null;
   order: number;
@@ -35,10 +34,22 @@ export interface PackageCategory {
 
 export type ConversationRendererId = "chat" | "novel";
 
+export type ConversationKind = "chat" | "task" | "test";
+
+export interface ConversationResourceBinding {
+  packageId?: string;
+  resourceType: string;
+  resourceId: string;
+  resourcePath: string;
+  resourceTitle: string;
+  pluginId?: string;
+}
+
 export interface Conversation {
   id: string;
   packageId: string;
-  projectPackageId?: string;
+  kind: ConversationKind;
+  binding?: ConversationResourceBinding;
   title: string;
   isTemplate?: boolean;
   rendererId?: ConversationRendererId;

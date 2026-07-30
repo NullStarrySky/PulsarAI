@@ -17,12 +17,15 @@ import { useLayoutStore } from "../application/layout-store";
 import ShellLeftSidebar from "./ShellLeftSidebar.vue";
 import ShellRightSidebar from "./ShellRightSidebar.vue";
 import ShellTopBar from "./ShellTopBar.vue";
+import TextEditingContextMenu from "./TextEditingContextMenu.vue";
+import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 
 const appearance = useAppearanceStore();
 const commandStore = useCommandStore();
 const hotkeyStore = useHotkeyStore();
 const layout = useLayoutStore();
 const responsive = useResponsiveStore();
+const conversation = useConversationStore();
 const { isMobileLayout } = storeToRefs(responsive);
 const { activeTabId, settingsOpen } = storeToRefs(layout);
 
@@ -79,6 +82,19 @@ function applySubWindowParams() {
 }
 
 function onGlobalKeydown(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === "r") {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.shiftKey) {
+      if (!window.confirm("清空全部角色包、角色包对话和本地插件，并恢复初始角色包？设置和密钥不会改动。")) {
+        return;
+      }
+      void conversation.resetCharacterPackages().then(() => window.location.reload());
+      return;
+    }
+    window.location.reload();
+    return;
+  }
   const target = event.target as HTMLElement | null;
   const editing = target?.closest("input, textarea, [contenteditable='true']");
   const commandId = hotkeyStore.commandIdForEvent(event);
@@ -113,6 +129,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
     </div>
     <SettingsDialog />
     <CommandSearchDialog />
+    <TextEditingContextMenu />
     <Notivue v-slot="item">
       <Notification :item="item" />
     </Notivue>

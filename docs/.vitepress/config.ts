@@ -15,7 +15,7 @@ export default defineConfig({
   },
   themeConfig: {
     nav: [
-      { text: "指南", link: "/guide/capabilities" },
+      { text: "指南", link: "/guide/plugins" },
       { text: "API", link: "/api/" },
     ],
     sidebar: [
@@ -27,7 +27,15 @@ export default defineConfig({
         ],
       },
       {
-        text: "参考",
+        text: "核心功能",
+        items: [
+          { text: "插件系统", link: "/guide/plugins" },
+          { text: "对话系统", link: "/guide/conversation" },
+          { text: "基本界面", link: "/guide/interface" },
+        ],
+      },
+      {
+        text: "开发参考",
         items: [
           { text: "Feature API", link: "/api/" },
           { text: "类型契约", link: "/api/types" },

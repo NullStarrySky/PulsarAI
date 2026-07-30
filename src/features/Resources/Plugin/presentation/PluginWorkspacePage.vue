@@ -6,6 +6,7 @@ import { readFile } from "@tauri-apps/plugin-fs";
 import { push } from "notivue";
 import {
   ArrowLeft,
+  Boxes,
   Braces,
   ChevronDown,
   ChevronRight,
@@ -17,10 +18,15 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  Eye,
   Image,
+  Minus,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  RotateCcw,
   Search,
-  Star,
   Trash2,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
@@ -35,7 +41,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useResponsiveStore } from "@/features/Misc/application/responsive-store";
-import ConversationComposerEditor from "@/features/Resources/Conversation/presentation/ConversationComposerEditor.vue";
+import { useLayoutStore } from "@/features/UI/application/layout-store";
 import ConversationMarkdown from "@/features/Resources/Conversation/presentation/ConversationMarkdown.vue";
 import JavaScriptCodeMirrorEditor from "@/features/Resources/Preset/presentation/JavaScriptCodeMirrorEditor.vue";
 import InteractiveDocumentWorkspacePage from "@/features/Resources/InteractiveDoc/presentation/InteractiveDocumentWorkspacePage.vue";
@@ -46,6 +52,8 @@ import {
   createPluginReferenceResolver,
 } from "@/features/Resources/Plugin/application/plugin-reference-resolver";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
+import PluginContainerDefinitionsEditor from "@/features/Resources/Plugin/presentation/PluginContainerDefinitionsEditor.vue";
+import PluginVuePreview from "@/features/Resources/Plugin/presentation/PluginVuePreview.vue";
 import {
   findPluginNodeByPath,
   findPluginTreeNode,
@@ -100,14 +108,17 @@ const props = defineProps<{
 }>();
 
 const pluginStore = usePluginStore();
+const layout = useLayoutStore();
 const responsive = useResponsiveStore();
 const { isMobileLayout } = storeToRefs(responsive);
 const search = ref("");
 const selectedNodeId = ref("");
+const treeCollapsed = ref(false);
 const treeVisibleOnMobile = ref(true);
 const showProperties = ref(false);
 const contentDraft = ref("");
 const contentError = ref("");
+const fileViewMode = ref<"source" | "preview">("source");
 const importInput = ref<HTMLInputElement | null>(null);
 const importTargetFolderId = ref("");
 const draggingNodeId = ref("");
@@ -129,10 +140,43 @@ const selectedFile = computed(() =>
 const selectedType = computed(() =>
   selectedFile.value ? pluginFileType(selectedFile.value.name) : null,
 );
+const selectedIsVue = computed(
+  () => selectedFile.value?.name.toLocaleLowerCase().endsWith(".vue") === true,
+);
 const selectedPath = computed(() =>
   plugin.value && selectedNode.value
     ? pluginNodePath(plugin.value.root, selectedNode.value.id).join("/")
     : "",
+);
+const selectedIsContainerDefinitions = computed(
+  () =>
+    selectedPath.value.toLocaleLowerCase()
+      === pluginConventions.containers.toLocaleLowerCase(),
+);
+const selectedIsManifest = computed(
+  () =>
+    selectedPath.value.toLocaleLowerCase()
+      === pluginConventions.manifest.toLocaleLowerCase(),
+);
+const selectedIsOverride = computed(
+  () =>
+    selectedPath.value.toLocaleLowerCase()
+      === pluginConventions.override.toLocaleLowerCase(),
+);
+const selectedIsFixedConvention = computed(
+  () =>
+    selectedIsContainerDefinitions.value
+    || selectedIsManifest.value
+    || selectedIsOverride.value,
+);
+const selectedTypeLabel = computed(() =>
+  selectedIsContainerDefinitions.value
+    ? "container definitions"
+    : selectedIsManifest.value
+      ? "plugin manifest"
+      : selectedIsOverride.value
+        ? "conversation renderer override"
+        : selectedType.value,
 );
 const activeParentFolder = computed(() => {
   if (!plugin.value) return null;
@@ -145,11 +189,6 @@ const treeRows = computed(() => {
   const keyword = search.value.trim().toLocaleLowerCase();
   return flattenTree(plugin.value.root, 0, keyword);
 });
-const formattedReadOnlyContent = computed(() => {
-  const content = selectedFile.value?.content;
-  if (typeof content === "string") return content;
-  return content == null ? "" : JSON.stringify(content, null, 2);
-});
 const mediaSource = computed(() => pluginMediaSource(selectedFile.value?.content));
 const mediaKind = computed(() =>
   pluginMediaType(selectedFile.value?.content, mediaSource.value),
@@ -160,7 +199,7 @@ const interactiveDocumentPreviewContext = computed(() => {
   if (
     !currentPlugin
     || !file
-    || selectedType.value !== "interactive-document"
+    || !["interactive-document", "markdown"].includes(selectedType.value ?? "")
   ) {
     return null;
   }
@@ -187,6 +226,7 @@ const interactiveDocumentPreviewContext = computed(() => {
     resolveReference: (target: string) =>
       resolver.resolveFromResource(file.id, target),
     diagnostics: resolver.diagnostics.map((item) => item.message),
+    suggestions: resolver.referenceSuggestionsFromResource(file.id),
   };
 });
 const interactiveDocumentReferenceResolver = computed(
@@ -195,6 +235,9 @@ const interactiveDocumentReferenceResolver = computed(
 const interactiveDocumentReferenceDiagnostics = computed(
   () => interactiveDocumentPreviewContext.value?.diagnostics ?? [],
 );
+const interactiveDocumentReferenceSuggestions = computed(() => {
+  return interactiveDocumentPreviewContext.value?.suggestions ?? [];
+});
 
 onMounted(async () => {
   await pluginStore.initialize();
@@ -228,10 +271,24 @@ watch(
     selectDefaultNode();
   },
 );
+watch(
+  [selectedPath, () => plugin.value?.id],
+  ([path, pluginId]) => {
+    if (!pluginId) return;
+    layout.updateResourceTabParams("plugin", pluginId, {
+      projectPath: `/plugins/${pluginId}${path ? `/${path}` : ""}`,
+    });
+  },
+  { immediate: true },
+);
 
 watch(
   () => selectedFile.value?.id,
-  loadContentDraft,
+  () => {
+    loadContentDraft();
+    fileViewMode.value =
+      selectedType.value === "markdown" ? "preview" : "source";
+  },
   { immediate: true },
 );
 
@@ -317,7 +374,7 @@ function scheduleContentSave(value: string) {
 async function persistContent() {
   const currentPlugin = plugin.value;
   const file = selectedFile.value;
-  if (!currentPlugin || !file || currentPlugin.builtIn) return;
+  if (!currentPlugin || !file) return;
   let content: unknown = contentDraft.value;
   if (
     selectedType.value === "json"
@@ -332,20 +389,10 @@ async function persistContent() {
   await pluginStore.updateNode(currentPlugin.id, file.id, { content });
 }
 
-async function persistPluginBasics() {
-  const current = plugin.value;
-  if (!current || current.builtIn) return;
-  await pluginStore.updatePlugin(current.id, {
-    name: current.name.trim() || "未命名插件",
-    icon: current.icon,
-    shortDescription: current.shortDescription,
-  });
-}
-
 async function persistNodeName() {
   const current = plugin.value;
   const node = selectedNode.value;
-  if (!current || !node || current.builtIn) return;
+  if (!current || !node) return;
   await pluginStore.updateNode(current.id, node.id, { name: node.name });
   loadContentDraft();
 }
@@ -353,8 +400,48 @@ async function persistNodeName() {
 async function persistNodeIcon() {
   const current = plugin.value;
   const node = selectedNode.value;
-  if (!current || !node || current.builtIn) return;
+  if (!current || !node) return;
   await pluginStore.updateNode(current.id, node.id, { icon: node.icon });
+}
+
+async function updateSelectedPriority(delta: number) {
+  const current = plugin.value;
+  const file = selectedFile.value;
+  if (!current || !file) return;
+  await pluginStore.updateNode(current.id, file.id, {
+    priority: file.priority + delta,
+  });
+}
+
+async function persistSelectedMemberships() {
+  const current = plugin.value;
+  const file = selectedFile.value;
+  if (!current || !file) return;
+  await pluginStore.updateNode(current.id, file.id, {
+    memberships: file.memberships
+      .filter((item) => item.container.trim())
+      .map((item) => ({
+        container: item.container.trim(),
+        alias: item.alias.trim(),
+      })),
+  });
+}
+
+async function addSelectedMembership() {
+  const file = selectedFile.value;
+  if (!file) return;
+  file.memberships.push({
+    container: "container:plugin/会话上下文",
+    alias: "",
+  });
+  await persistSelectedMemberships();
+}
+
+async function removeSelectedMembership(index: number) {
+  const file = selectedFile.value;
+  if (!file) return;
+  file.memberships.splice(index, 1);
+  await persistSelectedMemberships();
 }
 
 async function createFile(
@@ -439,7 +526,7 @@ async function importFile(event: Event) {
 async function handleBrowserFileDrop(event: DragEvent) {
   externalFileDragActive.value = false;
   const files = Array.from(event.dataTransfer?.files ?? []);
-  if (!files.length || !plugin.value || plugin.value.builtIn) return;
+  if (!files.length || !plugin.value) return;
   const parent = activeParentFolder.value ?? plugin.value.root;
   for (const file of files) {
     const created = await pluginStore.importFile(
@@ -470,7 +557,7 @@ function handleBrowserDragLeave(event: DragEvent) {
 }
 
 async function importNativePaths(paths: string[]) {
-  if (!paths.length || !plugin.value || plugin.value.builtIn) return;
+  if (!paths.length || !plugin.value) return;
   const parent = activeParentFolder.value ?? plugin.value.root;
   let imported = 0;
   for (const path of paths) {
@@ -559,7 +646,7 @@ function readFileAsDataUrl(file: globalThis.File) {
 
 async function updateMediaSource(value: string) {
   contentDraft.value = value;
-  if (!plugin.value || !selectedFile.value || plugin.value.builtIn) return;
+  if (!plugin.value || !selectedFile.value) return;
   await pluginStore.updateNode(plugin.value.id, selectedFile.value.id, {
     content: createPluginMediaContent(value.trim()),
   });
@@ -568,14 +655,14 @@ async function updateMediaSource(value: string) {
 async function removeSelectedNode() {
   const current = plugin.value;
   const node = selectedNode.value;
-  if (!current || !node || current.builtIn || node.id === current.root.id) return;
+  if (!current || !node || node.id === current.root.id) return;
   await pluginStore.deleteNode(current.id, node.id);
   selectDefaultNode();
 }
 
 async function removeNode(nodeId: string) {
   const current = plugin.value;
-  if (!current || current.builtIn || nodeId === current.root.id) return;
+  if (!current || nodeId === current.root.id) return;
   await pluginStore.deleteNode(current.id, nodeId);
   if (selectedNodeId.value === nodeId) selectDefaultNode();
 }
@@ -594,8 +681,30 @@ async function dropOnRow(row: TreeRow) {
   draggingNodeId.value = "";
 }
 
+function isContainerDefinitionsNode(node: PluginTreeNode) {
+  return Boolean(
+    plugin.value
+    && pluginNodePath(plugin.value.root, node.id).join("/").toLocaleLowerCase()
+      === pluginConventions.containers.toLocaleLowerCase(),
+  );
+}
+
+function isFixedConventionNode(node: PluginTreeNode) {
+  if (!plugin.value) return false;
+  const path = pluginNodePath(plugin.value.root, node.id)
+    .join("/")
+    .toLocaleLowerCase();
+  return [
+    pluginConventions.manifest,
+    pluginConventions.containers,
+    pluginConventions.override,
+    pluginConventions.componentsFolder,
+  ].some((name) => path === name.toLocaleLowerCase());
+}
+
 function nodeIcon(node: PluginTreeNode) {
   if (node.kind === "folder") return node.collapsed ? Folder : FolderOpen;
+  if (isContainerDefinitionsNode(node)) return Boxes;
   switch (pluginFileType(node.name)) {
     case "markdown":
       return FileText;
@@ -612,6 +721,24 @@ function nodeIcon(node: PluginTreeNode) {
   }
 }
 
+function openTreeRowMenu(event: MouseEvent) {
+  const row = event.currentTarget as HTMLElement | null;
+  row?.querySelector<HTMLButtonElement>("[data-tree-row-menu-trigger]")?.click();
+}
+
+function showNodeProperties(node: PluginTreeNode) {
+  selectNode(node);
+  if (node.kind === "file") showProperties.value = true;
+}
+
+async function restoreBuiltInPlugin() {
+  const current = plugin.value;
+  if (!current?.builtIn) return;
+  await pluginStore.restoreBuiltInPlugin(current.id);
+  selectDefaultNode();
+  push.success("已还原内置插件");
+}
+
 </script>
 
 <template>
@@ -622,60 +749,18 @@ function nodeIcon(node: PluginTreeNode) {
     @dragleave="handleBrowserDragLeave"
     @drop.prevent="handleBrowserFileDrop"
   >
-    <header class="flex min-h-16 items-center gap-3 border-b px-5 mobile:min-h-14 mobile:px-3">
-      <img
-        v-if="plugin.icon"
-        :src="plugin.icon"
-        alt=""
-        class="size-9 rounded-md object-cover"
-      />
-      <div class="min-w-0 flex-1">
-        <input
-          v-model="plugin.name"
-          :disabled="plugin.builtIn"
-          class="block h-6 w-full bg-transparent p-0 text-base font-semibold outline-none disabled:cursor-default"
-          placeholder="插件名称"
-          @change="persistPluginBasics"
-        />
-        <input
-          v-model="plugin.shortDescription"
-          :disabled="plugin.builtIn"
-          class="block h-5 w-full bg-transparent p-0 text-xs text-muted-foreground outline-none disabled:cursor-default"
-          placeholder=""
-          @change="persistPluginBasics"
-        />
-      </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger as-child>
-          <Button size="icon" variant="ghost" class="size-8" title="插件菜单">
-            <MoreHorizontal class="size-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" class="w-40">
-          <DropdownMenuItem
-            :disabled="plugin.packageId === null || plugin.builtIn"
-            @click="pluginStore.updatePlugin(plugin.id, { main: !plugin.main })"
-          >
-            <Star class="mr-2 size-4" />
-            {{ plugin.main ? "取消主要" : "设为主要" }}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            :disabled="plugin.builtIn"
-            class="text-destructive focus:text-destructive"
-            @click="pluginStore.deletePlugin(plugin.id)"
-          >
-            <Trash2 class="mr-2 size-4" />
-            删除插件
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </header>
-
-    <div class="grid min-h-0 flex-1 grid-cols-[17rem_minmax(0,1fr)] mobile:block">
+    <div
+      class="grid min-h-0 flex-1 transition-[grid-template-columns] duration-200 mobile:block"
+      :class="
+        treeCollapsed
+          ? 'grid-cols-[0_minmax(0,1fr)]'
+          : 'grid-cols-[17rem_minmax(0,1fr)]'
+      "
+    >
       <aside
         v-show="!isMobileLayout || treeVisibleOnMobile"
-        class="flex min-h-0 flex-col border-r mobile:h-full mobile:border-r-0"
+        class="flex min-h-0 min-w-0 flex-col overflow-hidden border-r mobile:h-full mobile:border-r-0"
+        :class="treeCollapsed && !isMobileLayout && 'invisible pointer-events-none'"
       >
         <div class="flex h-12 items-center gap-1.5 border-b px-2">
           <div class="relative min-w-0 flex-1">
@@ -693,7 +778,6 @@ function nodeIcon(node: PluginTreeNode) {
                 variant="ghost"
                 class="size-8"
                 title="新建文件"
-                :disabled="plugin.builtIn"
               >
                 <FilePlus2 class="size-4" />
               </Button>
@@ -716,7 +800,6 @@ function nodeIcon(node: PluginTreeNode) {
             variant="ghost"
             class="size-8"
             title="新建文件夹"
-            :disabled="plugin.builtIn"
             @click="createFolder()"
           >
             <FolderPlus class="size-4" />
@@ -726,10 +809,19 @@ function nodeIcon(node: PluginTreeNode) {
             variant="ghost"
             class="size-8"
             title="导入文件"
-            :disabled="plugin.builtIn"
             @click="chooseImport()"
           >
             <FileDown class="size-4" />
+          </Button>
+          <Button
+            v-if="plugin.builtIn"
+            size="icon"
+            variant="ghost"
+            class="size-8"
+            title="还原内置插件"
+            @click="restoreBuiltInPlugin"
+          >
+            <RotateCcw class="size-4" />
           </Button>
         </div>
 
@@ -737,7 +829,7 @@ function nodeIcon(node: PluginTreeNode) {
           <div
             v-for="row in treeRows"
             :key="row.node.id"
-            :draggable="!plugin.builtIn"
+            :draggable="!isFixedConventionNode(row.node)"
             class="group relative mb-0.5 flex h-8 items-center rounded-md transition-colors hover:bg-accent/55"
             :class="[
               selectedNodeId === row.node.id && 'bg-accent text-accent-foreground',
@@ -747,6 +839,7 @@ function nodeIcon(node: PluginTreeNode) {
             @dragend="draggingNodeId = ''"
             @dragover.prevent
             @drop.stop.prevent="dropOnRow(row)"
+            @contextmenu.prevent.stop="openTreeRowMenu"
           >
             <button
               type="button"
@@ -780,9 +873,10 @@ function nodeIcon(node: PluginTreeNode) {
               </span>
             </button>
 
-            <DropdownMenu v-if="!plugin.builtIn">
+            <DropdownMenu>
               <DropdownMenuTrigger as-child>
                 <Button
+                  data-tree-row-menu-trigger
                   size="icon"
                   variant="ghost"
                   class="mobile-touch-actions mr-0.5 size-7 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
@@ -793,6 +887,12 @@ function nodeIcon(node: PluginTreeNode) {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" class="w-40">
+                <DropdownMenuItem
+                  v-if="row.node.kind === 'file'"
+                  @click="showNodeProperties(row.node)"
+                >
+                  文件属性
+                </DropdownMenuItem>
                 <template v-if="row.node.kind === 'folder'">
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger>
@@ -823,6 +923,7 @@ function nodeIcon(node: PluginTreeNode) {
                   <DropdownMenuSeparator />
                 </template>
                 <DropdownMenuItem
+                  v-if="!isFixedConventionNode(row.node)"
                   class="text-destructive focus:text-destructive"
                   @click="removeNode(row.node.id)"
                 >
@@ -843,7 +944,10 @@ function nodeIcon(node: PluginTreeNode) {
         v-show="!isMobileLayout || !treeVisibleOnMobile"
         class="flex min-h-0 min-w-0 flex-col mobile:h-full"
       >
-        <div v-if="selectedFile" class="flex min-h-12 items-center gap-2 border-b px-3">
+        <div
+          v-if="selectedFile || !isMobileLayout"
+          class="flex min-h-12 items-center gap-2 border-b px-3"
+        >
           <Button
             v-if="isMobileLayout"
             size="icon"
@@ -854,29 +958,69 @@ function nodeIcon(node: PluginTreeNode) {
           >
             <ArrowLeft class="size-4" />
           </Button>
+          <Button
+            v-else
+            size="icon"
+            variant="ghost"
+            class="size-8"
+            :title="treeCollapsed ? '展开文件栏' : '折叠文件栏'"
+            :aria-label="treeCollapsed ? '展开文件栏' : '折叠文件栏'"
+            :aria-expanded="!treeCollapsed"
+            @click="treeCollapsed = !treeCollapsed"
+          >
+            <PanelLeftOpen v-if="treeCollapsed" class="size-4" />
+            <PanelLeftClose v-else class="size-4" />
+          </Button>
           <img
-            v-if="selectedFile.icon"
+            v-if="selectedFile?.icon"
             :src="selectedFile.icon"
             alt=""
             class="size-5 rounded-sm object-cover"
           />
           <component
-            :is="nodeIcon(selectedFile)"
-            v-else
+            :is="selectedFile ? nodeIcon(selectedFile) : File"
+            v-else-if="selectedFile"
             class="size-4 shrink-0 text-muted-foreground"
           />
           <input
+            v-if="selectedFile"
             v-model="selectedFile.name"
-            :disabled="plugin.builtIn"
+            :disabled="selectedIsFixedConvention"
             class="min-w-0 flex-1 bg-transparent p-0 text-sm font-medium outline-none disabled:cursor-default"
             @change="persistNodeName"
           />
           <span
+            v-if="selectedFile"
             class="hidden text-[11px] text-muted-foreground sm:inline"
           >
-            {{ selectedType }}
+            {{ selectedTypeLabel }}
           </span>
-          <DropdownMenu>
+          <div
+            v-if="selectedType === 'markdown' || selectedIsVue"
+            class="flex items-center rounded-md border bg-muted/30 p-0.5"
+          >
+            <Button
+              size="icon"
+              variant="ghost"
+              class="size-7"
+              :class="fileViewMode === 'source' && 'bg-background shadow-sm'"
+              title="显示原始内容"
+              @click="fileViewMode = 'source'"
+            >
+              <Code2 class="size-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              class="size-7"
+              :class="fileViewMode === 'preview' && 'bg-background shadow-sm'"
+              title="预览"
+              @click="fileViewMode = 'preview'"
+            >
+              <Eye class="size-3.5" />
+            </Button>
+          </div>
+          <DropdownMenu v-if="selectedFile">
             <DropdownMenuTrigger as-child>
               <Button size="icon" variant="ghost" class="size-8" title="文件属性">
                 <MoreHorizontal class="size-4" />
@@ -886,9 +1030,11 @@ function nodeIcon(node: PluginTreeNode) {
               <DropdownMenuItem @click="showProperties = !showProperties">
                 {{ showProperties ? "收起属性" : "编辑属性" }}
               </DropdownMenuItem>
-              <DropdownMenuSeparator v-if="!plugin.builtIn" />
+              <DropdownMenuSeparator
+                v-if="!selectedIsFixedConvention"
+              />
               <DropdownMenuItem
-                v-if="!plugin.builtIn"
+                v-if="!selectedIsFixedConvention"
                 class="text-destructive focus:text-destructive"
                 @click="removeSelectedNode"
               >
@@ -901,54 +1047,198 @@ function nodeIcon(node: PluginTreeNode) {
 
         <div
           v-if="selectedFile && showProperties"
-          class="grid min-h-11 grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-center gap-4 border-b px-4 mobile:grid-cols-1 mobile:gap-1 mobile:py-2"
+          class="grid min-h-11 grid-cols-[minmax(0,1fr)_auto_minmax(0,1.5fr)] items-center gap-4 border-b px-4 py-2 mobile:grid-cols-1 mobile:gap-2"
         >
           <span class="truncate font-mono text-[11px] text-muted-foreground">
             {{ selectedPath || "/" }} · {{ selectedFile.id }}
           </span>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-muted-foreground">优先级</span>
+            <div class="inline-flex items-center rounded-md border">
+              <Button
+                size="icon"
+                variant="ghost"
+                class="size-7 rounded-r-none"
+                title="降低优先级"
+                @click="updateSelectedPriority(-1)"
+              >
+                <Minus class="size-3.5" />
+              </Button>
+              <span class="min-w-11 border-x px-2 text-center font-mono text-xs">
+                {{ selectedFile.priority }}
+              </span>
+              <Button
+                size="icon"
+                variant="ghost"
+                class="size-7 rounded-l-none"
+                title="提高优先级"
+                @click="updateSelectedPriority(1)"
+              >
+                <Plus class="size-3.5" />
+              </Button>
+            </div>
+          </div>
           <label class="flex min-w-0 items-center gap-2">
             <span class="shrink-0 text-xs text-muted-foreground">图标</span>
             <input
               v-model="selectedFile.icon"
-              :disabled="plugin.builtIn"
               class="h-7 min-w-0 flex-1 bg-transparent px-1 text-xs outline-none placeholder:text-muted-foreground"
               placeholder="URL，可留空"
               @change="persistNodeIcon"
             />
           </label>
+          <div class="col-span-full border-t pt-2 mobile:col-span-1">
+            <div class="mb-1.5 flex items-center justify-between">
+              <span class="text-xs font-medium">容器成员关系（资源元数据）</span>
+              <Button size="sm" variant="ghost" class="h-7 text-xs" @click="addSelectedMembership">
+                <Plus class="mr-1 size-3.5" />
+                加入容器
+              </Button>
+            </div>
+            <div
+              v-for="(membership, index) in selectedFile.memberships"
+              :key="index"
+              class="mb-1 grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] gap-2"
+            >
+              <input
+                v-model="membership.container"
+                class="h-8 rounded-md border bg-background px-2 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
+                placeholder="container:plugin/会话上下文"
+                @change="persistSelectedMemberships"
+              />
+              <input
+                v-model="membership.alias"
+                class="h-8 rounded-md border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+                placeholder="别名（可选）"
+                @change="persistSelectedMemberships"
+              />
+              <Button size="icon" variant="ghost" class="size-8" title="移除成员关系" @click="removeSelectedMembership(index)">
+                <Trash2 class="size-3.5" />
+              </Button>
+            </div>
+            <p v-if="!selectedFile.memberships.length" class="text-xs text-muted-foreground">
+              此资源暂未加入容器。元数据不会显示在文件正文或 Markdown 预览中。
+            </p>
+          </div>
         </div>
 
         <div v-if="selectedFile" class="min-h-0 flex-1 overflow-hidden">
+          <PluginContainerDefinitionsEditor
+            v-if="selectedIsContainerDefinitions"
+            :key="selectedFile.id"
+            :model-value="contentDraft"
+            @update:model-value="scheduleContentSave"
+          />
+
           <div
-            v-if="selectedType === 'markdown'"
-            class="plugin-file-markdown h-full overflow-y-auto px-8 py-7 mobile:px-4 mobile:py-4"
-            @click.self="($event.currentTarget as HTMLElement).querySelector<HTMLElement>('.ProseMirror')?.focus()"
+            v-else-if="selectedIsManifest"
+            class="relative flex h-full min-h-0 flex-col"
           >
-            <ConversationMarkdown
-              v-if="plugin.builtIn"
-              :model-value="formattedReadOnlyContent"
-              enable-reference-syntax
-            />
-            <ConversationComposerEditor
+            <div class="border-b px-4 py-3">
+              <div class="text-sm font-medium">插件配置</div>
+              <p class="mt-0.5 text-xs text-muted-foreground">
+                配置结构暂未开放；当前文件保持为空对象。
+              </p>
+            </div>
+            <div class="min-h-0 flex-1">
+              <JavaScriptCodeMirrorEditor
+                :key="selectedFile.id"
+                :model-value="contentDraft"
+                language="json"
+                frameless
+                @update:model-value="scheduleContentSave"
+              />
+            </div>
+            <span
+              v-if="contentError"
+              class="absolute bottom-3 right-4 rounded bg-destructive px-2 py-1 text-xs text-destructive-foreground"
+            >
+              {{ contentError }}
+            </span>
+          </div>
+
+          <div
+            v-else-if="selectedIsOverride"
+            class="flex h-full min-h-0 flex-col"
+          >
+            <div class="border-b px-4 py-3">
+              <div class="text-sm font-medium">默认对话渲染器覆盖</div>
+              <p class="mt-0.5 text-xs text-muted-foreground">
+                根级 Override.vue 用于替换默认对话内容区域；可复用 components/ 中的组件。
+              </p>
+            </div>
+            <div class="min-h-0 flex-1">
+              <PluginVuePreview
+                v-if="fileViewMode === 'preview' && plugin"
+                :plugin="plugin"
+                :file="selectedFile"
+                :source="contentDraft"
+              />
+              <JavaScriptCodeMirrorEditor
+                v-else
+                :key="selectedFile.id"
+                :model-value="contentDraft"
+                language="vue"
+                frameless
+                @update:model-value="scheduleContentSave"
+              />
+            </div>
+          </div>
+
+          <div
+            v-else-if="selectedType === 'markdown'"
+            class="h-full min-h-0"
+          >
+            <div
+              v-if="fileViewMode === 'preview'"
+              class="h-full overflow-y-auto bg-muted/35 px-6 py-8 mobile:px-3 mobile:py-4"
+            >
+              <article class="plugin-document mx-auto max-w-3xl rounded-xl border bg-background px-12 py-10 shadow-sm mobile:px-5 mobile:py-6">
+                <ConversationMarkdown
+                  :model-value="contentDraft"
+                  enable-reference-syntax
+                />
+              </article>
+            </div>
+            <JavaScriptCodeMirrorEditor
               v-else
+              :key="`${selectedFile.id}:markdown-source`"
               :model-value="contentDraft"
-              enable-block-edit
-              enable-reference-syntax
-              :enable-ai="false"
-              placeholder=""
+              language="markdown"
+              :reference-suggestions="interactiveDocumentReferenceSuggestions"
+              frameless
               @update:model-value="scheduleContentSave"
             />
           </div>
 
           <div
-            v-else-if="selectedType === 'javascript' || selectedType === 'component'"
+            v-else-if="selectedType === 'javascript'"
             class="h-full"
           >
             <JavaScriptCodeMirrorEditor
               :key="`${selectedFile.id}:${selectedType}`"
               :model-value="contentDraft"
               frameless
-              :readonly="plugin.builtIn"
+              @update:model-value="scheduleContentSave"
+            />
+          </div>
+
+          <div
+            v-else-if="selectedType === 'component'"
+            class="h-full"
+          >
+            <PluginVuePreview
+              v-if="fileViewMode === 'preview' && selectedIsVue && plugin"
+              :plugin="plugin"
+              :file="selectedFile"
+              :source="contentDraft"
+            />
+            <JavaScriptCodeMirrorEditor
+              v-else
+              :key="`${selectedFile.id}:component-source`"
+              :model-value="contentDraft"
+              language="vue"
+              frameless
               @update:model-value="scheduleContentSave"
             />
           </div>
@@ -957,9 +1247,9 @@ function nodeIcon(node: PluginTreeNode) {
             v-else-if="selectedType === 'interactive-document'"
             :key="selectedFile.id"
             :model-value="contentDraft"
-            :readonly="plugin.builtIn"
             :resolve-reference="interactiveDocumentReferenceResolver"
             :reference-diagnostics="interactiveDocumentReferenceDiagnostics"
+            :reference-suggestions="interactiveDocumentReferenceSuggestions"
             class="h-full"
             @update:model-value="scheduleContentSave"
           />
@@ -973,7 +1263,6 @@ function nodeIcon(node: PluginTreeNode) {
               :model-value="contentDraft"
               language="json"
               frameless
-              :readonly="plugin.builtIn"
               @update:model-value="scheduleContentSave"
             />
             <span
@@ -991,7 +1280,6 @@ function nodeIcon(node: PluginTreeNode) {
             <div class="flex h-12 items-center border-b px-4">
               <input
                 :value="mediaSource"
-                :disabled="plugin.builtIn"
                 class="h-8 w-full bg-transparent px-1 font-mono text-xs outline-none disabled:cursor-default"
                 placeholder="图片或视频 URL"
                 @change="updateMediaSource(($event.target as HTMLInputElement).value)"
@@ -1017,7 +1305,6 @@ function nodeIcon(node: PluginTreeNode) {
           <textarea
             v-else
             :value="contentDraft"
-            :disabled="plugin.builtIn"
             class="h-full w-full resize-none bg-transparent p-5 font-mono text-sm leading-6 outline-none disabled:cursor-default"
             @input="scheduleContentSave(($event.target as HTMLTextAreaElement).value)"
           />
@@ -1028,7 +1315,7 @@ function nodeIcon(node: PluginTreeNode) {
 
     <input ref="importInput" type="file" class="hidden" @change="importFile" />
     <div
-      v-if="externalFileDragActive && !plugin.builtIn"
+      v-if="externalFileDragActive"
       class="pointer-events-none absolute inset-3 z-50 flex items-center justify-center rounded-lg border border-dashed border-primary/60 bg-background/90"
     >
       <div class="flex items-center gap-2 text-sm font-medium">
@@ -1040,12 +1327,15 @@ function nodeIcon(node: PluginTreeNode) {
 </template>
 
 <style>
-.plugin-file-markdown :where(.conversation-composer-editor, .milkdown, .editor, .ProseMirror) {
-  min-height: calc(100vh - 12rem) !important;
-  max-height: none !important;
+.plugin-document .conversation-markdown .ProseMirror {
+  font-size: 1rem;
+  line-height: 1.75;
 }
 
-.plugin-file-markdown .conversation-composer-editor--block-edit :where(.milkdown, .editor) {
-  overflow: visible !important;
+.plugin-document .conversation-markdown .ProseMirror > :is(h1, h2, h3) {
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin-bottom: 0.65em;
+  margin-top: 1.4em;
 }
 </style>

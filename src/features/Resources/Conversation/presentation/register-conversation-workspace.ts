@@ -6,7 +6,7 @@ import {
 import ConversationLeftSidebar from "./ConversationLeftSidebar.vue";
 import ConversationRightSidebar from "./ConversationRightSidebar.vue";
 import ConversationWorkspacePage from "./ConversationWorkspacePage.vue";
-import ProjectAgentLandingPage from "./ProjectAgentLandingPage.vue";
+import ConversationLandingPage from "./ConversationLandingPage.vue";
 
 registerWorkspaceResource({
   type: "conversation",
@@ -14,10 +14,10 @@ registerWorkspaceResource({
 });
 registerWorkspaceResource({
   type: "builtin",
-  id: "project-agent",
-  component: ProjectAgentLandingPage,
+  id: "conversation-new",
+  component: ConversationLandingPage,
 });
 
-registerWorkspaceEmptyComponent(ProjectAgentLandingPage);
+registerWorkspaceEmptyComponent(ConversationLandingPage);
 registerShellSidebar("left", ConversationLeftSidebar);
 registerShellSidebar("right", ConversationRightSidebar);

@@ -15,26 +15,28 @@ export interface PluginContainerImport {
 export interface PluginContainerDeclaration {
   name: string;
   scope: PluginContainerScope;
+  description?: string;
   imports: PluginContainerImport[];
 }
 
-export interface PluginContainerMembership {
-  container: string;
-  alias: string;
+export interface PluginReferenceSuggestion {
+  target: string;
+  label: string;
+  detail: string;
+  description?: string;
 }
 
-export interface PluginResourceManifest {
-  source: string;
+export interface PluginContainerDefinitions {
   containers: PluginContainerDeclaration[];
-  memberships: PluginContainerMembership[];
 }
 
 const referencePattern = /<@([^>\r\n]+)>/g;
 const containerPattern =
   /<container\b([^>]*?)(?:\/>|>([\s\S]*?)<\/container\s*>)/gi;
-const membershipPattern = /<member_of\b([^>]*?)\/?>/gi;
 const includePattern =
   /<include\b([^>]*?)(?:\/>|>([\s\S]*?)<\/include\s*>)/gi;
+const descriptionPattern =
+  /<description\b[^>]*>([\s\S]*?)<\/description\s*>/i;
 const attributePattern =
   /([A-Za-z_][\w-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
@@ -71,56 +73,73 @@ export function replacePluginReferenceTokens(
   return result + source.slice(cursor);
 }
 
-export function parsePluginResourceManifest(source: string): PluginResourceManifest {
+function parseContainerDeclarations(source: string) {
   const containers: PluginContainerDeclaration[] = [];
-  const memberships: PluginContainerMembership[] = [];
+  for (const match of source.matchAll(containerPattern)) {
+    const rawAttributes = match[1] ?? "";
+    const body = match[2];
+    const attributes = parseAttributes(rawAttributes);
+    const name = attributes.name?.trim();
+    const scope = normalizeContainerScope(attributes.scope);
+    if (!name) continue;
+    const description = decodeXml(
+      descriptionPattern.exec(body ?? "")?.[1]?.trim() ?? "",
+    );
+    const imports: PluginContainerImport[] = [];
+    for (const includeMatch of (body ?? "").matchAll(includePattern)) {
+      const includeAttributes = parseAttributes(includeMatch[1] ?? "");
+      const target = includeAttributes.ref?.trim()
+        ?? decodeXml((includeMatch[2] ?? "").trim());
+      if (!target) continue;
+      imports.push({
+        alias:
+          includeAttributes.as?.trim()
+          || containerTargetName(target)
+          || `container${imports.length + 1}`,
+        target,
+      });
+    }
+    containers.push({ name, scope, description, imports });
+  }
+  return containers;
+}
 
-  const withoutContainers = source.replace(
-    containerPattern,
-    (_whole, rawAttributes: string, body: string | undefined) => {
-      const attributes = parseAttributes(rawAttributes);
-      const name = attributes.name?.trim();
-      const scope = normalizeContainerScope(attributes.scope);
-      if (name) {
-        const imports: PluginContainerImport[] = [];
-        for (const match of (body ?? "").matchAll(includePattern)) {
-          const includeAttributes = parseAttributes(match[1] ?? "");
-          const target = (includeAttributes.ref ?? match[2] ?? "").trim();
-          if (!target) continue;
-          imports.push({
-            alias:
-              includeAttributes.as?.trim()
-              || containerTargetName(target)
-              || `container${imports.length + 1}`,
-            target,
-          });
-        }
-        containers.push({ name, scope, imports });
-      }
-      return "";
-    },
-  );
-
-  const strippedSource = withoutContainers.replace(
-    membershipPattern,
-    (_whole, rawAttributes: string) => {
-      const attributes = parseAttributes(rawAttributes);
-      const container = attributes.container?.trim();
-      if (container) {
-        memberships.push({
-          container,
-          alias: attributes.as?.trim() || "",
-        });
-      }
-      return "";
-    },
-  );
-
+export function parsePluginContainerDefinitions(
+  source: string,
+): PluginContainerDefinitions {
   return {
-    source: strippedSource.replace(/^\s*\r?\n/, ""),
-    containers,
-    memberships,
+    containers: parseContainerDeclarations(source),
   };
+}
+
+export function serializePluginContainerDefinitions(
+  definitions: PluginContainerDefinitions,
+) {
+  const lines = ["<containers>"];
+  definitions.containers.forEach((container, index) => {
+    if (index > 0) lines.push("");
+    const attributes =
+      `name="${escapeXmlAttribute(container.name)}" scope="${container.scope}"`;
+    const description = container.description?.trim() ?? "";
+    if (!container.imports.length && !description) {
+      lines.push(`  <container ${attributes} />`);
+      return;
+    }
+    lines.push(`  <container ${attributes}>`);
+    if (description) {
+      lines.push(`    <description>${escapeXmlText(description)}</description>`);
+    }
+    for (const item of container.imports) {
+      lines.push(
+        `    <include as="${escapeXmlAttribute(item.alias)}">${
+          escapeXmlText(item.target)
+        }</include>`,
+      );
+    }
+    lines.push("  </container>");
+  });
+  lines.push("</containers>", "");
+  return lines.join("\n");
 }
 
 export function normalizePluginReferenceTarget(target: string) {
@@ -169,7 +188,7 @@ function parseAttributes(source: string) {
   for (const match of source.matchAll(attributePattern)) {
     const key = (match[1] ?? "").toLocaleLowerCase();
     if (!key) continue;
-    attributes[key] = match[2] ?? match[3] ?? "";
+    attributes[key] = decodeXml(match[2] ?? match[3] ?? "");
   }
   return attributes;
 }
@@ -182,4 +201,28 @@ function containerTargetName(target: string) {
   const normalized = target.trim();
   const index = normalized.lastIndexOf("/");
   return index < 0 ? normalized : normalized.slice(index + 1);
+}
+
+function escapeXmlAttribute(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function escapeXmlText(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function decodeXml(value: string) {
+  return value
+    .replaceAll("&quot;", '"')
+    .replaceAll("&apos;", "'")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&amp;", "&");
 }

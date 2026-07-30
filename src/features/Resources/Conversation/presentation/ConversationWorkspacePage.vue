@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, onActivated, onMounted, reactive, ref, watch } from "vue";
 import { push } from "notivue";
 import {
   Bot,
@@ -54,6 +54,7 @@ import type {
 import { fileToMessagePart } from "@/features/Resources/Conversation/application/message-attachment";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
 import { pluginMediaSource, pluginMediaType } from "@/features/Resources/Plugin/domain/plugin-media";
+import PluginConversationOverride from "@/features/Resources/Plugin/presentation/PluginConversationOverride.vue";
 import ConversationComposerEditor from "@/features/Resources/Conversation/presentation/ConversationComposerEditor.vue";
 import ConversationActionPicker from "@/features/Resources/Conversation/presentation/ConversationActionPicker.vue";
 import ConversationMarkdown from "@/features/Resources/Conversation/presentation/ConversationMarkdown.vue";
@@ -114,6 +115,7 @@ onMounted(async () => {
   await Promise.all([conversation.initialize(), defaults.load(), pluginStore.initialize()]);
   openResourceConversation();
 });
+onActivated(openResourceConversation);
 
 watch(() => props.resourceId, openResourceConversation);
 watch(() => conversation.lastMessageEditRequestId, () => {
@@ -370,6 +372,10 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
       class="pointer-events-none absolute inset-0 h-full w-full object-cover"
     />
 
+    <PluginConversationOverride
+      :package-id="conversation.activePackageId"
+      :global-plugin-order="conversation.activePackage?.globalPluginOrder"
+    >
     <section
       v-if="conversation.activeConversation?.rendererId !== 'novel'"
       class="relative min-h-0 flex-1 overflow-y-auto bg-background/80 px-5 pb-28 pt-6 backdrop-blur-[1px] mobile:px-3 mobile:pb-32 mobile:pt-4"
@@ -445,7 +451,7 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
               />
               <ConversationMarkdown
                 v-else
-                :model-value="messageOf(container)?.content || (conversation.generating && container.id === conversation.activeContainerId ? '生成中...' : '')"
+                :model-value="messageOf(container)?.content || (conversation.activeConversationGenerating && container.id === conversation.activeContainerId ? '生成中...' : '')"
               />
               <template
                 v-for="(part, partIndex) in componentParts(messageOf(container))"
@@ -591,9 +597,10 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
       v-else
       :conversation-id="conversation.activeConversation?.id ?? ''"
       :containers="activePath"
-      :generating="conversation.generating"
+      :generating="conversation.activeConversationGenerating"
       :active-container-id="conversation.activeContainerId"
     />
+    </PluginConversationOverride>
 
     <footer class="mobile-safe-bottom pointer-events-none relative px-4 pb-4 mobile:px-2 mobile:pb-2">
       <div class="pointer-events-auto relative mx-auto max-w-3xl rounded-lg border bg-card/95 p-2 shadow-lg shadow-background/20 backdrop-blur mobile:rounded-xl">
@@ -630,7 +637,7 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
               size="icon"
               class="size-8 mobile:size-10"
               title="发送"
-              :disabled="(!input.trim() && pendingAttachments.length === 0 && !selectedAction) || conversation.generating"
+              :disabled="(!input.trim() && pendingAttachments.length === 0 && !selectedAction) || conversation.activeConversationGenerating"
               @click="send"
             >
               <Send class="size-4" />
@@ -685,7 +692,7 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
           </Button>
           <Button variant="outline" @click="fullscreenInputOpen = false">取消</Button>
           <Button
-            :disabled="(!input.trim() && pendingAttachments.length === 0 && !selectedAction) || conversation.generating"
+            :disabled="(!input.trim() && pendingAttachments.length === 0 && !selectedAction) || conversation.activeConversationGenerating"
             @click="fullscreenInputOpen = false; send()"
           >
             <Send data-icon="inline-start" />

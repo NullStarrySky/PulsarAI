@@ -11,9 +11,6 @@ import {
   pluginFileType,
   type Plugin,
 } from "@/features/Resources/Plugin/domain/plugin-types";
-import {
-  parsePluginResourceManifest,
-} from "@/features/Resources/Plugin/domain/plugin-reference";
 import type { SandboxEnvironment } from "@/features/Sandbox/domain/sandbox";
 
 export interface GenerationPathEnvironmentInput {
@@ -87,19 +84,24 @@ export async function buildPluginGenerationEnvironment(
     }
 
     if (!processResource) {
-      const generation = findPluginNodeByPath(
+      const agentProcess = findPluginNodeByPath(
         plugin.root,
-        pluginConventions.generation,
+        [
+          pluginConventions.agentProcessFolder,
+          pluginConventions.agentProcessEntry,
+        ],
       );
       if (
-        generation?.kind === "file"
-        && pluginFileType(generation.name) === "javascript"
-        && typeof generation.content === "string"
-        && parsePluginResourceManifest(generation.content).source.trim()
+        agentProcess?.kind === "file"
+        && pluginFileType(agentProcess.name) === "javascript"
+        && typeof agentProcess.content === "string"
+        && agentProcess.content.trim()
       ) {
         processPlugin = plugin;
-        processResource = resolver.resourceById(generation.id);
+        processResource = resolver.resourceById(agentProcess.id);
+        continue;
       }
+
     }
   }
 

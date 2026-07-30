@@ -1,7 +1,5 @@
 export function createInteractiveDocumentDemo() {
   return [
-    '<container name="调查上下文" scope="root" />',
-    "",
     '<prompt_template name="identity" role="system">',
     "# {{ <@local:profile>.name }}",
     "",

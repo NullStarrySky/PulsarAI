@@ -3,21 +3,21 @@ layout: home
 
 hero:
   name: PulsarAI
-  text: Feature API 文档
-  tagline: 与权限定义和模型提示词共用同一份事实来源
+  text: 开发与扩展文档
+  tagline: 从插件结构、对话生成到 Feature API 的统一说明
   actions:
     - theme: brand
-      text: 查看 Feature API
-      link: /api/
+      text: 编写插件
+      link: /guide/plugins
     - theme: alt
-      text: 理解权限系统
-      link: /guide/capabilities
+      text: 理解对话系统
+      link: /guide/conversation
 
 features:
-  - title: 单一事实来源
-    details: 权限说明、API 类型、Sandbox 对象和模型提示词都从各 Feature 的 capabilities.ts 构建。
-  - title: 角色包隔离
-    details: 默认权限可在设置中管理，每个角色包可以按 Feature 覆盖子权限。
-  - title: 面向代码生成
-    details: 模型只接收当前授权 API 的签名、说明与示例，并通过内置代码执行工具调用。
+  - title: 插件系统
+    details: 推荐文件树、容器清单、上下文模板、分步 JavaScript 流程和显式资源引用。
+  - title: 对话系统
+    details: 消息版本与分支、生成启动顺序、动作、附件、组件和渲染器。
+  - title: 基本界面
+    details: Shell、标签页、侧栏、工作区注册、命令、设置与移动布局。
 ---

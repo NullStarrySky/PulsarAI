@@ -66,7 +66,12 @@ export const useLayoutStore = defineStore("layout", {
       const existing = this.tabs.find((item) => item.id === tab.id);
 
       if (existing) {
+        const resourceParams =
+          tab.resourceParams === undefined
+            ? existing.resourceParams
+            : tab.resourceParams;
         Object.assign(existing, tab);
+        existing.resourceParams = resourceParams;
       } else {
         this.tabs.push({ closable: true, ...tab });
       }
@@ -97,6 +102,20 @@ export const useLayoutStore = defineStore("layout", {
       for (const tab of this.tabs) {
         if (tab.resourceType === resourceType && tab.resourceId === resourceId) {
           tab.status = status;
+        }
+      }
+    },
+    updateResourceTabParams(
+      resourceType: string,
+      resourceId: string,
+      patch: Record<string, unknown>,
+    ) {
+      for (const tab of this.tabs) {
+        if (tab.resourceType === resourceType && tab.resourceId === resourceId) {
+          tab.resourceParams = {
+            ...(tab.resourceParams ?? {}),
+            ...patch,
+          };
         }
       }
     },

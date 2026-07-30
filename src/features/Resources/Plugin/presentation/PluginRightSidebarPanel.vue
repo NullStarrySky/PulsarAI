@@ -17,12 +17,15 @@ import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-s
 import CapabilityGrantEditor from "@/features/Capabilities/presentation/CapabilityGrantEditor.vue";
 import type { CapabilityGrants } from "@/features/Capabilities/domain/capability";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/application/default-config-store";
+import InlineEditInput from "@/features/UI/presentation/InlineEditInput.vue";
 
 const layout = useLayoutStore();
 const conversation = useConversationStore();
 const pluginStore = usePluginStore();
 const defaults = useDefaultConfigStore();
 const draggingPluginId = ref("");
+const editingPluginId = ref("");
+const editingPluginName = ref("");
 
 onMounted(() => {
   void Promise.all([conversation.initialize(), pluginStore.initialize(), defaults.load()]);
@@ -93,6 +96,32 @@ async function createPlugin() {
   if (plugin) {
     openPlugin(plugin.id);
   }
+}
+
+function startRenamePlugin(pluginId: string) {
+  const plugin = pluginStore.plugins.find((item) => item.id === pluginId);
+  if (!plugin) return;
+  editingPluginId.value = pluginId;
+  editingPluginName.value = plugin.name;
+}
+
+async function confirmRenamePlugin() {
+  const plugin = pluginStore.plugins.find(
+    (item) => item.id === editingPluginId.value,
+  );
+  if (!plugin) return;
+  const name = editingPluginName.value.trim() || plugin.name;
+  await pluginStore.updatePlugin(plugin.id, { name });
+  if (pluginStore.activePluginId === plugin.id) {
+    layout.openResourceTab({
+      resourceType: "plugin",
+      resourceId: plugin.id,
+      packageId: conversation.activePackageId,
+      title: name,
+    });
+  }
+  editingPluginId.value = "";
+  editingPluginName.value = "";
 }
 
 function onDragStart(pluginId: string) {
@@ -195,7 +224,16 @@ async function onDrop(targetPluginId: string) {
           @drop.prevent="onDrop(plugin.id)"
         >
           <img v-if="plugin.icon" :src="plugin.icon" alt="" class="size-8 rounded-md object-cover" />
-          <div class="min-w-0 flex-1">
+          <InlineEditInput
+            v-if="editingPluginId === plugin.id"
+            v-model="editingPluginName"
+            class="min-w-0 flex-1"
+            placeholder="插件名称"
+            @click.stop
+            @confirm="confirmRenamePlugin"
+            @cancel="editingPluginId = ''"
+          />
+          <div v-else class="min-w-0 flex-1">
             <div class="flex min-w-0 items-baseline gap-1.5">
               <span class="truncate text-sm font-medium">{{ plugin.name }}</span>
               <span v-if="plugin.main" class="shrink-0 text-[10px] font-medium text-primary">主要</span>
@@ -208,13 +246,16 @@ async function onDrop(targetPluginId: string) {
 
           <div class="flex items-center gap-1" @click.stop>
             <Switch size="sm" :model-value="plugin.enabled" @update:model-value="pluginStore.updatePlugin(plugin.id, { enabled: Boolean($event) })" />
-            <DropdownMenu>
+            <DropdownMenu v-if="editingPluginId !== plugin.id">
               <DropdownMenuTrigger as-child>
                 <Button size="icon" variant="ghost" class="mobile-touch-actions size-7 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" title="插件菜单">
                   <MoreHorizontal class="size-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" class="w-40">
+                <DropdownMenuItem @click="startRenamePlugin(plugin.id)">
+                  重命名
+                </DropdownMenuItem>
                 <DropdownMenuItem :disabled="plugin.packageId === null" @click="pluginStore.updatePlugin(plugin.id, { main: !plugin.main })">
                   <Star class="mr-2 size-4" />
                   {{ plugin.main ? "取消主要" : "设为主要" }}

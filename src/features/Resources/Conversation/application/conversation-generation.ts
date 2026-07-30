@@ -1,15 +1,17 @@
 import type { ModelMessage } from "ai";
-import { runDefaultAgent } from "@/features/Agent/application/default-agent";
+import { createAgentResourceProvider } from "@/features/Agent/application/default-agent";
 import { createProjectAgentRuntime } from "@/features/Agent/application/project-agent-runtime";
-import { isProjectAgentPackage } from "@/features/Agent/domain/project-agent";
+import { isProjectAgentConversation } from "@/features/Agent/domain/project-agent";
 import {
   getAgentExtensionToolNames,
 } from "@/features/Agent/application/agent-extension-registry";
 import {
   buildPluginGenerationEnvironment,
+  type GenerationResourceValue,
   type PluginGenerationDiagnostic,
 } from "@/features/Resources/Plugin/application/plugin-generation-environment";
 import type { Plugin } from "@/features/Resources/Plugin/domain/plugin-types";
+import { createPluginSelfApi } from "@/features/Resources/Plugin/capabilities";
 import {
   buildCapabilityRuntime,
   mergeCapabilityGrants,
@@ -55,6 +57,7 @@ export interface RunConversationGenerationInput {
     name: string;
   };
   prompt: string;
+  resourceContext?: string;
   beforeGenerationMessage?: ChatMessage;
   capabilityGrants?: CapabilityGrants;
   onStep?: (step: LocalStep | ToolCallResult) => void | Promise<void>;
@@ -68,17 +71,22 @@ export interface RunConversationGenerationResult {
   processPluginId?: string;
 }
 
-let componentRequester: GenerationComponentRequester | null = null;
+const componentRequesters: GenerationComponentRequester[] = [];
 
 export function registerGenerationComponentRequester(
   requester: GenerationComponentRequester,
 ) {
-  componentRequester = requester;
+  componentRequesters.push(requester);
   return () => {
-    if (componentRequester === requester) {
-      componentRequester = null;
+    const index = componentRequesters.lastIndexOf(requester);
+    if (index >= 0) {
+      componentRequesters.splice(index, 1);
     }
   };
+}
+
+function currentComponentRequester() {
+  return componentRequesters[componentRequesters.length - 1] ?? null;
 }
 
 export async function runConversationGeneration(
@@ -90,8 +98,10 @@ export async function runConversationGeneration(
       input.capabilityGrants,
     ),
   );
-  const projectAgentRuntime = isProjectAgentPackage(input.conversation.packageId)
-    ? await createProjectAgentRuntime(input.conversationId)
+  const projectAgentRuntime = isProjectAgentConversation(input.conversation)
+    ? await createProjectAgentRuntime(input.conversationId, {
+        pluginSubCapIds: capabilityRuntime.grants.plugin ?? [],
+      })
     : null;
   const pluginEnvironment = await buildPluginGenerationEnvironment(
     input.plugins,
@@ -144,6 +154,9 @@ export async function runConversationGeneration(
         ...resolvedContextMessages,
       ]
     : resolvedContextMessages;
+  if (input.resourceContext) {
+    contextMessages.unshift({ role: "system", content: input.resourceContext });
+  }
   if (input.beforeGenerationMessage?.content.trim()) {
     contextMessages.splice(capabilityRuntime.prompt ? 1 : 0, 0, {
       role: "system",
@@ -155,37 +168,86 @@ export async function runConversationGeneration(
     });
   }
 
-  const runAgent = async (
-    messages: ModelMessage[] = contextMessages,
-    environment: SandboxEnvironment = finalEnvironment,
-  ) =>
-    runDefaultAgent({
-      messages,
-      environment,
-      onStep: input.onStep,
-      askUser: async ({ question, options }) => {
-        if (!componentRequester) {
-          throw new Error("当前界面没有注册用户提问处理器。");
-        }
-        return componentRequester({
-          componentId: "agent.ask-user",
-          title: "需要你的回答",
-          props: {
-            question,
-            options,
+  const agentResources = createAgentResourceProvider({
+    environment: finalEnvironment,
+    onStep: input.onStep,
+    askUser: async ({ question, options }) => {
+      const requester = currentComponentRequester();
+      if (!requester) {
+        throw new Error("当前界面没有注册用户提问处理器。");
+      }
+      return requester({
+        componentId: "agent.ask-user",
+        title: "需要你的回答",
+        props: { question, options },
+      });
+    },
+  });
+
+  const processStack: string[] = [];
+  const runProcess = async (
+    resource: GenerationResourceValue,
+    environmentOverrides: SandboxEnvironment = {},
+  ): Promise<unknown> => {
+    if (!pluginEnvironment.resolver.isResourceValue(resource)) {
+      throw new Error(
+        "api.runProcess() 只接受通过当前脚本显式 <@...> 引用的资源",
+      );
+    }
+    if (resource.type !== "javascript") {
+      throw new Error(`流程资源必须是 JavaScript：${resource.path}`);
+    }
+    if (processStack.includes(resource.id)) {
+      const cycle = [...processStack, resource.id]
+        .map(
+          (resourceId) =>
+            pluginEnvironment.resolver.resourceById(resourceId)?.path
+            ?? resourceId,
+        );
+      throw new Error(`检测到流程脚本循环：${cycle.join(" -> ")}`);
+    }
+    const prepared = pluginEnvironment.resolver.prepareJavaScript(resource.id);
+    const inheritedPluginApi =
+      finalEnvironment.plugin
+      && typeof finalEnvironment.plugin === "object"
+        ? finalEnvironment.plugin as Record<string, unknown>
+        : {};
+    const scopedPluginApi = {
+      ...inheritedPluginApi,
+      ...createPluginSelfApi(
+        resource.pluginId,
+        capabilityRuntime.grants.plugin ?? [],
+      ),
+    };
+    const source = prepared.source.trim();
+    if (!source) return undefined;
+    processStack.push(resource.id);
+    try {
+      return await executeSandboxCodeAsync(
+        source,
+        [
+          finalEnvironment,
+          environmentOverrides,
+          prepared.environment,
+          {
+            plugin: scopedPluginApi,
+            PLUGIN: scopedPluginApi,
           },
-        });
-      },
-    });
+        ],
+      );
+    } finally {
+      processStack.pop();
+    }
+  };
 
   const api = {
-    runAgent,
-    generate: runAgent,
+    runProcess,
     askUserWithComponent: async (request: GenerationComponentRequest) => {
-      if (!componentRequester) {
+      const requester = currentComponentRequester();
+      if (!requester) {
         throw new Error("当前界面没有注册组件交互处理器。");
       }
-      return componentRequester(request);
+      return requester(request);
     },
     renderComponent: (
       componentId: string,
@@ -209,37 +271,26 @@ export async function runConversationGeneration(
     contextTemplate: compiledContext?.markdown ?? "[[chat]]",
     contextMessages,
     api,
-    generate: api.generate,
-    runAgent: api.runAgent,
+    agent: agentResources,
+    AGENT: agentResources,
+    runProcess: api.runProcess,
     askUserWithComponent: api.askUserWithComponent,
     renderComponent: api.renderComponent,
   });
 
   const processResource =
     pluginEnvironment.actionProcessResource ?? pluginEnvironment.processResource;
-  const preparedProcess = processResource
-    ? pluginEnvironment.resolver.prepareJavaScript(processResource.id)
-    : null;
-  const source = preparedProcess?.source.trim();
   const processPluginId = pluginEnvironment.actionProcessResource?.pluginId
     ?? pluginEnvironment.processPlugin?.id;
-  const processResult = source
-    ? await executeSandboxCodeAsync(
-        source,
-        [finalEnvironment, preparedProcess?.environment ?? {}],
-      )
-    : await runAgent();
+  const processResult = processResource
+    ? await runProcess(processResource)
+    : (() => {
+        throw new Error("没有可执行的 agentprocess/index.js；请启用内置流程或提供自定义流程。");
+      })();
   const normalized = normalizeGenerationResult(processResult, input.emptyMessage);
 
   if (!normalized) {
-    const fallback = await runAgent();
-    fillEnvironmentMetadata(input.emptyMessage, pluginEnvironment);
-    return {
-      ...fallback,
-      messages: contextMessages,
-      diagnostics: pluginEnvironment.diagnostics,
-      processPluginId,
-    };
+    throw new Error("流程没有返回文本结果。");
   }
 
   fillEnvironmentMetadata(input.emptyMessage, pluginEnvironment);

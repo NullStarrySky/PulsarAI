@@ -132,7 +132,7 @@ function createCoreCommands(): CommandDefinition[] {
       id: "conversation.regenerate-last-message",
       title: "重生成最后一条消息",
       category: "对话",
-      defaultHotkey: "Ctrl+R",
+      defaultHotkey: "Ctrl+Shift+G",
       icon: RefreshCw,
       run: regenerateLastMessageAction,
     },

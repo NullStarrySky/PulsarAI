@@ -1,15 +1,8 @@
 import { defineStore } from "pinia";
 import { remove, selectAll, upsert } from "@/features/Database/application/database-service";
 import {
-  builtinProjectAgentPackageId,
-  builtinProjectAgentPluginId,
-} from "@/features/Agent/domain/project-agent";
-import {
   normalizeInteractiveDocumentSource,
 } from "@/features/Resources/InteractiveDoc/domain/interactive-document";
-import {
-  interactiveDocumentFormatPrompt,
-} from "@/features/Resources/InteractiveDoc/domain/interactive-document-format";
 import {
   findPluginNodeByPath,
   findPluginTreeNode,
@@ -25,6 +18,10 @@ import {
   type PluginTreeNodeBase,
   type ResolvedPluginAction,
 } from "@/features/Resources/Plugin/domain/plugin-types";
+import {
+  serializePluginContainerDefinitions,
+  type PluginContainerDeclaration,
+} from "@/features/Resources/Plugin/domain/plugin-reference";
 import { createPluginMediaContent } from "@/features/Resources/Plugin/domain/plugin-media";
 import builtinClassroomBackgroundUrl from "@/features/Resources/Plugin/assets/builtin-classroom-background.png";
 
@@ -55,11 +52,16 @@ function createNodeBase(
 function createFile(
   name: string,
   content: unknown = "",
-  input: Partial<PluginTreeNodeBase> = {},
+  input: Partial<PluginTreeNodeBase> & {
+    priority?: number;
+    memberships?: PluginFile["memberships"];
+  } = {},
 ): PluginFile {
   return {
     ...createNodeBase(name, input),
     kind: "file",
+    priority: input.priority ?? 100,
+    memberships: clonePlain(input.memberships ?? []),
     content:
       pluginFileType(name) === "interactive-document"
         ? normalizeInteractiveDocumentSource(content)
@@ -86,44 +88,71 @@ function starterInfo(name: string) {
     "",
     "在这里记录插件用途、约定和使用方式。",
     "",
-    "文件通过容器声明和 `<@...>` 显式引用参与解析；文件类型由名称后缀决定。",
+    "容器在根目录 `containers.xml` 中声明；文件的容器成员关系保存在资源元数据中，正文只使用 `<@...>` 显式引用。",
   ].join("\n");
 }
 
 function createStarterRoot(name: string): PluginFolder {
   return createFolder("/", [
     createFile(pluginConventions.info, starterInfo(name), { order: 0 }),
+    createFile(pluginConventions.manifest, {}, { order: 1 }),
+    createContainerDefinitionsFile([
+      {
+        name: "会话上下文",
+        scope: "plugin",
+        description: "角色设定与会话生成所需的共享上下文。",
+        imports: [],
+      },
+    ], { order: 2 }),
     createFile(
       pluginConventions.context,
       createDefaultContextDocument(),
-      { order: 1 },
+      { order: 3 },
     ),
-    createFile(
-      pluginConventions.generation,
-      "",
-      { order: 2 },
-    ),
-    createFolder(pluginConventions.backgroundFolder, [], { order: 3 }),
-    createFolder("character", [
+    createFolder("instruction", [
       createFile(
         "default.md",
         [
-          '<member_of container="container:plugin/会话上下文" as="character" />',
-          "",
-          "保持清晰、可靠，并尊重当前对话上下文。",
+          "You are Pulsar's conversation agent.",
+          "Use tools when useful and keep the final answer grounded in the referenced context.",
+          "Treat Feature API documentation as the exact permission boundary.",
+          "When a real user decision is required, use askUser and continue from its result.",
         ].join("\n"),
         { order: 0 },
       ),
     ], { order: 4 }),
-    createFolder(pluginConventions.actionFolder, [], { order: 5 }),
-    createFolder("components", [], { order: 6 }),
+    createAgentProcessFolder({ order: 5 }),
+    createFile(
+      pluginConventions.override,
+      [
+        "<template>",
+        "  <slot />",
+        "</template>",
+        "",
+      ].join("\n"),
+      { order: 6 },
+    ),
+    createFolder(pluginConventions.componentsFolder, [], { order: 7 }),
+    createFolder(pluginConventions.backgroundFolder, [], { order: 8 }),
+    createFolder("character", [
+      createFile(
+        "default.md",
+        "保持清晰、可靠，并尊重当前对话上下文。",
+        {
+          order: 0,
+          memberships: [{
+            container: "container:plugin/会话上下文",
+            alias: "character",
+          }],
+        },
+      ),
+    ], { order: 9 }),
+    createFolder(pluginConventions.actionFolder, [], { order: 10 }),
   ], { id: crypto.randomUUID() });
 }
 
 function createDefaultContextDocument() {
   return [
-    '<container name="会话上下文" scope="plugin" />',
-    "",
     '<prompt_template name="main" role="system">',
     '{{ <@会话上下文>.get("character") }}',
     "",
@@ -133,6 +162,81 @@ function createDefaultContextDocument() {
     "<data>",
     "</data>",
   ].join("\n");
+}
+
+function createContainerDefinitionsFile(
+  containers: PluginContainerDeclaration[] = [],
+  input: Partial<PluginTreeNodeBase> = {},
+) {
+  return createFile(
+    pluginConventions.containers,
+    serializePluginContainerDefinitions({ containers }),
+    input,
+  );
+}
+
+function createAgentProcessFolder(
+  input: Partial<PluginTreeNodeBase> = {},
+  fileIdPrefix = "",
+) {
+  return createFolder(pluginConventions.agentProcessFolder, [
+    createFile(
+      pluginConventions.agentProcessEntry,
+      [
+        "const messages = await api.runProcess(",
+        "  <@path:./step1-prepare.js>,",
+        ");",
+        "const result = await api.runProcess(",
+        "  <@path:./step2-generate.js>,",
+        "  { processInput: messages },",
+        ");",
+        "return api.runProcess(",
+        "  <@path:./step3-finalize.js>,",
+        "  { processInput: result },",
+        ");",
+      ].join("\n"),
+      {
+        id: fileIdPrefix ? `${fileIdPrefix}-index` : undefined,
+        order: 0,
+      },
+    ),
+    createFile(
+      "step1-prepare.js",
+      "return contextMessages;",
+      {
+        id: fileIdPrefix ? `${fileIdPrefix}-step1` : undefined,
+        order: 1,
+      },
+    ),
+    createFile(
+      "step2-generate.js",
+      [
+        "const runtime = await agent.prepare();",
+        "const runner = new agent.ToolLoopAgent({",
+        "  model: runtime.model,",
+        "  instructions: String(<@path:../instruction/default.md>),",
+        "  tools: runtime.tools,",
+        "  stopWhen: runtime.stopWhen,",
+        "  onStepStart: runtime.onStepStart,",
+        "});",
+        "const result = await runner.generate({ messages: processInput });",
+        "await runtime.finish();",
+        "return { text: result.text, modelName: runtime.modelName };",
+      ].join("\n"),
+      {
+        id: fileIdPrefix ? `${fileIdPrefix}-step2` : undefined,
+        order: 2,
+      },
+    ),
+    createFile(
+      "step3-finalize.js",
+      "return processInput;",
+      {
+        id: fileIdPrefix ? `${fileIdPrefix}-step3` : undefined,
+        order: 3,
+      },
+    ),
+  ], input);
 }
 
 function createBuiltinPlugin(): Plugin {
@@ -147,6 +251,19 @@ function createBuiltinPlugin(): Plugin {
       "<data>",
       "</data>",
     ].join("\n");
+  }
+  const containers = findPluginNodeByPath(root, pluginConventions.containers);
+  if (containers?.kind === "file") {
+    containers.content = serializePluginContainerDefinitions({
+      containers: [
+        {
+          name: "基础上下文",
+          scope: "global",
+          description: "所有启用插件都可以显式引用的 PulsarAI 基础上下文。",
+          imports: [],
+        },
+      ],
+    });
   }
   const background = findPluginNodeByPath(root, pluginConventions.backgroundFolder);
   if (background?.kind === "folder") {
@@ -189,15 +306,14 @@ function createBuiltinPlugin(): Plugin {
   root.children.push(
     createFile(
       "api-documentation.md",
-      [
-        '<container name="基础上下文" scope="global" />',
-        '<member_of container="container:global/基础上下文" as="apiDocumentation" />',
-        "",
-        "{{CAPABILITIES_PROMPT}}",
-      ].join("\n"),
+      "{{CAPABILITIES_PROMPT}}",
       {
         id: "builtin-api-documentation",
         order: 7,
+        memberships: [{
+          container: "container:global/基础上下文",
+          alias: "apiDocumentation",
+        }],
       },
     ),
     createFolder("tool", [
@@ -226,94 +342,6 @@ function createBuiltinPlugin(): Plugin {
     main: false,
     builtIn: true,
     order: 10_000,
-  };
-}
-
-function createProjectAgentPlugin(): Plugin {
-  const root = createFolder("/", [
-    createFile(
-      pluginConventions.info,
-      [
-        "# PulsarAI Project Agent",
-        "",
-        "这个内置插件把项目级 Agent 接入 PulsarAI 角色包。",
-        "项目由会话的 `projectPackageId` 指定，Agent 通过受限的文件系统式 API 读取和修改该项目。",
-      ].join("\n"),
-      { id: "builtin-project-agent-info", order: 0 },
-    ),
-    createFile(
-      pluginConventions.context,
-      [
-        '<container name="项目上下文" scope="plugin">',
-        '  <include as="base">container:global/基础上下文</include>',
-        "</container>",
-        "",
-        '<prompt_template name="project-agent" role="system">',
-        "{{PROJECT_AGENT_PROMPT}}",
-        "",
-        "[[chat]]",
-        "</prompt_template>",
-        "",
-        "<data>",
-        "</data>",
-      ].join("\n"),
-      {
-        id: "builtin-project-agent-context-file",
-        order: 1,
-      },
-    ),
-    createFile(
-      pluginConventions.generation,
-      "",
-      { id: "builtin-project-agent-generation", order: 2 },
-    ),
-    createFile(
-      "AGENTS.md",
-      [
-        "# Project Agent Instructions",
-        "",
-        "- Inspect before editing.",
-        "- Treat a role-playing package as one coherent system.",
-        "- Keep existing ids stable and create UUIDs for new structured nodes.",
-        "- Modify only the selected project's conversations and local plugins.",
-        "- Read back important writes and summarize changed paths.",
-      ].join("\n"),
-      { id: "builtin-project-agent-instructions", order: 3 },
-    ),
-    createFolder("reference", [
-      createFile(
-        "interactive-document.md",
-        interactiveDocumentFormatPrompt,
-        { id: "builtin-project-agent-imd-reference", order: 0 },
-      ),
-      createFile(
-        "plugin-files.md",
-        [
-          "# Plugin file conventions",
-          "",
-          "- `info.md` documents a plugin.",
-          "- Root `context.imd` is the role-aware generation entry document.",
-          "- `generation.js` may override the default Agent process.",
-          "- File semantics come from suffixes such as `.md`, `.imd`, `.js`, `.json`, media, and component files.",
-          "- Cross-resource access uses explicit `<@local:...>`, `<@path:...>`, `<@id:...>`, or `<@container:scope/name>` references.",
-          "- Containers are declared in files and remain lazy namespaces instead of being flattened into the Sandbox environment.",
-        ].join("\n"),
-        { id: "builtin-project-agent-plugin-reference", order: 1 },
-      ),
-    ], { id: "builtin-project-agent-reference", order: 4 }),
-  ], { id: "builtin-project-agent-root" });
-
-  return {
-    id: builtinProjectAgentPluginId,
-    packageId: builtinProjectAgentPackageId,
-    name: "项目 Agent",
-    icon: "",
-    shortDescription: "读取并修改指定角色包项目",
-    root,
-    enabled: true,
-    main: true,
-    builtIn: true,
-    order: -10_000,
   };
 }
 
@@ -366,6 +394,8 @@ function normalizeTreeNode(value: unknown, order = 0): PluginTreeNode | null {
   const source = value as Partial<PluginTreeNode> & {
     children?: unknown;
     content?: unknown;
+    priority?: unknown;
+    memberships?: unknown;
   };
   const name = typeof source.name === "string" && source.name.trim()
     ? source.name.trim()
@@ -397,6 +427,23 @@ function normalizeTreeNode(value: unknown, order = 0): PluginTreeNode | null {
   return {
     ...base,
     kind: "file",
+    priority:
+      typeof source.priority === "number" && Number.isFinite(source.priority)
+        ? source.priority
+        : 100,
+    memberships: Array.isArray(source.memberships)
+      ? source.memberships.flatMap((membership) => {
+          if (!membership || typeof membership !== "object") return [];
+          const item = membership as { container?: unknown; alias?: unknown };
+          if (typeof item.container !== "string" || !item.container.trim()) {
+            return [];
+          }
+          return [{
+            container: item.container.trim(),
+            alias: typeof item.alias === "string" ? item.alias.trim() : "",
+          }];
+        })
+      : [],
     content:
       pluginFileType(name) === "interactive-document"
         ? normalizeInteractiveDocumentSource(source.content)
@@ -433,6 +480,17 @@ function normalizePlugin(value: Plugin): Plugin {
     builtIn: value.builtIn === true,
     order: typeof value.order === "number" ? value.order : 0,
   };
+}
+
+function isFixedConventionNode(plugin: Plugin, nodeId: string) {
+  return [
+    pluginConventions.manifest,
+    pluginConventions.containers,
+    pluginConventions.override,
+    pluginConventions.componentsFolder,
+  ].some(
+    (path) => findPluginNodeByPath(plugin.root, path)?.id === nodeId,
+  );
 }
 
 function normalizeImportedGlobalPlugin(value: unknown, order: number): Plugin {
@@ -594,17 +652,31 @@ export const usePluginStore = defineStore("plugin-resource", {
     },
     async loadInitialData() {
       const records = await selectAll<Plugin>(pluginTable);
+      const persistedBuiltin = records
+        .map((record) => record.value)
+        .find(
+          (record) =>
+            isPluginRecord(record)
+            && record.id === builtinCorePluginId,
+        );
       this.plugins = records
         .map((record) => record.value)
         .filter(
           (record) =>
             isPluginRecord(record)
-            && record.id !== builtinCorePluginId
-            && record.id !== builtinProjectAgentPluginId,
+            && record.id !== builtinCorePluginId,
         )
         .map(normalizePlugin);
-      this.plugins.push(createBuiltinPlugin(), createProjectAgentPlugin());
-      await Promise.all(this.plugins.map((plugin) => this.persistPlugin(plugin)));
+      this.plugins.push(
+        persistedBuiltin
+          ? {
+              ...normalizePlugin(persistedBuiltin),
+              id: builtinCorePluginId,
+              packageId: null,
+              builtIn: true,
+            }
+          : createBuiltinPlugin(),
+      );
       this.activePluginId = this.sortedPlugins[0]?.id ?? "";
       this.loaded = true;
     },
@@ -657,19 +729,42 @@ export const usePluginStore = defineStore("plugin-resource", {
     ) {
       const plugin = this.plugins.find((item) => item.id === pluginId);
       if (!plugin) return;
-      if (plugin.builtIn) {
-        if (typeof patch.enabled === "boolean") {
-          plugin.enabled = patch.enabled;
-          await this.persistPlugin(plugin);
-        }
-        return;
-      }
       Object.assign(plugin, patch);
       await this.persistPlugin(plugin);
+    },
+    async restoreBuiltInPlugin(pluginId: string) {
+      if (pluginId !== builtinCorePluginId) return null;
+      const restored = createBuiltinPlugin();
+      const index = this.plugins.findIndex((item) => item.id === pluginId);
+      if (index >= 0) {
+        this.plugins.splice(index, 1, restored);
+      } else {
+        this.plugins.push(restored);
+      }
+      await this.persistPlugin(restored);
+      return restored;
     },
     async deletePlugin(pluginId: string) {
       const plugin = this.plugins.find((item) => item.id === pluginId);
       if (!plugin || plugin.builtIn) return;
+      const { useConversationStore } = await import(
+        "@/features/Resources/Conversation/application/conversation-store"
+      );
+      const conversation = useConversationStore();
+      await conversation.initialize();
+      for (const item of conversation.conversations.filter(
+        (candidate) =>
+          candidate.kind === "test"
+          && (candidate.binding?.pluginId === pluginId
+            || (
+              candidate.binding?.resourceType === "plugin"
+              && candidate.binding.resourceId === pluginId
+            )),
+      )) {
+        await conversation.deleteConversation(item.id, {
+          activateFallback: false,
+        });
+      }
       this.plugins = this.plugins.filter((item) => item.id !== pluginId);
       await remove(pluginTable, pluginId);
       this.activePluginId = this.sortedPlugins[0]?.id ?? "";
@@ -725,19 +820,41 @@ export const usePluginStore = defineStore("plugin-resource", {
     async createFile(
       pluginId: string,
       parentFolderId: string,
-      input: { name?: string; content?: unknown } = {},
+      input: { name?: string; content?: unknown; priority?: number } = {},
     ) {
       const plugin = this.plugins.find((item) => item.id === pluginId);
       const parent = plugin
         ? findPluginTreeNode(plugin.root, parentFolderId)
         : null;
-      if (!plugin || plugin.builtIn || parent?.kind !== "folder") return null;
+      if (!plugin || parent?.kind !== "folder") return null;
+      if (
+        parent.id === plugin.root.id
+        && [
+          pluginConventions.manifest,
+          pluginConventions.containers,
+          pluginConventions.override,
+        ].some(
+          (name) =>
+            input.name?.trim().toLocaleLowerCase()
+              === name.toLocaleLowerCase(),
+        )
+      ) {
+        const existing = findPluginNodeByPath(
+          plugin.root,
+          input.name?.trim() ?? "",
+        );
+        if (existing?.kind === "file") return existing;
+      }
       const file = createFile(
         input.name?.trim() || "untitled.md",
         input.content ?? "",
         {
           order:
             Math.max(-1, ...parent.children.map((child) => child.order ?? -1)) + 1,
+          priority:
+            typeof input.priority === "number" && Number.isFinite(input.priority)
+              ? Math.round(input.priority)
+              : 100,
         },
       );
       parent.children.push(file);
@@ -754,7 +871,18 @@ export const usePluginStore = defineStore("plugin-resource", {
       const parent = plugin
         ? findPluginTreeNode(plugin.root, parentFolderId)
         : null;
-      if (!plugin || plugin.builtIn || parent?.kind !== "folder") return null;
+      if (!plugin || parent?.kind !== "folder") return null;
+      if (
+        parent.id === plugin.root.id
+        && name.trim().toLocaleLowerCase()
+          === pluginConventions.componentsFolder.toLocaleLowerCase()
+      ) {
+        const existing = findPluginNodeByPath(
+          plugin.root,
+          pluginConventions.componentsFolder,
+        );
+        if (existing?.kind === "folder") return existing;
+      }
       const folder = createFolder(name, [], {
         order:
           Math.max(-1, ...parent.children.map((child) => child.order ?? -1)) + 1,
@@ -776,13 +904,22 @@ export const usePluginStore = defineStore("plugin-resource", {
       pluginId: string,
       nodeId: string,
       patch: Partial<
-        PluginTreeNodeBase & { content: unknown; collapsed: boolean }
+        PluginTreeNodeBase & {
+          content: unknown;
+          collapsed: boolean;
+          priority: number;
+          memberships: PluginFile["memberships"];
+        }
       >,
     ) {
       const plugin = this.plugins.find((item) => item.id === pluginId);
       const node = plugin ? findPluginTreeNode(plugin.root, nodeId) : null;
-      if (!plugin || plugin.builtIn || !node) return;
-      if (typeof patch.name === "string" && patch.name.trim()) {
+      if (!plugin || !node) return;
+      if (
+        !isFixedConventionNode(plugin, nodeId)
+        && typeof patch.name === "string"
+        && patch.name.trim()
+      ) {
         node.name = patch.name.trim();
       }
       if (typeof patch.icon === "string") node.icon = patch.icon;
@@ -791,6 +928,16 @@ export const usePluginStore = defineStore("plugin-resource", {
           pluginFileType(node.name) === "interactive-document"
             ? normalizeInteractiveDocumentSource(patch.content)
             : clonePlain(patch.content);
+      }
+      if (
+        node.kind === "file"
+        && typeof patch.priority === "number"
+        && Number.isFinite(patch.priority)
+      ) {
+        node.priority = Math.round(patch.priority);
+      }
+      if (node.kind === "file" && Array.isArray(patch.memberships)) {
+        node.memberships = clonePlain(patch.memberships);
       }
       if (node.kind === "folder" && typeof patch.collapsed === "boolean") {
         node.collapsed = patch.collapsed;
@@ -802,7 +949,11 @@ export const usePluginStore = defineStore("plugin-resource", {
       const parent = plugin
         ? findPluginTreeParent(plugin.root, nodeId)
         : null;
-      if (!plugin || plugin.builtIn || !parent) return;
+      if (
+        !plugin
+        || !parent
+        || isFixedConventionNode(plugin, nodeId)
+      ) return;
       parent.children = parent.children.filter((child) => child.id !== nodeId);
       await this.persistPlugin(plugin);
     },
@@ -822,10 +973,10 @@ export const usePluginStore = defineStore("plugin-resource", {
       const node = plugin ? findPluginTreeNode(plugin.root, nodeId) : null;
       if (
         !plugin
-        || plugin.builtIn
         || !sourceParent
         || target?.kind !== "folder"
         || !node
+        || isFixedConventionNode(plugin, nodeId)
         || node.id === target.id
         || (node.kind === "folder" && findPluginTreeNode(node, target.id))
       ) {

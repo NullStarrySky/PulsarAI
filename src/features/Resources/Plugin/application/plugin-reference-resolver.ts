@@ -9,15 +9,17 @@ import {
 } from "@/features/Sandbox/domain/sandbox";
 import {
   findPluginReferenceTokens,
+  parsePluginContainerDefinitions,
   normalizePluginReferenceTarget,
   parseContainerReferenceTarget,
-  parsePluginResourceManifest,
   replacePluginReferenceTokens,
   type PluginContainerDeclaration,
   type PluginContainerScope,
+  type PluginReferenceSuggestion,
 } from "@/features/Resources/Plugin/domain/plugin-reference";
 import {
   flattenPluginFiles,
+  pluginConventions,
   pluginFileType,
   pluginNodePath,
   type Plugin,
@@ -40,6 +42,7 @@ export interface GenerationResourceValue {
   name: string;
   icon: string;
   content: unknown;
+  priority: number;
   pluginId: string;
   pluginName: string;
   path: string;
@@ -88,6 +91,7 @@ export class PluginReferenceResolver {
   private readonly renderCache = new Map<string, string>();
   private readonly renderStack: ResourceRecord[] = [];
   private readonly tracedResourceIds = new Set<string>();
+  private readonly resourceValues = new WeakSet<object>();
 
   constructor(
     readonly plugins: Plugin[],
@@ -107,12 +111,49 @@ export class PluginReferenceResolver {
     return record ? this.createResourceValue(record) : null;
   }
 
+  isResourceValue(value: unknown): value is GenerationResourceValue {
+    return Boolean(
+      value
+      && typeof value === "object"
+      && this.resourceValues.has(value),
+    );
+  }
+
   resolveFromResource(resourceId: string, target: string) {
     const record = this.recordsById.get(resourceId);
     if (!record) {
       throw new Error(`引用来源不存在：${resourceId}`);
     }
     return this.resolve(target, record);
+  }
+
+  referenceSuggestionsFromResource(
+    resourceId: string,
+  ): PluginReferenceSuggestion[] {
+    const from = this.requireRecord(resourceId);
+    const visible = [...this.containers.values()].filter((container) =>
+      container.scope === "global"
+      || (
+        container.source.plugin.id === from.plugin.id
+        && (
+          container.scope === "plugin"
+          || container.source.directory === from.directory
+        )
+      )
+    );
+    const nameCounts = new Map<string, number>();
+    for (const container of visible) {
+      nameCounts.set(container.name, (nameCounts.get(container.name) ?? 0) + 1);
+    }
+    return visible.map((container) => ({
+      target:
+        nameCounts.get(container.name) === 1
+          ? container.name
+          : `container:${container.scope}/${container.name}`,
+      label: container.name,
+      detail: `${container.scope} · ${container.source.plugin.name}`,
+      description: container.declaration.description?.trim() || undefined,
+    }));
   }
 
   private resolve(target: string, from?: ResourceRecord): unknown {
@@ -266,14 +307,13 @@ export class PluginReferenceResolver {
         const path = pluginNodePath(plugin.root, file.id).join("/");
         const rawContent = sourceOverrides[file.id] ?? file.content;
         const source = typeof rawContent === "string" ? rawContent : "";
-        const manifest = parsePluginResourceManifest(source);
         const record: ResourceRecord = {
           plugin,
           file: rawContent === file.content ? file : { ...file, content: rawContent },
           path,
           directory: parentResourcePath(path),
           source,
-          declarationSource: manifest.source,
+          declarationSource: source,
         };
         this.records.push(record);
         if (!this.recordsById.has(file.id)) {
@@ -291,8 +331,12 @@ export class PluginReferenceResolver {
 
   private indexContainers() {
     for (const record of this.records) {
-      const manifest = parsePluginResourceManifest(record.source);
-      for (const declaration of manifest.containers) {
+      const isDefinitionsFile =
+        record.path.toLocaleLowerCase()
+          === pluginConventions.containers.toLocaleLowerCase();
+      if (!isDefinitionsFile) continue;
+      const definitions = parsePluginContainerDefinitions(record.source);
+      for (const declaration of definitions.containers) {
         const key = containerKey(declaration.scope, declaration.name, record);
         if (this.containers.has(key)) {
           this.diagnostics.push({
@@ -314,9 +358,12 @@ export class PluginReferenceResolver {
       }
     }
 
-    for (const record of this.records) {
-      const manifest = parsePluginResourceManifest(record.source);
-      for (const membership of manifest.memberships) {
+    for (
+      const record of [...this.records].sort(
+        (a, b) => b.file.priority - a.file.priority,
+      )
+    ) {
+      for (const membership of record.file.memberships ?? []) {
         try {
           const container = this.resolveContainer(
             membership.container,
@@ -420,7 +467,7 @@ export class PluginReferenceResolver {
       use: (alias) => {
         const imported = record.imports.get(alias);
         if (!imported) {
-          throw new Error(`容器 ${record.name} 没有导入：${alias}`);
+          throw new Error(`容器 ${record.name} 没有引用该命名空间：${alias}`);
         }
         return this.createContainerValue(imported);
       },
@@ -438,17 +485,20 @@ export class PluginReferenceResolver {
   }
 
   private createResourceValue(record: ResourceRecord): GenerationResourceValue {
-    return {
+    const value: GenerationResourceValue = {
       id: record.file.id,
       name: record.file.name,
       icon: record.file.icon,
       content: record.file.content,
+      priority: record.file.priority,
       pluginId: record.plugin.id,
       pluginName: record.plugin.name,
       path: record.path,
       type: pluginFileType(record.file.name),
       toString: () => this.renderResource(record.file.id),
     };
+    this.resourceValues.add(value);
+    return value;
   }
 
   private requireRecord(resourceId: string) {

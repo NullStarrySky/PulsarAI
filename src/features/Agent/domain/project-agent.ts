@@ -1,6 +1,5 @@
-export const builtinProjectAgentPackageId = "builtin-pulsarai-project-agent";
-export const builtinProjectAgentPluginId = "builtin-pulsarai-project-plugin";
+import type { Conversation } from "@/features/Resources/Conversation/domain/conversation-types";
 
-export function isProjectAgentPackage(packageId?: string | null) {
-  return packageId === builtinProjectAgentPackageId;
+export function isProjectAgentConversation(conversation: Conversation) {
+  return conversation.kind === "task" && Boolean(conversation.binding?.packageId);
 }

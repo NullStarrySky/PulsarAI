@@ -1,7 +1,7 @@
 import { CrepeFeature, type CrepeConfig } from "@milkdown/crepe";
 import type { AIPromptContext } from "@milkdown/crepe/feature/ai";
 import type { ModelMessage } from "ai";
-import { runDefaultAgent } from "@/features/Agent/application/default-agent";
+import { generateAuxiliaryText } from "@/features/Agent/application/default-agent";
 
 export const conversationCrepeFeatures: Record<CrepeFeature, boolean> = {
   [CrepeFeature.Cursor]: true,
@@ -45,13 +45,7 @@ async function* conversationAIProvider(context: AIPromptContext, signal: AbortSi
     },
   ];
 
-  const result = await runDefaultAgent({
-    messages,
-    environment: {
-      now: () => new Date().toISOString(),
-      source: "milkdown-ai",
-    },
-  });
+  const result = await generateAuxiliaryText(messages);
 
   for (const chunk of chunkText(result.text)) {
     if (signal.aborted) {

@@ -28,6 +28,9 @@ import {
   type InteractiveDocumentSource,
   type InteractivePromptRole,
 } from "../domain/interactive-document";
+import type {
+  PluginReferenceSuggestion,
+} from "@/features/Resources/Plugin/domain/plugin-reference";
 
 const props = withDefaults(
   defineProps<{
@@ -35,6 +38,7 @@ const props = withDefaults(
     readonly?: boolean;
     resolveReference?: (target: string) => unknown;
     referenceDiagnostics?: string[];
+    referenceSuggestions?: PluginReferenceSuggestion[];
   }>(),
   {
     readonly: false,
@@ -48,6 +52,15 @@ const emit = defineEmits<{
 const activeTab = ref(props.readonly ? "preview" : "edit");
 const source = computed(() => props.modelValue ?? createInteractiveDocumentDemo());
 const document = computed(() => parseInteractiveDocumentSource(source.value));
+const referenceSuggestions = computed<PluginReferenceSuggestion[]>(() => [
+  ...document.value.data.map((item) => ({
+    target: `local:${item.name}`,
+    label: item.name,
+    detail: `local · ${item.contentType}`,
+    description: item.description.trim() || undefined,
+  })),
+  ...(props.referenceSuggestions ?? []),
+]);
 const preview = computed(() => {
   const result = compileInteractiveDocumentSource(source.value, {
     environment: {
@@ -253,6 +266,7 @@ function uniqueDataName(document: InteractiveDocumentSource, base: string) {
                   :model-value="template.content"
                   enable-block-edit
                   enable-reference-syntax
+                  :reference-suggestions="referenceSuggestions"
                   :enable-ai="false"
                   placeholder=""
                   class="interactive-doc-template-editor px-4 py-3"

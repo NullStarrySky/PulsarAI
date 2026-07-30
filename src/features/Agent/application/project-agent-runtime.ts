@@ -1,4 +1,10 @@
 import { interactiveDocumentFormatPrompt } from "@/features/Resources/InteractiveDoc/domain/interactive-document-format";
+import {
+  createCapabilityPrompt,
+} from "@/features/Capabilities/domain/capability";
+import {
+  pluginCapabilitiesDefinition,
+} from "@/features/Resources/Plugin/domain/plugin-capability";
 import type {
   Conversation,
   ConversationRendererId,
@@ -13,7 +19,6 @@ import {
   type PluginTreeNode,
 } from "@/features/Resources/Plugin/domain/plugin-types";
 import type { SandboxEnvironment } from "@/features/Sandbox/domain/sandbox";
-import { builtinProjectAgentPackageId } from "../domain/project-agent";
 
 export interface ProjectAgentRuntime {
   environment: SandboxEnvironment;
@@ -29,6 +34,7 @@ interface ProjectCreateInput {
   rendererId?: ConversationRendererId;
   icon?: string;
   shortDescription?: string;
+  priority?: number;
 }
 
 interface ProjectWriteInput {
@@ -42,6 +48,7 @@ interface ProjectWriteInput {
   enabled?: boolean;
   main?: boolean;
   content?: unknown;
+  priority?: number;
 }
 
 interface ProjectAgentApi {
@@ -64,6 +71,9 @@ interface ProjectAgentApi {
 
 export async function createProjectAgentRuntime(
   hostConversationId: string,
+  options: {
+    pluginSubCapIds?: string[];
+  } = {},
 ): Promise<ProjectAgentRuntime> {
   const [
     { useConversationStore },
@@ -80,9 +90,7 @@ export async function createProjectAgentRuntime(
 
   function hostConversation() {
     const host = conversation.conversations.find(
-      (item) =>
-        item.id === hostConversationId
-        && item.packageId === builtinProjectAgentPackageId,
+      (item) => item.id === hostConversationId && item.kind === "task",
     );
     if (!host) {
       throw new Error("项目 Agent 会话不存在。");
@@ -91,12 +99,12 @@ export async function createProjectAgentRuntime(
   }
 
   function selectedProject() {
-    const projectId = hostConversation().projectPackageId;
+    const projectId = hostConversation().binding?.packageId;
     if (!projectId) {
       throw new Error("尚未指定项目。先调用 project.select(projectId)。");
     }
     const project = conversation.packages.find(
-      (item) => item.id === projectId && !item.builtIn,
+      (item) => item.id === projectId,
     );
     if (!project) {
       throw new Error("当前项目不存在或已被删除。");
@@ -113,15 +121,13 @@ export async function createProjectAgentRuntime(
 
   const api: ProjectAgentApi = {
     listProjects() {
-      return conversation.packages
-        .filter((item) => !item.builtIn)
-        .map(({ id, name, description, icon, categoryId }) => ({
+      return conversation.packages.map(({ id, name, description, icon, categoryId }) => ({
           id,
           name,
           description,
           icon,
           categoryId,
-        }));
+      }));
     },
     async createProject(input: ProjectCreateInput = {}) {
       const created = await conversation.createPackage(
@@ -133,14 +139,20 @@ export async function createProjectAgentRuntime(
         { activate: false },
       );
       await conversation.updateConversation(hostConversationId, {
-        projectPackageId: created.id,
+        binding: {
+          resourceType: "project",
+          resourceId: created.id,
+          resourcePath: "/project.json",
+          resourceTitle: created.name,
+          packageId: created.id,
+        },
       });
       return api.read("/project.json");
     },
     getSelection() {
       const host = hostConversation();
       const project = conversation.packages.find(
-        (item) => item.id === host.projectPackageId && !item.builtIn,
+        (item) => item.id === host.binding?.packageId,
       );
       return project
         ? {
@@ -158,13 +170,23 @@ export async function createProjectAgentRuntime(
       if (
         projectId
         && !conversation.packages.some(
-          (item) => item.id === projectId && !item.builtIn,
+          (item) => item.id === projectId,
         )
       ) {
         throw new Error("无法选择项目：角色包不存在。");
       }
       await conversation.updateConversation(hostConversationId, {
-        projectPackageId: projectId || undefined,
+        binding: projectId
+          ? {
+              ...(hostConversation().binding ?? {
+                resourceType: "project",
+                resourceId: projectId,
+                resourcePath: "/project.json",
+                resourceTitle: conversation.packages.find((item) => item.id === projectId)?.name ?? "项目",
+              }),
+              packageId: projectId,
+            }
+          : undefined,
       });
       return api.getSelection();
     },
@@ -293,10 +315,11 @@ export async function createProjectAgentRuntime(
           throw new Error("创建插件节点时必须提供 name。");
         }
         const created = input.kind === "folder"
-          ? await plugins.createFolder(plugin.id, parent.id, name)
-          : await plugins.createFile(plugin.id, parent.id, {
+            ? await plugins.createFolder(plugin.id, parent.id, name)
+            : await plugins.createFile(plugin.id, parent.id, {
               name,
               content: input.content ?? "",
+              priority: input.priority,
             });
         if (!created) {
           throw new Error("创建插件节点失败。");
@@ -360,6 +383,9 @@ export async function createProjectAgentRuntime(
         await plugins.updateNode(plugin.id, node.id, {
           ...(typeof input.name === "string" ? { name: input.name } : {}),
           ...(typeof input.icon === "string" ? { icon: input.icon } : {}),
+          ...(typeof input.priority === "number"
+            ? { priority: input.priority }
+            : {}),
           ...("content" in input ? { content: input.content } : {}),
         });
         return api.read(projectPluginNodePath(plugin, node));
@@ -396,7 +422,7 @@ export async function createProjectAgentRuntime(
         }
         layout.closeTabsByPackage(project.id);
         await conversation.updateConversation(hostConversationId, {
-          projectPackageId: undefined,
+          binding: undefined,
         });
         await conversation.deletePackage(project.id, {
           activateFallback: false,
@@ -448,14 +474,29 @@ export async function createProjectAgentRuntime(
   }
 
   const selection = api.getSelection();
+  const host = hostConversation();
   const projectLabel = selection.projectId
     ? `当前项目是 ${selection.projectName}（${selection.projectId}）。`
     : "当前未指定项目。先根据用户意图选择项目，必要时调用 project.listProjects() 和 project.select(projectId)。";
   const apiDocumentation = projectApiDocumentation();
+  const pluginApiDocumentation = createCapabilityPrompt(
+    pluginCapabilitiesDefinition,
+    options.pluginSubCapIds ?? [],
+  );
+  const resourceLabel = host.binding
+    ? [
+        "This is a side-task conversation bound to the current project resource.",
+        `Resource title: ${host.binding.resourceTitle}`,
+        `Resource type: ${host.binding.resourceType}`,
+        `Project path: ${host.binding.resourcePath}`,
+        "Inspect that path first and keep the task scoped to it unless the user explicitly broadens the request.",
+      ].join("\n")
+    : "";
   const prompt = [
     "# PulsarAI Project Agent",
     "You are the project-level Agent inside PulsarAI.",
     projectLabel,
+    resourceLabel,
     "Treat the selected character package as a complete role-playing system, not a loose collection of prompts.",
     "Before changing anything, inspect the relevant project paths and infer how its conversations, plugins, context, characters, actions, components, and interactive documents work together.",
     "Translate the user's intent into a coherent system: identity, setting, participant relationships, voice, goals, boundaries, continuity, context assembly, and interaction rules.",
@@ -465,8 +506,9 @@ export async function createProjectAgentRuntime(
     "If the request is ambiguous in a way that changes the system design, use askUser before writing.",
     "Explain the resulting structure and mention the paths changed in the final response.",
     apiDocumentation,
+    pluginApiDocumentation,
     interactiveDocumentFormatPrompt,
-  ].join("\n\n");
+  ].filter(Boolean).join("\n\n");
 
   return {
     environment: {
@@ -474,6 +516,8 @@ export async function createProjectAgentRuntime(
       PROJECT: api,
       PROJECT_AGENT_PROMPT: prompt,
       PROJECT_API_DOCUMENTATION: apiDocumentation,
+      PLUGIN_API_DOCUMENTATION: pluginApiDocumentation,
+      PROJECT_RESOURCE_PATH: host.binding?.resourcePath ?? "",
       INTERACTIVE_DOCUMENT_FORMAT: interactiveDocumentFormatPrompt,
     },
     prompt,
@@ -519,6 +563,7 @@ function nodeEntry(node: PluginTreeNode) {
     kind: node.kind,
     id: node.id,
     type: node.kind === "file" ? pluginFileType(node.name) : "folder",
+    ...(node.kind === "file" ? { priority: node.priority } : {}),
   };
 }
 
@@ -562,9 +607,9 @@ function projectApiDocumentation() {
     "`project.read(path)` reads `/project.json`, `/conversations/<id>.json`, `/plugins/<pluginId>`, or a plugin node.",
     "`await project.create('/conversations', { title, rendererId })` creates a project conversation without leaving this Agent conversation.",
     "`await project.create('/plugins', { name, icon, shortDescription })` creates a project-local plugin.",
-    "`await project.create('/plugins/<pluginId>/<folder>', { kind: 'file' | 'folder', name, content })` creates a node.",
+    "`await project.create('/plugins/<pluginId>/<folder>', { kind: 'file' | 'folder', name, content, priority? })` creates a node; file priority defaults to 100.",
     "`await project.mkdir('/plugins/<pluginId>/<folder>', name)` creates a folder.",
-    "`await project.write(path, patch)` updates project metadata, conversation metadata, plugin metadata, or a plugin node/content.",
+    "`await project.write(path, patch)` updates project metadata, conversation metadata, plugin metadata, or a plugin node/content/priority.",
     "`await project.move(fromPath, targetFolderPath, beforeName?)` moves a node inside one plugin.",
     "`await project.remove(path)` removes a project conversation, local plugin, or plugin node.",
     "`await project.remove('/project.json')` deletes the selected project after removing its own conversations and local plugins.",

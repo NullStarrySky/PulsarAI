@@ -166,6 +166,75 @@
   color: var(--secondary-foreground);
 }
 
+.milkdown .pulsar-plugin-reference-suggestions {
+  position: absolute;
+  z-index: 50;
+  display: grid;
+  width: min(24rem, calc(100vw - 2rem));
+  margin-top: 1.7rem;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 12px 32px color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+
+.milkdown .pulsar-plugin-reference-suggestion {
+  display: grid;
+  gap: 0.18rem;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.milkdown .pulsar-plugin-reference-suggestion:last-child {
+  border-bottom: 0;
+}
+
+.milkdown .pulsar-plugin-reference-suggestion:hover,
+.milkdown .pulsar-plugin-reference-suggestion[data-active="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.milkdown .pulsar-plugin-reference-suggestion-heading {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.milkdown .pulsar-plugin-reference-suggestion-heading strong {
+  overflow: hidden;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.milkdown .pulsar-plugin-reference-suggestion-heading small {
+  flex: none;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
+  font-size: 0.66rem;
+}
+
+.milkdown .pulsar-plugin-reference-suggestion-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .milkdown .crepe-drop-cursor {
   background-color: var(--foreground) !important;
   opacity: 0.7 !important;

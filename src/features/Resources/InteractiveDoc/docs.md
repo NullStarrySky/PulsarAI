@@ -54,10 +54,10 @@ Local data is never injected under a bare name. It is available only through `<@
 
 `presentation/InteractiveDocumentWorkspacePage.vue` has three views:
 
-- Edit presents each `prompt_template` in Milkdown with `<@...>` syntax highlighting and each `sub_data` in compact responsive fields.
-- Source edits the complete SFC text, including container declarations and memberships.
+- Edit presents each `prompt_template` in Milkdown with `<@...>` syntax highlighting and each `sub_data` in compact responsive fields. Typing `<@` opens reference completion for local data and currently visible Plugin containers; suggestions show their optional descriptions and insert a scoped container target when a short name would be ambiguous.
+- Source edits the complete SFC text. Container declarations and namespaced container references belong to the owning plugin root `containers.xml`; resource memberships are Plugin file metadata and never appear in IMD source.
 - Preview compiles the current source and renders each output message with its role and any parser/linker diagnostics.
 
-The layout becomes a single-column data grid below 768px and keeps usable touch targets. Built-in IMD files open read-only with Source and Preview available.
+The layout becomes a single-column data grid below 768px and keeps usable touch targets.
 
 The workspace is registered for `resourceType: "interactive-doc"` and is reused by Plugin `.imd` files.

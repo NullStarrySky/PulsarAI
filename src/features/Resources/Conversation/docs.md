@@ -6,15 +6,17 @@ The generation sequence is:
 
 1. Convert the active container path to role-preserving AI SDK messages.
 2. Resolve default Feature API grants and the active character package override, then use the built Capability objects as the minimal Sandbox base environment.
-3. Ask `Plugin` to index enabled files, scoped container declarations, memberships, and root entry conventions without evaluating or flattening resources.
+3. Ask `Plugin` to read scoped container declarations from each enabled plugin's root `containers.xml`, index file membership metadata, and discover root entry conventions without evaluating or flattening resources.
 4. Add the active path, empty container, empty message, registered Skill/MCP tool names, and component-interaction API to the same minimal environment.
 5. Compile the first root `context.imd`. Repeatable SFC `prompt_template` blocks preserve their roles, `[[chat]]` splices the active path, and `<@...>` links only explicitly requested resources. With no entry document, the fallback is `[[chat]]`. The generated Feature API reference remains a prepended system message.
-6. Preprocess and execute the selected `action/` JavaScript file or highest-priority non-empty root `generation.js` with a source-scoped guarded `ref`. The process can call `api.runAgent(messages?)`, authorized Feature APIs, `api.askUserWithComponent(...)`, or `api.renderComponent(componentId, props)`. An empty or absent process runs the default Agent.
+6. Preprocess and execute the selected `action/` JavaScript file, otherwise the first enabled plugin's non-empty root `agentprocess/index.js`, with a source-scoped guarded `ref`. The process can call `api.runProcess(explicitResource, overrides?)`, authorized Feature APIs, `api.askUserWithComponent(...)`, or `api.renderComponent(componentId, props)`. Agent resources expose the constructor immediately and hydrate the model, tools, and lifecycle hooks only through `agent.prepare()`; the built-in plugin visibly decides whether to construct `ToolLoopAgent`. A missing process is an explicit error rather than an invisible fallback.
 7. Normalize the process result into the already-created assistant message and persist generation metadata, resolved resource IDs, and linker diagnostics.
 
 Character packages persist an optional `capabilities` map. An omitted map inherits the default configuration; a package map overrides defaults feature by feature, and an explicit empty list denies that Feature.
 
-The immutable `PulsarAI` package is the owner of project-Agent conversations. A project conversation persists an optional `projectPackageId` pointing at the normal character package it may inspect and modify. The workspace empty state does not persist a conversation until the first message is sent; it then creates a `PulsarAI` conversation, derives a collision-safe title from the selected project name, opens its normal conversation workspace, and sends through this same generation sequence.
+Every conversation belongs to a user character package. `kind` is `chat`, `task`, or `test`; `binding` independently records the related package, resource type/id, concrete path, title, and optional plugin id. The workspace empty state does not persist a conversation until the first message is sent, and lets the user select an existing package or create one before choosing `chat` or `task`.
+
+Right-sidebar tasks are `task` conversations in their real project package. The merged Task panel derives scope from the active workspace tab, filters by exact binding path, manages associated conversation files from its header, and embeds a compact scoped chat using the shared composer. Plugin workspaces publish `/plugins/<pluginId>/<selected path>` as their selected file changes; plugin bindings create `test` conversations. Deleting a project or plugin removes conversations bound to it.
 
 The current `Conversation` record is available in the generation environment as `conversation`. During regeneration, the store searches backward from the selected assistant page for the most recent completed page. A page is complete when it has content and either no generation metadata or a finished `timeUsed` value. That page is exposed as `beforeGenerationMessage` and inserted as a system message asking the model to reduce unnecessary repetition; if no complete page exists, it is omitted.
 
@@ -22,9 +24,9 @@ While a conversation is generating, its workspace tab receives the generic UI `l
 
 Generation components register through `presentation/generation-component-registry.ts`. A component emits `resolve` with its result or `cancel`; `GenerationComponentDialog.vue` keeps the generation promise pending while the user interacts with it. Components added with `api.renderComponent` are stored as message parts and rendered below the message markdown through the same registry.
 
-Skill and MCP features register AI SDK tools through `Agent/application/agent-extension-registry.ts`. The default Agent includes all registered tools in the same run rather than using a second generation path.
+Skill and MCP features register AI SDK tools through `Agent/application/agent-extension-registry.ts`. Agent exposes all registered tools to the selected plugin workflow rather than creating a second generation path.
 
-The default Agent also owns the built-in `askUser` tool. Its Zod input contains one question and 1-8 predefined options. During conversation generation the tool opens the registered `agent.ask-user` generation component and waits for either a predefined option or the final free-response dialog. The selected value is returned to the same `ToolLoopAgent` run as a normal tool result, so the model can continue from the user's answer.
+The Agent resource set also includes the built-in `askUser` tool. Its Zod input contains one question and 1-8 predefined options. During conversation generation the tool opens the registered `agent.ask-user` generation component and waits for either a predefined option or the final free-response dialog. The selected value is returned to the plugin-process-created `ToolLoopAgent` run as a normal tool result, so the model can continue from the user's answer.
 
 ## Conversation Renderers
 

@@ -8,6 +8,13 @@ export interface PluginTreeNodeBase {
 export interface PluginFile extends PluginTreeNodeBase {
   kind: "file";
   content: unknown;
+  priority: number;
+  memberships: PluginFileMembership[];
+}
+
+export interface PluginFileMembership {
+  container: string;
+  alias: string;
 }
 
 export interface PluginFolder extends PluginTreeNodeBase {
@@ -51,10 +58,15 @@ export type PluginFileType =
 
 export const pluginConventions = {
   info: "info.md",
-  generation: "generation.js",
+  manifest: "manifest.json",
+  containers: "containers.xml",
   context: "context.imd",
+  override: "Override.vue",
+  agentProcessFolder: "agentprocess",
+  agentProcessEntry: "index.js",
   actionFolder: "action",
   backgroundFolder: "background",
+  componentsFolder: "components",
 } as const;
 
 const markdownExtensions = new Set(["md", "markdown"]);
