@@ -324,7 +324,7 @@ function createVariableUpdateEnvironment(facades: Record<string, unknown>) {
       super(value instanceof Date ? value.getTime() : value);
     }
 
-    static now() {
+    static now(): number {
       throw new Error("变量更新意图不能读取当前时间。");
     }
   }

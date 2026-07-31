@@ -981,19 +981,20 @@ export const useConversationStore = defineStore("conversation", {
     },
     async pushErrorMessage(
       content: string,
-      conversationId = this.activeConversationId,
+      conversationId?: string | null,
     ) {
       const message = content.trim();
-      if (!message || !conversationId) {
+      const targetConversationId = conversationId ?? this.activeConversationId;
+      if (!message || !targetConversationId) {
         return null;
       }
       return this.appendContainerToConversation(
-        conversationId,
+        targetConversationId,
         "assistant",
         message,
         undefined,
         undefined,
-        conversationId === this.activeConversationId,
+        targetConversationId === this.activeConversationId,
         "error",
       );
     },

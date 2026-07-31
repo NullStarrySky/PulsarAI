@@ -141,7 +141,7 @@ export function createPluginSelfApi(
   };
   const requireOwnContainer = (containerId: string) => {
     const { plugin, node } = requireContainersFile();
-    const definitions = parsePluginContainerDefinitions(node.content);
+    const definitions = parsePluginContainerDefinitions(node.content as string);
     const index = definitions.containers.findIndex(
       (container) =>
         createPluginContainerQueryId(
@@ -201,7 +201,7 @@ export function createPluginSelfApi(
     }) {
       requireWrite();
       const { plugin, node } = requireContainersFile();
-      const definitions = parsePluginContainerDefinitions(node.content);
+      const definitions = parsePluginContainerDefinitions(node.content as string);
       const container = normalizeContainerDeclaration(input);
       assertUniqueContainer(definitions.containers, container);
       definitions.containers.push(container);

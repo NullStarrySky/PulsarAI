@@ -608,7 +608,7 @@ async function handleMessageNavigationRequest() {
 
             <div
               v-for="{ container, virtualRow } in virtualMessages"
-              :key="virtualRow.key"
+              :key="String(virtualRow.key)"
               :ref="measureVirtualMessage"
               :data-index="virtualRow.index"
               class="absolute left-0 top-0 w-full px-5 mobile:px-3"
