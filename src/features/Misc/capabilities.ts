@@ -19,6 +19,35 @@ export const capabilities: CapabilityDefinition = {
   id: "misc",
   title: "运行环境",
   description: "读取当前运行平台，或发送一条本地通知。",
+  documentation: {
+    overview: "汇集少量不适合独立建模的运行时能力，包括平台识别、回复完成通知和 Android 系统导航栏外观同步。",
+    notes: [
+      "平台信息来自 Tauri OS 适配层，适合选择行为分支，不应作为安全判断。",
+      "移动端导航栏设置在非 Android 平台返回 false，不会模拟成功。",
+    ],
+    types: [
+      {
+        name: "PlatformInfo",
+        description: "当前桌面或移动运行环境的摘要。",
+        definition: `interface PlatformInfo {
+  platform: string;
+  osType: string;
+  family: string;
+  arch: string;
+  version: string;
+}`,
+      },
+      {
+        name: "MobileNavigationBarMode",
+        description: "Android 系统导航栏的外观策略。",
+        definition: `type MobileNavigationBarMode =
+  | "topbar"
+  | "system"
+  | "light"
+  | "dark";`,
+      },
+    ],
+  },
   subCaps: {
     all: "全部运行环境权限",
     readPlatform: "读取平台信息",

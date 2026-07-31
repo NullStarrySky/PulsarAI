@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Play, X } from "lucide-vue-next";
+import { FileText, Play, X } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import type { ActionPart } from "@/features/Resources/Conversation/domain/conversation-types";
 import type { ResolvedPluginAction } from "@/features/Resources/Plugin/domain/plugin-types";
@@ -36,6 +36,16 @@ const filteredActions = computed(() => {
 });
 
 function chooseAction(action: ResolvedPluginAction) {
+  if (action.kind === "prompt") {
+    emit(
+      "update:modelValue",
+      typeof action.resource.content === "string"
+        ? action.resource.content
+        : JSON.stringify(action.resource.content, null, 2),
+    );
+    emit("update:selectedAction", null);
+    return;
+  }
   emit("update:selectedAction", {
     type: "action",
     actionId: action.resource.id,
@@ -75,7 +85,7 @@ function chooseAction(action: ResolvedPluginAction) {
       :class="props.menuPlacement === 'below' ? 'top-full mt-2' : 'bottom-full mb-2'"
     >
       <div class="border-b px-3 py-2 text-xs font-medium text-muted-foreground">
-        选择 Action
+        选择命令
       </div>
       <div class="max-h-64 overflow-y-auto p-1.5">
         <button
@@ -86,16 +96,20 @@ function chooseAction(action: ResolvedPluginAction) {
           @mousedown.prevent
           @click="chooseAction(action)"
         >
-          <Play class="mt-0.5 size-3.5 text-muted-foreground" />
+          <FileText
+            v-if="action.kind === 'prompt'"
+            class="mt-0.5 size-3.5 text-muted-foreground"
+          />
+          <Play v-else class="mt-0.5 size-3.5 text-muted-foreground" />
           <span class="min-w-0">
             <span class="block truncate font-mono text-sm font-medium">/{{ action.resource.name }}</span>
             <span class="mt-0.5 block truncate text-xs text-muted-foreground">
-              {{ action.pluginName }}
+              {{ action.pluginName }} · {{ action.kind === "prompt" ? "填入输入框" : "执行 Action" }}
             </span>
           </span>
         </button>
         <p v-if="filteredActions.length === 0" class="px-2.5 py-5 text-center text-xs text-muted-foreground">
-          没有匹配的 Action
+          没有匹配的命令
         </p>
       </div>
     </div>

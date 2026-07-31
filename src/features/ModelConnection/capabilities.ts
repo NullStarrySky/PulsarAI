@@ -9,6 +9,31 @@ export const capabilities: CapabilityDefinition = {
   id: "modelConnection",
   title: "模型连接",
   description: "通过已经配置的模型连接执行简洁的文本生成。API 不暴露提供商密钥。",
+  documentation: {
+    overview: "使用现有 ModelConnection 与默认模型配置执行一次无工具文本生成，适合摘要、改写和分类等短任务。",
+    notes: [
+      "省略 model 时使用默认聊天模型，显式模型值使用 provider/model 引用格式。",
+      "此入口不创建 Agent，也不启动插件流程或工具循环。",
+    ],
+    types: [
+      {
+        name: "GenerateTextInput",
+        description: "一次简单文本生成请求。",
+        definition: `interface GenerateTextInput {
+  prompt: string;
+  model?: string;
+  system?: string;
+}`,
+      },
+      {
+        name: "GenerateTextResult",
+        description: "公开给调用方的最小生成结果。",
+        definition: `interface GenerateTextResult {
+  text: string;
+}`,
+      },
+    ],
+  },
   subCaps: {
     all: "全部模型连接权限",
     generateText: "生成文本",

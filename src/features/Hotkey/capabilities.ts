@@ -8,6 +8,24 @@ export const capabilities: CapabilityDefinition = {
   id: "hotkey",
   title: "命令与快捷键",
   description: "查询或执行已经注册到 Pulsar 的命令。",
+  documentation: {
+    overview: "命令注册表把可搜索命令、菜单动作和快捷键入口统一为稳定的 commandId。自动化代码应先查询命令，再按 id 执行。",
+    notes: [
+      "执行行为仍由命令所属 Feature 的 actions.ts 负责。",
+      "默认快捷键是显示元数据，用户实际绑定可能已在外观或快捷键设置中调整。",
+    ],
+    types: [{
+      name: "CommandSummary",
+      description: "命令目录返回的轻量元数据。",
+      definition: `interface CommandSummary {
+  id: string;
+  title: string;
+  description?: string;
+  category?: string;
+  defaultHotkey?: string;
+}`,
+    }],
+  },
   subCaps: {
     all: "全部命令权限",
     read: "读取命令",

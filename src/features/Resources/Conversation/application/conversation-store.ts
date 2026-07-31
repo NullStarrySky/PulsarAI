@@ -5,13 +5,16 @@ import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-s
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { runConversationGeneration } from "./conversation-generation";
 import { buildConversationResourceContext } from "./conversation-resource-context";
+import { deleteConversationMemory } from "./conversation-memory";
 import type {
   CharacterPackage,
   ActionPart,
   AdditionalParts,
   ChatMessage,
   ChatMessageContainer,
+  ChatMessageType,
   ConversationKind,
+  ConversationReasoningEffort,
   ConversationRendererId,
   ConversationResourceBinding,
   FilePart,
@@ -27,13 +30,20 @@ const conversationTable = "resource_conversations";
 const containerTable = "resource_message_containers";
 let initializePromise: Promise<void> | null = null;
 
+interface MessageNavigationRequest {
+  conversationId: string;
+  containerId: string;
+  requestId: number;
+}
+
 function now() {
   return new Date().toISOString();
 }
 
-function createMessage(content = ""): ChatMessage {
+function createMessage(content = "", type: ChatMessageType = "message"): ChatMessage {
   return {
     id: crypto.randomUUID(),
+    type,
     content,
     meta: {
       steps: [],
@@ -52,6 +62,7 @@ function clonePlain<T>(value: T): T {
 function cloneMessage(message: ChatMessage): ChatMessage {
   return {
     id: crypto.randomUUID(),
+    type: message.type ?? "message",
     content: message.content,
     meta: clonePlain(message.meta),
     parts: message.parts ? clonePlain(message.parts) : undefined,
@@ -64,8 +75,9 @@ function createContainer(input: {
   previousContainer: string | null;
   content?: string;
   parts?: AdditionalParts[];
+  messageType?: ChatMessageType;
 }): ChatMessageContainer {
-  const message = createMessage(input.content ?? "");
+  const message = createMessage(input.content ?? "", input.messageType);
   if (input.parts?.length) {
     message.parts = clonePlain(input.parts);
   }
@@ -115,6 +127,8 @@ export const useConversationStore = defineStore("conversation", {
     containers: [] as ChatMessageContainer[],
     generatingConversationIds: [] as string[],
     lastMessageEditRequestId: 0,
+    lastMessageNavigationRequestId: 0,
+    messageNavigationRequest: null as MessageNavigationRequest | null,
   }),
   getters: {
     activePackage: (state) =>
@@ -202,8 +216,15 @@ export const useConversationStore = defineStore("conversation", {
       this.conversations = conversations.map((item) => ({
         ...item.value,
         rendererId: item.value.rendererId ?? "chat",
+        reasoningEffort: item.value.reasoningEffort ?? "none",
       }));
-      this.containers = containers.map((item) => item.value);
+      this.containers = containers.map((item) => ({
+        ...item.value,
+        content: item.value.content.map((message) => ({
+          ...message,
+          type: message.type ?? "message",
+        })),
+      }));
 
       if (this.packages.length === 0) {
         const basePackage = createDefaultPackage();
@@ -449,6 +470,7 @@ export const useConversationStore = defineStore("conversation", {
         activate?: boolean;
         binding?: ConversationResourceBinding;
         kind?: ConversationKind;
+        reasoningEffort?: ConversationReasoningEffort;
         rendererId?: ConversationRendererId;
         title?: string;
       } = {},
@@ -467,6 +489,10 @@ export const useConversationStore = defineStore("conversation", {
         title: input.title?.trim() || template?.title || "新对话",
         isTemplate: false,
         rendererId: input.rendererId ?? template?.rendererId ?? "chat",
+        reasoningEffort:
+          input.reasoningEffort
+          ?? template?.reasoningEffort
+          ?? "none",
         rootContainerId: null,
         lastContainerId: null,
         createdAt: now(),
@@ -584,6 +610,9 @@ export const useConversationStore = defineStore("conversation", {
       const messages: ModelMessage[] = [];
       for (const item of this.containerPathTo(container.previousContainer)) {
         const message = this.currentMessage(item);
+        if (message?.type === "error") {
+          continue;
+        }
         const content = message?.content.trim();
         const fileParts = message?.parts?.filter(
           (part) => part.type === "file" || part.type === "image",
@@ -651,6 +680,7 @@ export const useConversationStore = defineStore("conversation", {
           | "kind"
           | "binding"
           | "rendererId"
+          | "reasoningEffort"
         >
       >,
     ) {
@@ -685,6 +715,12 @@ export const useConversationStore = defineStore("conversation", {
     ) {
       await this.updateConversation(conversationId, { rendererId });
     },
+    async setConversationReasoningEffort(
+      conversationId: string,
+      reasoningEffort: ConversationReasoningEffort,
+    ) {
+      await this.updateConversation(conversationId, { reasoningEffort });
+    },
     async deleteConversation(
       conversationId: string,
       options: { activateFallback?: boolean } = {},
@@ -701,6 +737,7 @@ export const useConversationStore = defineStore("conversation", {
 
       this.containers = this.containers.filter((item) => item.conversationid !== conversationId);
       this.conversations = this.conversations.filter((item) => item.id !== conversationId);
+      await deleteConversationMemory(conversationId);
       await remove(conversationTable, conversationId);
 
       const packageItem = this.packages.find((item) => item.id === conversation.packageId);
@@ -723,6 +760,19 @@ export const useConversationStore = defineStore("conversation", {
     },
     requestLastMessageEdit() {
       this.lastMessageEditRequestId += 1;
+    },
+    requestMessageNavigation(conversationId: string, containerId: string) {
+      this.lastMessageNavigationRequestId += 1;
+      this.messageNavigationRequest = {
+        conversationId,
+        containerId,
+        requestId: this.lastMessageNavigationRequestId,
+      };
+    },
+    completeMessageNavigation(requestId: number) {
+      if (this.messageNavigationRequest?.requestId === requestId) {
+        this.messageNavigationRequest = null;
+      }
     },
     branchIdsFor(containerId: string) {
       const container = this.containers.find((item) => item.id === containerId);
@@ -765,7 +815,55 @@ export const useConversationStore = defineStore("conversation", {
       }
 
       message.content = content;
+      message.meta.translation = undefined;
       await this.persistContainer(container);
+    },
+    async setMessageTranslation(
+      containerId: string,
+      messageId: string,
+      translatedContent: string,
+    ) {
+      const container = this.containers.find((item) => item.id === containerId);
+      const message = container?.content.find((item) => item.id === messageId);
+      if (!container || !message) {
+        return false;
+      }
+
+      message.meta.translation ??= {
+        originalContent: message.content,
+        translatedAt: now(),
+      };
+      message.content = translatedContent;
+      await this.persistContainer(container);
+      return true;
+    },
+    async restoreMessageOriginal(containerId: string, messageId: string) {
+      const container = this.containers.find((item) => item.id === containerId);
+      const message = container?.content.find((item) => item.id === messageId);
+      const translation = message?.meta.translation;
+      if (!container || !message || !translation) {
+        return false;
+      }
+
+      message.content = translation.originalContent;
+      message.meta.translation = undefined;
+      await this.persistContainer(container);
+      return true;
+    },
+    async setMessageFavorite(
+      containerId: string,
+      messageId: string,
+      favorite: boolean,
+    ) {
+      const container = this.containers.find((item) => item.id === containerId);
+      const message = container?.content.find((item) => item.id === messageId);
+      if (!container || !message) {
+        return false;
+      }
+
+      message.favorite = favorite || undefined;
+      await this.persistContainer(container);
+      return true;
     },
     async addMessageAttachments(
       containerId: string,
@@ -844,6 +942,7 @@ export const useConversationStore = defineStore("conversation", {
       previousContainerId?: string,
       parts?: AdditionalParts[],
       activate = false,
+      messageType: ChatMessageType = "message",
     ) {
       const conversation = this.conversations.find(
         (item) => item.id === conversationId,
@@ -860,6 +959,7 @@ export const useConversationStore = defineStore("conversation", {
         previousContainer: previousContainerId || null,
         content,
         parts,
+        messageType,
       });
 
       const previous = previousContainerId ? this.containers.find((item) => item.id === previousContainerId) : null;
@@ -878,6 +978,24 @@ export const useConversationStore = defineStore("conversation", {
       this.syncConversationLink(conversation);
       await Promise.all([this.persistContainer(container), this.persistConversation(conversation)]);
       return container;
+    },
+    async pushErrorMessage(
+      content: string,
+      conversationId = this.activeConversationId,
+    ) {
+      const message = content.trim();
+      if (!message || !conversationId) {
+        return null;
+      }
+      return this.appendContainerToConversation(
+        conversationId,
+        "assistant",
+        message,
+        undefined,
+        undefined,
+        conversationId === this.activeConversationId,
+        "error",
+      );
     },
     async createBranch(containerId: string) {
       const container = this.containers.find((item) => item.id === containerId);
@@ -1078,7 +1196,10 @@ export const useConversationStore = defineStore("conversation", {
           }
         }
         const previousPath = this.containerPathTo(container.previousContainer);
-        const promptContainer = [...previousPath].reverse().find(
+        const generationPath = previousPath.filter(
+          (item) => this.currentMessage(item)?.type !== "error",
+        );
+        const promptContainer = [...generationPath].reverse().find(
           (item) => item.role === "user",
         );
         const promptMessage = promptContainer
@@ -1092,7 +1213,8 @@ export const useConversationStore = defineStore("conversation", {
           packageId: conversation.packageId,
           conversationId: container.conversationid,
           conversation,
-          activePath: this.containerPathTo(container.previousContainer),
+          reasoningEffort: conversation.reasoningEffort,
+          activePath: generationPath,
           chat: this.modelMessagesBefore(container),
           emptyContainer: container,
           emptyMessage: message,
@@ -1121,18 +1243,20 @@ export const useConversationStore = defineStore("conversation", {
             await this.persistContainer(container);
           },
         });
+        message.type = "message";
         message.meta.generateInfo.modelName = result.modelName;
-          message.content = result.text;
-          void import("@/features/Statistic/application/statistic-store").then(({ useStatisticStore }) =>
-            useStatisticStore().recordEvent("message.assistant"),
-          );
-          void import("@/features/Misc/application/reply-completion-notifier").then(({ notifyReplyCompleted }) =>
-            notifyReplyCompleted({
-              title: "Pulsar",
-              body: result.text.slice(0, 120) || "回复已完成。",
-            }),
-          );
+        message.content = result.text;
+        void import("@/features/Statistic/application/statistic-store").then(({ useStatisticStore }) =>
+          useStatisticStore().recordEvent("message.assistant"),
+        );
+        void import("@/features/Misc/application/reply-completion-notifier").then(({ notifyReplyCompleted }) =>
+          notifyReplyCompleted({
+            title: "Pulsar",
+            body: result.text.slice(0, 120) || "回复已完成。",
+          }),
+        );
       } catch (error) {
+        message.type = "error";
         message.content = error instanceof Error ? error.message : "生成失败";
       } finally {
         message.meta.generateInfo.timeUsed = Date.now() - start;
@@ -1201,6 +1325,63 @@ export const useConversationStore = defineStore("conversation", {
         await this.persistContainer(previous);
       }
     },
+    async activateContainerBranch(containerId: string) {
+      const target = this.containers.find((item) => item.id === containerId);
+      const conversation = target
+        ? this.conversations.find((item) => item.id === target.conversationid)
+        : null;
+      if (
+        !target
+        || !conversation
+        || conversation.id !== this.activeConversationId
+      ) {
+        return null;
+      }
+
+      const path = this.containerPathTo(target.id);
+      const changedParents: ChatMessageContainer[] = [];
+      for (let index = 0; index < path.length - 1; index += 1) {
+        const parent = path[index];
+        const child = path[index + 1];
+        if (!parent || !child || child.previousContainer !== parent.id) {
+          continue;
+        }
+        if (parent.activeNextContainer !== child.id) {
+          parent.activeNextContainer = child.id;
+          changedParents.push(parent);
+        }
+      }
+
+      const tailId = this.resolveActiveTailId(target.id);
+      this.activeContainerId = tailId;
+      conversation.lastContainerId = tailId;
+      conversation.updatedAt = now();
+      await Promise.all([
+        ...changedParents.map((item) => this.persistContainer(item)),
+        this.persistConversation(conversation),
+      ]);
+      this.syncConversationLink(conversation);
+      return target.id;
+    },
+    async activateMessage(containerId: string, messageId: string) {
+      const container = this.containers.find((item) => item.id === containerId);
+      const messageIndex = container?.content.findIndex(
+        (item) => item.id === messageId,
+      ) ?? -1;
+      if (!container || messageIndex < 0) {
+        return null;
+      }
+
+      if (this.activeConversationId !== container.conversationid) {
+        this.openConversation(container.conversationid);
+      }
+      if (container.activeMessage !== messageIndex) {
+        container.activeMessage = messageIndex;
+        await this.persistContainer(container);
+      }
+
+      return this.activateContainerBranch(containerId);
+    },
     resolveActiveTailId(containerId: string) {
       const seen = new Set<string>();
       let current = this.containers.find((item) => item.id === containerId);
@@ -1251,7 +1432,8 @@ function findLastCompleteMessage(
   for (let index = startIndex; index >= 0; index -= 1) {
     const message = container.content[index];
     if (
-      message?.content.trim()
+      message?.type !== "error"
+      && message?.content.trim()
       && (
         !message.meta.generateInfo
         || typeof message.meta.generateInfo.timeUsed === "number"

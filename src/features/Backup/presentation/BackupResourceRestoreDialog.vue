@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { ArchiveRestore, Box, MessageSquareText, PlugZap } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,12 +11,24 @@ import {
   DialogScrollContent,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
-import { useBackupStore, type RestorableResource } from "../application/backup-store";
+import {
+  useBackupStore,
+  type ResourceImportMode,
+  type RestorableResource,
+} from "../application/backup-store";
 
 const open = defineModel<boolean>("open", { default: false });
 const backup = useBackupStore();
 const conversation = useConversationStore();
+const restoreMode = ref<ResourceImportMode>("copy");
 
 const packages = computed(() =>
   (backup.backupResources?.packages ?? []).map((item) => ({
@@ -53,7 +65,7 @@ function toggle(resource: RestorableResource, value: boolean) {
 
 async function restore() {
   try {
-    if (await backup.restoreSelectedResources()) {
+    if (await backup.restoreSelectedResources(restoreMode.value)) {
       open.value = false;
     }
   } catch (error) {
@@ -71,9 +83,25 @@ async function restore() {
           从历史备份恢复资源
         </DialogTitle>
         <DialogDescription>
-          选择角色包、会话或插件。恢复会新增资源，不会覆盖当前内容。
+          选择角色包、会话或插件，并决定新增副本或更新同 ID 资源。
         </DialogDescription>
       </DialogHeader>
+
+      <div class="grid gap-2 rounded-lg border bg-muted/20 p-3 sm:grid-cols-[minmax(0,1fr)_15rem] sm:items-center">
+        <div>
+          <p class="text-sm font-medium">恢复方式</p>
+          <p class="text-xs leading-5 text-muted-foreground">
+            更新模式按结构差异合并，并保留冲突消息版本与插件文件副本。
+          </p>
+        </div>
+        <Select v-model="restoreMode">
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="copy">作为副本恢复</SelectItem>
+            <SelectItem value="update">更新同 ID 资源</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       <div v-if="backup.loadingResources" class="grid gap-3 py-4">
         <div v-for="index in 3" :key="index" class="h-16 animate-pulse rounded-lg bg-muted" />
@@ -181,7 +209,7 @@ async function restore() {
           :disabled="backup.selectedResourceKeys.length === 0"
           @click="restore"
         >
-          恢复所选资源
+          {{ restoreMode === "update" ? "合并更新" : "恢复为副本" }}
         </Button>
       </DialogFooter>
     </DialogScrollContent>

@@ -143,6 +143,7 @@ function addSubData() {
       description: "",
       contentType: "json",
       content: "null",
+      wrapper: "",
     });
   });
 }
@@ -161,6 +162,7 @@ function updateSubData(
     description: string;
     contentType: InteractiveDataContentType;
     content: string;
+    wrapper: string;
   }>,
 ) {
   updateDocument((draft) => {
@@ -175,6 +177,18 @@ function uniqueDataName(document: InteractiveDocumentSource, base: string) {
   let index = 2;
   while (names.has(`${base}-${index}`)) index += 1;
   return `${base}-${index}`;
+}
+
+function updateCompressionThreshold(event: Event) {
+  const value = Number.parseInt(
+    (event.target as HTMLInputElement).value,
+    10,
+  );
+  updateDocument((draft) => {
+    draft.memory.compressionThreshold = Number.isFinite(value) && value > 0
+      ? Math.max(4, value)
+      : 0;
+  });
 }
 </script>
 
@@ -336,7 +350,7 @@ function uniqueDataName(document: InteractiveDocumentSource, base: string) {
                 <label class="mt-3 flex items-center justify-between gap-3 text-xs">
                   <span>
                     <span class="font-medium">enable_updater</span>
-                    <span class="ml-1 text-muted-foreground">暂不执行</span>
+                    <span class="ml-1 text-muted-foreground">允许消息绑定更新函数</span>
                   </span>
                   <Switch
                     size="sm"
@@ -359,8 +373,34 @@ function uniqueDataName(document: InteractiveDocumentSource, base: string) {
                   :placeholder="item.contentType === 'json' ? '{}' : 'value'"
                   @input="updateSubData(index, { content: ($event.target as HTMLTextAreaElement).value })"
                 />
+                <textarea
+                  :value="item.wrapper"
+                  rows="6"
+                  class="mt-2 block w-full resize-y rounded-md border bg-muted/10 px-2.5 py-2 font-mono text-xs leading-5 outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  placeholder="function (value) { return value; }"
+                  aria-label="变量包装器函数"
+                  @input="updateSubData(index, { wrapper: ($event.target as HTMLTextAreaElement).value })"
+                />
               </article>
             </div>
+          </section>
+
+          <section class="rounded-lg border bg-card p-4">
+            <h2 class="text-sm font-semibold">压缩式记忆</h2>
+            <p class="mt-1 text-xs leading-5 text-muted-foreground">
+              当激活路径积累到阈值后，主生成流程会压缩最早的连续静态区间；设为 0 表示关闭。
+            </p>
+            <label class="mt-3 flex items-center justify-between gap-4 text-sm">
+              <span>容器阈值</span>
+              <input
+                :value="document.memory.compressionThreshold"
+                type="number"
+                min="0"
+                step="1"
+                class="h-9 w-28 rounded-md border bg-background px-3 text-right font-mono text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                @change="updateCompressionThreshold"
+              />
+            </label>
           </section>
         </div>
       </TabsContent>

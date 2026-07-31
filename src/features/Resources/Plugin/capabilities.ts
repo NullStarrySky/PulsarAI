@@ -15,8 +15,16 @@ import {
 import {
   findPluginReferenceTokens,
   parsePluginContainerDefinitions,
+  serializePluginContainerDefinitions,
+  type PluginContainerDeclaration,
+  type PluginContainerImport,
+  type PluginContainerScope,
 } from "./domain/plugin-reference";
 import { usePluginStore } from "./application/plugin-store";
+import {
+  createPluginContainerQueryId,
+  createPluginReferenceResolver,
+} from "./application/plugin-reference-resolver";
 import {
   pluginCapabilitiesDefinition,
 } from "./domain/plugin-capability";
@@ -77,8 +85,20 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
       const plugin = usePluginStore().plugins.find((item) => item.id === pluginId);
       return plugin ? nodeSummary(plugin.root) : null;
     },
+    listContainers: () => createVisibleContainerResolver().listContainers(),
+    getContainer: (containerId: string) =>
+      createVisibleContainerResolver().getContainer(containerId),
   } : {}),
 }));
+
+function createVisibleContainerResolver() {
+  const conversation = useConversationStore();
+  const plugins = usePluginStore().enabledPluginsForPackage(
+    conversation.activePackageId,
+    conversation.activePackage?.globalPluginOrder,
+  );
+  return createPluginReferenceResolver(plugins);
+}
 
 function normalizePath(path: string) {
   return path.trim().replace(/\\/g, "/").split("/").filter(Boolean);
@@ -107,6 +127,39 @@ export function createPluginSelfApi(
     const node = findPluginNodeByPath(plugin.root, normalizePath(path));
     if (!node) throw new Error(`插件路径不存在：${path}`);
     return { plugin, node };
+  };
+  const requireContainersFile = () => {
+    const plugin = requirePlugin();
+    const node = findPluginNodeByPath(
+      plugin.root,
+      pluginConventions.containers,
+    );
+    if (node?.kind !== "file" || typeof node.content !== "string") {
+      throw new Error("当前插件缺少根 containers.xml。");
+    }
+    return { plugin, node };
+  };
+  const requireOwnContainer = (containerId: string) => {
+    const { plugin, node } = requireContainersFile();
+    const definitions = parsePluginContainerDefinitions(node.content);
+    const index = definitions.containers.findIndex(
+      (container) =>
+        createPluginContainerQueryId(
+          container.scope,
+          container.name,
+          plugin.id,
+        ) === containerId,
+    );
+    if (index < 0) {
+      throw new Error(`当前插件没有容器：${containerId}`);
+    }
+    return {
+      plugin,
+      node,
+      definitions,
+      index,
+      container: definitions.containers[index]!,
+    };
   };
   const requireWrite = () => {
     if (!grantedSubCaps.includes("read") && !grantedSubCaps.includes("all")) {
@@ -138,6 +191,132 @@ export function createPluginSelfApi(
     read(path: string) {
       requireRead();
       const { plugin, node } = requireNode(path);
+      return scopedNodeSummary(plugin, node);
+    },
+    async createContainer(input: {
+      name: string;
+      scope?: PluginContainerScope;
+      description?: string;
+      imports?: PluginContainerImport[];
+    }) {
+      requireWrite();
+      const { plugin, node } = requireContainersFile();
+      const definitions = parsePluginContainerDefinitions(node.content);
+      const container = normalizeContainerDeclaration(input);
+      assertUniqueContainer(definitions.containers, container);
+      definitions.containers.push(container);
+      await store.updateNode(plugin.id, node.id, {
+        content: serializePluginContainerDefinitions(definitions),
+      });
+      return selfContainerSummary(plugin, node.id, container);
+    },
+    async updateContainer(
+      containerId: string,
+      patch: Partial<{
+        name: string;
+        scope: PluginContainerScope;
+        description: string;
+        imports: PluginContainerImport[];
+      }>,
+    ) {
+      requireWrite();
+      const { plugin, node, definitions, index, container } =
+        requireOwnContainer(containerId);
+      const updated = normalizeContainerDeclaration({
+        ...container,
+        ...patch,
+      });
+      assertUniqueContainer(definitions.containers, updated, index);
+      definitions.containers[index] = updated;
+      await store.updateNode(plugin.id, node.id, {
+        content: serializePluginContainerDefinitions(definitions),
+      });
+      return selfContainerSummary(plugin, node.id, updated);
+    },
+    async removeContainer(containerId: string) {
+      requireWrite();
+      const { plugin, node, definitions, index, container } =
+        requireOwnContainer(containerId);
+      definitions.containers.splice(index, 1);
+      await store.updateNode(plugin.id, node.id, {
+        content: serializePluginContainerDefinitions(definitions),
+      });
+      return selfContainerSummary(plugin, node.id, container);
+    },
+    async addContainerContent(
+      containerId: string,
+      path: string,
+      input: { alias?: string; priority?: number } = {},
+    ) {
+      requireWrite();
+      const { container } = requireOwnContainer(containerId);
+      const { plugin, node } = requireNode(path);
+      if (node.kind !== "file") throw new Error("只有文件可以加入容器。");
+      if (
+        container.scope === "root"
+        && pluginNodePath(plugin.root, node.id).length > 1
+      ) {
+        throw new Error("root 容器只对插件根目录中的文件可见。");
+      }
+      const target = explicitContainerTarget(container);
+      if (node.memberships.some((item) => item.container === target)) {
+        throw new Error(`资源已经属于容器：${container.name}`);
+      }
+      const memberships = [
+        ...node.memberships,
+        {
+          container: target,
+          alias: input.alias?.trim() ?? "",
+        },
+      ];
+      await store.updateNode(plugin.id, node.id, {
+        memberships,
+        ...(typeof input.priority === "number"
+          ? { priority: input.priority }
+          : {}),
+      });
+      return scopedNodeSummary(plugin, node);
+    },
+    async updateContainerContent(
+      containerId: string,
+      path: string,
+      patch: { alias?: string; priority?: number },
+    ) {
+      requireWrite();
+      const { container } = requireOwnContainer(containerId);
+      const { plugin, node } = requireNode(path);
+      if (node.kind !== "file") throw new Error("只有文件可以属于容器。");
+      const target = explicitContainerTarget(container);
+      const membership = node.memberships.find(
+        (item) => item.container === target,
+      );
+      if (!membership) throw new Error(`资源不属于容器：${container.name}`);
+      const memberships = node.memberships.map((item) =>
+        item === membership
+          ? { ...item, alias: patch.alias?.trim() ?? item.alias }
+          : item
+      );
+      await store.updateNode(plugin.id, node.id, {
+        memberships,
+        ...(typeof patch.priority === "number"
+          ? { priority: patch.priority }
+          : {}),
+      });
+      return scopedNodeSummary(plugin, node);
+    },
+    async removeContainerContent(containerId: string, path: string) {
+      requireWrite();
+      const { container } = requireOwnContainer(containerId);
+      const { plugin, node } = requireNode(path);
+      if (node.kind !== "file") throw new Error("只有文件可以属于容器。");
+      const target = explicitContainerTarget(container);
+      const memberships = node.memberships.filter(
+        (item) => item.container !== target,
+      );
+      if (memberships.length === node.memberships.length) {
+        throw new Error(`资源不属于容器：${container.name}`);
+      }
+      await store.updateNode(plugin.id, node.id, { memberships });
       return scopedNodeSummary(plugin, node);
     },
     async write(path: string, content: unknown) {
@@ -194,5 +373,81 @@ export function createPluginSelfApi(
         throw new Error("该节点是固定插件约定，不能删除。");
       }
     },
+  };
+}
+
+function normalizeContainerDeclaration(input: {
+  name?: string;
+  scope?: PluginContainerScope;
+  description?: string;
+  imports?: PluginContainerImport[];
+}): PluginContainerDeclaration {
+  const name = input.name?.trim() ?? "";
+  if (!name) throw new Error("容器名称不能为空。");
+  const scope =
+    input.scope === "root" || input.scope === "global"
+      ? input.scope
+      : "plugin";
+  const description = input.description?.trim().replace(/\s+/g, " ") ?? "";
+  const imports = (input.imports ?? []).map((item) => ({
+    alias: item.alias.trim(),
+    target: item.target.trim(),
+  }));
+  if (imports.some((item) => !item.alias || !item.target)) {
+    throw new Error("容器引用必须同时包含 alias 与 target。");
+  }
+  if (new Set(imports.map((item) => item.alias)).size !== imports.length) {
+    throw new Error("容器引用别名不能重复。");
+  }
+  return {
+    name,
+    scope,
+    description,
+    imports,
+  };
+}
+
+function assertUniqueContainer(
+  containers: PluginContainerDeclaration[],
+  candidate: PluginContainerDeclaration,
+  ignoredIndex = -1,
+) {
+  if (
+    containers.some(
+      (item, index) =>
+        index !== ignoredIndex
+        && item.scope === candidate.scope
+        && item.name === candidate.name,
+    )
+  ) {
+    throw new Error(
+      `容器已经存在：${candidate.scope}/${candidate.name}`,
+    );
+  }
+}
+
+function explicitContainerTarget(container: PluginContainerDeclaration) {
+  return `container:${container.scope}/${container.name}`;
+}
+
+function selfContainerSummary(
+  plugin: Plugin,
+  definitionId: string,
+  container: PluginContainerDeclaration,
+) {
+  return {
+    id: createPluginContainerQueryId(
+      container.scope,
+      container.name,
+      plugin.id,
+    ),
+    name: container.name,
+    scope: container.scope,
+    description: container.description,
+    imports: structuredClone(container.imports),
+    pluginId: plugin.id,
+    pluginName: plugin.name,
+    definitionId,
+    path: `/${pluginConventions.containers}`,
   };
 }

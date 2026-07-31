@@ -158,7 +158,11 @@ function measureContentHeight({
   const padding = getPadding(content)
   const viewportRect = viewport.getBoundingClientRect()
   const scrollTop = viewport.scrollTop
-  let height = padding.start + padding.end
+  let height = Math.max(
+    padding.start + padding.end,
+    content.scrollHeight,
+    content.getBoundingClientRect().height,
+  )
   for (const child of children) {
     const rect = child.getBoundingClientRect()
     height = Math.max(height, rect.bottom - viewportRect.top + scrollTop + padding.end)
@@ -770,10 +774,35 @@ function createEngine(props: MessageScrollerProviderProps) {
     if (!content)
       return
     const children = getMessageChildren(content, spacer)
+    const virtualCountValue = content.dataset.virtualCount
+    const virtualCount = virtualCountValue === undefined
+      ? null
+      : Number.parseInt(virtualCountValue, 10)
+    const usesVirtualItems = virtualCount !== null && Number.isFinite(virtualCount)
     const previousCount = itemCount
     const previousFirst = firstItem
-    itemCount = children.length
+    itemCount = usesVirtualItems
+      ? Math.max(0, virtualCount ?? 0)
+      : children.length
     firstItem = children[0] ?? null
+
+    if (usesVirtualItems) {
+      if (previousCount === 0) {
+        if (
+          applyDefaultScrollPosition()
+          || (itemCount > 0 && autoScroll() && scrollToEnd({ behavior: 'auto' }))
+        ) {
+          return
+        }
+      }
+      else if (itemCount > previousCount && mode === 'following-bottom' && autoScroll()) {
+        scrollToEnd({ behavior: 'auto' })
+        return
+      }
+      commitScrollState()
+      scheduleVisibilitySync()
+      return
+    }
 
     applyContentChange(children, previousCount, previousFirst)
     capturePrependAnchor()

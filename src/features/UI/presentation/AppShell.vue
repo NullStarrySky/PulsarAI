@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, watch } from "vue";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Notivue, Notification } from "notivue";
 import { storeToRefs } from "pinia";
 import MainWorkspace from "./MainWorkspace.vue";
@@ -19,6 +21,8 @@ import ShellRightSidebar from "./ShellRightSidebar.vue";
 import ShellTopBar from "./ShellTopBar.vue";
 import TextEditingContextMenu from "./TextEditingContextMenu.vue";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
+import { useWindowLifecycleStore } from "../application/window-lifecycle-store";
+import WindowCloseDialog from "./WindowCloseDialog.vue";
 
 const appearance = useAppearanceStore();
 const commandStore = useCommandStore();
@@ -26,10 +30,12 @@ const hotkeyStore = useHotkeyStore();
 const layout = useLayoutStore();
 const responsive = useResponsiveStore();
 const conversation = useConversationStore();
+const windowLifecycle = useWindowLifecycleStore();
 const { isMobileLayout } = storeToRefs(responsive);
 const { activeTabId, settingsOpen } = storeToRefs(layout);
+let unlistenCloseRequested: UnlistenFn | undefined;
 
-onMounted(() => {
+onMounted(async () => {
   appearance.initialize();
   responsive.refreshPlatform();
   applySubWindowParams();
@@ -37,10 +43,18 @@ onMounted(() => {
   registerMiscCommands();
   void useStatisticStore().recordAppLaunch();
   window.addEventListener("keydown", onGlobalKeydown, { capture: true });
+  const appWindow = getCurrentWindow();
+  if (appWindow.label === "main") {
+    unlistenCloseRequested = await appWindow.onCloseRequested((event) => {
+      event.preventDefault();
+      void windowLifecycle.handleCloseRequest();
+    });
+  }
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onGlobalKeydown, { capture: true });
+  unlistenCloseRequested?.();
 });
 
 watch(isMobileLayout, (mobile) => {
@@ -128,6 +142,7 @@ function onGlobalKeydown(event: KeyboardEvent) {
       <ShellRightSidebar v-if="layout.shellMode !== 'simplified'" />
     </div>
     <SettingsDialog />
+    <WindowCloseDialog />
     <CommandSearchDialog />
     <TextEditingContextMenu />
     <Notivue v-slot="item">

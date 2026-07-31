@@ -1,9 +1,15 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { Boxes, Plus, Trash2 } from "lucide-vue-next";
+import { computed, ref } from "vue";
+import {
+  Boxes,
+  ChevronRight,
+  FileText,
+  Package,
+  Plus,
+  Trash2,
+} from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -17,22 +23,32 @@ import {
   type PluginContainerDeclaration,
   type PluginContainerScope,
 } from "@/features/Resources/Plugin/domain/plugin-reference";
+import type {
+  PluginContainerDetailsQuery,
+  PluginContainerResourceQuery,
+} from "@/features/Resources/Plugin/application/plugin-reference-resolver";
 
 const props = withDefaults(
   defineProps<{
     modelValue?: string;
     readonly?: boolean;
+    containerDetails?: PluginContainerDetailsQuery[];
+    definitionId?: string;
   }>(),
   {
     modelValue: "",
     readonly: false,
+    containerDetails: () => [],
+    definitionId: "",
   },
 );
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
+  "open-resource": [resource: PluginContainerResourceQuery];
 }>();
 
+const expandedContainerIds = ref<string[]>([]);
 const definitions = computed(() =>
   parsePluginContainerDefinitions(props.modelValue),
 );
@@ -133,20 +149,54 @@ function containerIssue(container: PluginContainerDeclaration) {
   }
   return "";
 }
+
+function detailsFor(container: PluginContainerDeclaration) {
+  return props.containerDetails.find(
+    (item) =>
+      item.name === container.name
+      && item.scope === container.scope
+      && (!props.definitionId || item.definitionId === props.definitionId),
+  );
+}
+
+function detailKey(
+  container: PluginContainerDeclaration,
+  containerIndex: number,
+) {
+  return detailsFor(container)?.id
+    ?? `${container.scope}:${container.name}:${containerIndex}`;
+}
+
+function isDetailsOpen(
+  container: PluginContainerDeclaration,
+  containerIndex: number,
+) {
+  return expandedContainerIds.value.includes(detailKey(container, containerIndex));
+}
+
+function toggleDetails(
+  container: PluginContainerDeclaration,
+  containerIndex: number,
+) {
+  const key = detailKey(container, containerIndex);
+  expandedContainerIds.value = expandedContainerIds.value.includes(key)
+    ? expandedContainerIds.value.filter((item) => item !== key)
+    : [...expandedContainerIds.value, key];
+}
 </script>
 
 <template>
   <div class="h-full overflow-y-auto bg-background">
-    <div class="mx-auto w-full max-w-[920px] px-6 pb-20 pt-7 mobile:px-3 mobile:pb-12 mobile:pt-4">
-      <div class="mb-6 flex items-start justify-between gap-4">
+    <div class="mx-auto w-full max-w-[1040px] px-4 pb-12 pt-4 mobile:px-3">
+      <div class="mb-3 flex items-center justify-between gap-3">
         <div class="min-w-0">
           <div class="flex items-center gap-2">
             <Boxes class="size-4 text-muted-foreground" />
             <h2 class="text-sm font-semibold">容器定义</h2>
+            <span class="text-xs text-muted-foreground">
+              {{ definitions.containers.length }} 个
+            </span>
           </div>
-          <p class="mt-1.5 max-w-2xl text-xs leading-5 text-muted-foreground">
-            在这里统一声明当前插件的容器与命名空间引用。资源成员关系保存在各文件的属性元数据中。
-          </p>
         </div>
         <Button
           v-if="!readonly"
@@ -160,15 +210,15 @@ function containerIssue(container: PluginContainerDeclaration) {
         </Button>
       </div>
 
-      <div v-if="definitions.containers.length" class="space-y-4">
+      <div v-if="definitions.containers.length" class="space-y-2">
         <section
           v-for="(container, containerIndex) in definitions.containers"
           :key="containerIndex"
           class="rounded-lg border bg-card/35"
         >
-          <div class="grid grid-cols-[minmax(0,1fr)_9rem_auto] items-center gap-3 p-4 mobile:grid-cols-[minmax(0,1fr)_auto] mobile:gap-2 mobile:p-3">
+          <div class="grid grid-cols-[minmax(8rem,1fr)_8rem_minmax(12rem,1.8fr)_auto_auto] items-end gap-2 p-3 mobile:grid-cols-[minmax(0,1fr)_auto]">
             <label class="min-w-0">
-              <span class="mb-1.5 block text-xs font-medium">名称</span>
+              <span class="mb-1 block text-[11px] text-muted-foreground">名称</span>
               <Input
                 :model-value="container.name"
                 :disabled="readonly"
@@ -178,7 +228,7 @@ function containerIssue(container: PluginContainerDeclaration) {
               />
             </label>
             <label class="mobile:col-start-1">
-              <span class="mb-1.5 block text-xs font-medium">作用域</span>
+              <span class="mb-1 block text-[11px] text-muted-foreground">作用域</span>
               <Select
                 :model-value="container.scope"
                 :disabled="readonly"
@@ -198,26 +248,16 @@ function containerIssue(container: PluginContainerDeclaration) {
                 </SelectContent>
               </Select>
             </label>
-            <Button
-              v-if="!readonly"
-              size="icon"
-              variant="ghost"
-              class="mt-5 size-8 mobile:col-start-2 mobile:row-start-1"
-              title="删除容器"
-              @click="removeContainer(containerIndex)"
-            >
-              <Trash2 class="size-4" />
-            </Button>
-            <label class="col-span-3 min-w-0 mobile:col-span-2">
-              <span class="mb-1.5 block text-xs font-medium">
-                说明
-                <span class="font-normal text-muted-foreground">（可选）</span>
+            <label class="min-w-0 mobile:col-span-2">
+              <span class="mb-1 block text-[11px] text-muted-foreground">
+                简短说明
+                <span class="font-normal">（可选）</span>
               </span>
-              <Textarea
+              <Input
                 :model-value="container.description ?? ''"
                 :disabled="readonly"
-                class="min-h-16 resize-y text-xs"
-                placeholder="说明这个容器提供什么内容、适合在什么情况下引用"
+                class="h-8 text-xs"
+                placeholder="用一句话说明这个容器提供什么"
                 @update:model-value="
                   updateContainer(containerIndex, {
                     description: String($event),
@@ -225,6 +265,33 @@ function containerIssue(container: PluginContainerDeclaration) {
                 "
               />
             </label>
+            <Button
+              size="sm"
+              variant="ghost"
+              class="h-8 px-2 text-xs mobile:col-start-1 mobile:justify-start"
+              :aria-expanded="isDetailsOpen(container, containerIndex)"
+              @click="toggleDetails(container, containerIndex)"
+            >
+              <ChevronRight
+                class="mr-1 size-3.5 transition-transform"
+                :class="isDetailsOpen(container, containerIndex) && 'rotate-90'"
+              />
+              详情
+              <span class="ml-1 text-muted-foreground">
+                {{ detailsFor(container)?.usedByCount ?? 0 }} 使用 ·
+                {{ detailsFor(container)?.contentCount ?? 0 }} 内容
+              </span>
+            </Button>
+            <Button
+              v-if="!readonly"
+              size="icon"
+              variant="ghost"
+              class="size-8 mobile:col-start-2 mobile:row-start-2"
+              title="删除容器"
+              @click="removeContainer(containerIndex)"
+            >
+              <Trash2 class="size-4" />
+            </Button>
           </div>
 
           <p
@@ -234,71 +301,137 @@ function containerIssue(container: PluginContainerDeclaration) {
             {{ containerIssue(container) }}
           </p>
 
-          <div class="border-t px-4 pb-4 pt-3 mobile:px-3 mobile:pb-3">
-            <div class="mb-2 flex items-center justify-between gap-3">
-              <div>
-                <h3 class="text-xs font-medium">引用容器命名空间</h3>
-                <p class="mt-0.5 text-[11px] text-muted-foreground">
-                  引用保持命名空间，不会展开、复制或覆盖当前容器成员。
-                </p>
+          <div
+            v-if="isDetailsOpen(container, containerIndex)"
+            class="grid grid-cols-2 gap-3 border-t bg-muted/10 p-3 mobile:grid-cols-1"
+          >
+            <section class="min-w-0 rounded-md border bg-background">
+              <div class="flex h-8 items-center gap-1.5 border-b px-2.5">
+                <FileText class="size-3.5 text-muted-foreground" />
+                <h3 class="text-xs font-medium">使用此容器的文档</h3>
+                <span class="text-[11px] text-muted-foreground">
+                  {{ detailsFor(container)?.usedByCount ?? 0 }}
+                </span>
               </div>
-              <Button
-                v-if="!readonly"
-                size="sm"
-                variant="ghost"
-                class="h-7 px-2 text-xs"
-                @click="addImport(containerIndex)"
-              >
-                <Plus class="mr-1 size-3.5" />
-                添加引用
-              </Button>
-            </div>
+              <div v-if="detailsFor(container)?.usedBy.length" class="p-1">
+                <button
+                  v-for="resource in detailsFor(container)?.usedBy"
+                  :key="`${resource.pluginId}:${resource.id}`"
+                  type="button"
+                  class="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  @click="emit('open-resource', resource)"
+                >
+                  <span class="truncate text-xs font-medium">{{ resource.name }}</span>
+                  <span class="text-[10px] text-muted-foreground">{{ resource.type }}</span>
+                  <span class="col-span-2 truncate font-mono text-[10px] text-muted-foreground">
+                    {{ resource.pluginName }} · {{ resource.path }}
+                  </span>
+                </button>
+              </div>
+              <p v-else class="px-3 py-4 text-center text-xs text-muted-foreground">
+                暂无文档直接引用此容器。
+              </p>
+            </section>
 
-            <div
-              v-for="(item, importIndex) in container.imports"
-              :key="importIndex"
-              class="grid grid-cols-[11rem_minmax(0,1fr)_auto] items-center gap-2 py-1 mobile:grid-cols-[minmax(0,1fr)_auto]"
-            >
-              <Input
-                :model-value="item.alias"
-                :disabled="readonly"
-                class="h-8 font-mono text-xs"
-                placeholder="别名"
-                @update:model-value="
-                  updateImport(containerIndex, importIndex, {
-                    alias: String($event),
-                  })
-                "
-              />
-              <Input
-                :model-value="item.target"
-                :disabled="readonly"
-                class="h-8 font-mono text-xs mobile:col-start-1"
-                placeholder="container:plugin/容器名称"
-                @update:model-value="
-                  updateImport(containerIndex, importIndex, {
-                    target: String($event),
-                  })
-                "
-              />
-              <Button
-                v-if="!readonly"
-                size="icon"
-                variant="ghost"
-                class="size-8 mobile:col-start-2 mobile:row-start-1"
-                title="删除导入"
-                @click="removeImport(containerIndex, importIndex)"
-              >
-                <Trash2 class="size-3.5" />
-              </Button>
-            </div>
+            <section class="min-w-0 rounded-md border bg-background">
+              <div class="flex h-8 items-center gap-1.5 border-b px-2.5">
+                <Package class="size-3.5 text-muted-foreground" />
+                <h3 class="text-xs font-medium">容器中的现有内容</h3>
+                <span class="text-[11px] text-muted-foreground">
+                  {{ detailsFor(container)?.contentCount ?? 0 }}
+                </span>
+              </div>
+              <div v-if="detailsFor(container)?.contents.length" class="p-1">
+                <button
+                  v-for="resource in detailsFor(container)?.contents"
+                  :key="`${resource.pluginId}:${resource.id}:${resource.alias}`"
+                  type="button"
+                  class="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  @click="emit('open-resource', resource)"
+                >
+                  <span class="truncate text-xs font-medium">
+                    {{ resource.name }}
+                    <span class="font-normal text-muted-foreground">· {{ resource.alias }}</span>
+                  </span>
+                  <span class="font-mono text-[10px] text-muted-foreground">
+                    P{{ resource.priority }}
+                  </span>
+                  <span class="col-span-2 truncate font-mono text-[10px] text-muted-foreground">
+                    {{ resource.pluginName }} · {{ resource.path }}
+                  </span>
+                </button>
+              </div>
+              <p v-else class="px-3 py-4 text-center text-xs text-muted-foreground">
+                此容器目前没有内容。
+              </p>
+            </section>
 
-            <p
-              v-if="container.imports.length === 0"
-              class="py-2 text-xs text-muted-foreground"
-            >
-              当前容器没有引用其他容器命名空间。
-            </p>
+            <section class="col-span-2 min-w-0 rounded-md border bg-background p-2.5 mobile:col-span-1">
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <h3 class="text-xs font-medium">引用容器命名空间</h3>
+                  <p class="truncate text-[10px] text-muted-foreground">
+                    保留命名空间，不展开、复制或覆盖成员。
+                  </p>
+                </div>
+                <Button
+                  v-if="!readonly"
+                  size="sm"
+                  variant="ghost"
+                  class="h-7 shrink-0 px-2 text-xs"
+                  @click="addImport(containerIndex)"
+                >
+                  <Plus class="mr-1 size-3.5" />
+                  添加引用
+                </Button>
+              </div>
+
+              <div
+                v-for="(item, importIndex) in container.imports"
+                :key="importIndex"
+                class="grid grid-cols-[11rem_minmax(0,1fr)_auto] items-center gap-2 py-1 mobile:grid-cols-[minmax(0,1fr)_auto]"
+              >
+                <Input
+                  :model-value="item.alias"
+                  :disabled="readonly"
+                  class="h-8 font-mono text-xs"
+                  placeholder="别名"
+                  @update:model-value="
+                    updateImport(containerIndex, importIndex, {
+                      alias: String($event),
+                    })
+                  "
+                />
+                <Input
+                  :model-value="item.target"
+                  :disabled="readonly"
+                  class="h-8 font-mono text-xs mobile:col-start-1"
+                  placeholder="container:plugin/容器名称"
+                  @update:model-value="
+                    updateImport(containerIndex, importIndex, {
+                      target: String($event),
+                    })
+                  "
+                />
+                <Button
+                  v-if="!readonly"
+                  size="icon"
+                  variant="ghost"
+                  class="size-8 mobile:col-start-2 mobile:row-start-1"
+                  title="删除导入"
+                  @click="removeImport(containerIndex, importIndex)"
+                >
+                  <Trash2 class="size-3.5" />
+                </Button>
+              </div>
+
+              <p
+                v-if="container.imports.length === 0"
+                class="py-1 text-xs text-muted-foreground"
+              >
+                当前容器没有引用其他容器命名空间。
+              </p>
+            </section>
           </div>
         </section>
       </div>

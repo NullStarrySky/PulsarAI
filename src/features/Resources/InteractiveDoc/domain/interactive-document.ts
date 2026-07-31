@@ -1,5 +1,6 @@
 import type { ModelMessage } from "ai";
 import {
+  createSandboxFunction,
   resolveSandboxMessages,
   stringifySandboxValue,
   type SandboxEnvironment,
@@ -34,12 +35,31 @@ export interface InteractiveSubData {
   description: string;
   contentType: InteractiveDataContentType;
   content: string;
+  wrapper: string;
+}
+
+export interface InteractiveMemoryConfig {
+  compressionThreshold: number;
+}
+
+export interface InteractiveVariableDefinition {
+  id: string;
+  name: string;
+  description: string;
+  initialValue: InteractiveValue;
+  wrapperSource: string;
+}
+
+export interface InteractiveVariableBinding {
+  readonly value: InteractiveValue;
+  replace(value: InteractiveValue): void;
 }
 
 export interface InteractiveDocumentSource {
   prologue: string;
   templates: InteractivePromptTemplate[];
   data: InteractiveSubData[];
+  memory: InteractiveMemoryConfig;
 }
 
 export interface InteractiveDocumentCompileError {
@@ -51,18 +71,23 @@ export interface InteractiveDocumentCompileResult {
   messages: ModelMessage[];
   markdown: string;
   data: Record<string, InteractiveValue>;
+  variableDefinitions: InteractiveVariableDefinition[];
+  variableDescriptionContainer: string;
+  memory: InteractiveMemoryConfig;
   errors: InteractiveDocumentCompileError[];
   dependencies: string[];
 }
 
 export interface InteractiveDocumentCompileOptions {
   environment?: SandboxEnvironment;
+  dataOverrides?: Record<string, InteractiveValue>;
   resolveReference?: (target: string) => unknown;
 }
 
 const promptPattern =
   /<prompt_template\b([^>]*)>([\s\S]*?)<\/prompt_template\s*>/gi;
 const dataPattern = /<data\b[^>]*>([\s\S]*?)<\/data\s*>/i;
+const memoryPattern = /<memory\b[^>]*>([\s\S]*?)<\/memory\s*>/i;
 const subDataPattern =
   /<sub_data\b([^>]*)>([\s\S]*?)<\/sub_data\s*>/gi;
 const attributePattern =
@@ -109,19 +134,27 @@ export function parseInteractiveDocumentSource(
             ? "json"
             : "value",
         content: trimRawBlock(contentMatch?.[2] ?? ""),
+        wrapper: trimRawBlock(parseRawElement(body, "wrapper")),
       });
     }
   }
 
+  const memoryBody = source.match(memoryPattern)?.[1] ?? "";
+  const compressionThreshold = normalizeCompressionThreshold(
+    parseRawElement(memoryBody, "compression_threshold"),
+  );
+
   const prologue = source
     .replace(promptPattern, "")
     .replace(dataPattern, "")
+    .replace(memoryPattern, "")
     .trim();
 
   return {
     prologue,
     templates,
     data,
+    memory: { compressionThreshold },
   };
 }
 
@@ -153,9 +186,23 @@ export function serializeInteractiveDocumentSource(
       `    <content type="${item.contentType}">`,
       indentRawBlock(item.content, 6),
       "    </content>",
+      "    <wrapper>",
+      indentRawBlock(item.wrapper, 6),
+      "    </wrapper>",
       "  </sub_data>",
     ].join("\n"));
     sections.push(["<data>", ...rows, "</data>"].join("\n"));
+  }
+
+
+  if (document.memory.compressionThreshold > 0) {
+    sections.push([
+      "<memory>",
+      "  <compression_threshold>",
+      `    ${document.memory.compressionThreshold}`,
+      "  </compression_threshold>",
+      "</memory>",
+    ].join("\n"));
   }
 
   return `${sections.join("\n\n").trim()}\n`;
@@ -170,6 +217,8 @@ export function compileInteractiveDocumentSource(
   const errors: InteractiveDocumentCompileError[] = [];
   const dependencies = new Set<string>();
   const localData: Record<string, InteractiveValue> = {};
+  const localFacades: Record<string, unknown> = {};
+  const variableDefinitions: InteractiveVariableDefinition[] = [];
 
   const promptOpenCount =
     normalizedSource.match(/<prompt_template\b/gi)?.length ?? 0;
@@ -194,6 +243,14 @@ export function compileInteractiveDocumentSource(
       message: "IMD 只能包含一个成对闭合的 data 区块。",
     });
   }
+  const memoryOpenCount = normalizedSource.match(/<memory\b/gi)?.length ?? 0;
+  const memoryCloseCount = normalizedSource.match(/<\/memory\s*>/gi)?.length ?? 0;
+  if (memoryOpenCount > 1 || memoryOpenCount !== memoryCloseCount) {
+    errors.push({
+      sourceId: "memory",
+      message: "IMD 只能包含一个成对闭合的 memory 区块。",
+    });
+  }
   const subDataOpenCount =
     normalizedSource.match(/<sub_data\b/gi)?.length ?? 0;
   if (subDataOpenCount !== document.data.length) {
@@ -212,7 +269,30 @@ export function compileInteractiveDocumentSource(
       continue;
     }
     try {
-      localData[item.name] = parseSubDataContent(item);
+      const hasOverride = Object.prototype.hasOwnProperty.call(
+        options.dataOverrides ?? {},
+        item.name,
+      );
+      const value = structuredClone(
+        hasOverride
+          ? options.dataOverrides?.[item.name] ?? null
+          : parseSubDataContent(item),
+      );
+      localData[item.name] = value;
+      localFacades[item.name] = createInteractiveVariableFacade(
+        item,
+        value,
+        { readonly: true },
+      );
+      if (item.enableUpdater) {
+        variableDefinitions.push({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          initialValue: structuredClone(parseSubDataContent(item)),
+          wrapperSource: item.wrapper,
+        });
+      }
     } catch (error) {
       errors.push({
         sourceId: item.id,
@@ -239,7 +319,7 @@ export function compileInteractiveDocumentSource(
         if (!(name in localData)) {
           throw new Error(`本地数据不存在：${name}`);
         }
-        return localData[name];
+        return localFacades[name];
       }
       if (!options.resolveReference) {
         throw new Error(`当前解析器无法访问外部引用：${target}`);
@@ -273,6 +353,10 @@ export function compileInteractiveDocumentSource(
     messages,
     markdown: messagesToMarkdown(messages),
     data: localData,
+    variableDefinitions,
+    variableDescriptionContainer:
+      createVariableDescriptionContainer(variableDefinitions),
+    memory: document.memory,
     errors,
     dependencies: [...dependencies],
   };
@@ -296,6 +380,7 @@ export function normalizeInteractiveDocumentSource(input: unknown): string {
         description: String(block.description ?? ""),
         contentType: "json",
         content: JSON.stringify(block.value ?? null, null, 2),
+        wrapper: "",
       });
       continue;
     }
@@ -348,6 +433,7 @@ export function normalizeInteractiveDocumentSource(input: unknown): string {
     prologue: "",
     templates,
     data,
+    memory: { compressionThreshold: 0 },
   });
 }
 
@@ -361,7 +447,95 @@ export function createEmptyInteractiveDocumentSource() {
       content: "",
     }],
     data: [],
+    memory: { compressionThreshold: 0 },
   });
+}
+
+export function collectInteractiveVariableDefinitions(
+  input: string | unknown,
+): InteractiveVariableDefinition[] {
+  const names = new Set<string>();
+  return parseInteractiveDocumentSource(input).data.flatMap((item) => {
+    if (names.has(item.name)) {
+      throw new Error(`本地数据名称重复：${item.name}`);
+    }
+    names.add(item.name);
+    if (!item.enableUpdater) return [];
+    return [{
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      initialValue: structuredClone(parseSubDataContent(item)),
+      wrapperSource: item.wrapper,
+    }];
+  });
+}
+
+export function createInteractiveVariableFacade(
+  definition: Pick<InteractiveSubData, "name" | "wrapper">,
+  value: InteractiveValue,
+  options: {
+    readonly?: boolean;
+    onReplace?: (value: InteractiveValue) => void;
+  } = {},
+) {
+  let current = options.readonly
+    ? deepFreezeInteractiveValue(structuredClone(value))
+    : value;
+  if (!definition.wrapper.trim()) return current;
+  const binding: InteractiveVariableBinding = {
+    get value() {
+      return current;
+    },
+    replace(nextValue) {
+      if (options.readonly) {
+        throw new Error(`${definition.name} 在当前上下文中是只读变量。`);
+      }
+      current = structuredClone(nextValue);
+      options.onReplace?.(current);
+    },
+  };
+  const wrapper = createSandboxFunction(definition.wrapper, []);
+  const facade = wrapper(current, binding);
+  if (facade === undefined) {
+    throw new Error(`${definition.name} 的 wrapper 必须返回包装后的变量。`);
+  }
+  return options.readonly && facade
+      && (typeof facade === "object" || typeof facade === "function")
+    ? Object.freeze(facade)
+    : facade;
+}
+
+function deepFreezeInteractiveValue<T extends InteractiveValue>(value: T): T {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) {
+    deepFreezeInteractiveValue(child as InteractiveValue);
+  }
+  return Object.freeze(value);
+}
+
+export function createVariableDescriptionContainer(
+  definitions: InteractiveVariableDefinition[],
+) {
+  if (!definitions.length) return "";
+  return [
+    "# 变量说明",
+    "",
+    "以下变量可通过 codeAct 的 variable-update 意图更新。更新函数只能操作 variables 中的包装变量，不能执行网络、文件、插件或其它外部副作用。",
+    "",
+    ...definitions.flatMap((definition) => [
+      `## ${formatVariableAccess(definition.name)}`,
+      "",
+      definition.description.trim() || "未提供说明。",
+      "",
+    ]),
+  ].join("\n").trim();
+}
+
+function formatVariableAccess(name: string) {
+  return /^[A-Za-z_$][\w$]*$/.test(name)
+    ? `variables.${name}`
+    : `variables[${JSON.stringify(name)}]`;
 }
 
 function prepareInteractiveTemplate(
@@ -401,6 +575,11 @@ function parseSubDataContent(item: InteractiveSubData): InteractiveValue {
       }`,
     );
   }
+}
+
+function normalizeCompressionThreshold(value: string) {
+  const parsed = Number.parseInt(value.trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.max(4, parsed) : 0;
 }
 
 function messagesToMarkdown(messages: ModelMessage[]) {

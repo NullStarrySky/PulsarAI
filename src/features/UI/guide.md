@@ -139,6 +139,7 @@ Feature 特定页面必须留在所属 Feature 中，通过注册表接入，不
 外观设置包括：
 
 - 主题与明暗模式；
+- 独立于主题的全局自定义 CSS；
 - 字体和字号；
 - UI 缩放；
 - 输入框工具栏布局；
@@ -147,11 +148,24 @@ Feature 特定页面必须留在所属 Feature 中，通过注册表接入，不
 
 主题使用共享 CSS 变量，组件应优先使用 `background`、`foreground`、`muted`、`border`、`primary` 等语义变量。
 
+自定义 CSS 保存在 appearance snapshot 的 `customCss` 字段中，由
+`appearance-store.ts` 写入独立的 `#pulsarai-custom-css` 样式节点，并在主题
+样式之后实时应用。它不参与主题导入、解析或切换，因此适合覆盖普通选择器；
+旧版 snapshot 缺少该字段时自动回退为空字符串。
+
 ## 输入框工具栏布局
 
 输入框工具栏不是 Conversation 工作区中的硬编码顺序，而是外观 store 保存的标准化布局：
 
 ```ts
+type ComposerToolId =
+  | "model"
+  | "reasoning"
+  | "attachment"
+  | "whiteboard"
+  | "map"
+  | "fullscreen"
+
 interface ComposerToolbarLayout {
   left: ComposerToolId[]
   right: ComposerToolId[]
@@ -160,6 +174,10 @@ interface ComposerToolbarLayout {
 ```
 
 每个已知工具必须且只能出现一次。新增工具如果不在旧配置中，标准化过程会自动把它加入默认区域。
+
+`reasoning` 显示当前会话的思考深度按钮。点击后使用五档滑块选择关闭、低、中、高或超高；它由 Conversation 持久化，但通过共享工具栏目录决定位置。
+
+`map` 打开当前会话的分支地图及消息搜索；输入关键词后，Conversation 负责用收藏优先的消息预览覆盖地图。它属于 Conversation 的领域行为，但与其他输入框工具一样通过共享目录决定显示区域与顺序。
 
 外观设置使用输入框形状的拖动编辑器调整顺序，移动端同样支持指针拖动。
 

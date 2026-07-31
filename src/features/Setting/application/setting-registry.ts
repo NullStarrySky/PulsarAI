@@ -1,5 +1,5 @@
 import type { Component } from "vue";
-import { BarChart3, BellRing, Brain, CreditCard, History, Info, Keyboard, Languages, Palette, Settings, SlidersHorizontal } from "lucide-vue-next";
+import { BarChart3, BellRing, Brain, CreditCard, History, Info, Keyboard, Languages, Palette, Settings, SlidersHorizontal, Star } from "lucide-vue-next";
 import GeneralSettingsPage from "../presentation/pages/GeneralSettingsPage.vue";
 import SubscriptionSettingsPage from "../presentation/pages/SubscriptionSettingsPage.vue";
 import ModelProviderSettingsPage from "@/features/ModelConnection/presentation/ModelProviderSettingsPage.vue";
@@ -11,6 +11,7 @@ import BackupSettingsPage from "@/features/Backup/presentation/BackupSettingsPag
 import StatisticSettingsPage from "@/features/Statistic/presentation/StatisticSettingsPage.vue";
 import TranslateSettingsPage from "@/features/Translate/presentation/TranslateSettingsPage.vue";
 import RuntimeSettingsPage from "@/features/Misc/presentation/RuntimeSettingsPage.vue";
+import ConversationFavoriteSettingsPage from "@/features/Resources/Conversation/presentation/ConversationFavoriteSettingsPage.vue";
 
 export interface SettingPageMeta {
   id: string;
@@ -58,6 +59,7 @@ export function ensureDefaultSettingPages() {
   }
 
   registerSettingGroup({ id: "general", title: "基础" });
+  registerSettingGroup({ id: "conversation", title: "会话" });
   registerSettingGroup({ id: "account", title: "账户" });
   registerSettingGroup({ id: "appearance", title: "外观" });
   registerSettingGroup({ id: "provider", title: "模型" });
@@ -93,6 +95,16 @@ export function ensureDefaultSettingPages() {
       group: "general",
     },
     component: RuntimeSettingsPage,
+  });
+
+  registerSettingPage({
+    meta: {
+      id: "conversation.favorites",
+      icon: Star,
+      title: "消息收藏",
+      group: "conversation",
+    },
+    component: ConversationFavoriteSettingsPage,
   });
 
   registerSettingPage({

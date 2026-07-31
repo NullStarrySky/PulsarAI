@@ -22,6 +22,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
+import {
+  applyPluginRegexToText,
+  collectPluginRegexRules,
+} from "@/features/Resources/Plugin/domain/plugin-regex";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import ConversationComposerEditor from "./ConversationComposerEditor.vue";
 import ConversationMarkdown from "./ConversationMarkdown.vue";
@@ -124,6 +128,30 @@ const messages = computed(() =>
         || Boolean(conversation.currentMessage(container)?.content),
     ),
 );
+const renderingRegexRules = computed(() => {
+  const packageItem = conversation.packages.find(
+    (item) => item.id === selectedConversation.value?.packageId,
+  );
+  return collectPluginRegexRules(
+    plugins.enabledPluginsForPackage(
+      packageItem?.id,
+      packageItem?.globalPluginOrder,
+    ),
+  ).value;
+});
+
+function renderedMessageContent(index: number) {
+  const container = messages.value[index];
+  if (!container) return "";
+  const message = conversation.currentMessage(container);
+  if (!message) return "";
+  return applyPluginRegexToText(message.content, {
+    role: container.role,
+    depthFromEnd: messages.value.length - index,
+    rules: renderingRegexRules.value,
+    rendering: true,
+  }).value;
+}
 
 watch(
   currentBinding,
@@ -334,7 +362,7 @@ async function send() {
 
     <div v-if="selectedConversation" class="min-h-0 flex-1 overflow-y-auto p-3">
       <div
-        v-for="container in messages"
+        v-for="(container, index) in messages"
         :key="container.id"
         class="mb-3"
       >
@@ -349,7 +377,7 @@ async function send() {
         >
           <ConversationMarkdown
             v-if="conversation.currentMessage(container)?.content"
-            :model-value="conversation.currentMessage(container)?.content ?? ''"
+            :model-value="renderedMessageContent(index)"
           />
           <span v-else class="text-xs text-muted-foreground">生成中…</span>
         </div>

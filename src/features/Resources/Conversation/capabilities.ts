@@ -7,12 +7,12 @@ import { useConversationStore } from "./application/conversation-store";
 export const capabilities: CapabilityDefinition = {
   id: "conversation",
   title: "对话",
-  description: "查询角色包和对话，创建对话，或向当前对话发送消息。",
+  description: "查询角色包和对话，创建对话，或向当前对话发送普通消息与错误提示。",
   subCaps: {
     all: "全部对话权限",
     read: "读取角色包与对话",
     create: "创建对话",
-    send: "发送消息并生成回复",
+    send: "发送消息、生成回复与追加错误提示",
   },
   api: {
     read: [
@@ -35,12 +35,20 @@ export const capabilities: CapabilityDefinition = {
       description: "在指定角色包或当前角色包中新建并打开普通、任务或测试对话；任务与测试对话可显式绑定资源。",
       example: "await conversation.create({ kind: 'task', binding: { packageId, resourceType: 'project', resourceId: packageId, resourcePath: '/project.json', resourceTitle: '项目' } })",
     }],
-    send: [{
-      name: "send",
-      signature: "send(content: string): Promise<void>",
-      description: "向当前对话发送文本，并运行正常的插件与 Agent 生成流程。",
-      example: "await conversation.send('继续')",
-    }],
+    send: [
+      {
+        name: "send",
+        signature: "send(content: string): Promise<void>",
+        description: "向当前对话发送文本，并运行正常的插件与 Agent 生成流程。",
+        example: "await conversation.send('继续')",
+      },
+      {
+        name: "pushErrorMessage",
+        signature: "pushErrorMessage(content: string): Promise<void>",
+        description: "向当前对话追加一条不会进入后续生成上下文的错误消息。",
+        example: "await conversation.pushErrorMessage('读取资源失败')",
+      },
+    ],
   },
 };
 
@@ -106,5 +114,7 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
   } : {}),
   ...(granted.has("send") ? {
     send: (content: string) => useConversationStore().send(content),
+    pushErrorMessage: (content: string) =>
+      useConversationStore().pushErrorMessage(content).then(() => undefined),
   } : {}),
 }));

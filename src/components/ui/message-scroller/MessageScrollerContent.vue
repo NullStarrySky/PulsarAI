@@ -7,6 +7,7 @@ import { useMessageScrollerContext } from './useMessageScroller'
 const props = defineProps<{
   class?: HTMLAttributes['class']
   spacerClass?: HTMLAttributes['class']
+  virtualCount?: number
 }>()
 
 const {
@@ -61,6 +62,7 @@ onBeforeUnmount(() => {
   <div
     ref="content"
     data-slot="message-scroller-content"
+    :data-virtual-count="props.virtualCount"
     role="log"
     aria-relevant="additions"
     :class="cn('flex h-max min-h-full flex-col gap-8', props.class)"

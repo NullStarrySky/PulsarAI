@@ -5,9 +5,11 @@ import {
   Check,
   ChevronsUpDown,
   DatabaseBackup,
+  Download,
   RefreshCw,
   Search,
   ShieldCheck,
+  Upload,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
+import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
 import SettingGroup from "@/features/Setting/presentation/SettingGroup.vue";
 import SettingItem from "@/features/Setting/presentation/SettingItem.vue";
 import SettingPage from "@/features/Setting/presentation/SettingPage.vue";
@@ -29,13 +32,17 @@ import {
   backupLimitOptions,
   type BackupInterval,
   type BackupLimit,
+  type ResourceImportMode,
   useBackupStore,
 } from "../application/backup-store";
 import BackupResourceRestoreDialog from "./BackupResourceRestoreDialog.vue";
 
 const backup = useBackupStore();
 const conversation = useConversationStore();
+const plugin = usePluginStore();
 const restoreDialogOpen = ref(false);
+const selectedExportResource = ref("");
+const resourceImportMode = ref<ResourceImportMode>("copy");
 const syncScopeOpen = ref(false);
 const syncScopeSearch = ref("");
 const backupOptions = computed(() =>
@@ -55,9 +62,29 @@ const filteredSyncPackages = computed(() => {
     )
     .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans"));
 });
+const exportResourceOptions = computed(() => [
+  ...conversation.packages.map((item) => ({
+    value: `package:${item.id}`,
+    label: `角色包 · ${item.name}`,
+  })),
+  ...conversation.conversations.map((item) => ({
+    value: `conversation:${item.id}`,
+    label: `会话 · ${item.title}`,
+  })),
+  ...plugin.plugins
+    .filter((item) => !item.builtIn)
+    .map((item) => ({
+      value: `plugin:${item.id}`,
+      label: `插件 · ${item.name}`,
+    })),
+]);
 
 onMounted(async () => {
-  await Promise.all([backup.initialize(), conversation.initialize()]);
+  await Promise.all([
+    backup.initialize(),
+    conversation.initialize(),
+    plugin.initialize(),
+  ]);
 });
 
 async function openResourceRestore() {
@@ -71,6 +98,22 @@ function formatSyncTime(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+async function exportSelectedResource() {
+  try {
+    await backup.exportResource(selectedExportResource.value);
+  } catch (error) {
+    backup.status = `导出失败：${String(error)}`;
+  }
+}
+
+async function importResourceArchive() {
+  try {
+    await backup.importResourceArchive(resourceImportMode.value);
+  } catch (error) {
+    backup.status = `导入失败：${String(error)}`;
+  }
 }
 </script>
 
@@ -206,8 +249,61 @@ function formatSyncTime(value: string) {
       </SettingItem>
     </SettingGroup>
 
-    <SettingGroup title="本地历史备份">
-      <SettingItem title="创建备份" description="保存当前数据库的完整历史版本。">
+    <SettingGroup
+      title="资源导入与导出"
+      description="角色包会携带所属会话和本地插件；会话会携带消息容器。归档使用 Zstandard 压缩。"
+    >
+      <SettingItem title="导出资源" description="内置插件不可导出。归档保留稳定 ID，便于之后更新。">
+        <div class="grid w-full gap-2 sm:w-80 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <Select v-model="selectedExportResource">
+            <SelectTrigger>
+              <SelectValue placeholder="选择角色包、会话或插件" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem
+                v-for="item in exportResourceOptions"
+                :key="item.value"
+                :value="item.value"
+              >
+                {{ item.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            :disabled="!selectedExportResource"
+            @click="exportSelectedResource"
+          >
+            <Download />
+            导出
+          </Button>
+        </div>
+      </SettingItem>
+      <SettingItem
+        title="导入资源"
+        description="“作为副本”会重映射冲突 ID；“更新同 ID”会自动合并结构差异并保留冲突版本。"
+      >
+        <div class="grid w-full gap-2 sm:w-80 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <Select v-model="resourceImportMode">
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="copy">作为副本导入</SelectItem>
+              <SelectItem value="update">更新同 ID 资源</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button @click="importResourceArchive">
+            <Upload />
+            导入
+          </Button>
+        </div>
+      </SettingItem>
+    </SettingGroup>
+
+    <SettingGroup
+      title="本地历史备份"
+      description="文件按内容去重并使用 Zstandard 压缩；相邻版本只新增发生变化的对象。"
+    >
+      <SettingItem title="创建备份" description="创建当前数据库与资源文件的增量历史快照。">
         <Button @click="backup.createLocalBackup">
           <DatabaseBackup data-icon="inline-start" />
           立即备份

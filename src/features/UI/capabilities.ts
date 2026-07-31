@@ -10,6 +10,43 @@ export const capabilities: CapabilityDefinition = {
   id: "ui",
   title: "界面",
   description: "打开设置或工作区资源，并控制主界面的侧栏。",
+  documentation: {
+    overview: "提供应用壳层的可见交互入口，包括设置、资源标签、侧栏、顶栏标签状态和输入框工具栏布局。领域操作仍由对应 Feature 自己负责。",
+    notes: [
+      "openResource 只负责打开标签，不负责创建或验证资源内容。",
+      "工具栏布局中的每个已知工具只保留一次，缺失工具会按默认分区补回。",
+    ],
+    types: [
+      {
+        name: "ComposerToolId",
+        description: "当前输入框工具栏目录中的工具标识。",
+        definition: `type ComposerToolId =
+  | "model"
+  | "reasoning"
+  | "attachment"
+  | "whiteboard"
+  | "map"
+  | "fullscreen";`,
+      },
+      {
+        name: "TopBarStatus",
+        description: "资源标签可以显示的短期状态。",
+        definition: `interface TopBarStatus {
+  kind: "loading" | "success" | "warning" | "error";
+  label?: string;
+}`,
+      },
+      {
+        name: "ComposerToolbarLayout",
+        description: "输入框工具在左侧、右侧与未使用分区中的顺序。",
+        definition: `interface ComposerToolbarLayout {
+  left: ComposerToolId[];
+  right: ComposerToolId[];
+  unused: ComposerToolId[];
+}`,
+      },
+    ],
+  },
   subCaps: {
     all: "全部界面权限",
     settings: "打开或关闭设置",
@@ -54,7 +91,7 @@ export const capabilities: CapabilityDefinition = {
         name: "setComposerToolbar",
         signature: "setComposerToolbar(layout: ComposerToolbarLayout): void",
         description: "保存输入框工具栏布局；每个已知工具只会保留一次。",
-        example: "ui.setComposerToolbar({ left: ['model'], right: ['fullscreen'], unused: ['plugin', 'attachment', 'whiteboard'] })",
+        example: "ui.setComposerToolbar({ left: ['model', 'attachment'], right: ['map', 'fullscreen'], unused: ['whiteboard'] })",
       },
     ],
   },

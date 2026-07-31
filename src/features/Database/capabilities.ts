@@ -8,6 +8,21 @@ export const capabilities: CapabilityDefinition = {
   id: "database",
   title: "数据库",
   description: "访问 Pulsar 本地数据库的底层记录。除诊断或迁移外应优先使用所属 Feature 的高层 API。",
+  documentation: {
+    overview: "这是 SurrealDB 记录层的通用逃生口，允许按表名直接读写值。它绕过所属 Feature 的业务校验，因此默认权限应保持保守。",
+    notes: [
+      "表名和记录结构不会在运行时替调用方推断，调用方必须掌握对应 Feature 的持久化契约。",
+      "删除权限与写入权限分离，便于只允许迁移脚本新增或更新数据。",
+    ],
+    types: [{
+      name: "DatabaseRecord",
+      description: "selectAll 返回的记录包装结构。",
+      definition: `interface DatabaseRecord<T> {
+  id: string;
+  value: T;
+}`,
+    }],
+  },
   subCaps: {
     all: "全部数据库权限",
     read: "读取数据库记录",

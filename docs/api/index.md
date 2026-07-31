@@ -1,5 +1,8 @@
-# Feature API
-
-本页不复制 API 数据。以下内容直接渲染自 `src/features/**/capabilities.ts` 汇总出的定义；应用设置、模型提示词和此页面使用同一份事实来源。
+---
+title: Feature API
+description: 从各 Feature capability 定义生成的人类文档与模型上下文预览。
+aside: false
+pageClass: feature-api-page
+---
 
 <CapabilityReference />

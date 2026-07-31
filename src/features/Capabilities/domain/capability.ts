@@ -8,10 +8,23 @@ export interface CapabilityApiDoc {
   example?: string;
 }
 
+export interface CapabilityTypeDoc {
+  name: string;
+  description?: string;
+  definition: string;
+}
+
+export interface CapabilityHumanDocumentation {
+  overview: string;
+  notes?: string[];
+  types?: CapabilityTypeDoc[];
+}
+
 export interface CapabilityDefinition {
   id: string;
   title: string;
   description: string;
+  documentation?: CapabilityHumanDocumentation;
   subCaps: Record<string, string>;
   api: Record<string, CapabilityApiDoc[]>;
 }
@@ -90,6 +103,15 @@ export function createCapabilityPrompt(
     definition.description,
     ...sections,
   ].join("\n");
+}
+
+export function composeCapabilityRuntimePrompt(sections: string[]) {
+  return [
+    "# Pulsar Feature API",
+    "仅可调用下列已授权 API。API 对象同时位于 `environment.<featureId>` 与 `environment.capabilities.<featureId>`。",
+    "优先调用直观的 Feature API；除非明确需要，不要直接访问 database 或执行任意预设源码。",
+    ...sections.filter(Boolean),
+  ].join("\n\n");
 }
 
 export function createMetadataOnlyCapability(

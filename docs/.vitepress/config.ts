@@ -6,6 +6,7 @@ export default defineConfig({
   title: "PulsarAI",
   description: "PulsarAI Feature API 与权限参考",
   cleanUrls: true,
+  srcExclude: ["api/capability-reference.generated.md"],
   vite: {
     resolve: {
       alias: {

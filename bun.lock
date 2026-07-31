@@ -16,6 +16,7 @@
         "@milkdown/crepe": "^7.21.3",
         "@milkdown/vue": "^7.21.3",
         "@tailwindcss/vite": "^4.3.3",
+        "@tanstack/vue-virtual": "^3.13.34",
         "@tanstack/vue-table": "^8.21.3",
         "@tauri-apps/api": "^2",
         "@tauri-apps/plugin-dialog": "^2.7.2",

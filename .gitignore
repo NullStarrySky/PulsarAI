@@ -17,6 +17,8 @@ src-tauri/target
 .prompt_history
 .vscode
 apikeys
+similarProjects
+todo
 
 # Editor directories and files
 .vscode/*

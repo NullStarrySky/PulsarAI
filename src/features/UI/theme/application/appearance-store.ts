@@ -21,11 +21,13 @@ interface AppearanceSnapshot {
   themeId: string;
   themeMode: ThemeMode;
   customThemes: ThemeDefinition[];
+  customCss: string;
   fontId: string;
   customFonts: FontDefinition[];
   fontSize: number;
   uiScale: number;
   composerToolbar: ComposerToolbarLayout;
+  interactiveCodePreview: boolean;
   mobileNavigationBarMode: MobileNavigationBarMode;
 }
 
@@ -39,11 +41,13 @@ export const useAppearanceStore = defineStore("appearance", () => {
   const themeId = ref(snapshot.themeId);
   const themeMode = ref<ThemeMode>(snapshot.themeMode);
   const customThemes = ref<ThemeDefinition[]>(snapshot.customThemes);
+  const customCss = ref(snapshot.customCss);
   const fontId = ref(snapshot.fontId);
   const customFonts = ref<FontDefinition[]>(snapshot.customFonts);
   const fontSize = ref(snapshot.fontSize);
   const uiScale = ref(snapshot.uiScale);
   const composerToolbar = ref(snapshot.composerToolbar);
+  const interactiveCodePreview = ref(snapshot.interactiveCodePreview);
   const mobileNavigationBarMode = ref(snapshot.mobileNavigationBarMode);
 
   const themes = computed(() => [...builtInThemes, ...customThemes.value]);
@@ -52,17 +56,31 @@ export const useAppearanceStore = defineStore("appearance", () => {
   const activeFont = computed(() => fonts.value.find((font) => font.id === fontId.value) ?? builtInFonts[0]);
 
   watch(
-    [themeId, themeMode, customThemes, fontId, customFonts, fontSize, uiScale, composerToolbar, mobileNavigationBarMode],
+    [
+      themeId,
+      themeMode,
+      customThemes,
+      customCss,
+      fontId,
+      customFonts,
+      fontSize,
+      uiScale,
+      composerToolbar,
+      interactiveCodePreview,
+      mobileNavigationBarMode,
+    ],
     () => {
       persistSnapshot({
         themeId: themeId.value,
         themeMode: themeMode.value,
         customThemes: customThemes.value,
+        customCss: customCss.value,
         fontId: fontId.value,
         customFonts: customFonts.value,
         fontSize: fontSize.value,
         uiScale: uiScale.value,
         composerToolbar: composerToolbar.value,
+        interactiveCodePreview: interactiveCodePreview.value,
         mobileNavigationBarMode: mobileNavigationBarMode.value,
       });
       applyAppearance();
@@ -95,6 +113,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
       return;
     }
     installCustomThemeStyles(customThemes.value);
+    installCustomCss(customCss.value);
     const topBarIsDark = applyTheme(
       activeTheme.value,
       themeMode.value,
@@ -112,8 +131,10 @@ export const useAppearanceStore = defineStore("appearance", () => {
     activeFont,
     activeTheme,
     customFonts,
+    customCss,
     customThemes,
     composerToolbar,
+    interactiveCodePreview,
     fontId,
     fontSize,
     fonts,
@@ -171,6 +192,17 @@ function installCustomThemeStyles(themes: ThemeDefinition[]) {
   style.textContent = [...builtInThemes, ...themes].map((theme) => theme.css ?? "").join("\n\n");
 }
 
+function installCustomCss(css: string) {
+  const styleId = "pulsarai-custom-css";
+  let style = document.getElementById(styleId) as HTMLStyleElement | null;
+  if (!style) {
+    style = document.createElement("style");
+    style.id = styleId;
+    document.head.append(style);
+  }
+  style.textContent = css;
+}
+
 function installSystemModeListener(mode: ThemeMode, onSystemChange: () => void) {
   if (typeof window === "undefined") {
     return;
@@ -194,11 +226,13 @@ function readSnapshot(): AppearanceSnapshot {
     themeId: builtInThemes[0].id,
     themeMode: "system",
     customThemes: [],
+    customCss: "",
     fontId: builtInFonts[0].id,
     customFonts: [],
     fontSize: 16,
     uiScale: 100,
     composerToolbar: structuredClone(defaultComposerToolbarLayout),
+    interactiveCodePreview: false,
     mobileNavigationBarMode: "topbar",
   };
   if (typeof localStorage === "undefined") {
@@ -213,7 +247,12 @@ function readSnapshot(): AppearanceSnapshot {
     return {
       ...fallback,
       ...parsed,
+      customCss: typeof parsed.customCss === "string" ? parsed.customCss : "",
       composerToolbar: normalizeComposerToolbarLayout(parsed.composerToolbar),
+      interactiveCodePreview:
+        typeof parsed.interactiveCodePreview === "boolean"
+          ? parsed.interactiveCodePreview
+          : fallback.interactiveCodePreview,
     };
   } catch {
     return fallback;

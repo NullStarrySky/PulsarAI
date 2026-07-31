@@ -1,5 +1,6 @@
 import {
   compileInteractiveDocumentSource,
+  type InteractiveDocumentCompileOptions,
   type InteractiveDocumentCompileResult,
 } from "@/features/Resources/InteractiveDoc/domain/interactive-document";
 import {
@@ -62,6 +63,38 @@ export interface PluginContainerValue {
   toString(): string;
 }
 
+export interface PluginContainerResourceQuery {
+  id: string;
+  name: string;
+  path: string;
+  type: ReturnType<typeof pluginFileType>;
+  priority: number;
+  pluginId: string;
+  pluginName: string;
+}
+
+export interface PluginContainerContentQuery extends PluginContainerResourceQuery {
+  alias: string;
+}
+
+export interface PluginContainerQuery {
+  id: string;
+  name: string;
+  scope: PluginContainerScope;
+  description?: string;
+  pluginId: string;
+  pluginName: string;
+  definitionId: string;
+  path: string;
+  usedByCount: number;
+  contentCount: number;
+}
+
+export interface PluginContainerDetailsQuery extends PluginContainerQuery {
+  usedBy: PluginContainerResourceQuery[];
+  contents: PluginContainerContentQuery[];
+}
+
 interface ResourceRecord {
   plugin: Plugin;
   file: PluginFile;
@@ -72,6 +105,7 @@ interface ResourceRecord {
 }
 
 interface ContainerRecord {
+  id: string;
   key: string;
   name: string;
   scope: PluginContainerScope;
@@ -156,6 +190,36 @@ export class PluginReferenceResolver {
     }));
   }
 
+  listContainers(): PluginContainerQuery[] {
+    return [...this.containers.values()].map((container) =>
+      this.createContainerQuery(container),
+    );
+  }
+
+  getContainer(containerId: string): PluginContainerDetailsQuery | null {
+    const container = [...this.containers.values()].find(
+      (item) => item.id === containerId,
+    );
+    if (!container) return null;
+    const usedBy = this.records
+      .filter((record) => this.resourceUsesContainer(record, container))
+      .map((record) => this.createResourceQuery(record));
+    const contents = [...container.resources.entries()].map(
+      ([alias, record]) => ({
+        alias,
+        ...this.createResourceQuery(record),
+      }),
+    );
+    return {
+      ...this.createContainerQuery(container, {
+        usedByCount: usedBy.length,
+        contentCount: contents.length,
+      }),
+      usedBy,
+      contents,
+    };
+  }
+
   private resolve(target: string, from?: ResourceRecord): unknown {
     const normalized = normalizePluginReferenceTarget(target);
     if (normalized.startsWith("local:")) {
@@ -190,7 +254,10 @@ export class PluginReferenceResolver {
     throw new Error(`不支持的引用：${normalized}`);
   }
 
-  compileInteractiveDocument(resourceId: string): InteractiveDocumentCompileResult {
+  compileInteractiveDocument(
+    resourceId: string,
+    options: Pick<InteractiveDocumentCompileOptions, "dataOverrides"> = {},
+  ): InteractiveDocumentCompileResult {
     const record = this.requireRecord(resourceId);
     if (pluginFileType(record.file.name) !== "interactive-document") {
       throw new Error(`资源不是 IMD：${record.path}`);
@@ -198,6 +265,7 @@ export class PluginReferenceResolver {
     this.tracedResourceIds.add(record.file.id);
     const result = compileInteractiveDocumentSource(record.declarationSource, {
       environment: this.environment,
+      dataOverrides: options.dataOverrides,
       resolveReference: (target) => this.resolve(target, record),
     });
     this.addCompileDiagnostics(record, result);
@@ -206,6 +274,7 @@ export class PluginReferenceResolver {
 
   prepareJavaScript(resourceId: string) {
     const record = this.requireRecord(resourceId);
+    this.tracedResourceIds.add(record.file.id);
     const tokens = findPluginReferenceTokens(record.declarationSource);
     const allowedTargets = new Set(
       tokens.map((token) => normalizePluginReferenceTarget(token.target)),
@@ -347,6 +416,12 @@ export class PluginReferenceResolver {
           continue;
         }
         this.containers.set(key, {
+          id: createPluginContainerQueryId(
+            declaration.scope,
+            declaration.name,
+            record.plugin.id,
+            record.directory,
+          ),
           key,
           name: declaration.name,
           scope: declaration.scope,
@@ -484,6 +559,57 @@ export class PluginReferenceResolver {
     return record.value;
   }
 
+  private createContainerQuery(
+    record: ContainerRecord,
+    counts?: { usedByCount: number; contentCount: number },
+  ): PluginContainerQuery {
+    const usedByCount = counts?.usedByCount
+      ?? this.records.filter(
+        (item) => this.resourceUsesContainer(item, record),
+      ).length;
+    return {
+      id: record.id,
+      name: record.name,
+      scope: record.scope,
+      description: record.declaration.description?.trim() || undefined,
+      pluginId: record.source.plugin.id,
+      pluginName: record.source.plugin.name,
+      definitionId: record.source.file.id,
+      path: `/${record.source.path}`,
+      usedByCount,
+      contentCount: counts?.contentCount ?? record.resources.size,
+    };
+  }
+
+  private createResourceQuery(
+    record: ResourceRecord,
+  ): PluginContainerResourceQuery {
+    return {
+      id: record.file.id,
+      name: record.file.name,
+      path: `/${record.path}`,
+      type: pluginFileType(record.file.name),
+      priority: record.file.priority,
+      pluginId: record.plugin.id,
+      pluginName: record.plugin.name,
+    };
+  }
+
+  private resourceUsesContainer(
+    resource: ResourceRecord,
+    target: ContainerRecord,
+  ) {
+    return findPluginReferenceTokens(resource.declarationSource).some((token) => {
+      try {
+        const normalized = normalizePluginReferenceTarget(token.target);
+        return normalized.startsWith("container:")
+          && this.resolveContainer(normalized, resource).key === target.key;
+      } catch {
+        return false;
+      }
+    });
+  }
+
   private createResourceValue(record: ResourceRecord): GenerationResourceValue {
     const value: GenerationResourceValue = {
       id: record.file.id,
@@ -526,6 +652,21 @@ export function createPluginReferenceResolver(
   options: PluginReferenceResolverOptions = {},
 ) {
   return new PluginReferenceResolver(plugins, options);
+}
+
+export function createPluginContainerQueryId(
+  scope: PluginContainerScope,
+  name: string,
+  pluginId: string,
+  directory = "",
+) {
+  return [
+    "container",
+    scope,
+    encodeURIComponent(pluginId),
+    encodeURIComponent(directory),
+    encodeURIComponent(name.trim()),
+  ].join(":");
 }
 
 function containerKey(

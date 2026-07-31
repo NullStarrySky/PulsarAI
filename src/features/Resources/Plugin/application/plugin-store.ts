@@ -10,6 +10,7 @@ import {
   flattenPluginFiles,
   pluginConventions,
   pluginFileType,
+  pluginNodePath,
   sortPluginTreeNodes,
   type Plugin,
   type PluginFile,
@@ -104,24 +105,33 @@ function createStarterRoot(name: string): PluginFolder {
         imports: [],
       },
     ], { order: 2 }),
+    createFile(pluginConventions.regex, [], {
+      order: 3,
+      memberships: [{
+        container: "container:global/正则",
+        alias: "regex",
+      }],
+    }),
     createFile(
       pluginConventions.context,
       createDefaultContextDocument(),
-      { order: 3 },
+      { order: 4 },
     ),
     createFolder("instruction", [
       createFile(
         "default.md",
         [
           "You are Pulsar's conversation agent.",
-          "Use tools when useful and keep the final answer grounded in the referenced context.",
+          "Use the single codeAct tool for API work and keep the final answer grounded in the referenced context.",
+          "Every codeAct call must be one function with an explicit return.",
           "Treat Feature API documentation as the exact permission boundary.",
-          "When a real user decision is required, use askUser and continue from its result.",
+          "Read the custom tool documentation block and call plugin functions through ctx.tools when relevant.",
+          "When a real user decision is required, call agent.askUser(...) or api.askUser(...) inside codeAct and continue from its result.",
         ].join("\n"),
         { order: 0 },
       ),
-    ], { order: 4 }),
-    createAgentProcessFolder({ order: 5 }),
+    ], { order: 5 }),
+    createAgentProcessFolder({ order: 6 }),
     createFile(
       pluginConventions.override,
       [
@@ -130,10 +140,10 @@ function createStarterRoot(name: string): PluginFolder {
         "</template>",
         "",
       ].join("\n"),
-      { order: 6 },
+      { order: 7 },
     ),
-    createFolder(pluginConventions.componentsFolder, [], { order: 7 }),
-    createFolder(pluginConventions.backgroundFolder, [], { order: 8 }),
+    createFolder(pluginConventions.componentsFolder, [], { order: 8 }),
+    createFolder(pluginConventions.backgroundFolder, [], { order: 9 }),
     createFolder("character", [
       createFile(
         "default.md",
@@ -146,8 +156,9 @@ function createStarterRoot(name: string): PluginFolder {
           }],
         },
       ),
-    ], { order: 9 }),
-    createFolder(pluginConventions.actionFolder, [], { order: 10 }),
+    ], { order: 10 }),
+    createFolder(pluginConventions.toolsFolder, [], { order: 11 }),
+    createFolder(pluginConventions.actionFolder, [], { order: 12 }),
   ], { id: crypto.randomUUID() });
 }
 
@@ -214,7 +225,8 @@ function createAgentProcessFolder(
         "const runtime = await agent.prepare();",
         "const runner = new agent.ToolLoopAgent({",
         "  model: runtime.model,",
-        "  instructions: String(<@path:../instruction/default.md>),",
+        "  reasoning: runtime.reasoning,",
+        "  instructions: [String(<@path:../instruction/default.md>), runtime.instructions].join('\\n\\n'),",
         "  tools: runtime.tools,",
         "  stopWhen: runtime.stopWhen,",
         "  onStepStart: runtime.onStepStart,",
@@ -260,6 +272,24 @@ function createBuiltinPlugin(): Plugin {
           name: "基础上下文",
           scope: "global",
           description: "所有启用插件都可以显式引用的 PulsarAI 基础上下文。",
+          imports: [],
+        },
+        {
+          name: "正则",
+          scope: "global",
+          description: "按插件与文件优先级应用的根级 regex.json 规则。",
+          imports: [],
+        },
+        {
+          name: "自定义工具",
+          scope: "global",
+          description: "tools/<name>/tool.js 中可由 ctx.tools 调用的函数。",
+          imports: [],
+        },
+        {
+          name: "自定义工具文档",
+          scope: "global",
+          description: "tools/<name>/prompt.md 中注入模型上下文的函数说明。",
           imports: [],
         },
       ],
@@ -316,19 +346,6 @@ function createBuiltinPlugin(): Plugin {
         }],
       },
     ),
-    createFolder("tool", [
-      createFile(
-        "executeJavaScript.json",
-        {
-          toolName: "executeJavaScript",
-          environment: "capabilities",
-        },
-        {
-          id: "builtin-tool-execute-javascript",
-          order: 0,
-        },
-      ),
-    ], { order: 8 }),
   );
 
   return {
@@ -486,8 +503,10 @@ function isFixedConventionNode(plugin: Plugin, nodeId: string) {
   return [
     pluginConventions.manifest,
     pluginConventions.containers,
+    pluginConventions.regex,
     pluginConventions.override,
     pluginConventions.componentsFolder,
+    pluginConventions.toolsFolder,
   ].some(
     (path) => findPluginNodeByPath(plugin.root, path)?.id === nodeId,
   );
@@ -506,6 +525,53 @@ function normalizeImportedGlobalPlugin(value: unknown, order: number): Plugin {
     main: false,
     order,
   };
+}
+
+function conventionalToolMemberships(
+  plugin: Plugin,
+  parent: PluginFolder,
+  fileName: string,
+): PluginFile["memberships"] {
+  const parentPath = pluginNodePath(plugin.root, parent.id);
+  if (
+    parentPath.length !== 2
+    || parentPath[0]?.toLocaleLowerCase()
+      !== pluginConventions.toolsFolder.toLocaleLowerCase()
+  ) {
+    return [];
+  }
+  const alias = parentPath[1]?.trim() ?? "";
+  const normalizedName = fileName.trim().toLocaleLowerCase();
+  if (normalizedName === pluginConventions.toolEntry.toLocaleLowerCase()) {
+    return [{
+      container: "container:global/自定义工具",
+      alias,
+    }];
+  }
+  if (normalizedName === pluginConventions.toolPrompt.toLocaleLowerCase()) {
+    return [{
+      container: "container:global/自定义工具文档",
+      alias,
+    }];
+  }
+  return [];
+}
+
+function syncConventionalToolMemberships(
+  plugin: Plugin,
+  parent: PluginFolder,
+  file: PluginFile,
+) {
+  const reservedContainers = new Set([
+    "container:global/自定义工具",
+    "container:global/自定义工具文档",
+  ]);
+  file.memberships = [
+    ...file.memberships.filter(
+      (membership) => !reservedContainers.has(membership.container),
+    ),
+    ...conventionalToolMemberships(plugin, parent, file.name),
+  ];
 }
 
 export const usePluginStore = defineStore("plugin-resource", {
@@ -614,8 +680,9 @@ export const usePluginStore = defineStore("plugin-resource", {
               .replace(/\.[^.]+$/, "")
               .trim()
               .toLocaleLowerCase();
+            const type = pluginFileType(resource.name);
             if (
-              pluginFileType(resource.name) !== "javascript"
+              (type !== "javascript" && type !== "markdown")
               || !commandName
               || claimedNames.has(commandName)
             ) {
@@ -625,6 +692,7 @@ export const usePluginStore = defineStore("plugin-resource", {
             actions.push({
               pluginId: plugin.id,
               pluginName: plugin.name,
+              kind: type === "markdown" ? "prompt" : "process",
               resource: {
                 ...resource,
                 name: resource.name.replace(/\.[^.]+$/, ""),
@@ -832,6 +900,7 @@ export const usePluginStore = defineStore("plugin-resource", {
         && [
           pluginConventions.manifest,
           pluginConventions.containers,
+          pluginConventions.regex,
           pluginConventions.override,
         ].some(
           (name) =>
@@ -855,6 +924,11 @@ export const usePluginStore = defineStore("plugin-resource", {
             typeof input.priority === "number" && Number.isFinite(input.priority)
               ? Math.round(input.priority)
               : 100,
+          memberships: conventionalToolMemberships(
+            plugin,
+            parent,
+            input.name?.trim() || "untitled.md",
+          ),
         },
       );
       parent.children.push(file);
@@ -874,12 +948,18 @@ export const usePluginStore = defineStore("plugin-resource", {
       if (!plugin || parent?.kind !== "folder") return null;
       if (
         parent.id === plugin.root.id
-        && name.trim().toLocaleLowerCase()
-          === pluginConventions.componentsFolder.toLocaleLowerCase()
+        && [
+          pluginConventions.componentsFolder,
+          pluginConventions.toolsFolder,
+        ].some(
+          (folderName) =>
+            name.trim().toLocaleLowerCase()
+              === folderName.toLocaleLowerCase(),
+        )
       ) {
         const existing = findPluginNodeByPath(
           plugin.root,
-          pluginConventions.componentsFolder,
+          name.trim(),
         );
         if (existing?.kind === "folder") return existing;
       }
@@ -921,6 +1001,12 @@ export const usePluginStore = defineStore("plugin-resource", {
         && patch.name.trim()
       ) {
         node.name = patch.name.trim();
+        const parent = node.kind === "file"
+          ? findPluginTreeParent(plugin.root, node.id)
+          : null;
+        if (node.kind === "file" && parent && !Array.isArray(patch.memberships)) {
+          syncConventionalToolMemberships(plugin, parent, node);
+        }
       }
       if (typeof patch.icon === "string") node.icon = patch.icon;
       if (node.kind === "file" && "content" in patch) {
@@ -997,6 +1083,9 @@ export const usePluginStore = defineStore("plugin-resource", {
       });
       target.children = ordered;
       target.collapsed = false;
+      if (node.kind === "file") {
+        syncConventionalToolMemberships(plugin, target, node);
+      }
       await this.persistPlugin(plugin);
     },
   },

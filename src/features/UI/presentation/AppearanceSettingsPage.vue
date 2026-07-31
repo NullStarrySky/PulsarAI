@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import SettingForm from "@/features/Setting/presentation/SettingForm.vue";
 import SettingFormField from "@/features/Setting/presentation/SettingFormField.vue";
 import SettingPage from "@/features/Setting/presentation/SettingPage.vue";
@@ -96,6 +98,20 @@ function importFont() {
         </div>
       </SettingFormField>
 
+      <SettingFormField
+        title="自定义 CSS"
+        description="在主题样式之后应用到整个应用。内容会实时生效并保存在本机；错误的选择器可能影响界面可用性。"
+      >
+        <template #bottom>
+          <Textarea
+            v-model="appearance.customCss"
+            class="min-h-48 resize-y font-mono text-xs leading-5"
+            placeholder="/* 例如：调整工作区圆角 */&#10;.workspace-panel { border-radius: 12px; }"
+            spellcheck="false"
+          />
+        </template>
+      </SettingFormField>
+
       <SettingFormField title="字体" description="选择字体方案。">
         <Select v-model="appearance.fontId">
           <SelectTrigger class="ml-auto w-40"><SelectValue placeholder="选择字体" /></SelectTrigger>
@@ -140,6 +156,16 @@ function importFont() {
         <ComposerToolbarLayoutEditor
           :model-value="appearance.composerToolbar"
           @update:model-value="appearance.setComposerToolbar"
+        />
+      </SettingFormField>
+
+      <SettingFormField
+        title="交互式代码预览"
+        description="将消息中包含 HTML 或脚本的代码块放入隔离页面运行。最新消息会优先显示预览，仍可随时切回源码。"
+      >
+        <Switch
+          v-model="appearance.interactiveCodePreview"
+          aria-label="启用交互式代码预览"
         />
       </SettingFormField>
 

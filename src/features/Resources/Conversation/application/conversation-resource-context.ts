@@ -124,13 +124,14 @@ export function buildConversationResourceContext(
           JSON.stringify(
             {
               ...target,
-              messages: path.map((container) => ({
-                role: container.role,
-                content:
-                  container.activeMessage === null
-                    ? ""
-                    : container.content[container.activeMessage]?.content ?? "",
-              })),
+              messages: path.flatMap((container) => {
+                const message = container.activeMessage === null
+                  ? null
+                  : container.content[container.activeMessage] ?? null;
+                return !message || message.type === "error"
+                  ? []
+                  : [{ role: container.role, content: message.content }];
+              }),
             },
             null,
             2,

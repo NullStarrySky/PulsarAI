@@ -50,9 +50,11 @@ import {
 } from "@/features/Resources/InteractiveDoc/domain/interactive-document";
 import {
   createPluginReferenceResolver,
+  type PluginContainerResourceQuery,
 } from "@/features/Resources/Plugin/application/plugin-reference-resolver";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
 import PluginContainerDefinitionsEditor from "@/features/Resources/Plugin/presentation/PluginContainerDefinitionsEditor.vue";
+import PluginRegexEditor from "@/features/Resources/Plugin/presentation/PluginRegexEditor.vue";
 import PluginVuePreview from "@/features/Resources/Plugin/presentation/PluginVuePreview.vue";
 import {
   findPluginNodeByPath,
@@ -65,6 +67,9 @@ import {
   type PluginFolder,
   type PluginTreeNode,
 } from "@/features/Resources/Plugin/domain/plugin-types";
+import type {
+  WorkspaceTab,
+} from "@/features/UI/application/layout-store";
 import {
   createPluginMediaContent,
   pluginMediaSource,
@@ -105,6 +110,7 @@ const newFileTypes: Array<{
 const props = defineProps<{
   resourceId: string;
   packageId?: string;
+  tab?: WorkspaceTab;
 }>();
 
 const pluginStore = usePluginStore();
@@ -158,6 +164,11 @@ const selectedIsManifest = computed(
     selectedPath.value.toLocaleLowerCase()
       === pluginConventions.manifest.toLocaleLowerCase(),
 );
+const selectedIsRegex = computed(
+  () =>
+    selectedPath.value.toLocaleLowerCase()
+      === pluginConventions.regex.toLocaleLowerCase(),
+);
 const selectedIsOverride = computed(
   () =>
     selectedPath.value.toLocaleLowerCase()
@@ -167,6 +178,7 @@ const selectedIsFixedConvention = computed(
   () =>
     selectedIsContainerDefinitions.value
     || selectedIsManifest.value
+    || selectedIsRegex.value
     || selectedIsOverride.value,
 );
 const selectedTypeLabel = computed(() =>
@@ -174,9 +186,11 @@ const selectedTypeLabel = computed(() =>
     ? "container definitions"
     : selectedIsManifest.value
       ? "plugin manifest"
-      : selectedIsOverride.value
-        ? "conversation renderer override"
-        : selectedType.value,
+      : selectedIsRegex.value
+        ? "regex container"
+        : selectedIsOverride.value
+          ? "conversation renderer override"
+          : selectedType.value,
 );
 const activeParentFolder = computed(() => {
   if (!plugin.value) return null;
@@ -193,35 +207,45 @@ const mediaSource = computed(() => pluginMediaSource(selectedFile.value?.content
 const mediaKind = computed(() =>
   pluginMediaType(selectedFile.value?.content, mediaSource.value),
 );
-const interactiveDocumentPreviewContext = computed(() => {
+const pluginReferenceResolver = computed(() => {
   const currentPlugin = plugin.value;
   const file = selectedFile.value;
-  if (
-    !currentPlugin
-    || !file
-    || !["interactive-document", "markdown"].includes(selectedType.value ?? "")
-  ) {
-    return null;
-  }
-  const visiblePlugins = currentPlugin.packageId
-    ? pluginStore.enabledPluginsForPackage(currentPlugin.packageId)
+  if (!currentPlugin) return null;
+  const contextPackageId = props.packageId ?? currentPlugin.packageId;
+  const visiblePlugins = contextPackageId
+    ? pluginStore.enabledPluginsForPackage(contextPackageId)
     : pluginStore.globalPlugins.filter((item) => item.enabled);
   const previewPlugins = visiblePlugins.some(
     (item) => item.id === currentPlugin.id,
   )
     ? visiblePlugins
     : [{ ...currentPlugin, enabled: true }, ...visiblePlugins];
-  const resolver = createPluginReferenceResolver(previewPlugins, {
+  return createPluginReferenceResolver(previewPlugins, {
     environment: {
       chat: [],
       CHAT: [],
       CAPABILITIES_PROMPT: "[CAPABILITIES_PROMPT]",
       PROJECT_AGENT_PROMPT: "[PROJECT_AGENT_PROMPT]",
     },
-    sourceOverrides: {
-      [file.id]: contentDraft.value,
-    },
+    sourceOverrides: file ? { [file.id]: contentDraft.value } : {},
   });
+});
+const containerDetails = computed(() =>
+  (pluginReferenceResolver.value?.listContainers() ?? []).flatMap((container) => {
+    const details = pluginReferenceResolver.value?.getContainer(container.id);
+    return details ? [details] : [];
+  }),
+);
+const interactiveDocumentPreviewContext = computed(() => {
+  const file = selectedFile.value;
+  const resolver = pluginReferenceResolver.value;
+  if (
+    !file
+    || !resolver
+    || !["interactive-document", "markdown"].includes(selectedType.value ?? "")
+  ) {
+    return null;
+  }
   return {
     resolveReference: (target: string) =>
       resolver.resolveFromResource(file.id, target),
@@ -242,7 +266,7 @@ const interactiveDocumentReferenceSuggestions = computed(() => {
 onMounted(async () => {
   await pluginStore.initialize();
   pluginStore.openPlugin(props.resourceId);
-  selectDefaultNode();
+  selectInitialNode();
   try {
     unlistenNativeFileDrop = await getCurrentWebview().onDragDropEvent((event) => {
       if (event.payload.type === "over") {
@@ -268,7 +292,13 @@ watch(
   () => props.resourceId,
   (resourceId) => {
     pluginStore.openPlugin(resourceId);
-    selectDefaultNode();
+    selectInitialNode();
+  },
+);
+watch(
+  () => props.tab?.resourceParams?.nodeId,
+  (nodeId) => {
+    if (typeof nodeId === "string") selectNodeById(nodeId);
   },
 );
 watch(
@@ -308,6 +338,28 @@ function selectDefaultNode() {
   treeVisibleOnMobile.value = false;
 }
 
+function selectInitialNode() {
+  const requestedNodeId = props.tab?.resourceParams?.nodeId;
+  if (
+    typeof requestedNodeId === "string"
+    && selectNodeById(requestedNodeId)
+  ) {
+    return;
+  }
+  selectDefaultNode();
+}
+
+function selectNodeById(nodeId: string) {
+  const current = plugin.value;
+  if (!current) return false;
+  const node = findPluginTreeNode(current.root, nodeId);
+  if (!node) return false;
+  selectedNodeId.value = node.id;
+  showProperties.value = false;
+  if (isMobileLayout.value) treeVisibleOnMobile.value = false;
+  return true;
+}
+
 function flattenTree(
   folder: PluginFolder,
   depth: number,
@@ -341,8 +393,43 @@ function selectNode(node: PluginTreeNode) {
     return;
   }
   selectedNodeId.value = node.id;
+  layout.updateResourceTabParams("plugin", props.resourceId, {
+    nodeId: node.id,
+  });
   showProperties.value = false;
   if (isMobileLayout.value) treeVisibleOnMobile.value = false;
+}
+
+function openContainerResource(resource: PluginContainerResourceQuery) {
+  if (contentSaveTimer) {
+    clearTimeout(contentSaveTimer);
+    contentSaveTimer = null;
+    void persistContent();
+  }
+  const targetPlugin = pluginStore.plugins.find(
+    (item) => item.id === resource.pluginId,
+  );
+  if (!targetPlugin) return;
+  if (targetPlugin.id === props.resourceId) {
+    if (selectNodeById(resource.id)) {
+      layout.updateResourceTabParams("plugin", targetPlugin.id, {
+        nodeId: resource.id,
+        projectPath: `/plugins/${targetPlugin.id}${resource.path}`,
+      });
+    }
+    return;
+  }
+  pluginStore.openPlugin(targetPlugin.id);
+  layout.openResourceTab({
+    resourceType: "plugin",
+    resourceId: targetPlugin.id,
+    packageId: targetPlugin.packageId ?? props.packageId,
+    title: targetPlugin.name,
+    resourceParams: {
+      nodeId: resource.id,
+      projectPath: `/plugins/${targetPlugin.id}${resource.path}`,
+    },
+  });
 }
 
 function loadContentDraft() {
@@ -697,8 +784,10 @@ function isFixedConventionNode(node: PluginTreeNode) {
   return [
     pluginConventions.manifest,
     pluginConventions.containers,
+    pluginConventions.regex,
     pluginConventions.override,
     pluginConventions.componentsFolder,
+    pluginConventions.toolsFolder,
   ].some((name) => path === name.toLocaleLowerCase());
 }
 
@@ -1125,6 +1214,16 @@ async function restoreBuiltInPlugin() {
         <div v-if="selectedFile" class="min-h-0 flex-1 overflow-hidden">
           <PluginContainerDefinitionsEditor
             v-if="selectedIsContainerDefinitions"
+            :key="selectedFile.id"
+            :model-value="contentDraft"
+            :definition-id="selectedFile.id"
+            :container-details="containerDetails"
+            @update:model-value="scheduleContentSave"
+            @open-resource="openContainerResource"
+          />
+
+          <PluginRegexEditor
+            v-else-if="selectedIsRegex"
             :key="selectedFile.id"
             :model-value="contentDraft"
             @update:model-value="scheduleContentSave"

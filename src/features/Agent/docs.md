@@ -1,6 +1,6 @@
 # Agent
 
-`Agent` supplies the AI SDK `ToolLoopAgent` constructor and a lazy `prepare()` provider for the hydrated model, built-in tools, lifecycle hooks, and the registry used by Skill and MCP integrations. It does not own the conversation's main process; the editable built-in Plugin workflow decides whether and how to construct the Agent.
+`Agent` supplies the AI SDK `ToolLoopAgent` constructor and a lazy `prepare()` provider for the hydrated model, the current conversation reasoning level, the single CodeAct tool, lifecycle hooks, and the registry used by Skill and MCP integrations. It does not own the conversation's main process; the editable built-in Plugin workflow decides whether and how to construct the Agent.
 
 ## Project Agent
 
@@ -15,7 +15,7 @@ For package-bound `task` conversations, Conversation calls `createProjectAgentRu
 - role-playing architecture guidance for identity, setting, relationships, voice, goals, boundaries, continuity, context assembly, and interaction rules;
 - the current `.imd` data definition from `InteractiveDoc/domain/interactive-document-format.ts`.
 
-The task then enters the same selected Plugin workflow as ordinary conversations. Project operations are performed through the existing sandboxed `executeJavaScript` tool.
+The task then enters the same selected Plugin workflow as ordinary conversations. Project operations are performed through the single sandboxed `codeAct` tool.
 
 `createProjectAgentRuntime` adds three synchronized documentation blocks to the project prompt:
 
@@ -31,15 +31,19 @@ Right-sidebar tasks use the same project-Agent runtime. They are `task` conversa
 
 When the host conversation has this context, the runtime adds the bound path to the prompt and exposes it as `PROJECT_RESOURCE_PATH`. The Agent inspects that path first and remains scoped to it unless the user broadens the request.
 
-## Built-in tools
+## CodeAct
 
-- `application/default-agent.ts` exposes the constructor immediately and hydrates the selected chat model, built-in/registered tools, stop condition, and lifecycle hooks only after a plugin process calls `agent.prepare()`. It does not call `new ToolLoopAgent`.
-- `application/ask-user-tool.ts` defines the `askUser` Zod schema and normalizes UI results. The model supplies one question and 1-8 predefined options.
-- `application/agent-extension-registry.ts` adds Skill and MCP tools to the same agent. It does not create another conversation-generation path.
+- `application/default-agent.ts` exposes the constructor immediately and hydrates the selected chat model, one `codeAct` tool, stop condition, lifecycle hooks, and conversation reasoning level only after a plugin process calls `agent.prepare()`. It does not call `new ToolLoopAgent`.
+- The conversation-bound constructor supplies the current AI SDK top-level `reasoning` default even to persisted process scripts created before the setting existed. `agent.prepare()` also returns it as `runtime.reasoning`, so current built-in and custom processes can pass it explicitly.
+- `application/code-act.ts` accepts only one JavaScript function with an explicit `return`, executes it against the authorized Sandbox environment, and returns either `{ ok: true, value }` or `{ ok: false, error }`.
+- CodeAct input has an optional `intent`. Ordinary `action` calls use the authorized runtime environment; synchronous `variable-update` calls receive only transactional IMD variable facades. They cannot use Feature/Plugin APIs, network/files, detached async work, current time, or randomness. Errors return to the ToolLoopAgent for correction, the third consecutive failure throws, and `runtime.finish()` rejects if the model abandons an unresolved update error.
+- `application/ask-user-tool.ts` retains the `askUser` Zod schema and result normalization, but ask-user is now `agent.askUser(...)` / `api.askUser(...)` inside CodeAct rather than a second model tool.
+- `application/agent-extension-registry.ts` keeps Skill and MCP registrations behind `agent.callExtension(...)`, `skills.call(...)`, and `mcp.call(...)`. Registered extensions no longer expand the model-visible tool list.
+- Plugin `tools/<name>/tool.js` functions also stay out of the AI SDK tool set. Conversation injects their `prompt.md` contracts into a `# 自定义工具` context block and exposes the compiled functions through `ctx.tools[name](...args)` inside CodeAct.
 
 ## Ask-user interaction
 
-Conversation generation gives the Agent resource set an ask-user requester backed by the existing generation-component dialog. The tool awaits that requester inside its `execute` function, so the current agent step remains pending until the user responds.
+Conversation generation gives the CodeAct environment an ask-user requester backed by the existing generation-component dialog. The CodeAct function awaits that requester, so the current agent step remains pending until the user responds.
 
 `presentation/AskUserComponent.vue` renders the question followed by the predefined options. Its final option is always `自由回复`, which opens a text dialog. Both predefined and custom answers resolve to:
 

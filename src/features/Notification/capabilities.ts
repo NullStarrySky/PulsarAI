@@ -9,6 +9,36 @@ export const capabilities: CapabilityDefinition = {
   id: "notification",
   title: "通知",
   description: "发送系统外部通知或写入 Pulsar 内置通知中心。",
+  documentation: {
+    overview: "统一处理应用内通知记录与操作系统通知。internal 通道持久化到内置通知中心，external 通道会先请求系统权限。",
+    notes: [
+      "外部通知是默认投递方式，但不会自动复制一份到内置通知中心。",
+      "读取权限只返回通知元数据和正文，不会改变 read 状态。",
+    ],
+    types: [
+      {
+        name: "NotificationLevel",
+        description: "内置通知使用的语义级别。",
+        definition: `type NotificationLevel =
+  | "info"
+  | "success"
+  | "warning"
+  | "error";`,
+      },
+      {
+        name: "PulsarNotification",
+        description: "内置通知中心保存的通知记录。",
+        definition: `interface PulsarNotification {
+  id: string;
+  title: string;
+  body: string;
+  level: NotificationLevel;
+  createdAt: string;
+  read: boolean;
+}`,
+      },
+    ],
+  },
   subCaps: {
     all: "全部通知权限",
     read: "读取内置通知",

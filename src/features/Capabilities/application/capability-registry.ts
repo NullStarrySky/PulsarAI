@@ -14,6 +14,7 @@ import * as interactiveDoc from "@/features/Resources/InteractiveDoc/capabilitie
 import * as plugin from "@/features/Resources/Plugin/capabilities";
 import * as preset from "@/features/Resources/Preset/capabilities";
 import * as sandbox from "@/features/Sandbox/capabilities";
+import * as globals from "@/features/Sandbox/global-capabilities";
 import * as setting from "@/features/Setting/capabilities";
 import * as statistic from "@/features/Statistic/capabilities";
 import * as subWindow from "@/features/SubWindow/capabilities";
@@ -28,6 +29,7 @@ import type {
   CapabilityModule,
   CapabilityRuntime,
 } from "../domain/capability";
+import { composeCapabilityRuntimePrompt } from "../domain/capability";
 export { fallbackCapabilityGrants } from "../domain/default-grants";
 
 export const capabilityModules: CapabilityModule[] = [
@@ -48,6 +50,7 @@ export const capabilityModules: CapabilityModule[] = [
   plugin,
   preset,
   sandbox,
+  globals,
   setting,
   statistic,
   subWindow,
@@ -90,12 +93,7 @@ export function buildCapabilityRuntime(
     }
   }
 
-  const prompt = [
-    "# Pulsar Feature API",
-    "仅可调用下列已授权 API。API 对象同时位于 `environment.<featureId>` 与 `environment.capabilities.<featureId>`。",
-    "优先调用直观的 Feature API；除非明确需要，不要直接访问 database 或执行任意预设源码。",
-    ...prompts,
-  ].join("\n\n");
+  const prompt = composeCapabilityRuntimePrompt(prompts);
 
   return {
     environment: {

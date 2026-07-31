@@ -1,4 +1,11 @@
 export type Role = "assistant" | "user" | "system";
+export type ChatMessageType = "message" | "error";
+export type ConversationReasoningEffort =
+  | "none"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh";
 
 export interface Plugin {
   id: string;
@@ -53,6 +60,7 @@ export interface Conversation {
   title: string;
   isTemplate?: boolean;
   rendererId?: ConversationRendererId;
+  reasoningEffort: ConversationReasoningEffort;
   rootContainerId: string | null;
   lastContainerId: string | null;
   createdAt: string;
@@ -117,7 +125,20 @@ export interface ActionPart {
 
 export type AdditionalParts = TextPart | ImagePart | FilePart | ComponentPart | ActionPart;
 
+export interface ConversationVariableUpdate {
+  intent: "variable-update";
+  source: string;
+  sourceHash: string;
+  sources?: string[];
+  definitionHash: string;
+  createdAt: string;
+}
+
 export type ChatMessageMeta = {
+  translation?: {
+    originalContent: string;
+    translatedAt: string;
+  };
   generateInfo?: {
     modelName: string;
     startTime: string;
@@ -131,12 +152,15 @@ export type ChatMessageMeta = {
     resolvedResourceIds?: string[];
     diagnostics?: string[];
   };
+  variableUpdate?: ConversationVariableUpdate;
   steps: (LocalStep | ToolCallResult | SubAgentStep)[];
 };
 
 export type ChatMessage = {
   id: string;
+  type: ChatMessageType;
   content: string;
+  favorite?: boolean;
   meta: ChatMessageMeta;
   parts?: AdditionalParts[];
 };

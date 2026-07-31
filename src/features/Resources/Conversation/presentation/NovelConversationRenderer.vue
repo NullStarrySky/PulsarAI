@@ -17,6 +17,7 @@ const props = defineProps<{
   containers: ChatMessageContainer[];
   generating: boolean;
   activeContainerId: string;
+  focusContainerId?: string;
 }>();
 
 const selectedChapter = ref("0");
@@ -87,6 +88,38 @@ watch(
   (next, previous) => {
     if (next > previous || Number(selectedChapter.value) >= next) {
       goToChapter(next - 1);
+    }
+  },
+);
+
+watch(
+  () => props.focusContainerId,
+  (containerId) => {
+    if (!containerId) {
+      return;
+    }
+    const exactIndex = chapters.value.findIndex(
+      (chapter) => chapter.container.id === containerId,
+    );
+    if (exactIndex >= 0) {
+      goToChapter(exactIndex);
+      return;
+    }
+
+    const containerIndex = props.containers.findIndex(
+      (container) => container.id === containerId,
+    );
+    if (containerIndex < 0) {
+      return;
+    }
+    const nextAssistant = props.containers
+      .slice(containerIndex)
+      .find((container) => container.role === "assistant");
+    const fallbackIndex = chapters.value.findIndex(
+      (chapter) => chapter.container.id === nextAssistant?.id,
+    );
+    if (fallbackIndex >= 0) {
+      goToChapter(fallbackIndex);
     }
   },
 );

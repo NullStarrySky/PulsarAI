@@ -10,6 +10,7 @@ import {
   AttachmentGroup,
   AttachmentMedia,
   AttachmentTitle,
+  AttachmentTrigger,
 } from "@/components/ui/attachment";
 import {
   attachmentPreviewUrl,
@@ -47,13 +48,7 @@ async function openAttachment(attachment: FilePart) {
       v-for="(attachment, index) in props.attachments"
       :key="`${attachment.filename}:${attachment.mediaType}:${index}`"
       size="xs"
-      class="min-w-0 max-w-64 cursor-pointer flex-nowrap rounded-md"
-      role="button"
-      tabindex="0"
-      :title="attachment.filename || '打开附件'"
-      @click="openAttachment(attachment)"
-      @keydown.enter.prevent="openAttachment(attachment)"
-      @keydown.space.prevent="openAttachment(attachment)"
+      class="min-w-0 max-w-64 flex-nowrap rounded-md"
     >
       <AttachmentMedia
         :variant="attachment.mediaType.startsWith('image/') ? 'image' : 'icon'"
@@ -74,11 +69,16 @@ async function openAttachment(attachment: FilePart) {
       <AttachmentActions v-if="props.removable">
         <AttachmentAction
           title="移除附件"
+          :aria-label="`移除 ${attachment.filename || '附件'}`"
           @click.stop="emit('remove', index)"
         >
           <X />
         </AttachmentAction>
       </AttachmentActions>
+      <AttachmentTrigger
+        :aria-label="`打开 ${attachment.filename || '附件'}`"
+        @click="openAttachment(attachment)"
+      />
     </Attachment>
   </AttachmentGroup>
 </template>

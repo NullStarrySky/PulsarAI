@@ -1,12 +1,28 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useWindowLifecycleStore } from "@/features/UI/application/window-lifecycle-store";
 import SettingGroup from "../SettingGroup.vue";
 import SettingItem from "../SettingItem.vue";
 import SettingPage from "../SettingPage.vue";
 import SettingSwitch from "../SettingSwitch.vue";
+import type { WindowCloseBehavior } from "@/features/UI/application/window-lifecycle-store";
 
 const compactMode = ref(false);
 const enableAnimations = ref(true);
+const windowLifecycle = useWindowLifecycleStore();
+
+function setCloseBehavior(value: unknown) {
+  if (value === "ask" || value === "exit" || value === "tray") {
+    windowLifecycle.setCloseBehavior(value satisfies WindowCloseBehavior);
+  }
+}
 </script>
 
 <template>
@@ -17,6 +33,27 @@ const enableAnimations = ref(true);
       </SettingItem>
       <SettingItem title="启用动画" description="侧栏、弹窗和交互反馈默认保留平滑过渡。">
         <SettingSwitch v-model="enableAnimations" />
+      </SettingItem>
+    </SettingGroup>
+
+    <SettingGroup title="启动与关闭">
+      <SettingItem
+        title="关闭主窗口时"
+        description="决定点击关闭按钮后是询问、直接退出，还是继续在系统托盘运行。"
+      >
+        <Select
+          :model-value="windowLifecycle.closeBehavior"
+          @update:model-value="setCloseBehavior"
+        >
+          <SelectTrigger class="w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ask">每次询问</SelectItem>
+            <SelectItem value="exit">直接退出</SelectItem>
+            <SelectItem value="tray">最小化到托盘</SelectItem>
+          </SelectContent>
+        </Select>
       </SettingItem>
     </SettingGroup>
   </SettingPage>

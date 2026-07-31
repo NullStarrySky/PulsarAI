@@ -1,4 +1,5 @@
 import type { ModelMessage } from "ai";
+import { createSandboxScope } from "./sandbox-globals";
 
 export type SandboxEnvironment = Record<string | number, unknown>;
 
@@ -40,10 +41,11 @@ export function mergeSandboxEnvironments(environments: SandboxEnvironment[] = []
 
 export function executeSandboxCode(code: string, environments: SandboxEnvironment[] = []): unknown {
   const environment = mergeEnvironment(environments);
+  const scope = createSandboxScope(environment);
   const body = buildExecutableBody(code.trim(), environment);
   const runner = new Function("environment", `with (environment) { ${body} }`);
-  const result = runner(environment);
-  return typeof result === "function" ? result(environment) : result;
+  const result = runner.call(scope, scope);
+  return typeof result === "function" ? result.call(scope, scope) : result;
 }
 
 export async function executeSandboxCodeAsync(
@@ -51,11 +53,27 @@ export async function executeSandboxCodeAsync(
   environments: SandboxEnvironment[] = [],
 ): Promise<unknown> {
   const environment = mergeEnvironment(environments);
+  const scope = createSandboxScope(environment);
   const body = buildExecutableBody(code.trim(), environment);
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
   const runner = new AsyncFunction("environment", `with (environment) { ${body} }`);
-  const result = await runner(environment);
-  return typeof result === "function" ? await result(environment) : result;
+  const result = await runner.call(scope, scope);
+  return typeof result === "function" ? await result.call(scope, scope) : result;
+}
+
+export function createSandboxFunction(
+  code: string,
+  environments: SandboxEnvironment[] = [],
+): (...args: unknown[]) => unknown {
+  const environment = mergeEnvironment(environments);
+  const scope = createSandboxScope(environment);
+  const body = buildExecutableBody(code.trim(), environment);
+  const runner = new Function("environment", `with (environment) { ${body} }`);
+  const value = runner.call(scope, scope);
+  if (typeof value !== "function") {
+    throw new Error("自定义工具的 tool.js 必须只包含一个函数。");
+  }
+  return (...args: unknown[]) => Reflect.apply(value, scope, args);
 }
 
 export async function runSandbox(

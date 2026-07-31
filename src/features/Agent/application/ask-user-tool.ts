@@ -1,6 +1,4 @@
-import { tool } from "ai";
 import { z } from "zod";
-import type { ToolCallResult } from "@/features/Resources/Conversation/domain/conversation-types";
 
 export const askUserOptionSchema = z.object({
   label: z.string().min(1).describe("Short option label shown to the user."),
@@ -31,35 +29,8 @@ export interface AskUserCancelled {
 }
 
 export type AskUserResult = AskUserAnswer | AskUserCancelled;
-export type AskUserRequester = (input: AskUserInput) => Promise<unknown>;
 
-export function createAskUserTool(
-  requestUser: AskUserRequester,
-  onStep?: (step: ToolCallResult) => void | Promise<void>,
-) {
-  return tool({
-    description: [
-      "Ask the user one blocking question when their preference or decision is required.",
-      "Provide concise, mutually exclusive predefined options.",
-      "The interface always adds a final free-response option.",
-      "Do not use this tool when the answer can be inferred safely from existing context.",
-    ].join(" "),
-    inputSchema: askUserInputSchema,
-    execute: async (input, { toolCallId }) => {
-      const output = normalizeAskUserResult(await requestUser(input));
-      await onStep?.({
-        type: "tool-result",
-        toolCallId,
-        toolName: "askUser",
-        input,
-        output,
-      });
-      return output;
-    },
-  });
-}
-
-function normalizeAskUserResult(value: unknown): AskUserResult {
+export function normalizeAskUserResult(value: unknown): AskUserResult {
   if (!value || typeof value !== "object") {
     return { cancelled: true };
   }

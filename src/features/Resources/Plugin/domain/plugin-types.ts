@@ -44,6 +44,7 @@ export interface Plugin {
 export interface ResolvedPluginAction {
   pluginId: string;
   pluginName: string;
+  kind: "process" | "prompt";
   resource: PluginFile;
 }
 
@@ -60,11 +61,15 @@ export const pluginConventions = {
   info: "info.md",
   manifest: "manifest.json",
   containers: "containers.xml",
+  regex: "regex.json",
   context: "context.imd",
   override: "Override.vue",
   agentProcessFolder: "agentprocess",
   agentProcessEntry: "index.js",
   actionFolder: "action",
+  toolsFolder: "tools",
+  toolEntry: "tool.js",
+  toolPrompt: "prompt.md",
   backgroundFolder: "background",
   componentsFolder: "components",
 } as const;

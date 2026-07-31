@@ -8,6 +8,23 @@ PulsarAI 插件是一棵可持久化的文件树。插件不把全部文件自�
 - 模型只能看到当前生成流程明确使用的资源；
 - 上下文编译、流程执行和模型调用保持一条可追踪的链路。
 
+## 基本设计：用文档引用构建上下文
+
+插件系统把 Markdown、Interactive Document、JavaScript、媒体和组件都视为有稳定 ID 与路径的普通资源。`containers.xml` 只声明可见的命名空间，文件自己的 `memberships` 决定它属于哪些容器；`context.imd`、其他文档和流程脚本再通过 `<@...>` 显式引用需要的资源。
+
+一次生成可以沿着一条直接可见的链路理解：
+
+1. 索引当前角色包可见且启用的插件文件，不执行文件内容；
+2. 从 `containers.xml` 建立容器命名空间，把成员文件按优先级挂入容器；
+3. 从根 `context.imd` 出发，只解析它直接或间接引用的文档；
+4. 把编译后的角色消息、授权 Feature API 文档与当前对话组成模型上下文；
+5. 按优先级运行根 `regex.json` 中的正则规则，对最终消息列表做后处理；
+6. 运行显式 `agentprocess/index.js`，由其中的 `ToolLoopAgent` 使用唯一的 CodeAct 工具调用上下文 API。
+
+因此最终上下文不是“把插件全部塞给模型”，而是从入口文档出发遍历引用图得到的结果。资源 ID 用于稳定定位，路径便于人类与 Agent 继续向下查看；容器只负责按需组织，不做隐式注入。
+
+![图片占位：插件文档引用图，展示 context.imd、containers.xml、成员文档和 agentprocess 如何互相引用并形成最终上下文](/images/plugin-document-graph-placeholder.svg)
+
 ## 推荐目录结构
 
 新插件会创建下面的基础结构：
@@ -17,6 +34,7 @@ PulsarAI 插件是一棵可持久化的文件树。插件不把全部文件自�
 ├─ info.md
 ├─ manifest.json
 ├─ containers.xml
+├─ regex.json
 ├─ context.imd
 ├─ instruction/
 │  └─ default.md
@@ -25,6 +43,10 @@ PulsarAI 插件是一棵可持久化的文件树。插件不把全部文件自�
 │  ├─ step1-prepare.js
 │  ├─ step2-generate.js
 │  └─ step3-finalize.js
+├─ tools/
+│  └─ example/
+│     ├─ tool.js
+│     └─ prompt.md
 ├─ Override.vue
 ├─ components/
 ├─ character/
@@ -33,7 +55,7 @@ PulsarAI 插件是一棵可持久化的文件树。插件不把全部文件自�
 └─ background/
 ```
 
-推荐把稳定的插件说明放在 `info.md`，插件配置放在 `manifest.json`，容器拓扑放在 `containers.xml`，上下文模板放在 `context.imd`，生成步骤放在 `agentprocess/`。根级 `Override.vue` 是默认对话渲染器的覆盖入口，`components/` 用来存放它和其他插件界面复用的 Vue 组件。
+推荐把稳定的插件说明放在 `info.md`，插件配置放在 `manifest.json`，容器拓扑放在 `containers.xml`，消息后处理规则放在 `regex.json`，上下文模板放在 `context.imd`，生成步骤放在 `agentprocess/`，CodeAct 可调用函数放在 `tools/`。根级 `Override.vue` 是默认对话渲染器的覆盖入口，`components/` 用来存放它和其他插件界面复用的 Vue 组件。
 
 ## 插件级属性
 
@@ -151,6 +173,23 @@ const inventory = container.list()
 
 引用的容器始终保留命名空间，不会复制或把所有成员摊平到当前容器。“引用容器命名空间”只让当前容器通过 `use(alias)` 访问另一个既有容器。
 
+### 查询容器
+
+容器编辑器保持紧凑布局，说明只使用单行短句。展开某个容器的“详情”后，可以看到直接引用它的文档数量与列表，以及按运行时解析顺序得到的现有内容。列表会显示名称、插件内路径、来源插件和优先级；点击条目会打开对应插件并定位到文件。
+
+获得 Plugin Feature 读取权限后，Agent 可以查询同一份运行时索引：
+
+```js
+const containers = plugin.listContainers()
+const details = plugin.getContainer(containers[0].id)
+```
+
+`listContainers()` 返回容器查询 ID、定义文件 ID/路径、来源插件、使用数量和内容数量。`getContainer(containerId)` 的 `usedBy` 与 `contents` 条目都带有资源 `id`、插件内 `path`、`pluginId`、`pluginName`、文件类型和优先级，便于 Agent 继续读取文件树或使用显式 ID 引用。这里的“使用文档”只统计直接写有该容器引用的文件，不把间接依赖重复计数。
+
+容器声明与内容关系也可以通过 `createContainer`、`updateContainer`、`removeContainer`、`addContainerContent`、`updateContainerContent` 和 `removeContainerContent` 完整维护。这些写入 API 只在插件流程中可用，并且只能修改当前插件。
+
+![图片占位：容器详情页面，展示单行说明、使用文档列表、容器内容、来源插件、优先级和点击跳转](/images/plugin-container-details-placeholder.svg)
+
 ## `context.imd`
 
 根目录 `context.imd` 是角色感知的上下文入口。它使用 Interactive Document 格式，可以包含多个带角色的模板：
@@ -181,9 +220,48 @@ Interactive Document 中可以使用：
 
 如果所有启用插件都没有可用的根 `context.imd`，生成流程使用只包含 `[[chat]]` 的回退上下文。
 
+## `regex.json`
+
+根级 `regex.json` 是正则容器的约定文件。新插件会把它关联到内置全局“正则”容器；运行时按完整根文件名发现规则，不需要把规则变成 Sandbox 全局变量。
+
+```json
+[
+  {
+    "find_regex": "/secret:\\s*\\S+/gi",
+    "replace_regex": "secret: [hidden]",
+    "range": "all",
+    "depth_min": 1,
+    "depth_max": "INF",
+    "applyOnRending": true
+  }
+]
+```
+
+- `find_regex` 接受普通正则源码或 `/pattern/flags` 写法；普通源码默认全局替换；
+- `replace_regex` 默认为空，支持 `$1` 等 JavaScript 替换分组；
+- `range` 为 `user_input`、`ai_output` 或 `all`；
+- 深度从最终消息列表末尾按 1 开始计算，`INF` 表示对应一侧不设边界，反向填写的数字边界也会自动规范为有效区间；
+- 所有启用插件的根规则按文件优先级从高到低执行，同优先级保持插件与文件树顺序，单文件内部保持数组顺序；
+- 生成阶段处理最终上下文中的全部有效规则；会话和任务面板只处理 `applyOnRending: true` 的规则，并且只改变显示结果，不改写数据库消息。
+
+工作区会为根 `regex.json` 打开结构化编辑器。该约定文件不能重命名、移动或删除。无效 JSON、无效规则或无法编译的表达式会进入插件诊断，而不是中断整条消息历史。
+
 ## `agentprocess/`
 
 `agentprocess/index.js` 是插件的生成流程入口。新插件默认使用三个步骤：
+
+模型侧只暴露一个 `codeAct` 工具。每次调用必须提交一个显式包含 `return` 的 JavaScript 函数：
+
+```js
+async function () {
+  const containers = plugin.listContainers()
+  return containers.map(({ id, name, path }) => ({ id, name, path }))
+}
+```
+
+函数在当前授权 Sandbox 环境中执行，可以组合多个 Feature API、Plugin API、`agent.callExtension(...)`、`agent.askUser(...)` 或 `api.askUser(...)`。成功时模型收到 `{ ok: true, value }`；语法、权限或运行错误会变为 `{ ok: false, error }`，模型可以根据错误修正下一次函数。原来的时间、用户提问、Skill 和 MCP 能力不再各自占用模型工具名：普通 JavaScript 可直接读取时间，用户提问和扩展调用都通过上下文 API 完成。
+
+![图片占位：CodeAct 执行流程，展示模型生成带 return 的函数、Sandbox 调用 API、返回值或错误回到模型](/images/plugin-codeact-placeholder.svg)
 
 ```js
 const messages = await api.runProcess(
@@ -213,7 +291,8 @@ return contextMessages
 const runtime = await agent.prepare()
 const runner = new agent.ToolLoopAgent({
   model: runtime.model,
-  instructions: String(<@path:../instruction/default.md>),
+  reasoning: runtime.reasoning,
+  instructions: [String(<@path:../instruction/default.md>), runtime.instructions].join("\n\n"),
   tools: runtime.tools,
   stopWhen: runtime.stopWhen,
   onStepStart: runtime.onStepStart,
@@ -247,16 +326,19 @@ return [...contextMessages, {
 - `contextMessages`：由 Feature API 文档和 `context.imd` 编译出的消息；
 - `chat` / `CHAT`：当前有效对话路径；
 - `conversation`、`conversationId`、`packageId`、`containerId`；
+- `reasoningEffort`：当前会话选择的 AI SDK 思考深度；
 - `emptyContainer`、`emptyMessage`、`messageMeta`；
 - `action`：当前动作名称；
 - `prompt`：去除动作前缀后的用户输入；
-- `skills.tools`、`mcp.tools`：当前注册的扩展工具名称；
-- 已授权 Feature API。
-- `agent`：Agent Feature 提供的 `ToolLoopAgent` 构造器与惰性 `prepare()`；只有流程调用 `prepare()` 时才加载模型、工具和生命周期钩子。
+- `skills.list()` / `mcp.list()` 与 `skills.call(...)` / `mcp.call(...)`：检查并调用扩展；`skills.tools`、`mcp.tools` 保留名称列表；
+- `ctx.tools`：当前启用插件的自定义函数表；函数定义来自 `tools/<name>/tool.js`，使用说明来自同目录 `prompt.md`；
+- 已授权 Feature API 与当前流程作用域内的 Plugin API；
+- `agent`：Agent Feature API、`ToolLoopAgent` 构造器与惰性 `prepare()`；只有流程调用 `prepare()` 时才加载模型、当前思考深度、唯一 CodeAct 工具和生命周期钩子。
 
 流程可以调用：
 
 - `api.runProcess(resource, overrides?)`：运行另一个显式 JavaScript 步骤；
+- `api.askUser(input)`：使用标准问题结构暂停 CodeAct 并等待用户回答；
 - `api.askUserWithComponent(request)`：暂停当前流程并等待组件结果；
 - `api.renderComponent(componentId, props?)`：把已注册组件加入回复；
 - `api.modelConnection`：在对应能力存在时访问当前模型连接。
@@ -268,6 +350,56 @@ return [...contextMessages, {
 1. 当前消息选择的 `action/` 动作；
 2. 第一个启用插件的非空 `agentprocess/index.js`；
 3. 没有流程时明确报错，避免隐式执行不可见的默认逻辑。
+
+## `tools/`
+
+根级 `tools/` 保存插件自定义工具。只发现它的直接子目录，每个目录名就是工具名，并且必须同时包含：
+
+```text
+tools/
+└─ lookupCharacter/
+   ├─ tool.js
+   └─ prompt.md
+```
+
+`tool.js` 的完整内容是一个函数。它可以接收普通参数，也可以像其他插件 JavaScript 一样使用已授权 Feature API、来源插件作用域内的 `plugin` API 和显式 `<@...>` 引用：
+
+```js
+async function lookupCharacter(name) {
+  const tree = await plugin.getTree()
+  return tree.filter((item) => item.name.includes(name))
+}
+```
+
+`prompt.md` 写给模型阅读，应该明确参数、返回值、限制和适用场景：
+
+```md
+查询当前插件中的角色资源。
+
+- 调用：`await ctx.tools.lookupCharacter(name)`
+- 参数 `name`：角色名关键词
+- 返回：带 `id` 和 `path` 的资源列表
+```
+
+生成开始时，系统会建立两个可检查的全局容器：
+
+- `自定义工具`：对应每个 `tool.js`；
+- `自定义工具文档`：对应每个 `prompt.md`。
+
+工作区在约定目录中新建这两个文件时会自动写入对应成员元数据。运行时仍按精确目录结构发现它们，因此导入的旧插件不需要改写文件正文。
+
+所有启用插件的工具按 `tool.js` 文件优先级从高到低收集，同优先级保持插件和目录顺序。同名工具只保留第一个并报告冲突，不采用后写覆盖。说明文档先经过普通插件引用解析，再组成一个 `# 自定义工具` 系统区块，其中同时包含插件 ID、函数/说明资源 ID 与路径。
+
+模型侧仍然只有 `codeAct` 一个工具。它从该文档区块读取定义，然后在 CodeAct 函数中调用：
+
+```js
+async function (ctx) {
+  const result = await ctx.tools.lookupCharacter("Alice")
+  return result
+}
+```
+
+自定义函数在当前授权 Sandbox 中执行，且 `plugin` / `ctx.plugin` 指向函数来源插件的作用域 API。`tool.js` 或 `prompt.md` 缺失、函数格式错误、引用错误和命名冲突都会进入生成诊断。
 
 ## `Override.vue` 与 `components/`
 
@@ -285,7 +417,10 @@ return [...contextMessages, {
 
 ## `action/`
 
-`action/` 下的 JavaScript 文件会成为输入框 `/` 菜单中的动作。文件名去掉后缀后作为命令名。
+`action/` 下的 JavaScript 和 Markdown 文件都会成为输入框 `/` 菜单中的命令，文件名去掉后缀后作为命令名。
+
+- JavaScript 命令沿用 Action：选中后显示命令标记，发送时保存一个开头的 `ActionPart`，并只替换本轮 `agentprocess/index.js`；
+- Markdown 命令是输入模板：点击菜单项或直接提交完整 `/命令名` 时，把文件正文直接填入输入框，不发送消息、不生成 `ActionPart`，已有附件也会保留，用户可以继续编辑后再发送。
 
 例如 `action/getTime.js`：
 

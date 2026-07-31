@@ -23,6 +23,12 @@ const {
 
 const viewportEl = useTemplateRef<HTMLElement>('viewport')
 
+defineExpose({
+  get element() {
+    return viewportEl.value
+  },
+})
+
 watch(() => props.preserveScrollOnPrepend, setPreserveScrollOnPrepend, { immediate: true })
 
 function onKeyDown(event: KeyboardEvent) {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onActivated, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onActivated, onMounted, reactive, ref, watch } from "vue";
+import { useVirtualizer } from "@tanstack/vue-virtual";
 import { push } from "notivue";
 import {
   Bot,
@@ -7,6 +8,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CircleAlert,
   Copy,
   GitBranch,
   Languages,
@@ -15,11 +17,30 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  RotateCcw,
   Send,
+  Star,
+  StarOff,
   Trash2,
   UserRound,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
+import {
+  Message,
+  MessageAvatar,
+  MessageContent,
+  MessageFooter,
+} from "@/components/ui/message";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
 import {
   Dialog,
   DialogContent,
@@ -35,11 +56,11 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/application/default-config-store";
 import { useTranslateStore } from "@/features/Translate/application/translate-store";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
@@ -54,16 +75,21 @@ import type {
 import { fileToMessagePart } from "@/features/Resources/Conversation/application/message-attachment";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
 import { pluginMediaSource, pluginMediaType } from "@/features/Resources/Plugin/domain/plugin-media";
+import {
+  applyPluginRegexToText,
+  collectPluginRegexRules,
+} from "@/features/Resources/Plugin/domain/plugin-regex";
 import PluginConversationOverride from "@/features/Resources/Plugin/presentation/PluginConversationOverride.vue";
 import ConversationComposerEditor from "@/features/Resources/Conversation/presentation/ConversationComposerEditor.vue";
 import ConversationActionPicker from "@/features/Resources/Conversation/presentation/ConversationActionPicker.vue";
-import ConversationMarkdown from "@/features/Resources/Conversation/presentation/ConversationMarkdown.vue";
+import ConversationMessageContent from "@/features/Resources/Conversation/presentation/ConversationMessageContent.vue";
 import GenerationComponentDialog from "@/features/Resources/Conversation/presentation/GenerationComponentDialog.vue";
 import { getGenerationComponent } from "@/features/Resources/Conversation/presentation/generation-component-registry";
 import MessageAttachmentStrip from "@/features/Resources/Conversation/presentation/MessageAttachmentStrip.vue";
 import MessageActionBadge from "@/features/Resources/Conversation/presentation/MessageActionBadge.vue";
 import NovelConversationRenderer from "@/features/Resources/Conversation/presentation/NovelConversationRenderer.vue";
 import ConversationComposerToolbarTools from "@/features/Resources/Conversation/presentation/ConversationComposerToolbarTools.vue";
+import ConversationBranchMapDialog from "@/features/Resources/Conversation/presentation/ConversationBranchMapDialog.vue";
 import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
 
 const props = defineProps<{
@@ -83,15 +109,44 @@ const selectedAction = ref<ActionPart | null>(null);
 const attachmentTarget = ref<{ containerId: string; messageId: string } | null>(null);
 const fullscreenInputOpen = ref(false);
 const whiteboardOpen = ref(false);
+const branchMapOpen = ref(false);
+const branchMapTargetId = ref("");
+const messageViewport = ref<{ element: HTMLElement | null } | null>(null);
 const editing = reactive({
   containerId: "",
   messageId: "",
   content: "",
 });
 const pointerStartX = ref<number | null>(null);
+const handledNavigationRequestId = ref(0);
 
 const activePath = computed(() =>
   conversation.activePath.filter((container) => container.role !== "system" || conversation.currentMessage(container)?.content),
+);
+const latestMessageContainerId = computed(
+  () => activePath.value[activePath.value.length - 1]?.id ?? "",
+);
+const messageVirtualizer = useVirtualizer(
+  computed(() => ({
+    count: activePath.value.length,
+    getScrollElement: () => messageViewport.value?.element ?? null,
+    estimateSize: () => 180,
+    getItemKey: (index: number) =>
+      activePath.value[index]?.id ?? index,
+    gap: 16,
+    overscan: 6,
+    paddingStart: 24,
+    paddingEnd: 128,
+  })),
+);
+const virtualMessages = computed(() =>
+  messageVirtualizer.value.getVirtualItems().flatMap((virtualRow) => {
+    const container = activePath.value[virtualRow.index];
+    return container ? [{ container, virtualRow }] : [];
+  }),
+);
+const virtualContentHeight = computed(
+  () => messageVirtualizer.value.getTotalSize(),
 );
 const emptyPrompt = computed(() => `今天想和 ${conversation.activePackage?.name ?? "Pulsar"} 聊点什么？`);
 const availableActions = computed(() =>
@@ -99,6 +154,30 @@ const availableActions = computed(() =>
     conversation.activePackageId,
     conversation.activePackage?.globalPluginOrder,
   ),
+);
+const renderingRegexRules = computed(() =>
+  collectPluginRegexRules(
+    pluginStore.enabledPluginsForPackage(
+      conversation.activePackageId,
+      conversation.activePackage?.globalPluginOrder,
+    ),
+  ).value,
+);
+const renderedNovelPath = computed(() =>
+  activePath.value.map((container, index) => {
+    const message = messageOf(container);
+    if (!message) return container;
+    const rendered = renderMessageContent(container, index);
+    if (rendered === message.content) return container;
+    return {
+      ...container,
+      content: container.content.map((candidate) =>
+        candidate.id === message.id
+          ? { ...candidate, content: rendered }
+          : candidate,
+      ),
+    };
+  }),
 );
 const conversationBackground = computed(() => {
   const resource = pluginStore.activeBackgroundResourceForPackage(
@@ -114,16 +193,29 @@ const conversationBackground = computed(() => {
 onMounted(async () => {
   await Promise.all([conversation.initialize(), defaults.load(), pluginStore.initialize()]);
   openResourceConversation();
+  await handleMessageNavigationRequest();
 });
-onActivated(openResourceConversation);
+onActivated(async () => {
+  openResourceConversation();
+  await handleMessageNavigationRequest();
+});
 
-watch(() => props.resourceId, openResourceConversation);
+watch(() => props.resourceId, async () => {
+  openResourceConversation();
+  await handleMessageNavigationRequest();
+});
 watch(() => conversation.lastMessageEditRequestId, () => {
   const container = conversation.activeContainer;
   if (container) {
     startEdit(container);
   }
 });
+watch(
+  () => conversation.messageNavigationRequest?.requestId,
+  () => {
+    void handleMessageNavigationRequest();
+  },
+);
 
 function openResourceConversation() {
   if (props.resourceId && conversation.activeConversationId !== props.resourceId) {
@@ -225,14 +317,34 @@ async function copyMessage(container: ChatMessageContainer) {
 
 async function translateMessage(container: ChatMessageContainer) {
   const message = messageOf(container);
-  if (!message?.content.trim() || translate.translating) {
+  if (!message) {
+    return;
+  }
+
+  if (message.meta.translation) {
+    const restored = await conversation.restoreMessageOriginal(
+      container.id,
+      message.id,
+    );
+    if (restored) {
+      push.success("已还原原文");
+    }
+    return;
+  }
+  if (!message.content.trim() || translate.translating) {
     return;
   }
 
   try {
     const translated = await translate.translateText(message.content, true);
-    await conversation.editMessage(container.id, message.id, translated);
-    push.success("已翻译");
+    const updated = await conversation.setMessageTranslation(
+      container.id,
+      message.id,
+      translated,
+    );
+    if (updated) {
+      push.success("已翻译，可从更多菜单还原原文");
+    }
   } catch {
     push.error(translate.errorText || "翻译失败");
   }
@@ -240,6 +352,11 @@ async function translateMessage(container: ChatMessageContainer) {
 
 async function send() {
   const resolved = resolveComposerAction(input.value);
+  if (resolved.promptContent !== undefined) {
+    input.value = resolved.promptContent;
+    selectedAction.value = null;
+    return;
+  }
   const attachments = [...pendingAttachments.value];
   input.value = "";
   pendingAttachments.value = [];
@@ -249,7 +366,7 @@ async function send() {
 
 function resolveComposerAction(content: string) {
   if (selectedAction.value) {
-    return { content, action: selectedAction.value };
+    return { content, action: selectedAction.value, promptContent: undefined };
   }
   const match = content.match(/^\s*\/([^\s]+)(?:\s+([\s\S]*))?$/);
   const commandName = match?.[1]?.toLocaleLowerCase();
@@ -259,7 +376,17 @@ function resolveComposerAction(content: string) {
       )
     : null;
   if (!matched) {
-    return { content, action: null };
+    return { content, action: null, promptContent: undefined };
+  }
+  if (matched.kind === "prompt") {
+    return {
+      content,
+      action: null,
+      promptContent:
+        typeof matched.resource.content === "string"
+          ? matched.resource.content
+          : JSON.stringify(matched.resource.content, null, 2),
+    };
   }
   return {
     content: match?.[2] ?? "",
@@ -271,7 +398,23 @@ function resolveComposerAction(content: string) {
       name: matched.resource.name,
       description: "",
     },
+    promptContent: undefined,
   };
+}
+
+function renderMessageContent(
+  container: ChatMessageContainer,
+  knownIndex = activePath.value.findIndex((item) => item.id === container.id),
+) {
+  const message = messageOf(container);
+  if (!message) return "";
+  const index = knownIndex >= 0 ? knownIndex : activePath.value.length - 1;
+  return applyPluginRegexToText(message.content, {
+    role: container.role,
+    depthFromEnd: activePath.value.length - index,
+    rules: renderingRegexRules.value,
+    rendering: true,
+  }).value;
 }
 
 function requestAttachments(container?: ChatMessageContainer) {
@@ -308,6 +451,23 @@ async function onAttachmentsSelected(event: Event) {
   }
 }
 
+async function toggleMessageFavorite(container: ChatMessageContainer) {
+  const message = messageOf(container);
+  if (!message) {
+    return;
+  }
+
+  const favorite = !message.favorite;
+  const updated = await conversation.setMessageFavorite(
+    container.id,
+    message.id,
+    favorite,
+  );
+  if (updated) {
+    push.success(favorite ? "已收藏消息" : "已取消收藏");
+  }
+}
+
 async function removeMessageAttachment(
   container: ChatMessageContainer,
   index: number,
@@ -335,6 +495,12 @@ function onPointerDown(event: PointerEvent) {
   pointerStartX.value = event.clientX;
 }
 
+function measureVirtualMessage(element: unknown) {
+  if (element instanceof Element) {
+    messageVirtualizer.value.measureElement(element);
+  }
+}
+
 async function onPointerUp(event: PointerEvent, container: ChatMessageContainer) {
   if (pointerStartX.value === null) {
     return;
@@ -348,6 +514,47 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
   }
 
   await switchSiblingMessage(container, delta < 0 ? 1 : -1);
+}
+
+async function onBranchMapNavigate(containerId: string) {
+  branchMapTargetId.value = "";
+  await nextTick();
+  branchMapTargetId.value = containerId;
+  await nextTick();
+  const virtualIndex = activePath.value.findIndex(
+    (container) => container.id === containerId,
+  );
+  if (
+    virtualIndex >= 0
+    && conversation.activeConversation?.rendererId !== "novel"
+  ) {
+    messageVirtualizer.value.scrollToIndex(virtualIndex, {
+      align: "center",
+      behavior: "auto",
+    });
+    return;
+  }
+  window.requestAnimationFrame(() => {
+    const target = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-message-id]"),
+    ).find((element) => element.dataset.messageId === containerId);
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
+}
+
+async function handleMessageNavigationRequest() {
+  const request = conversation.messageNavigationRequest;
+  if (
+    !request
+    || request.conversationId !== props.resourceId
+    || request.requestId <= handledNavigationRequestId.value
+  ) {
+    return;
+  }
+
+  handledNavigationRequestId.value = request.requestId;
+  await onBranchMapNavigate(request.containerId);
+  conversation.completeMessageNavigation(request.requestId);
 }
 </script>
 
@@ -376,39 +583,81 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
       :package-id="conversation.activePackageId"
       :global-plugin-order="conversation.activePackage?.globalPluginOrder"
     >
-    <section
+    <MessageScrollerProvider
       v-if="conversation.activeConversation?.rendererId !== 'novel'"
-      class="relative min-h-0 flex-1 overflow-y-auto bg-background/80 px-5 pb-28 pt-6 backdrop-blur-[1px] mobile:px-3 mobile:pb-32 mobile:pt-4"
+      auto-scroll
+      default-scroll-position="last-anchor"
     >
-      <div class="mx-auto flex max-w-4xl flex-col gap-4 mobile:gap-3">
-        <div
-          v-if="activePath.length === 0"
-          class="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground"
-        >
-          {{ emptyPrompt }}
-        </div>
-
-        <article
-          v-for="container in activePath"
-          :key="container.id"
-          :class="cn('flex gap-3 mobile:gap-2', container.role === 'user' && 'flex-row-reverse')"
-          @pointerdown="onPointerDown"
-          @pointerup="onPointerUp($event, container)"
-        >
-          <div class="flex size-9 shrink-0 items-center justify-center rounded-md border bg-card mobile:size-8">
-            <UserRound v-if="container.role === 'user'" class="size-4" />
-            <Bot v-else class="size-4" />
-          </div>
-
-          <div :class="cn('min-w-0 max-w-[78%] mobile:max-w-[calc(100%_-_2.5rem)]', container.role === 'user' && 'items-end')">
+      <MessageScroller class="relative min-h-0 flex-1 bg-background/80 backdrop-blur-[1px]">
+        <MessageScrollerViewport ref="messageViewport">
+          <MessageScrollerContent
+            :virtual-count="activePath.length"
+            class="relative block min-h-full w-full max-w-none gap-0 p-0"
+            :style="{
+              height: activePath.length
+                ? `${virtualContentHeight}px`
+                : '100%',
+            }"
+          >
             <div
-              :class="
-                cn(
-                  'rounded-lg border bg-card px-3 py-2',
-                  container.role === 'user' && 'bg-accent text-accent-foreground',
-                )
-              "
+              v-if="activePath.length === 0"
+              class="flex min-h-[40vh] items-center justify-center px-5 text-sm text-muted-foreground mobile:px-3"
             >
+              {{ emptyPrompt }}
+            </div>
+
+            <div
+              v-for="{ container, virtualRow } in virtualMessages"
+              :key="virtualRow.key"
+              :ref="measureVirtualMessage"
+              :data-index="virtualRow.index"
+              class="absolute left-0 top-0 w-full px-5 mobile:px-3"
+              :style="{ transform: `translateY(${virtualRow.start}px)` }"
+            >
+              <MessageScrollerItem
+                :message-id="container.id"
+                :scroll-anchor="container.role === 'user'"
+                class="mx-auto w-full max-w-4xl"
+              >
+              <Message
+                :align="container.role === 'user' ? 'end' : 'start'"
+                @pointerdown="onPointerDown"
+                @pointerup="onPointerUp($event, container)"
+              >
+                <MessageAvatar class="size-9 rounded-md border bg-card mobile:size-8">
+                  <UserRound v-if="container.role === 'user'" class="size-4" />
+                  <CircleAlert
+                    v-else-if="messageOf(container)?.type === 'error'"
+                    class="size-4 text-destructive"
+                  />
+                  <Bot v-else class="size-4" />
+                </MessageAvatar>
+
+                <MessageContent class="max-w-[78%] mobile:max-w-[calc(100%_-_2.5rem)]">
+                  <Bubble
+                    :align="container.role === 'user' ? 'end' : 'start'"
+                    :variant="
+                      messageOf(container)?.type === 'error'
+                        ? 'destructive'
+                        : container.role === 'user'
+                          ? 'tinted'
+                          : 'outline'
+                    "
+                    class="max-w-full"
+                  >
+                    <BubbleContent
+                      class="w-full"
+                      :role="messageOf(container)?.type === 'error' ? 'alert' : undefined"
+                    >
+                      <Marker
+                        v-if="messageOf(container)?.type === 'error'"
+                        class="mb-2 text-destructive"
+                      >
+                        <MarkerIcon>
+                          <CircleAlert />
+                        </MarkerIcon>
+                        <MarkerContent>运行错误</MarkerContent>
+                      </Marker>
               <MessageActionBadge
                 v-if="actionPart(messageOf(container))"
                 :action="actionPart(messageOf(container))!"
@@ -449,9 +698,11 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
                 placeholder="编辑消息..."
                 @submit="saveEdit"
               />
-              <ConversationMarkdown
+              <ConversationMessageContent
                 v-else
-                :model-value="messageOf(container)?.content || (conversation.activeConversationGenerating && container.id === conversation.activeContainerId ? '生成中...' : '')"
+                :content="renderMessageContent(container, virtualRow.index) || (conversation.activeConversationGenerating && container.id === conversation.activeContainerId ? '生成中...' : '')"
+                :interactive-preview-enabled="appearance.interactiveCodePreview"
+                :replace-with-preview="container.id === latestMessageContainerId"
               />
               <template
                 v-for="(part, partIndex) in componentParts(messageOf(container))"
@@ -464,9 +715,10 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
                   class="mt-3"
                 />
               </template>
-            </div>
+                    </BubbleContent>
+                  </Bubble>
 
-            <div :class="cn('mt-1 flex min-w-0 items-center gap-1', container.role === 'user' && 'flex-row-reverse')">
+                  <MessageFooter>
               <div class="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md bg-background/80 p-0.5 [scrollbar-width:none]">
                 <Button size="icon" variant="ghost" class="size-7" @click="switchSiblingMessage(container, -1)">
                   <ChevronLeft class="size-4" />
@@ -573,32 +825,58 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
                   </PopoverContent>
                 </Popover>
 
-                <DropdownMenu v-if="container.role !== 'user'">
+                <DropdownMenu>
                   <DropdownMenuTrigger as-child>
                     <Button size="icon" variant="ghost" class="size-7">
                       <MoreHorizontal class="size-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" class="w-40">
-                    <DropdownMenuItem :disabled="translate.translating || !messageOf(container)?.content.trim()" @click="translateMessage(container)">
-                      <Languages class="mr-2 size-4" />
-                      翻译输出
+                    <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      @click="toggleMessageFavorite(container)"
+                    >
+                      <StarOff
+                        v-if="messageOf(container)?.favorite"
+                        data-icon="inline-start"
+                      />
+                      <Star v-else data-icon="inline-start" />
+                      {{ messageOf(container)?.favorite ? "取消收藏" : "收藏消息" }}
                     </DropdownMenuItem>
+                    <DropdownMenuItem
+                      v-if="container.role !== 'user'"
+                      :disabled="!messageOf(container)?.meta.translation && (translate.translating || !messageOf(container)?.content.trim())"
+                      @click="translateMessage(container)"
+                    >
+                      <RotateCcw
+                        v-if="messageOf(container)?.meta.translation"
+                        data-icon="inline-start"
+                      />
+                      <Languages v-else data-icon="inline-start" />
+                      {{ messageOf(container)?.meta.translation ? "还原原文" : "翻译输出" }}
+                    </DropdownMenuItem>
+                    </DropdownMenuGroup>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+                  </MessageFooter>
+                </MessageContent>
+              </Message>
+              </MessageScrollerItem>
             </div>
-          </div>
-        </article>
-      </div>
-    </section>
+          </MessageScrollerContent>
+        </MessageScrollerViewport>
+        <MessageScrollerButton direction="end" />
+      </MessageScroller>
+    </MessageScrollerProvider>
 
     <NovelConversationRenderer
       v-else
       :conversation-id="conversation.activeConversation?.id ?? ''"
-      :containers="activePath"
+      :containers="renderedNovelPath"
       :generating="conversation.activeConversationGenerating"
       :active-container-id="conversation.activeContainerId"
+      :focus-container-id="branchMapTargetId"
     />
     </PluginConversationOverride>
 
@@ -623,6 +901,7 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
               :tool-ids="appearance.composerToolbar.left"
               @attach="requestAttachments()"
               @whiteboard="whiteboardOpen = true"
+              @map="branchMapOpen = true"
               @fullscreen="fullscreenInputOpen = true"
             />
           </div>
@@ -631,6 +910,7 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
               :tool-ids="appearance.composerToolbar.right"
               @attach="requestAttachments()"
               @whiteboard="whiteboardOpen = true"
+              @map="branchMapOpen = true"
               @fullscreen="fullscreenInputOpen = true"
             />
             <Button
@@ -712,6 +992,11 @@ async function onPointerUp(event: PointerEvent, container: ChatMessageContainer)
         />
       </DialogContent>
     </Dialog>
+
+    <ConversationBranchMapDialog
+      v-model:open="branchMapOpen"
+      @navigate="onBranchMapNavigate"
+    />
 
     <GenerationComponentDialog />
   </div>
