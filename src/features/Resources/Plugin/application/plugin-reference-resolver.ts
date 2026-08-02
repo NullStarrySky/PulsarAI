@@ -1,8 +1,22 @@
 import {
-  compileInteractiveDocumentSource,
-  type InteractiveDocumentCompileOptions,
-  type InteractiveDocumentCompileResult,
+  compileContextDocumentSource,
+  createContextDataFacade,
+  type ContextDocumentDataBinding,
+  type ContextDocumentCompileOptions,
+  type ContextDocumentCompileResult,
+  type ContextDataValue,
 } from "@/features/Resources/InteractiveDoc/domain/interactive-document";
+import {
+  parsePluginDataDefinition,
+  pluginDataInstanceKey,
+  type PluginDataIsolation,
+} from "@/features/Resources/Plugin/domain/plugin-data";
+import {
+  manifestValueAt,
+  parsePluginManifest,
+  parsePluginManifestReference,
+  type PluginManifestValue,
+} from "@/features/Resources/Plugin/domain/plugin-manifest";
 import {
   resolveSandboxText,
   stringifySandboxValue,
@@ -36,6 +50,7 @@ export interface PluginReferenceDiagnostic {
 export interface PluginReferenceResolverOptions {
   environment?: SandboxEnvironment;
   sourceOverrides?: Record<string, string>;
+  dataOverrides?: Record<string, ContextDataValue>;
 }
 
 export interface GenerationResourceValue {
@@ -48,6 +63,7 @@ export interface GenerationResourceValue {
   pluginName: string;
   path: string;
   type: ReturnType<typeof pluginFileType>;
+  contextConfig?: PluginFile["contextConfig"];
   toString(): string;
 }
 
@@ -75,6 +91,7 @@ export interface PluginContainerResourceQuery {
 
 export interface PluginContainerContentQuery extends PluginContainerResourceQuery {
   alias: string;
+  condition?: PluginFile["memberships"][number]["condition"];
 }
 
 export interface PluginContainerQuery {
@@ -95,6 +112,21 @@ export interface PluginContainerDetailsQuery extends PluginContainerQuery {
   contents: PluginContainerContentQuery[];
 }
 
+export interface ResolvedPluginDataBinding extends ContextDocumentDataBinding {
+  isolation: PluginDataIsolation;
+}
+
+export interface PluginDataReferenceQuery {
+  alias: string;
+  dataId: string;
+  resourceId: string;
+  path: string;
+  isolation: PluginDataIsolation;
+  writable: boolean;
+  pluginId: string;
+  pluginName: string;
+}
+
 interface ResourceRecord {
   plugin: Plugin;
   file: PluginFile;
@@ -111,7 +143,10 @@ interface ContainerRecord {
   scope: PluginContainerScope;
   declaration: PluginContainerDeclaration;
   source: ResourceRecord;
-  resources: Map<string, ResourceRecord>;
+  resources: Map<string, {
+    record: ResourceRecord;
+    membership: PluginFile["memberships"][number];
+  }>;
   imports: Map<string, ContainerRecord>;
   value?: PluginContainerValue;
 }
@@ -126,18 +161,27 @@ export class PluginReferenceResolver {
   private readonly renderStack: ResourceRecord[] = [];
   private readonly tracedResourceIds = new Set<string>();
   private readonly resourceValues = new WeakSet<object>();
+  private dataOverrides: Record<string, ContextDataValue>;
 
   constructor(
     readonly plugins: Plugin[],
     options: PluginReferenceResolverOptions = {},
   ) {
     this.environment = options.environment ?? {};
+    this.dataOverrides = structuredClone(options.dataOverrides ?? {});
     this.indexResources(options.sourceOverrides ?? {});
     this.indexContainers();
   }
 
   get resolvedResourceIds() {
     return [...this.tracedResourceIds];
+  }
+
+  setDataOverrides(
+    values: Record<string, ContextDataValue>,
+  ) {
+    this.dataOverrides = structuredClone(values);
+    this.renderCache.clear();
   }
 
   resourceById(resourceId: string) {
@@ -179,7 +223,7 @@ export class PluginReferenceResolver {
     for (const container of visible) {
       nameCounts.set(container.name, (nameCounts.get(container.name) ?? 0) + 1);
     }
-    return visible.map((container) => ({
+    const containerSuggestions = visible.map((container) => ({
       target:
         nameCounts.get(container.name) === 1
           ? container.name
@@ -188,6 +232,23 @@ export class PluginReferenceResolver {
       detail: `${container.scope} · ${container.source.plugin.name}`,
       description: container.declaration.description?.trim() || undefined,
     }));
+    const configSuggestions = this.plugins.flatMap((plugin) => {
+      if (plugin.id !== from.plugin.id && plugin.packageId !== null) return [];
+      const record = this.manifestRecord(plugin.id);
+      if (!record) return [];
+      const parsed = parsePluginManifest(record.file.content);
+      return parsed.manifest.flatMap((groupContent) =>
+        groupContent.content.map((content) => ({
+          target: plugin.id === from.plugin.id
+            ? `config:local/${groupContent.group.id}/${content.id}`
+            : `config:global/${plugin.id}/${groupContent.group.id}/${content.id}`,
+          label: content.title,
+          detail: `${groupContent.group.title} · ${plugin.name}`,
+          description: content.description,
+        }))
+      );
+    });
+    return [...containerSuggestions, ...configSuggestions];
   }
 
   listContainers(): PluginContainerQuery[] {
@@ -205,9 +266,12 @@ export class PluginReferenceResolver {
       .filter((record) => this.resourceUsesContainer(record, container))
       .map((record) => this.createResourceQuery(record));
     const contents = [...container.resources.entries()].map(
-      ([alias, record]) => ({
+      ([alias, entry]) => ({
         alias,
-        ...this.createResourceQuery(record),
+        ...this.createResourceQuery(entry.record),
+        ...(entry.membership.condition
+          ? { condition: structuredClone(entry.membership.condition) }
+          : {}),
       }),
     );
     return {
@@ -247,6 +311,9 @@ export class PluginReferenceResolver {
       this.tracedResourceIds.add(record.file.id);
       return this.createResourceValue(record);
     }
+    if (normalized.startsWith("config:")) {
+      return this.resolveManifestValue(normalized, from);
+    }
     if (normalized.startsWith("container:")) {
       const container = this.resolveContainer(normalized, from);
       return this.createContainerValue(container);
@@ -254,22 +321,95 @@ export class PluginReferenceResolver {
     throw new Error(`不支持的引用：${normalized}`);
   }
 
-  compileInteractiveDocument(
+  compileContextDocument(
     resourceId: string,
-    options: Pick<InteractiveDocumentCompileOptions, "dataOverrides"> = {},
-  ): InteractiveDocumentCompileResult {
+    options: Pick<ContextDocumentCompileOptions, "dataOverrides"> = {},
+  ): ContextDocumentCompileResult {
     const record = this.requireRecord(resourceId);
-    if (pluginFileType(record.file.name) !== "interactive-document") {
-      throw new Error(`资源不是 IMD：${record.path}`);
+    if (pluginFileType(record.file.name) !== "markdown") {
+      throw new Error(`上下文资源不是 Markdown：${record.path}`);
     }
     this.tracedResourceIds.add(record.file.id);
-    const result = compileInteractiveDocumentSource(record.declarationSource, {
+    if (options.dataOverrides) this.setDataOverrides(options.dataOverrides);
+    const result = compileContextDocumentSource(record.declarationSource, {
       environment: this.environment,
       dataOverrides: options.dataOverrides,
+      dataBindings: this.dataBindingsForResource(record.file.id),
       resolveReference: (target) => this.resolve(target, record),
     });
     this.addCompileDiagnostics(record, result);
     return result;
+  }
+
+  dataBindingsForResource(resourceId: string): ResolvedPluginDataBinding[] {
+    const record = this.requireRecord(resourceId);
+    const aliases = new Set<string>();
+    return (record.file.dataReferences ?? []).flatMap((reference) => {
+      const alias = reference.alias.trim();
+      if (!alias) {
+        this.addDataDiagnostic(record, "数据引用 alias 不能为空。");
+        return [];
+      }
+      if (aliases.has(alias)) {
+        this.addDataDiagnostic(record, `数据引用 alias 重复：${alias}`);
+        return [];
+      }
+      aliases.add(alias);
+      const target = this.recordsById.get(reference.dataId);
+      if (!target) {
+        this.addDataDiagnostic(record, `Data 资源不存在：${reference.dataId}`);
+        return [];
+      }
+      if (pluginFileType(target.file.name) !== "data") {
+        this.addDataDiagnostic(record, `引用目标不是 .data：${target.path}`);
+        return [];
+      }
+      const parsed = parsePluginDataDefinition(target.file.content);
+      for (const diagnostic of parsed.diagnostics) {
+        this.addDataDiagnostic(
+          target,
+          `${target.path} (${diagnostic.path})：${diagnostic.message}`,
+        );
+      }
+      const stateKey = pluginDataInstanceKey(
+        target.file.id,
+        parsed.definition.isolation,
+        record.file.id,
+      );
+      return [{
+        alias,
+        dataId: target.file.id,
+        stateKey,
+        resourceId: record.file.id,
+        path: `/${target.path}`,
+        initialValue: parsed.definition.initialValue,
+        description: parsed.definition.description,
+        enableUpdater: parsed.definition.enableUpdater,
+        wrapperSource: parsed.definition.wrapperSource,
+        isolation: parsed.definition.isolation,
+        pluginId: target.plugin.id,
+        pluginName: target.plugin.name,
+      }];
+    });
+  }
+
+  getDataReferences(resourceId: string): PluginDataReferenceQuery[] {
+    return this.dataBindingsForResource(resourceId).map((binding) => ({
+      alias: binding.alias,
+      dataId: binding.dataId,
+      resourceId: binding.resourceId,
+      path: binding.path,
+      isolation: binding.isolation,
+      writable: binding.enableUpdater === true,
+      pluginId: binding.pluginId,
+      pluginName: binding.pluginName,
+    }));
+  }
+
+  listDataBindings(): ResolvedPluginDataBinding[] {
+    return this.records.flatMap((record) =>
+      this.dataBindingsForResource(record.file.id)
+    );
   }
 
   prepareJavaScript(resourceId: string) {
@@ -317,10 +457,7 @@ export class PluginReferenceResolver {
     try {
       const type = pluginFileType(record.file.name);
       let rendered: string;
-      if (type === "interactive-document") {
-        const result = this.compileInteractiveDocument(record.file.id);
-        rendered = result.markdown;
-      } else if (
+      if (
         type === "markdown"
         || type === "text"
         || type === "component"
@@ -367,11 +504,34 @@ export class PluginReferenceResolver {
           : stringifySandboxValue(ref(target));
       },
     );
-    return resolveSandboxText(prepared, [{ ...this.environment, ref }]);
+    const data = Object.fromEntries(
+      this.dataBindingsForResource(record.file.id).map((binding) => {
+        const value = Object.prototype.hasOwnProperty.call(
+            this.dataOverrides,
+            binding.stateKey,
+          )
+          ? this.dataOverrides[binding.stateKey]!
+          : binding.initialValue;
+        return [
+          binding.alias,
+          createContextDataFacade(
+            { name: binding.alias, wrapperSource: binding.wrapperSource },
+            structuredClone(value),
+            { readonly: true },
+          ),
+        ];
+      }),
+    );
+    return resolveSandboxText(prepared, [{
+      ...this.environment,
+      data,
+      DATA: data,
+      ref,
+    }]);
   }
 
   private indexResources(sourceOverrides: Record<string, string>) {
-    for (const plugin of this.plugins.filter((item) => item.enabled)) {
+    for (const plugin of this.plugins) {
       for (const file of flattenPluginFiles(plugin.root)) {
         const path = pluginNodePath(plugin.root, file.id).join("/");
         const rawContent = sourceOverrides[file.id] ?? file.content;
@@ -404,7 +564,12 @@ export class PluginReferenceResolver {
         record.path.toLocaleLowerCase()
           === pluginConventions.containers.toLocaleLowerCase();
       if (!isDefinitionsFile) continue;
-      const definitions = parsePluginContainerDefinitions(record.source);
+      const definitions = parsePluginContainerDefinitions(record.file.content);
+      this.diagnostics.push(...definitions.diagnostics.map((diagnostic) => ({
+        pluginId: record.plugin.id,
+        resourceId: record.file.id,
+        message: `${diagnostic.path}：${diagnostic.message}`,
+      })));
       for (const declaration of definitions.containers) {
         const key = containerKey(declaration.scope, declaration.name, record);
         if (this.containers.has(key)) {
@@ -435,11 +600,16 @@ export class PluginReferenceResolver {
 
     for (
       const record of [...this.records].sort(
-        (a, b) => b.file.priority - a.file.priority,
+        (a, b) =>
+          b.file.priority - a.file.priority
+          || a.plugin.id.localeCompare(b.plugin.id)
+          || a.path.localeCompare(b.path)
+          || a.file.id.localeCompare(b.file.id),
       )
     ) {
       for (const membership of record.file.memberships ?? []) {
         try {
+          if (!this.membershipEnabled(record, membership.condition)) continue;
           const container = this.resolveContainer(
             membership.container,
             record,
@@ -453,7 +623,7 @@ export class PluginReferenceResolver {
               `容器 ${container.name} 中的资源别名冲突：${alias}`,
             );
           }
-          container.resources.set(alias, record);
+          container.resources.set(alias, { record, membership });
         } catch (error) {
           this.diagnostics.push({
             pluginId: record.plugin.id,
@@ -486,6 +656,60 @@ export class PluginReferenceResolver {
         }
       }
     }
+  }
+
+  private membershipEnabled(
+    record: ResourceRecord,
+    condition: PluginFile["memberships"][number]["condition"],
+  ) {
+    if (!condition?.reference.trim()) return true;
+    const reference = parsePluginManifestReference(condition.reference);
+    if (reference.scope !== "local") {
+      throw new Error("容器成员注入条件只允许引用 config:local/group/content。");
+    }
+    const value = this.resolveManifestValue(condition.reference, record);
+    return Object.prototype.hasOwnProperty.call(condition, "equals")
+      ? manifestValuesEqual(value, condition.equals ?? null)
+      : Boolean(value);
+  }
+
+  private resolveManifestValue(rawReference: string, from?: ResourceRecord) {
+    const reference = parsePluginManifestReference(rawReference);
+    const plugin = reference.scope === "local"
+      ? from?.plugin
+      : this.plugins.find(
+          (item) => item.packageId === null && item.id === reference.pluginId,
+        );
+    if (!plugin) {
+      throw new Error(
+        reference.scope === "local"
+          ? `本地配置引用缺少来源资源：${rawReference}`
+          : `全局配置插件不可见：${reference.pluginId}`,
+      );
+    }
+    const manifestRecord = this.manifestRecord(plugin.id);
+    if (!manifestRecord) throw new Error(`插件 ${plugin.name} 缺少 manifest.json。`);
+    const parsed = parsePluginManifest(manifestRecord.file.content);
+    if (parsed.diagnostics.length) {
+      throw new Error(
+        `插件 ${plugin.name} 的 manifest.json 无效：${parsed.diagnostics[0]!.message}`,
+      );
+    }
+    this.tracedResourceIds.add(manifestRecord.file.id);
+    return manifestValueAt(
+      parsed.manifest,
+      reference.groupId,
+      reference.contentId,
+    );
+  }
+
+  private manifestRecord(pluginId: string) {
+    return this.records.find(
+      (record) =>
+        record.plugin.id === pluginId
+        && record.path.toLocaleLowerCase()
+          === pluginConventions.manifest.toLocaleLowerCase(),
+    );
   }
 
   private resolveContainer(target: string, from?: ResourceRecord) {
@@ -532,7 +756,7 @@ export class PluginReferenceResolver {
       name: record.name,
       scope: record.scope,
       get: (alias) => {
-        const resource = record.resources.get(alias);
+        const resource = record.resources.get(alias)?.record;
         if (!resource) {
           throw new Error(`容器 ${record.name} 没有资源：${alias}`);
         }
@@ -589,6 +813,9 @@ export class PluginReferenceResolver {
       name: record.file.name,
       path: `/${record.path}`,
       type: pluginFileType(record.file.name),
+      ...(record.file.contextConfig
+        ? { contextConfig: structuredClone(record.file.contextConfig) }
+        : {}),
       priority: record.file.priority,
       pluginId: record.plugin.id,
       pluginName: record.plugin.name,
@@ -635,7 +862,7 @@ export class PluginReferenceResolver {
 
   private addCompileDiagnostics(
     record: ResourceRecord,
-    result: InteractiveDocumentCompileResult,
+    result: ContextDocumentCompileResult,
   ) {
     for (const error of result.errors) {
       this.diagnostics.push({
@@ -644,6 +871,19 @@ export class PluginReferenceResolver {
         message: `${record.path} (${error.sourceId})：${error.message}`,
       });
     }
+  }
+
+  private addDataDiagnostic(record: ResourceRecord, message: string) {
+    if (this.diagnostics.some((item) =>
+      item.pluginId === record.plugin.id
+      && item.resourceId === record.file.id
+      && item.message === message
+    )) return;
+    this.diagnostics.push({
+      pluginId: record.plugin.id,
+      resourceId: record.file.id,
+      message,
+    });
   }
 }
 
@@ -711,4 +951,11 @@ function findMacroRanges(source: string): Array<[number, number]> {
     ranges.push([match.index, match.index + match[0].length]);
   }
   return ranges;
+}
+
+function manifestValuesEqual(
+  left: PluginManifestValue,
+  right: PluginManifestValue,
+) {
+  return JSON.stringify(left) === JSON.stringify(right);
 }

@@ -113,20 +113,18 @@ export function collectPluginRegexRules(plugins: Plugin[]): PluginRegexResult<Re
   const resources: Array<{
     plugin: Plugin;
     file: PluginFile;
-    pluginIndex: number;
   }> = [];
 
-  plugins.filter((plugin) => plugin.enabled).forEach((plugin, pluginIndex) => {
+  plugins.forEach((plugin) => {
     const file = findPluginNodeByPath(plugin.root, pluginConventions.regex);
     if (file?.kind !== "file") return;
-    resources.push({ plugin, file, pluginIndex });
+    resources.push({ plugin, file });
   });
 
   resources.sort(
     (a, b) =>
       (b.file.priority ?? 100) - (a.file.priority ?? 100)
-      || a.pluginIndex - b.pluginIndex
-      || (a.file.order ?? 0) - (b.file.order ?? 0)
+      || a.plugin.id.localeCompare(b.plugin.id)
       || a.file.id.localeCompare(b.file.id),
   );
 

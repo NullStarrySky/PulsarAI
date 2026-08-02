@@ -135,7 +135,8 @@ const renderingRegexRules = computed(() => {
   return collectPluginRegexRules(
     plugins.enabledPluginsForPackage(
       packageItem?.id,
-      packageItem?.globalPluginOrder,
+      packageItem?.enabledGlobalPluginIds,
+      packageItem?.mainPluginId,
     ),
   ).value;
 });

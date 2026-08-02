@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { MoreHorizontal, Plus, Search, ShieldCheck, Star, Trash2 } from "lucide-vue-next";
+import { push } from "notivue";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,10 +11,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
-import { cn } from "@/lib/utils";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
+import {
+  findPluginNodeByPath,
+  pluginConventions,
+  pluginFileType,
+  type Plugin,
+} from "@/features/Resources/Plugin/domain/plugin-types";
 import CapabilityGrantEditor from "@/features/Capabilities/presentation/CapabilityGrantEditor.vue";
 import type { CapabilityGrants } from "@/features/Capabilities/domain/capability";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/application/default-config-store";
@@ -23,7 +29,6 @@ const layout = useLayoutStore();
 const conversation = useConversationStore();
 const pluginStore = usePluginStore();
 const defaults = useDefaultConfigStore();
-const draggingPluginId = ref("");
 const editingPluginId = ref("");
 const editingPluginName = ref("");
 
@@ -34,12 +39,19 @@ onMounted(() => {
 const usesDefaultCapabilities = computed(
   () => conversation.activePackage?.capabilities === undefined,
 );
+const keyword = computed(() => pluginStore.search.trim().toLocaleLowerCase());
+const localPlugin = computed(() => pluginStore.plugins.find(
+  (plugin) => plugin.id === conversation.activePackage?.pluginId,
+) ?? null);
+const globalPlugins = computed(() => pluginStore.globalPlugins.filter((plugin) =>
+  !keyword.value
+  || plugin.name.toLocaleLowerCase().includes(keyword.value)
+  || plugin.shortDescription.toLocaleLowerCase().includes(keyword.value)
+));
 
 async function setUsesDefaultCapabilities(enabled: boolean) {
   const active = conversation.activePackage;
-  if (!active) {
-    return;
-  }
+  if (!active) return;
   await conversation.updatePackage(active.id, {
     capabilities: enabled
       ? undefined
@@ -49,110 +61,100 @@ async function setUsesDefaultCapabilities(enabled: boolean) {
 
 async function updatePackageCapabilities(value: CapabilityGrants) {
   const active = conversation.activePackage;
-  if (!active) {
-    return;
-  }
-  await conversation.updatePackage(active.id, { capabilities: value });
+  if (active) await conversation.updatePackage(active.id, { capabilities: value });
 }
 
-const pluginSections = computed(() => {
-  const plugins = pluginStore.visiblePluginsForPackage(
-    conversation.activePackageId,
-    conversation.activePackage?.globalPluginOrder,
-  );
-  return [
-    {
-      id: "local",
-      label: "本地",
-      plugins: plugins.filter((plugin) => plugin.packageId !== null),
-    },
-    {
-      id: "global",
-      label: "内置",
-      plugins: plugins.filter((plugin) => plugin.packageId === null),
-    },
-  ];
-});
-
-function openPlugin(pluginId: string) {
-  const plugin = pluginStore.plugins.find((item) => item.id === pluginId);
-  if (!plugin) {
-    return;
-  }
+function openPlugin(plugin: Plugin) {
+  const activePackage = conversation.activePackage;
   pluginStore.openPlugin(plugin.id);
   layout.openResourceTab({
     resourceType: "plugin",
     resourceId: plugin.id,
-    packageId: conversation.activePackageId,
-    title: plugin.name,
+    packageId: activePackage?.id,
+    title: plugin.packageId === activePackage?.id
+      ? `${activePackage.name}资源`
+      : plugin.name,
   });
 }
 
-async function createPlugin() {
-  if (!conversation.activePackageId) {
+async function createGlobalPlugin() {
+  const plugin = await pluginStore.createGlobalPlugin();
+  openPlugin(plugin);
+}
+
+function hasGenerationProcess(plugin: Plugin) {
+  const context = findPluginNodeByPath(plugin.root, pluginConventions.context);
+  const process = findPluginNodeByPath(plugin.root, [
+    pluginConventions.agentProcessFolder,
+    pluginConventions.agentProcessEntry,
+  ]);
+  return context?.kind === "file"
+    && pluginFileType(context.name) === "markdown"
+    && process?.kind === "file"
+    && pluginFileType(process.name) === "javascript"
+    && typeof process.content === "string"
+    && Boolean(process.content.trim());
+}
+
+async function setMainPlugin(plugin: Plugin) {
+  const active = conversation.activePackage;
+  if (!active) return;
+  if (!hasGenerationProcess(plugin)) {
+    push.error(`插件 ${plugin.name} 没有有效的 context.md 与 agentprocess/index.js。`);
     return;
   }
-  const plugin = await pluginStore.createPlugin(conversation.activePackageId);
-  if (plugin) {
-    openPlugin(plugin.id);
+  try {
+    if (!plugin.enabled) await pluginStore.updatePlugin(plugin.id, { enabled: true });
+    const enabledGlobalPluginIds = plugin.packageId === null
+      ? [...new Set([...active.enabledGlobalPluginIds, plugin.id])]
+      : active.enabledGlobalPluginIds;
+    await conversation.updatePackage(active.id, {
+      mainPluginId: plugin.id,
+      enabledGlobalPluginIds,
+    });
+  } catch (error) {
+    push.error(error instanceof Error ? error.message : "主要插件切换失败");
   }
 }
 
-function startRenamePlugin(pluginId: string) {
-  const plugin = pluginStore.plugins.find((item) => item.id === pluginId);
-  if (!plugin) return;
-  editingPluginId.value = pluginId;
+async function toggleGlobalPlugin(plugin: Plugin, enabled: boolean) {
+  const active = conversation.activePackage;
+  if (!active || plugin.packageId !== null) return;
+  if (!enabled && active.mainPluginId === plugin.id) {
+    push.error("主要插件不能停用，请先选择另一个主要插件。");
+    return;
+  }
+  const ids = enabled
+    ? [...new Set([...active.enabledGlobalPluginIds, plugin.id])]
+    : active.enabledGlobalPluginIds.filter((id) => id !== plugin.id);
+  try {
+    await conversation.updatePackage(active.id, { enabledGlobalPluginIds: ids });
+  } catch (error) {
+    push.error(error instanceof Error ? error.message : "插件启用状态更新失败");
+  }
+}
+
+async function deleteGlobalPlugin(plugin: Plugin) {
+  try {
+    await pluginStore.deletePlugin(plugin.id);
+    layout.closeTabsByResource("plugin", plugin.id);
+  } catch (error) {
+    push.error(error instanceof Error ? error.message : "插件删除失败");
+  }
+}
+
+function startRenamePlugin(plugin: Plugin) {
+  editingPluginId.value = plugin.id;
   editingPluginName.value = plugin.name;
 }
 
 async function confirmRenamePlugin() {
-  const plugin = pluginStore.plugins.find(
-    (item) => item.id === editingPluginId.value,
-  );
+  const plugin = pluginStore.plugins.find((item) => item.id === editingPluginId.value);
   if (!plugin) return;
   const name = editingPluginName.value.trim() || plugin.name;
   await pluginStore.updatePlugin(plugin.id, { name });
-  if (pluginStore.activePluginId === plugin.id) {
-    layout.openResourceTab({
-      resourceType: "plugin",
-      resourceId: plugin.id,
-      packageId: conversation.activePackageId,
-      title: name,
-    });
-  }
   editingPluginId.value = "";
   editingPluginName.value = "";
-}
-
-function onDragStart(pluginId: string) {
-  draggingPluginId.value = pluginId;
-}
-
-async function onDrop(targetPluginId: string) {
-  if (!draggingPluginId.value) {
-    return;
-  }
-  const moving = pluginStore.plugins.find((plugin) => plugin.id === draggingPluginId.value);
-  const target = pluginStore.plugins.find((plugin) => plugin.id === targetPluginId);
-  if (!moving || !target || moving.packageId !== target.packageId) {
-    draggingPluginId.value = "";
-    return;
-  }
-
-  if (moving.packageId === null) {
-    await conversation.movePackageGlobalPluginBefore(
-      conversation.activePackageId,
-      moving.id,
-      target.builtIn ? undefined : target.id,
-    );
-  } else {
-    await pluginStore.movePluginBefore(
-      moving.id,
-      target.id,
-      conversation.activePackageId,
-    );
-  }
-  draggingPluginId.value = "";
 }
 </script>
 
@@ -164,10 +166,10 @@ async function onDrop(targetPluginId: string) {
         <input
           v-model="pluginStore.search"
           class="h-8 w-full rounded-md bg-transparent pl-8 pr-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:bg-muted/45"
-          placeholder="搜索插件"
+          placeholder="搜索全局插件"
         />
       </div>
-      <Button size="icon" variant="ghost" class="size-8" title="新建插件" @click="createPlugin">
+      <Button size="icon" variant="ghost" class="size-8" title="新建全局插件" @click="createGlobalPlugin">
         <Plus class="size-4" />
       </Button>
     </div>
@@ -184,11 +186,7 @@ async function onDrop(targetPluginId: string) {
               <div class="text-xs font-medium">继承默认权限</div>
               <div class="text-[11px] text-muted-foreground">关闭后仅影响当前角色包。</div>
             </div>
-            <Switch
-              size="sm"
-              :model-value="usesDefaultCapabilities"
-              @update:model-value="setUsesDefaultCapabilities(Boolean($event))"
-            />
+            <Switch size="sm" :model-value="usesDefaultCapabilities" @update:model-value="setUsesDefaultCapabilities(Boolean($event))" />
           </div>
           <CapabilityGrantEditor
             v-if="conversation.activePackage?.capabilities"
@@ -202,26 +200,43 @@ async function onDrop(targetPluginId: string) {
         </div>
       </details>
 
-      <section v-for="section in pluginSections" :key="section.id" class="pt-3">
-        <div class="px-2.5 pb-1.5 text-[11px] font-medium text-muted-foreground">
-          {{ section.label }}
-        </div>
+      <section class="pt-3">
+        <div class="px-2.5 pb-1.5 text-[11px] font-medium text-muted-foreground">角色资源</div>
         <div
-          v-for="plugin in section.plugins"
+          v-if="localPlugin"
+          role="button"
+          tabindex="0"
+          class="group mb-0.5 flex min-h-12 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent/55"
+          @click="openPlugin(localPlugin)"
+          @keydown.enter="openPlugin(localPlugin)"
+        >
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5">
+              <span class="truncate text-sm font-medium">{{ conversation.activePackage?.name }}资源</span>
+              <span v-if="conversation.activePackage?.mainPluginId === localPlugin.id" class="text-[10px] font-medium text-primary">主要</span>
+            </div>
+            <p class="truncate text-xs text-muted-foreground">角色包唯一的本地文档与资源容器</p>
+          </div>
+          <Button
+            v-if="conversation.activePackage?.mainPluginId !== localPlugin.id && hasGenerationProcess(localPlugin)"
+            size="icon"
+            variant="ghost"
+            class="size-7"
+            title="设为主要插件"
+            @click.stop="setMainPlugin(localPlugin)"
+          >
+            <Star class="size-4" />
+          </Button>
+        </div>
+      </section>
+
+      <section class="pt-3">
+        <div class="px-2.5 pb-1.5 text-[11px] font-medium text-muted-foreground">全局插件</div>
+        <div
+          v-for="plugin in globalPlugins"
           :key="plugin.id"
-          :draggable="!plugin.builtIn"
-          :class="
-            cn(
-              'group mb-0.5 flex min-h-12 cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors hover:bg-accent/55',
-              plugin.id === pluginStore.activePluginId && 'bg-accent text-accent-foreground',
-              draggingPluginId === plugin.id && 'opacity-50',
-            )
-          "
-          @click="openPlugin(plugin.id)"
-          @dragstart="onDragStart(plugin.id)"
-          @dragend="draggingPluginId = ''"
-          @dragover.prevent
-          @drop.prevent="onDrop(plugin.id)"
+          class="group mb-0.5 flex min-h-12 cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 transition-colors hover:bg-accent/55"
+          @click="openPlugin(plugin)"
         >
           <img v-if="plugin.icon" :src="plugin.icon" alt="" class="size-8 rounded-md object-cover" />
           <InlineEditInput
@@ -236,35 +251,35 @@ async function onDrop(targetPluginId: string) {
           <div v-else class="min-w-0 flex-1">
             <div class="flex min-w-0 items-baseline gap-1.5">
               <span class="truncate text-sm font-medium">{{ plugin.name }}</span>
-              <span v-if="plugin.main" class="shrink-0 text-[10px] font-medium text-primary">主要</span>
+              <span v-if="conversation.activePackage?.mainPluginId === plugin.id" class="shrink-0 text-[10px] font-medium text-primary">主要</span>
               <span v-if="plugin.builtIn" class="shrink-0 text-[10px] text-muted-foreground">系统</span>
             </div>
-            <p v-if="plugin.shortDescription" class="truncate text-xs text-muted-foreground">
-              {{ plugin.shortDescription }}
-            </p>
+            <p v-if="plugin.shortDescription" class="truncate text-xs text-muted-foreground">{{ plugin.shortDescription }}</p>
           </div>
-
           <div class="flex items-center gap-1" @click.stop>
-            <Switch size="sm" :model-value="plugin.enabled" @update:model-value="pluginStore.updatePlugin(plugin.id, { enabled: Boolean($event) })" />
+            <Switch
+              size="sm"
+              :disabled="!plugin.enabled && conversation.activePackage?.mainPluginId !== plugin.id"
+              :model-value="conversation.activePackage?.enabledGlobalPluginIds.includes(plugin.id) || conversation.activePackage?.mainPluginId === plugin.id"
+              @update:model-value="toggleGlobalPlugin(plugin, Boolean($event))"
+            />
             <DropdownMenu v-if="editingPluginId !== plugin.id">
               <DropdownMenuTrigger as-child>
                 <Button size="icon" variant="ghost" class="mobile-touch-actions size-7 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" title="插件菜单">
                   <MoreHorizontal class="size-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" class="w-40">
-                <DropdownMenuItem @click="startRenamePlugin(plugin.id)">
-                  重命名
-                </DropdownMenuItem>
-                <DropdownMenuItem :disabled="plugin.packageId === null" @click="pluginStore.updatePlugin(plugin.id, { main: !plugin.main })">
+              <DropdownMenuContent align="end" class="w-44">
+                <DropdownMenuItem :disabled="!hasGenerationProcess(plugin)" @click="setMainPlugin(plugin)">
                   <Star class="mr-2 size-4" />
-                  {{ plugin.main ? "取消主要" : "设为主要" }}
+                  设为主要插件
                 </DropdownMenuItem>
+                <DropdownMenuItem @click="startRenamePlugin(plugin)">重命名</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  :disabled="plugin.packageId === null"
+                  :disabled="plugin.builtIn || conversation.activePackage?.mainPluginId === plugin.id"
                   class="text-destructive focus:text-destructive"
-                  @click="pluginStore.deletePlugin(plugin.id)"
+                  @click="deleteGlobalPlugin(plugin)"
                 >
                   <Trash2 class="mr-2 size-4" />
                   删除
@@ -272,12 +287,6 @@ async function onDrop(targetPluginId: string) {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        </div>
-        <div
-          v-if="section.plugins.length === 0"
-          class="px-2.5 py-2 text-xs text-muted-foreground"
-        >
-          暂无{{ section.label }}插件
         </div>
       </section>
     </div>

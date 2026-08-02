@@ -28,17 +28,10 @@ export interface PluginReferenceSuggestion {
 
 export interface PluginContainerDefinitions {
   containers: PluginContainerDeclaration[];
+  diagnostics: Array<{ path: string; message: string }>;
 }
 
 const referencePattern = /<@([^>\r\n]+)>/g;
-const containerPattern =
-  /<container\b([^>]*?)(?:\/>|>([\s\S]*?)<\/container\s*>)/gi;
-const includePattern =
-  /<include\b([^>]*?)(?:\/>|>([\s\S]*?)<\/include\s*>)/gi;
-const descriptionPattern =
-  /<description\b[^>]*>([\s\S]*?)<\/description\s*>/i;
-const attributePattern =
-  /([A-Za-z_][\w-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
 
 export function findPluginReferenceTokens(source: string): PluginReferenceToken[] {
   const tokens: PluginReferenceToken[] = [];
@@ -73,73 +66,109 @@ export function replacePluginReferenceTokens(
   return result + source.slice(cursor);
 }
 
-function parseContainerDeclarations(source: string) {
+function parseContainerDeclarations(
+  value: unknown,
+  diagnostics: PluginContainerDefinitions["diagnostics"],
+) {
   const containers: PluginContainerDeclaration[] = [];
-  for (const match of source.matchAll(containerPattern)) {
-    const rawAttributes = match[1] ?? "";
-    const body = match[2];
-    const attributes = parseAttributes(rawAttributes);
-    const name = attributes.name?.trim();
-    const scope = normalizeContainerScope(attributes.scope);
-    if (!name) continue;
-    const description = decodeXml(
-      descriptionPattern.exec(body ?? "")?.[1]?.trim() ?? "",
-    );
+  if (!Array.isArray(value)) {
+    diagnostics.push({ path: "$.containers", message: "containers 必须是数组。" });
+    return containers;
+  }
+  value.forEach((rawContainer, containerIndex) => {
+    const path = `$.containers[${containerIndex}]`;
+    if (!isRecord(rawContainer)) {
+      diagnostics.push({ path, message: "容器声明必须是对象。" });
+      return;
+    }
+    const name = normalizedText(rawContainer.name);
+    if (!name) {
+      diagnostics.push({ path: `${path}.name`, message: "容器名称不能为空。" });
+      return;
+    }
+    const scope = rawContainer.scope;
+    if (scope !== "root" && scope !== "plugin" && scope !== "global") {
+      diagnostics.push({ path: `${path}.scope`, message: "scope 必须是 root、plugin 或 global。" });
+      return;
+    }
     const imports: PluginContainerImport[] = [];
-    for (const includeMatch of (body ?? "").matchAll(includePattern)) {
-      const includeAttributes = parseAttributes(includeMatch[1] ?? "");
-      const target = includeAttributes.ref?.trim()
-        ?? decodeXml((includeMatch[2] ?? "").trim());
-      if (!target) continue;
+    if (rawContainer.imports !== undefined && !Array.isArray(rawContainer.imports)) {
+      diagnostics.push({ path: `${path}.imports`, message: "imports 必须是数组。" });
+    }
+    for (const [importIndex, rawImport] of (
+      Array.isArray(rawContainer.imports) ? rawContainer.imports : []
+    ).entries()) {
+      const importPath = `${path}.imports[${importIndex}]`;
+      if (!isRecord(rawImport)) {
+        diagnostics.push({ path: importPath, message: "容器引用必须是对象。" });
+        continue;
+      }
+      const target = normalizedText(rawImport.target);
+      const alias = normalizedText(rawImport.alias);
+      if (!alias) {
+        diagnostics.push({ path: `${importPath}.alias`, message: "引用别名不能为空。" });
+        continue;
+      }
+      if (!target) {
+        diagnostics.push({ path: `${importPath}.target`, message: "引用目标不能为空。" });
+        continue;
+      }
       imports.push({
-        alias:
-          includeAttributes.as?.trim()
-          || containerTargetName(target)
-          || `container${imports.length + 1}`,
+        alias,
         target,
       });
     }
-    containers.push({ name, scope, description, imports });
-  }
+    if (
+      rawContainer.description !== undefined
+      && typeof rawContainer.description !== "string"
+    ) {
+      diagnostics.push({ path: `${path}.description`, message: "description 必须是字符串。" });
+    }
+    const description = normalizedText(rawContainer.description);
+    containers.push({
+      name,
+      scope,
+      ...(description ? { description } : {}),
+      imports,
+    });
+  });
   return containers;
 }
 
 export function parsePluginContainerDefinitions(
-  source: string,
+  source: unknown,
 ): PluginContainerDefinitions {
+  let value = source;
+  const diagnostics: PluginContainerDefinitions["diagnostics"] = [];
+  if (typeof source === "string") {
+    try {
+      value = JSON.parse(source);
+    } catch (error) {
+      return {
+        containers: [],
+        diagnostics: [{
+          path: "$",
+          message: error instanceof Error ? error.message : "containers.json 语法错误。",
+        }],
+      };
+    }
+  }
+  if (!isRecord(value)) {
+    return {
+      containers: [],
+      diagnostics: [{ path: "$", message: "containers.json 根节点必须是对象。" }],
+    };
+  }
   return {
-    containers: parseContainerDeclarations(source),
+    containers: parseContainerDeclarations(value.containers, diagnostics),
+    diagnostics,
   };
 }
 
 export function serializePluginContainerDefinitions(
-  definitions: PluginContainerDefinitions,
+  definitions: Pick<PluginContainerDefinitions, "containers">,
 ) {
-  const lines = ["<containers>"];
-  definitions.containers.forEach((container, index) => {
-    if (index > 0) lines.push("");
-    const attributes =
-      `name="${escapeXmlAttribute(container.name)}" scope="${container.scope}"`;
-    const description = container.description?.trim() ?? "";
-    if (!container.imports.length && !description) {
-      lines.push(`  <container ${attributes} />`);
-      return;
-    }
-    lines.push(`  <container ${attributes}>`);
-    if (description) {
-      lines.push(`    <description>${escapeXmlText(description)}</description>`);
-    }
-    for (const item of container.imports) {
-      lines.push(
-        `    <include as="${escapeXmlAttribute(item.alias)}">${
-          escapeXmlText(item.target)
-        }</include>`,
-      );
-    }
-    lines.push("  </container>");
-  });
-  lines.push("</containers>", "");
-  return lines.join("\n");
+  return JSON.stringify({ containers: definitions.containers }, null, 2);
 }
 
 export function normalizePluginReferenceTarget(target: string) {
@@ -149,6 +178,7 @@ export function normalizePluginReferenceTarget(target: string) {
     || normalized.startsWith("path:")
     || normalized.startsWith("id:")
     || normalized.startsWith("container:")
+    || normalized.startsWith("config:")
   ) {
     return normalized;
   }
@@ -183,46 +213,10 @@ export function pluginReferenceLabel(target: string) {
   return separator < 0 ? target : target.slice(separator + 1);
 }
 
-function parseAttributes(source: string) {
-  const attributes: Record<string, string> = {};
-  for (const match of source.matchAll(attributePattern)) {
-    const key = (match[1] ?? "").toLocaleLowerCase();
-    if (!key) continue;
-    attributes[key] = decodeXml(match[2] ?? match[3] ?? "");
-  }
-  return attributes;
+function normalizedText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function normalizeContainerScope(value?: string): PluginContainerScope {
-  return value === "root" || value === "global" ? value : "plugin";
-}
-
-function containerTargetName(target: string) {
-  const normalized = target.trim();
-  const index = normalized.lastIndexOf("/");
-  return index < 0 ? normalized : normalized.slice(index + 1);
-}
-
-function escapeXmlAttribute(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function escapeXmlText(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
-function decodeXml(value: string) {
-  return value
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

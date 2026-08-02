@@ -11,9 +11,9 @@ import {
 import { getFastModel } from "@/features/defaultConfigs/application/default-config-service";
 import { hydrateModel } from "@/features/ModelConnection/application/model-ai";
 import {
-  createInteractiveVariableFacade,
-  type InteractiveValue,
-  type InteractiveVariableDefinition,
+  createContextDataFacade,
+  type ContextDataValue,
+  type ContextDataDefinition,
 } from "@/features/Resources/InteractiveDoc/domain/interactive-document";
 import {
   executeCodeAct,
@@ -27,14 +27,28 @@ import type {
 
 export interface ConversationVariableEvaluation {
   definitionHash: string;
-  state: Record<string, InteractiveValue>;
+  state: Record<string, ContextDataValue>;
   facades: Record<string, unknown>;
   versionKey: string;
 }
 
+export interface ConversationDataApi {
+  readForResource(resourceId: string, dataId: string): ContextDataValue;
+  writeForResource(resourceId: string, dataId: string, value: ContextDataValue): ContextDataValue;
+  listForResource(resourceId: string): Array<{
+    id: string;
+    path: string;
+    isolation: "resource" | "conversation";
+    writable: boolean;
+    pluginId: string;
+    pluginName: string;
+    value: ContextDataValue;
+  }>;
+}
+
 export interface VariableUpdateExecutionSuccess {
   ok: true;
-  state: Record<string, InteractiveValue>;
+  state: Record<string, ContextDataValue>;
   facades: Record<string, unknown>;
   update: ConversationVariableUpdate;
   value: unknown;
@@ -88,20 +102,24 @@ const stateCacheLimit = 64;
 const compressionConcurrency = 3;
 const compressionBranchingFactor = 4;
 const compressionAgentVersion = "conversation-memory-v1";
-const stateCache = new Map<string, Record<string, InteractiveValue>>();
+const stateCache = new Map<string, Record<string, ContextDataValue>>();
 
 export async function evaluateConversationVariables(
-  definitions: InteractiveVariableDefinition[],
+  definitions: ContextDataDefinition[],
   activePath: ChatMessageContainer[],
 ): Promise<ConversationVariableEvaluation> {
   const definitionHash = hashText(JSON.stringify(definitions.map((item) => ({
-    name: item.name,
+    id: item.id,
+    dataId: item.dataId,
+    resourceId: item.resourceId,
+    isolation: item.isolation,
+    enableUpdater: item.enableUpdater,
     initialValue: item.initialValue,
     wrapperSource: item.wrapperSource,
   }))));
   let versionKey = `variables:${definitionHash}`;
   let state = readStateCache(versionKey) ?? Object.fromEntries(
-    definitions.map((item) => [item.name, structuredClone(item.initialValue)]),
+    definitions.map((item) => [item.id, structuredClone(item.initialValue)]),
   );
   writeStateCache(versionKey, state);
   for (const container of activePath) {
@@ -148,7 +166,7 @@ export async function evaluateConversationVariables(
 
 export async function executeVariableUpdateIntent(
   source: string,
-  definitions: InteractiveVariableDefinition[],
+  definitions: ContextDataDefinition[],
   evaluation: ConversationVariableEvaluation,
 ): Promise<VariableUpdateExecutionResult> {
   const result = await applyVariableUpdate(source, definitions, evaluation.state);
@@ -236,17 +254,18 @@ export async function deleteConversationMemory(conversationId: string) {
 
 async function applyVariableUpdate(
   source: string,
-  definitions: InteractiveVariableDefinition[],
-  previousState: Record<string, InteractiveValue>,
+  definitions: ContextDataDefinition[],
+  previousState: Record<string, ContextDataValue>,
 ): Promise<VariableUpdateExecutionResult> {
   const sourceError = validateVariableUpdateSource(source);
   if (sourceError) return { ok: false, error: sourceError };
   try {
     const state = structuredClone(previousState);
     const facades = createVariableFacades(definitions, state, false);
+    const data = createConversationDataApi(definitions, state, false);
     const result = await executeCodeAct(
       source,
-      createVariableUpdateEnvironment(facades),
+      createVariableUpdateEnvironment(facades, data),
     );
     if (!result.ok) return result;
     assertVariableState(state);
@@ -272,29 +291,79 @@ async function applyVariableUpdate(
 }
 
 function createVariableFacades(
-  definitions: InteractiveVariableDefinition[],
-  sourceState: Record<string, InteractiveValue>,
+  definitions: ContextDataDefinition[],
+  sourceState: Record<string, ContextDataValue>,
   readonly: boolean,
 ) {
   const state = readonly
     ? deepFreeze(structuredClone(sourceState))
     : sourceState;
   return Object.fromEntries(definitions.map((definition) => [
-    definition.name,
-    createInteractiveVariableFacade(
+    definition.id,
+    createContextDataFacade(
       { name: definition.name, wrapper: definition.wrapperSource },
-      state[definition.name] ?? null,
+      state[definition.id] ?? null,
       {
         readonly,
         onReplace: (value) => {
-          state[definition.name] = value;
+          state[definition.id] = value;
         },
       },
     ),
   ]));
 }
 
-function createVariableUpdateEnvironment(facades: Record<string, unknown>) {
+export function createConversationDataApi(
+  definitions: ContextDataDefinition[],
+  state: Record<string, ContextDataValue>,
+  readonly: boolean,
+): ConversationDataApi {
+  const definitionFor = (resourceId: string, dataId: string) => {
+    const definition = definitions.find((item) =>
+      item.dataId === dataId
+      && item.resourceId === resourceId
+    );
+    if (!definition) {
+      throw new Error(`资源 ${resourceId} 没有引用 Data ${dataId}。`);
+    }
+    return definition;
+  };
+  return Object.freeze({
+    readForResource(resourceId: string, dataId: string) {
+      const definition = definitionFor(resourceId, dataId);
+      return structuredClone(state[definition.id] ?? definition.initialValue);
+    },
+    writeForResource(resourceId: string, dataId: string, value: ContextDataValue) {
+      if (readonly) throw new Error("当前 Data 容器是只读的。");
+      const definition = definitionFor(resourceId, dataId);
+      if (!definition.enableUpdater) {
+        throw new Error(`Data ${dataId} 未启用更新。`);
+      }
+      state[definition.id] = structuredClone(value);
+      return structuredClone(state[definition.id]!);
+    },
+    listForResource(resourceId: string) {
+      return definitions.flatMap((definition) =>
+        definition.resourceId === resourceId
+          ? [{
+              id: definition.dataId,
+              path: definition.path,
+              isolation: definition.isolation,
+              writable: definition.enableUpdater,
+              pluginId: definition.pluginId,
+              pluginName: definition.pluginName,
+              value: structuredClone(state[definition.id] ?? definition.initialValue),
+            }]
+          : [],
+      );
+    },
+  });
+}
+
+function createVariableUpdateEnvironment(
+  facades: Record<string, unknown>,
+  data: ConversationDataApi,
+) {
   const denied = (name: string) => () => {
     throw new Error(`变量更新意图不能使用 ${name}。`);
   };
@@ -331,6 +400,8 @@ function createVariableUpdateEnvironment(facades: Record<string, unknown>) {
   return {
     variables: facades,
     VARIABLES: facades,
+    data,
+    DATA: data,
     Math: deterministicMath,
     Date: VariableDate,
     crypto: new Proxy({}, {
@@ -371,7 +442,7 @@ function validateVariableUpdateSource(source: string) {
     : null;
 }
 
-function assertVariableState(state: Record<string, InteractiveValue>) {
+function assertVariableState(state: Record<string, ContextDataValue>) {
   const visiting = new WeakSet<object>();
   const visit = (value: unknown, path: string) => {
     if (
@@ -401,7 +472,7 @@ function assertVariableState(state: Record<string, InteractiveValue>) {
     visiting.delete(value);
   };
   for (const [name, value] of Object.entries(state)) {
-    visit(value, `variables.${name}`);
+    visit(value, `data[${JSON.stringify(name)}]`);
   }
 }
 
@@ -751,7 +822,7 @@ function readStateCache(key: string) {
   return structuredClone(value);
 }
 
-function writeStateCache(key: string, value: Record<string, InteractiveValue>) {
+function writeStateCache(key: string, value: Record<string, ContextDataValue>) {
   stateCache.delete(key);
   stateCache.set(key, structuredClone(value));
   while (stateCache.size > stateCacheLimit) {

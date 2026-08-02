@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import {
+  Blocks,
   BrainCircuit,
   GitFork,
   Maximize2,
@@ -46,6 +47,9 @@ const reasoningLevels = [
 const reasoningEffort = computed(
   () => conversation.activeConversation?.reasoningEffort ?? "none",
 );
+const featureApiEnabled = computed(
+  () => conversation.activeConversation?.featureApiEnabled ?? true,
+);
 const reasoningIndex = computed(() =>
   Math.max(
     0,
@@ -66,6 +70,15 @@ function updateReasoning(values: number[] | undefined) {
     return;
   }
   void conversation.setConversationReasoningEffort(conversationId, effort);
+}
+
+function toggleFeatureApi() {
+  const conversationId = conversation.activeConversationId;
+  if (!conversationId) return;
+  void conversation.setConversationFeatureApiEnabled(
+    conversationId,
+    !featureApiEnabled.value,
+  );
 }
 </script>
 
@@ -114,6 +127,18 @@ function updateReasoning(values: number[] | undefined) {
         </div>
       </PopoverContent>
     </Popover>
+    <Button
+      v-else-if="toolId === 'feature-api'"
+      size="sm"
+      :variant="featureApiEnabled ? 'secondary' : 'ghost'"
+      class="h-8 gap-1.5 px-2 mobile:h-10"
+      :title="featureApiEnabled ? 'Feature API：已注入' : 'Feature API：未注入'"
+      :aria-pressed="featureApiEnabled"
+      @click="toggleFeatureApi"
+    >
+      <Blocks class="size-4" />
+      <span class="text-xs">API</span>
+    </Button>
     <Button
       v-else-if="toolId === 'attachment'"
       size="icon"

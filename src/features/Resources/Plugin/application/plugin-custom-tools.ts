@@ -42,10 +42,10 @@ export function collectPluginCustomTools(
 ): PluginCustomToolCollection {
   const diagnostics: PluginReferenceDiagnostic[] = [];
   const candidates: Array<
-    PluginCustomToolDefinition & { pluginIndex: number; treeIndex: number }
+    PluginCustomToolDefinition & { treeIndex: number }
   > = [];
 
-  plugins.filter((plugin) => plugin.enabled).forEach((plugin, pluginIndex) => {
+  plugins.forEach((plugin) => {
     const tools = findPluginNodeByPath(plugin.root, pluginConventions.toolsFolder);
     if (tools?.kind !== "folder") return;
 
@@ -93,7 +93,6 @@ export function collectPluginCustomTools(
           priority: functionFile.priority ?? 100,
           prompt: resolver.renderResource(promptFile.id),
           functionFile,
-          pluginIndex,
           treeIndex,
         });
       } catch (error) {
@@ -111,7 +110,7 @@ export function collectPluginCustomTools(
   candidates.sort(
     (a, b) =>
       b.priority - a.priority
-      || a.pluginIndex - b.pluginIndex
+      || a.pluginId.localeCompare(b.pluginId)
       || a.treeIndex - b.treeIndex
       || a.functionId.localeCompare(b.functionId),
   );

@@ -234,8 +234,12 @@ function mergePackageForUpdate(
     ...clonePlain(remote),
     id: local.id,
     conversations: mergeById(local.conversations, remote.conversations),
-    plugins: mergeById(local.plugins, remote.plugins),
-    globalPluginOrder: unionIds(local.globalPluginOrder, remote.globalPluginOrder),
+    pluginId: remote.pluginId || local.pluginId,
+    mainPluginId: remote.mainPluginId || local.mainPluginId,
+    enabledGlobalPluginIds: unionIds(
+      local.enabledGlobalPluginIds,
+      remote.enabledGlobalPluginIds,
+    ),
     syncEnabled: local.syncEnabled ?? remote.syncEnabled ?? true,
   };
 }
@@ -527,10 +531,12 @@ async function persistMergedSnapshot(
             (link) => !local.conversations.some((item) => item.id === link.id),
           ),
         ];
-        local.globalPluginOrder = unionIds(
-          local.globalPluginOrder,
-          remotePackage.globalPluginOrder,
+        local.enabledGlobalPluginIds = unionIds(
+          local.enabledGlobalPluginIds,
+          remotePackage.enabledGlobalPluginIds,
         );
+        local.pluginId = remotePackage.pluginId || local.pluginId;
+        local.mainPluginId = remotePackage.mainPluginId || local.mainPluginId;
         await conversation.persistPackage(local);
         merged += 1;
       }
@@ -811,7 +817,7 @@ export const useBackupStore = defineStore("backup", {
         name = root.title;
         const parent = conversation.packages.find((item) => item.id === root.packageId);
         packages = parent
-          ? [{ ...clonePlain(parent), conversations: [], plugins: [] }]
+          ? [{ ...clonePlain(parent), conversations: [] }]
           : [];
         conversations = [clonePlain(root)];
         containers = conversation.containers
@@ -825,7 +831,7 @@ export const useBackupStore = defineStore("backup", {
           ? conversation.packages.find((item) => item.id === root.packageId)
           : null;
         packages = parent
-          ? [{ ...clonePlain(parent), conversations: [], plugins: [] }]
+          ? [{ ...clonePlain(parent), conversations: [] }]
           : [];
         plugins = [clonePlain(root)];
       }
@@ -1005,9 +1011,11 @@ export const useBackupStore = defineStore("backup", {
             ? sourcePackage.categoryId
             : null,
           conversations: [],
-          plugins: [],
-          globalPluginOrder: sourcePackage.globalPluginOrder
-            ?.map((pluginId) => pluginIdMap.get(pluginId) ?? pluginId),
+          pluginId: pluginIdMap.get(sourcePackage.pluginId) ?? sourcePackage.pluginId,
+          mainPluginId: pluginIdMap.get(sourcePackage.mainPluginId)
+            ?? sourcePackage.mainPluginId,
+          enabledGlobalPluginIds: sourcePackage.enabledGlobalPluginIds
+            .map((pluginId) => pluginIdMap.get(pluginId) ?? pluginId),
           syncEnabled: sourcePackage.syncEnabled ?? true,
           order: Math.max(-1, ...conversation.packages.map((value) => value.order ?? -1)) + 1,
         };
@@ -1058,6 +1066,7 @@ export const useBackupStore = defineStore("backup", {
               )
             : sourceConversation.title,
           reasoningEffort: sourceConversation.reasoningEffort ?? "none",
+          featureApiEnabled: sourceConversation.featureApiEnabled ?? true,
           rootContainerId: null,
           lastContainerId: null,
           updatedAt: new Date().toISOString(),
@@ -1150,20 +1159,14 @@ export const useBackupStore = defineStore("backup", {
               )
             : sourcePlugin.name,
           builtIn: false,
-          order: Math.max(
-            -1,
-            ...pluginStore.plugins
-              .filter((value) => value.packageId === packageId)
-              .map((value) => value.order ?? -1),
-          ) + 1,
         };
         pluginStore.plugins.push(item);
         await pluginStore.persistPlugin(item);
         const parent = packageId
           ? conversation.packages.find((value) => value.id === packageId)
           : null;
-        if (parent && !parent.plugins.some((link) => link.id === item.id)) {
-          parent.plugins.push({ id: item.id, name: item.name });
+        if (parent) {
+          parent.pluginId = item.id;
           await conversation.persistPackage(parent);
         }
         restored += 1;
@@ -1251,6 +1254,7 @@ export const useBackupStore = defineStore("backup", {
           const item = {
             ...clonePlain(incoming),
             reasoningEffort: incoming.reasoningEffort ?? ("none" as const),
+            featureApiEnabled: incoming.featureApiEnabled ?? true,
           };
           conversation.conversations.push(item);
           await conversation.persistConversation(item);
@@ -1342,12 +1346,7 @@ export const useBackupStore = defineStore("backup", {
           ? conversation.packages.find((item) => item.id === current.packageId)
           : null;
         if (parent) {
-          const link = parent.plugins.find((item) => item.id === current.id);
-          if (link) {
-            link.name = current.name;
-          } else {
-            parent.plugins.push({ id: current.id, name: current.name });
-          }
+          parent.pluginId = current.id;
           await conversation.persistPackage(parent);
         }
       }

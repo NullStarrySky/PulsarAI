@@ -65,6 +65,27 @@ export function resolvePluginConversationOverride(
   return { component: null, diagnostics };
 }
 
+export function resolvePluginComponentByName(
+  plugin: Plugin,
+  name: string,
+): PluginVueRuntimeResult {
+  const folder = findPluginNodeByPath(
+    plugin.root,
+    pluginConventions.componentsFolder,
+  );
+  if (folder?.kind !== "folder") {
+    return { component: null, diagnostics: ["插件缺少 components/ 目录。"] };
+  }
+  const file = flattenPluginFiles(folder).find(
+    (item) =>
+      item.name.toLocaleLowerCase().endsWith(".vue")
+      && componentName(item.name) === name,
+  );
+  return file
+    ? compilePluginVueFile(plugin, file)
+    : { component: null, diagnostics: [`插件组件不存在：${name}`] };
+}
+
 function isPassthroughOverride(content: unknown) {
   if (typeof content !== "string") return false;
   return content
@@ -107,7 +128,7 @@ function compilePluginComponentRegistry(
   return registry;
 }
 
-function componentName(filename: string) {
+export function componentName(filename: string) {
   const name = filename.replace(/\.[^.]+$/, "")
     .split(/[^A-Za-z0-9]+/)
     .filter(Boolean)

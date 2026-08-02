@@ -1,10 +1,8 @@
 import { defineStore } from "pinia";
 import { remove, selectAll, upsert } from "@/features/Database/application/database-service";
 import {
-  normalizeInteractiveDocumentSource,
-} from "@/features/Resources/InteractiveDoc/domain/interactive-document";
-import {
   findPluginNodeByPath,
+  findPluginChildByName,
   findPluginTreeNode,
   findPluginTreeParent,
   flattenPluginFiles,
@@ -20,14 +18,20 @@ import {
   type ResolvedPluginAction,
 } from "@/features/Resources/Plugin/domain/plugin-types";
 import {
-  serializePluginContainerDefinitions,
+  parsePluginContainerDefinitions,
   type PluginContainerDeclaration,
 } from "@/features/Resources/Plugin/domain/plugin-reference";
 import { createPluginMediaContent } from "@/features/Resources/Plugin/domain/plugin-media";
+import {
+  isJsonValue,
+  manifestValueAt,
+  parsePluginManifest,
+  setManifestValue,
+} from "@/features/Resources/Plugin/domain/plugin-manifest";
 import builtinClassroomBackgroundUrl from "@/features/Resources/Plugin/assets/builtin-classroom-background.png";
 
 const pluginTable = "resource_plugins";
-const builtinCorePluginId = "builtin-core-plugin";
+export const builtinCorePluginId = "builtin-core-plugin";
 let initializePromise: Promise<void> | null = null;
 
 function clonePlain<T>(value: T): T {
@@ -56,6 +60,8 @@ function createFile(
   input: Partial<PluginTreeNodeBase> & {
     priority?: number;
     memberships?: PluginFile["memberships"];
+    dataReferences?: PluginFile["dataReferences"];
+    contextConfig?: PluginFile["contextConfig"];
   } = {},
 ): PluginFile {
   return {
@@ -63,10 +69,9 @@ function createFile(
     kind: "file",
     priority: input.priority ?? 100,
     memberships: clonePlain(input.memberships ?? []),
-    content:
-      pluginFileType(name) === "interactive-document"
-        ? normalizeInteractiveDocumentSource(content)
-        : clonePlain(content),
+    dataReferences: clonePlain(input.dataReferences ?? []),
+    ...(input.contextConfig ? { contextConfig: clonePlain(input.contextConfig) } : {}),
+    content: clonePlain(content),
   };
 }
 
@@ -89,14 +94,14 @@ function starterInfo(name: string) {
     "",
     "在这里记录插件用途、约定和使用方式。",
     "",
-    "容器在根目录 `containers.xml` 中声明；文件的容器成员关系保存在资源元数据中，正文只使用 `<@...>` 显式引用。",
+    "容器在根目录 `containers.json` 中声明；文件的容器成员关系保存在资源元数据中，正文只使用 `<@...>` 显式引用。",
   ].join("\n");
 }
 
 function createStarterRoot(name: string): PluginFolder {
   return createFolder("/", [
     createFile(pluginConventions.info, starterInfo(name), { order: 0 }),
-    createFile(pluginConventions.manifest, {}, { order: 1 }),
+    createFile(pluginConventions.manifest, [], { order: 1 }),
     createContainerDefinitionsFile([
       {
         name: "会话上下文",
@@ -153,6 +158,9 @@ function createStarterRoot(name: string): PluginFolder {
           memberships: [{
             container: "container:plugin/会话上下文",
             alias: "character",
+          }, {
+            container: "container:global/会话上下文",
+            alias: "character",
           }],
         },
       ),
@@ -164,14 +172,11 @@ function createStarterRoot(name: string): PluginFolder {
 
 function createDefaultContextDocument() {
   return [
-    '<prompt_template name="main" role="system">',
+    ":::pulsar role=system",
     '{{ <@会话上下文>.get("character") }}',
     "",
     "[[chat]]",
-    "</prompt_template>",
-    "",
-    "<data>",
-    "</data>",
+    ":::",
   ].join("\n");
 }
 
@@ -181,7 +186,7 @@ function createContainerDefinitionsFile(
 ) {
   return createFile(
     pluginConventions.containers,
-    serializePluginContainerDefinitions({ containers }),
+    { containers: structuredClone(containers) },
     input,
   );
 }
@@ -226,6 +231,7 @@ function createAgentProcessFolder(
         "const runner = new agent.ToolLoopAgent({",
         "  model: runtime.model,",
         "  reasoning: runtime.reasoning,",
+        "  allowSystemInMessages: true,",
         "  instructions: [String(<@path:../instruction/default.md>), runtime.instructions].join('\\n\\n'),",
         "  tools: runtime.tools,",
         "  stopWhen: runtime.stopWhen,",
@@ -253,21 +259,47 @@ function createAgentProcessFolder(
 
 function createBuiltinPlugin(): Plugin {
   const root = createStarterRoot("内置会话资源");
+  const manifest = findPluginNodeByPath(root, pluginConventions.manifest);
+  if (manifest?.kind === "file") {
+    manifest.content = [{
+      group: {
+        id: "appearance",
+        title: "外观",
+        description: "配置内置会话界面的资源。",
+      },
+      content: [{
+        id: "background",
+        title: "会话背景",
+        description: "选择主要插件或已启用全局插件中的背景媒体。",
+        component: "MediaSelect",
+        props: { allowEmpty: true },
+        value: {
+          pluginId: builtinCorePluginId,
+          path: `${pluginConventions.backgroundFolder}/classroom.png`,
+        },
+      }],
+    }];
+  }
   const context = findPluginNodeByPath(root, pluginConventions.context);
   if (context?.kind === "file") {
     context.content = [
-      '<prompt_template name="fallback" role="system">',
-      "[[chat]]",
-      "</prompt_template>",
+      ":::pulsar role=system",
+      '{{ <@container:global/会话上下文>.get("character") }}',
       "",
-      "<data>",
-      "</data>",
+      "[[chat]]",
+      ":::",
     ].join("\n");
   }
   const containers = findPluginNodeByPath(root, pluginConventions.containers);
   if (containers?.kind === "file") {
-    containers.content = serializePluginContainerDefinitions({
+    containers.content = {
       containers: [
+        {
+          name: "会话上下文",
+          scope: "global",
+          description: "角色包唯一资源插件向主要插件提供的角色与剧情上下文。",
+          imports: [],
+        },
         {
           name: "基础上下文",
           scope: "global",
@@ -293,7 +325,7 @@ function createBuiltinPlugin(): Plugin {
           imports: [],
         },
       ],
-    });
+    };
   }
   const background = findPluginNodeByPath(root, pluginConventions.backgroundFolder);
   if (background?.kind === "folder") {
@@ -356,9 +388,7 @@ function createBuiltinPlugin(): Plugin {
     shortDescription: "Pulsar 默认文件与生成约定",
     root,
     enabled: true,
-    main: false,
     builtIn: true,
-    order: 10_000,
   };
 }
 
@@ -372,38 +402,44 @@ function createStarterPlugin(packageId: string | null, global = false): Plugin {
     shortDescription: "",
     root: createStarterRoot(name),
     enabled: true,
-    main: false,
     builtIn: false,
-    order: 0,
   };
 }
 
-function compareLocalPlugins(a: Plugin, b: Plugin) {
-  if (a.main !== b.main) return a.main ? -1 : 1;
-  return (
-    (a.order ?? 0) - (b.order ?? 0)
-    || a.name.localeCompare(b.name, "zh-Hans")
-    || a.id.localeCompare(b.id)
-  );
+function comparePlugins(a: Plugin, b: Plugin) {
+  return a.name.localeCompare(b.name, "zh-Hans") || a.id.localeCompare(b.id);
 }
 
-function sortGlobalPlugins(plugins: Plugin[], localOrder: string[] = []) {
-  const orderIndex = new Map(localOrder.map((pluginId, index) => [pluginId, index]));
-  return [...plugins].sort((a, b) => {
-    if (a.builtIn !== b.builtIn) return a.builtIn ? 1 : -1;
-    const aIndex = orderIndex.get(a.id);
-    const bIndex = orderIndex.get(b.id);
-    if (aIndex !== undefined || bIndex !== undefined) {
-      if (aIndex === undefined) return 1;
-      if (bIndex === undefined) return -1;
-      if (aIndex !== bIndex) return aIndex - bIndex;
-    }
-    return (
-      (a.order ?? 0) - (b.order ?? 0)
-      || a.name.localeCompare(b.name, "zh-Hans")
-      || a.id.localeCompare(b.id)
-    );
-  });
+function configuredBackground(plugin: Plugin) {
+  const manifest = findPluginNodeByPath(plugin.root, pluginConventions.manifest);
+  if (manifest?.kind !== "file") return null;
+  const parsed = parsePluginManifest(manifest.content);
+  let value: unknown;
+  try {
+    value = manifestValueAt(parsed.manifest, "appearance", "background");
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const pluginId = (value as Record<string, unknown>).pluginId;
+  const path = (value as Record<string, unknown>).path;
+  return typeof pluginId === "string" && pluginId.trim()
+    && typeof path === "string" && path.trim()
+    ? { pluginId: pluginId.trim(), path: path.trim() }
+    : null;
+}
+
+function clearConfiguredBackground(plugin: Plugin) {
+  const manifest = findPluginNodeByPath(plugin.root, pluginConventions.manifest);
+  if (manifest?.kind !== "file") return false;
+  const parsed = parsePluginManifest(manifest.content);
+  try {
+    setManifestValue(parsed.manifest, "appearance", "background", null);
+    manifest.content = parsed.manifest;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function normalizeTreeNode(value: unknown, order = 0): PluginTreeNode | null {
@@ -413,6 +449,8 @@ function normalizeTreeNode(value: unknown, order = 0): PluginTreeNode | null {
     content?: unknown;
     priority?: unknown;
     memberships?: unknown;
+    dataReferences?: unknown;
+    contextConfig?: unknown;
   };
   const name = typeof source.name === "string" && source.name.trim()
     ? source.name.trim()
@@ -451,20 +489,66 @@ function normalizeTreeNode(value: unknown, order = 0): PluginTreeNode | null {
     memberships: Array.isArray(source.memberships)
       ? source.memberships.flatMap((membership) => {
           if (!membership || typeof membership !== "object") return [];
-          const item = membership as { container?: unknown; alias?: unknown };
+          const item = membership as {
+            container?: unknown;
+            alias?: unknown;
+            condition?: unknown;
+          };
           if (typeof item.container !== "string" || !item.container.trim()) {
             return [];
           }
+          const condition = item.condition && typeof item.condition === "object"
+            && !Array.isArray(item.condition)
+            ? item.condition as { reference?: unknown; equals?: unknown }
+            : null;
           return [{
             container: item.container.trim(),
             alias: typeof item.alias === "string" ? item.alias.trim() : "",
+            ...(condition
+              && typeof condition.reference === "string"
+              && condition.reference.trim()
+              ? {
+                  condition: {
+                    reference: condition.reference.trim(),
+                    ...(Object.prototype.hasOwnProperty.call(condition, "equals")
+                      && isJsonValue(condition.equals)
+                      ? {
+                          equals: clonePlain(condition.equals),
+                        }
+                      : {}),
+                  },
+                }
+              : {}),
           }];
         })
       : [],
-    content:
-      pluginFileType(name) === "interactive-document"
-        ? normalizeInteractiveDocumentSource(source.content)
-        : clonePlain(source.content ?? ""),
+    dataReferences: Array.isArray(source.dataReferences)
+      ? source.dataReferences.flatMap((reference) => {
+          if (!reference || typeof reference !== "object") return [];
+          const item = reference as { alias?: unknown; dataId?: unknown };
+          if (
+            typeof item.alias !== "string"
+            || !item.alias.trim()
+            || typeof item.dataId !== "string"
+            || !item.dataId.trim()
+          ) return [];
+          return [{ alias: item.alias.trim(), dataId: item.dataId.trim() }];
+        })
+      : [],
+    ...(source.contextConfig && typeof source.contextConfig === "object"
+      ? {
+          contextConfig: {
+            compressionThreshold: Math.max(
+              0,
+              Math.round(Number(
+                (source.contextConfig as { compressionThreshold?: unknown })
+                  .compressionThreshold,
+              ) || 0),
+            ),
+          },
+        }
+      : {}),
+    content: clonePlain(source.content ?? ""),
   };
 }
 
@@ -493,9 +577,7 @@ function normalizePlugin(value: Plugin): Plugin {
       typeof value.shortDescription === "string" ? value.shortDescription : "",
     root,
     enabled: value.enabled !== false,
-    main: value.main === true,
     builtIn: value.builtIn === true,
-    order: typeof value.order === "number" ? value.order : 0,
   };
 }
 
@@ -512,7 +594,7 @@ function isFixedConventionNode(plugin: Plugin, nodeId: string) {
   );
 }
 
-function normalizeImportedGlobalPlugin(value: unknown, order: number): Plugin {
+function normalizeImportedGlobalPlugin(value: unknown): Plugin {
   if (!isPluginRecord(value)) {
     throw new Error("文件不是有效的文件树插件");
   }
@@ -522,8 +604,6 @@ function normalizeImportedGlobalPlugin(value: unknown, order: number): Plugin {
     id: crypto.randomUUID(),
     packageId: null,
     builtIn: false,
-    main: false,
-    order,
   };
 }
 
@@ -574,6 +654,89 @@ function syncConventionalToolMemberships(
   ];
 }
 
+function pluginNamespaceNames(plugin: Plugin) {
+  const actions = findPluginNodeByPath(plugin.root, pluginConventions.actionFolder);
+  const tools = findPluginNodeByPath(plugin.root, pluginConventions.toolsFolder);
+  const containers = findPluginNodeByPath(plugin.root, pluginConventions.containers);
+  const actionNames = actions?.kind === "folder"
+    ? flattenPluginFiles(actions)
+      .filter((file) => ["javascript", "markdown"].includes(pluginFileType(file.name)))
+      .map((file) => file.name.replace(/\.[^.]+$/, "").trim().toLocaleLowerCase())
+      .filter(Boolean)
+    : [];
+  const toolNames = tools?.kind === "folder"
+    ? tools.children.flatMap((child) =>
+      child.kind === "folder"
+      && findPluginChildByName(child, pluginConventions.toolEntry)?.kind === "file"
+      && findPluginChildByName(child, pluginConventions.toolPrompt)?.kind === "file"
+        ? [child.name.trim().toLocaleLowerCase()]
+        : []
+    )
+    : [];
+  const parsedContainers = containers?.kind === "file"
+    ? parsePluginContainerDefinitions(containers.content)
+    : { containers: [], diagnostics: [] };
+  if (parsedContainers.diagnostics.length) {
+    const diagnostic = parsedContainers.diagnostics[0]!;
+    throw new Error(
+      `containers.json 无效：${diagnostic.path}：${diagnostic.message}（${plugin.name}）`,
+    );
+  }
+  const globalContainerNames = parsedContainers.containers
+    .filter((container) => container.scope === "global")
+    .map((container) => container.name.trim().toLocaleLowerCase());
+  for (const [label, names] of [
+    ["Action", actionNames],
+    ["自定义工具", toolNames],
+    ["全局容器", globalContainerNames],
+  ] as const) {
+    const seen = new Set<string>();
+    const duplicate = names.find((name) => {
+      if (seen.has(name)) return true;
+      seen.add(name);
+      return false;
+    });
+    if (duplicate) {
+      throw new Error(`${label} 名称冲突：${duplicate}（${plugin.name}）`);
+    }
+  }
+  return {
+    actions: new Set(actionNames),
+    tools: new Set(toolNames),
+    globalContainers: new Set(globalContainerNames),
+  };
+}
+
+function assertPluginNamespaceCompatibility(plugins: Plugin[]) {
+  const indexed = plugins.map((plugin) => ({
+    plugin,
+    names: pluginNamespaceNames(plugin),
+  }));
+  for (let leftIndex = 0; leftIndex < indexed.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < indexed.length; rightIndex += 1) {
+      const left = indexed[leftIndex]!;
+      const right = indexed[rightIndex]!;
+      if (
+        left.plugin.packageId !== null
+        && right.plugin.packageId !== null
+        && left.plugin.packageId !== right.plugin.packageId
+      ) continue;
+      for (const [label, key] of [
+        ["Action", "actions"],
+        ["自定义工具", "tools"],
+        ["全局容器", "globalContainers"],
+      ] as const) {
+        const collision = [...left.names[key]].find((name) => right.names[key].has(name));
+        if (collision) {
+          throw new Error(
+            `${label} 名称冲突：${collision}（${left.plugin.name} / ${right.plugin.name}）`,
+          );
+        }
+      }
+    }
+  }
+}
+
 export const usePluginStore = defineStore("plugin-resource", {
   state: () => ({
     loaded: false,
@@ -585,44 +748,53 @@ export const usePluginStore = defineStore("plugin-resource", {
     sortedPlugins(state): Plugin[] {
       const local = state.plugins
         .filter((plugin) => plugin.packageId !== null)
-        .sort(compareLocalPlugins);
-      const global = sortGlobalPlugins(
-        state.plugins.filter((plugin) => plugin.packageId === null),
-      );
+        .sort(comparePlugins);
+      const global = state.plugins
+        .filter((plugin) => plugin.packageId === null)
+        .sort(comparePlugins);
       return [...local, ...global];
     },
-    externalGlobalPlugins(state): Plugin[] {
-      return sortGlobalPlugins(
-        state.plugins.filter(
-          (plugin) => plugin.packageId === null && !plugin.builtIn,
-        ),
-      );
-    },
     globalPlugins(state): Plugin[] {
-      return sortGlobalPlugins(
-        state.plugins.filter((plugin) => plugin.packageId === null),
-      );
+      return state.plugins
+        .filter((plugin) => plugin.packageId === null)
+        .sort(comparePlugins);
     },
     sortedPluginsForPackage: (state) => (
       packageId?: string | null,
-      globalOrder: string[] = [],
+      enabledGlobalPluginIds: string[] = [],
+      mainPluginId?: string,
     ): Plugin[] => {
-      const local = state.plugins
-        .filter((plugin) => Boolean(packageId && plugin.packageId === packageId))
-        .sort(compareLocalPlugins);
-      const global = sortGlobalPlugins(
-        state.plugins.filter((plugin) => plugin.packageId === null),
-        globalOrder,
+      const enabledGlobal = new Set(enabledGlobalPluginIds);
+      const selected = state.plugins.filter((plugin) =>
+        (Boolean(packageId) && plugin.packageId === packageId)
+        || (
+          plugin.packageId === null
+          && (plugin.id === mainPluginId || enabledGlobal.has(plugin.id))
+        )
       );
-      return [...local, ...global];
+      return selected.sort((a, b) => {
+        if (a.id === mainPluginId) return -1;
+        if (b.id === mainPluginId) return 1;
+        if (a.packageId !== b.packageId) return a.packageId === packageId ? -1 : 1;
+        return comparePlugins(a, b);
+      });
     },
     visiblePluginsForPackage(): (
       packageId?: string | null,
-      globalOrder?: string[],
+      enabledGlobalPluginIds?: string[],
+      mainPluginId?: string,
     ) => Plugin[] {
-      return (packageId?: string | null, globalOrder: string[] = []) => {
+      return (
+        packageId?: string | null,
+        enabledGlobalPluginIds: string[] = [],
+        mainPluginId?: string,
+      ) => {
         const keyword = this.search.trim().toLocaleLowerCase();
-        return this.sortedPluginsForPackage(packageId, globalOrder).filter(
+        return this.sortedPluginsForPackage(
+          packageId,
+          enabledGlobalPluginIds,
+          mainPluginId,
+        ).filter(
           (plugin) =>
             !keyword
             || plugin.name.toLocaleLowerCase().includes(keyword)
@@ -632,11 +804,23 @@ export const usePluginStore = defineStore("plugin-resource", {
     },
     enabledPluginsForPackage(): (
       packageId?: string | null,
-      globalOrder?: string[],
+      enabledGlobalPluginIds?: string[],
+      mainPluginId?: string,
     ) => Plugin[] {
-      return (packageId?: string | null, globalOrder: string[] = []) =>
-        this.sortedPluginsForPackage(packageId, globalOrder).filter(
-          (plugin) => plugin.enabled,
+      return (
+        packageId?: string | null,
+        enabledGlobalPluginIds: string[] = [],
+        mainPluginId?: string,
+      ) =>
+        this.sortedPluginsForPackage(
+          packageId,
+          enabledGlobalPluginIds,
+          mainPluginId,
+        ).filter(
+          (plugin) =>
+            plugin.enabled
+            || plugin.id === mainPluginId
+            || plugin.packageId === packageId,
         );
     },
     activePlugin(state): Plugin | undefined {
@@ -644,32 +828,59 @@ export const usePluginStore = defineStore("plugin-resource", {
     },
     activeBackgroundResourceForPackage(): (
       packageId?: string | null,
-      globalOrder?: string[],
+      enabledGlobalPluginIds?: string[],
+      mainPluginId?: string,
     ) => PluginFile | null {
-      return (packageId?: string | null, globalOrder: string[] = []) => {
-        for (const plugin of this.enabledPluginsForPackage(packageId, globalOrder)) {
-          const folder = findPluginNodeByPath(
-            plugin.root,
-            pluginConventions.backgroundFolder,
-          );
-          if (!folder || folder.kind !== "folder") continue;
-          const match = flattenPluginFiles(folder).find(
-            (file) =>
-              pluginFileType(file.name) === "media",
-          );
-          if (match) return match;
+      return (
+        packageId?: string | null,
+        enabledGlobalPluginIds: string[] = [],
+        mainPluginId?: string,
+      ) => {
+        const enabled = this.enabledPluginsForPackage(
+          packageId,
+          enabledGlobalPluginIds,
+          mainPluginId,
+        );
+        const candidates: Plugin[] = [];
+        const main = enabled.find((plugin) => plugin.id === mainPluginId);
+        const fallback = this.plugins.find(
+          (plugin) => plugin.id === builtinCorePluginId,
+        );
+        if (main) candidates.push(main);
+        if (fallback && fallback.id !== main?.id) candidates.push(fallback);
+        for (const plugin of candidates) {
+          const selection = configuredBackground(plugin);
+          if (!selection) continue;
+          const sourcePlugin = enabled.find(
+            (candidate) => candidate.id === selection.pluginId,
+          ) ?? (selection.pluginId === fallback?.id ? fallback : null);
+          const match = sourcePlugin
+            ? findPluginNodeByPath(sourcePlugin.root, selection.path)
+            : null;
+          if (match?.kind === "file" && pluginFileType(match.name) === "media") {
+            return match;
+          }
         }
         return null;
       };
     },
     actionResourcesForPackage(): (
       packageId?: string | null,
-      globalOrder?: string[],
+      enabledGlobalPluginIds?: string[],
+      mainPluginId?: string,
     ) => ResolvedPluginAction[] {
-      return (packageId?: string | null, globalOrder: string[] = []) => {
+      return (
+        packageId?: string | null,
+        enabledGlobalPluginIds: string[] = [],
+        mainPluginId?: string,
+      ) => {
         const claimedNames = new Set<string>();
         const actions: ResolvedPluginAction[] = [];
-        for (const plugin of this.enabledPluginsForPackage(packageId, globalOrder)) {
+        for (const plugin of this.enabledPluginsForPackage(
+          packageId,
+          enabledGlobalPluginIds,
+          mainPluginId,
+        )) {
           const folder = findPluginNodeByPath(
             plugin.root,
             pluginConventions.actionFolder,
@@ -684,9 +895,11 @@ export const usePluginStore = defineStore("plugin-resource", {
             if (
               (type !== "javascript" && type !== "markdown")
               || !commandName
-              || claimedNames.has(commandName)
             ) {
               continue;
+            }
+            if (claimedNames.has(commandName)) {
+              throw new Error(`Action 名称冲突：${commandName}（${plugin.name}/${resource.name}）`);
             }
             claimedNames.add(commandName);
             actions.push({
@@ -745,11 +958,28 @@ export const usePluginStore = defineStore("plugin-resource", {
             }
           : createBuiltinPlugin(),
       );
+      await this.pruneInvalidBackgroundSelections();
       this.activePluginId = this.sortedPlugins[0]?.id ?? "";
       this.loaded = true;
     },
     async persistPlugin(plugin: Plugin) {
       await upsert(pluginTable, plugin.id, clonePlain(plugin));
+    },
+    async pruneInvalidBackgroundSelections() {
+      for (const plugin of this.plugins) {
+        const selection = configuredBackground(plugin);
+        if (!selection) continue;
+        const sourcePlugin = this.plugins.find(
+          (candidate) => candidate.id === selection.pluginId,
+        );
+        const resource = sourcePlugin
+          ? findPluginNodeByPath(sourcePlugin.root, selection.path)
+          : null;
+        if (resource?.kind === "file" && pluginFileType(resource.name) === "media") {
+          continue;
+        }
+        if (clearConfiguredBackground(plugin)) await this.persistPlugin(plugin);
+      }
     },
     openPlugin(pluginId: string) {
       if (this.plugins.some((plugin) => plugin.id === pluginId)) {
@@ -757,14 +987,10 @@ export const usePluginStore = defineStore("plugin-resource", {
       }
     },
     async createPlugin(packageId: string) {
+      if (this.plugins.some((item) => item.packageId === packageId)) {
+        throw new Error(`角色包 ${packageId} 已经拥有资源插件。`);
+      }
       const plugin = createStarterPlugin(packageId);
-      plugin.order =
-        Math.max(
-          -1,
-          ...this.plugins
-            .filter((item) => !item.builtIn && item.packageId === packageId)
-            .map((item) => item.order ?? -1),
-        ) + 1;
       this.plugins.push(plugin);
       this.activePluginId = plugin.id;
       await this.persistPlugin(plugin);
@@ -772,20 +998,14 @@ export const usePluginStore = defineStore("plugin-resource", {
     },
     async createGlobalPlugin() {
       const plugin = createStarterPlugin(null, true);
-      plugin.order =
-        Math.max(-1, ...this.externalGlobalPlugins.map((item) => item.order ?? -1))
-        + 1;
       this.plugins.push(plugin);
       this.activePluginId = plugin.id;
       await this.persistPlugin(plugin);
       return plugin;
     },
     async importGlobalPlugin(value: unknown) {
-      const plugin = normalizeImportedGlobalPlugin(
-        value,
-        Math.max(-1, ...this.externalGlobalPlugins.map((item) => item.order ?? -1))
-          + 1,
-      );
+      const plugin = normalizeImportedGlobalPlugin(value);
+      assertPluginNamespaceCompatibility([...this.plugins, plugin]);
       this.plugins.push(plugin);
       this.activePluginId = plugin.id;
       await this.persistPlugin(plugin);
@@ -820,6 +1040,22 @@ export const usePluginStore = defineStore("plugin-resource", {
       );
       const conversation = useConversationStore();
       await conversation.initialize();
+      if (
+        plugin.packageId === null
+        && conversation.packages.some((item) => item.mainPluginId === pluginId)
+      ) {
+        throw new Error("该全局插件仍是角色包的主要插件，不能删除。");
+      }
+      if (plugin.packageId === null) {
+        for (const packageItem of conversation.packages) {
+          if (!packageItem.enabledGlobalPluginIds.includes(pluginId)) continue;
+          await conversation.updatePackage(packageItem.id, {
+            enabledGlobalPluginIds: packageItem.enabledGlobalPluginIds.filter(
+              (id) => id !== pluginId,
+            ),
+          });
+        }
+      }
       for (const item of conversation.conversations.filter(
         (candidate) =>
           candidate.kind === "test"
@@ -835,51 +1071,8 @@ export const usePluginStore = defineStore("plugin-resource", {
       }
       this.plugins = this.plugins.filter((item) => item.id !== pluginId);
       await remove(pluginTable, pluginId);
+      await this.pruneInvalidBackgroundSelections();
       this.activePluginId = this.sortedPlugins[0]?.id ?? "";
-    },
-    async movePluginBefore(
-      pluginId: string,
-      beforePluginId: string,
-      packageId?: string | null,
-    ) {
-      if (pluginId === beforePluginId) return;
-      const moving = this.plugins.find((plugin) => plugin.id === pluginId);
-      const target = this.plugins.find((plugin) => plugin.id === beforePluginId);
-      if (
-        !moving
-        || !target
-        || moving.builtIn
-        || !packageId
-        || moving.packageId !== packageId
-        || target.packageId !== packageId
-      ) {
-        return;
-      }
-      const ordered = this.sortedPluginsForPackage(packageId)
-        .filter(
-          (plugin) => plugin.packageId === packageId && plugin.id !== moving.id,
-        );
-      const targetIndex = ordered.findIndex((plugin) => plugin.id === target.id);
-      ordered.splice(targetIndex < 0 ? ordered.length : targetIndex, 0, moving);
-      ordered.forEach((plugin, index) => {
-        plugin.order = index;
-      });
-      await Promise.all(ordered.map((plugin) => this.persistPlugin(plugin)));
-    },
-    async moveGlobalPluginBefore(pluginId: string, beforePluginId?: string) {
-      const moving = this.plugins.find((plugin) => plugin.id === pluginId);
-      if (!moving || moving.packageId !== null || moving.builtIn) return;
-      const ordered = this.externalGlobalPlugins.filter(
-        (plugin) => plugin.id !== moving.id,
-      );
-      const targetIndex = beforePluginId
-        ? ordered.findIndex((plugin) => plugin.id === beforePluginId)
-        : -1;
-      ordered.splice(targetIndex < 0 ? ordered.length : targetIndex, 0, moving);
-      ordered.forEach((plugin, index) => {
-        plugin.order = index;
-      });
-      await Promise.all(ordered.map((plugin) => this.persistPlugin(plugin)));
     },
     findNode(pluginId: string, nodeId: string) {
       const plugin = this.plugins.find((item) => item.id === pluginId);
@@ -888,13 +1081,20 @@ export const usePluginStore = defineStore("plugin-resource", {
     async createFile(
       pluginId: string,
       parentFolderId: string,
-      input: { name?: string; content?: unknown; priority?: number } = {},
+      input: {
+        name?: string;
+        content?: unknown;
+        priority?: number;
+        dataReferences?: PluginFile["dataReferences"];
+        contextConfig?: PluginFile["contextConfig"];
+      } = {},
     ) {
       const plugin = this.plugins.find((item) => item.id === pluginId);
       const parent = plugin
         ? findPluginTreeNode(plugin.root, parentFolderId)
         : null;
       if (!plugin || parent?.kind !== "folder") return null;
+      const previousRoot = clonePlain(plugin.root);
       if (
         parent.id === plugin.root.id
         && [
@@ -929,11 +1129,19 @@ export const usePluginStore = defineStore("plugin-resource", {
             parent,
             input.name?.trim() || "untitled.md",
           ),
+          dataReferences: input.dataReferences,
+          contextConfig: input.contextConfig,
         },
       );
       parent.children.push(file);
       parent.collapsed = false;
-      await this.persistPlugin(plugin);
+      try {
+        assertPluginNamespaceCompatibility(this.plugins);
+        await this.persistPlugin(plugin);
+      } catch (error) {
+        plugin.root = previousRoot;
+        throw error;
+      }
       return file;
     },
     async createFolder(
@@ -989,12 +1197,15 @@ export const usePluginStore = defineStore("plugin-resource", {
           collapsed: boolean;
           priority: number;
           memberships: PluginFile["memberships"];
+          dataReferences: PluginFile["dataReferences"];
+          contextConfig: PluginFile["contextConfig"];
         }
       >,
     ) {
       const plugin = this.plugins.find((item) => item.id === pluginId);
       const node = plugin ? findPluginTreeNode(plugin.root, nodeId) : null;
       if (!plugin || !node) return;
+      const previousRoot = clonePlain(plugin.root);
       if (
         !isFixedConventionNode(plugin, nodeId)
         && typeof patch.name === "string"
@@ -1010,10 +1221,7 @@ export const usePluginStore = defineStore("plugin-resource", {
       }
       if (typeof patch.icon === "string") node.icon = patch.icon;
       if (node.kind === "file" && "content" in patch) {
-        node.content =
-          pluginFileType(node.name) === "interactive-document"
-            ? normalizeInteractiveDocumentSource(patch.content)
-            : clonePlain(patch.content);
+        node.content = clonePlain(patch.content);
       }
       if (
         node.kind === "file"
@@ -1025,10 +1233,23 @@ export const usePluginStore = defineStore("plugin-resource", {
       if (node.kind === "file" && Array.isArray(patch.memberships)) {
         node.memberships = clonePlain(patch.memberships);
       }
+      if (node.kind === "file" && Array.isArray(patch.dataReferences)) {
+        node.dataReferences = clonePlain(patch.dataReferences);
+      }
+      if (node.kind === "file" && patch.contextConfig) {
+        node.contextConfig = clonePlain(patch.contextConfig);
+      }
       if (node.kind === "folder" && typeof patch.collapsed === "boolean") {
         node.collapsed = patch.collapsed;
       }
-      await this.persistPlugin(plugin);
+      try {
+        assertPluginNamespaceCompatibility(this.plugins);
+        await this.persistPlugin(plugin);
+      } catch (error) {
+        plugin.root = previousRoot;
+        throw error;
+      }
+      await this.pruneInvalidBackgroundSelections();
     },
     async deleteNode(pluginId: string, nodeId: string) {
       const plugin = this.plugins.find((item) => item.id === pluginId);
@@ -1042,6 +1263,7 @@ export const usePluginStore = defineStore("plugin-resource", {
       ) return;
       parent.children = parent.children.filter((child) => child.id !== nodeId);
       await this.persistPlugin(plugin);
+      await this.pruneInvalidBackgroundSelections();
     },
     async moveNode(
       pluginId: string,
@@ -1068,6 +1290,7 @@ export const usePluginStore = defineStore("plugin-resource", {
       ) {
         return;
       }
+      const previousRoot = clonePlain(plugin.root);
       sourceParent.children = sourceParent.children.filter(
         (child) => child.id !== node.id,
       );
@@ -1086,7 +1309,14 @@ export const usePluginStore = defineStore("plugin-resource", {
       if (node.kind === "file") {
         syncConventionalToolMemberships(plugin, target, node);
       }
-      await this.persistPlugin(plugin);
+      try {
+        assertPluginNamespaceCompatibility(this.plugins);
+        await this.persistPlugin(plugin);
+      } catch (error) {
+        plugin.root = previousRoot;
+        throw error;
+      }
+      await this.pruneInvalidBackgroundSelections();
     },
   },
 });

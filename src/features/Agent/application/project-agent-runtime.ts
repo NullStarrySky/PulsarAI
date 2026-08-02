@@ -1,4 +1,4 @@
-import { interactiveDocumentFormatPrompt } from "@/features/Resources/InteractiveDoc/domain/interactive-document-format";
+import { contextDocumentFormatPrompt } from "@/features/Resources/InteractiveDoc/domain/interactive-document-format";
 import {
   createCapabilityPrompt,
 } from "@/features/Capabilities/domain/capability";
@@ -35,6 +35,8 @@ interface ProjectCreateInput {
   icon?: string;
   shortDescription?: string;
   priority?: number;
+  dataReferences?: Array<{ alias: string; dataId: string }>;
+  contextConfig?: { compressionThreshold: number };
 }
 
 interface ProjectWriteInput {
@@ -44,11 +46,12 @@ interface ProjectWriteInput {
   categoryId?: string | null;
   title?: string;
   rendererId?: ConversationRendererId;
-  shortDescription?: string;
-  enabled?: boolean;
-  main?: boolean;
+  mainPluginId?: string;
+  enabledGlobalPluginIds?: string[];
   content?: unknown;
   priority?: number;
+  dataReferences?: Array<{ alias: string; dataId: string }>;
+  contextConfig?: { compressionThreshold: number };
 }
 
 interface ProjectAgentApi {
@@ -114,9 +117,7 @@ export async function createProjectAgentRuntime(
 
   function projectPlugins() {
     const project = selectedProject();
-    return plugins.plugins.filter(
-      (plugin) => plugin.packageId === project.id && !plugin.builtIn,
-    );
+    return plugins.plugins.filter((plugin) => plugin.id === project.pluginId);
   }
 
   const api: ProjectAgentApi = {
@@ -230,9 +231,7 @@ export async function createProjectAgentRuntime(
           name: plugin.id,
           kind: "folder",
           id: plugin.id,
-          title: plugin.name,
-          enabled: plugin.enabled,
-          main: plugin.main,
+          title: "角色资源",
         }));
       }
       if (segments[0] === "plugins" && segments[1]) {
@@ -256,7 +255,9 @@ export async function createProjectAgentRuntime(
           icon: project.icon,
           categoryId: project.categoryId ?? null,
           capabilities: project.capabilities,
-          globalPluginOrder: project.globalPluginOrder ?? [],
+          pluginId: project.pluginId,
+          mainPluginId: project.mainPluginId,
+          enabledGlobalPluginIds: [...project.enabledGlobalPluginIds],
         };
       }
       if (segments[0] === "conversations" && segments[1]) {
@@ -298,14 +299,7 @@ export async function createProjectAgentRuntime(
         return api.read(`/conversations/${created.id}.json`);
       }
       if (segments.length === 1 && segments[0] === "plugins") {
-        const created = await plugins.createPlugin(project.id);
-        await plugins.updatePlugin(created.id, {
-          name: input.name?.trim() || created.name,
-          icon: input.icon ?? created.icon,
-          shortDescription:
-            input.shortDescription ?? created.shortDescription,
-        });
-        return pluginSummary(created);
+        throw new Error("角色包已经固定拥有一个资源插件，请在现有插件树中创建文件。");
       }
       if (segments[0] === "plugins" && segments[1]) {
         const plugin = requireProjectPlugin(segments[1]);
@@ -320,6 +314,8 @@ export async function createProjectAgentRuntime(
               name,
               content: input.content ?? "",
               priority: input.priority,
+              dataReferences: input.dataReferences,
+              contextConfig: input.contextConfig,
             });
         if (!created) {
           throw new Error("创建插件节点失败。");
@@ -342,6 +338,12 @@ export async function createProjectAgentRuntime(
             : {}),
           ...(typeof input.icon === "string" ? { icon: input.icon } : {}),
           ...("categoryId" in input ? { categoryId: input.categoryId } : {}),
+          ...(typeof input.mainPluginId === "string"
+            ? { mainPluginId: input.mainPluginId }
+            : {}),
+          ...(Array.isArray(input.enabledGlobalPluginIds)
+            ? { enabledGlobalPluginIds: input.enabledGlobalPluginIds }
+            : {}),
         });
         return api.read("/project.json");
       }
@@ -366,18 +368,7 @@ export async function createProjectAgentRuntime(
       if (segments[0] === "plugins" && segments[1]) {
         const plugin = requireProjectPlugin(segments[1]);
         if (segments.length === 2) {
-          await plugins.updatePlugin(plugin.id, {
-            ...(typeof input.name === "string" ? { name: input.name } : {}),
-            ...(typeof input.icon === "string" ? { icon: input.icon } : {}),
-            ...(typeof input.shortDescription === "string"
-              ? { shortDescription: input.shortDescription }
-              : {}),
-            ...(typeof input.enabled === "boolean"
-              ? { enabled: input.enabled }
-              : {}),
-            ...(typeof input.main === "boolean" ? { main: input.main } : {}),
-          });
-          return pluginSummary(plugin);
+          throw new Error("角色资源插件只作为文件容器，请修改其内部节点。");
         }
         const node = resolvePluginPath(plugin, segments.slice(2));
         await plugins.updateNode(plugin.id, node.id, {
@@ -386,6 +377,10 @@ export async function createProjectAgentRuntime(
           ...(typeof input.priority === "number"
             ? { priority: input.priority }
             : {}),
+          ...(Array.isArray(input.dataReferences)
+            ? { dataReferences: input.dataReferences }
+            : {}),
+          ...(input.contextConfig ? { contextConfig: input.contextConfig } : {}),
           ...("content" in input ? { content: input.content } : {}),
         });
         return api.read(projectPluginNodePath(plugin, node));
@@ -416,9 +411,8 @@ export async function createProjectAgentRuntime(
       const segments = projectPathSegments(path);
       if (segments.length === 1 && segments[0] === "project.json") {
         const project = selectedProject();
-        for (const plugin of [...projectPlugins()]) {
+        for (const plugin of projectPlugins()) {
           layout.closeTabsByResource("plugin", plugin.id);
-          await plugins.deletePlugin(plugin.id);
         }
         layout.closeTabsByPackage(project.id);
         await conversation.updateConversation(hostConversationId, {
@@ -440,8 +434,7 @@ export async function createProjectAgentRuntime(
       if (segments[0] === "plugins" && segments[1]) {
         const plugin = requireProjectPlugin(segments[1]);
         if (segments.length === 2) {
-          layout.closeTabsByResource("plugin", plugin.id);
-          await plugins.deletePlugin(plugin.id);
+          throw new Error("角色包的唯一资源插件不能单独删除；请删除角色包或清理其文件。");
         } else {
           const node = resolvePluginPath(plugin, segments.slice(2));
           await plugins.deleteNode(plugin.id, node.id);
@@ -498,7 +491,7 @@ export async function createProjectAgentRuntime(
     projectLabel,
     resourceLabel,
     "Treat the selected character package as a complete role-playing system, not a loose collection of prompts.",
-    "Before changing anything, inspect the relevant project paths and infer how its conversations, plugins, context, characters, actions, components, and interactive documents work together.",
+    "Before changing anything, inspect the relevant project paths and infer how its conversations, plugins, context Markdown, .data definitions, characters, actions, and components work together.",
     "Translate the user's intent into a coherent system: identity, setting, participant relationships, voice, goals, boundaries, continuity, context assembly, and interaction rules.",
     "When authoring role-playing content, preserve the distinction between system architecture, character facts, scene state, user role, and assistant behavior.",
     "Prefer small, internally consistent edits. Keep existing ids stable, create UUIDs for new structured resources, and read back important writes.",
@@ -508,7 +501,7 @@ export async function createProjectAgentRuntime(
     "Explain the resulting structure and mention the paths changed in the final response.",
     apiDocumentation,
     pluginApiDocumentation,
-    interactiveDocumentFormatPrompt,
+    contextDocumentFormatPrompt,
   ].filter(Boolean).join("\n\n");
 
   return {
@@ -519,7 +512,7 @@ export async function createProjectAgentRuntime(
       PROJECT_API_DOCUMENTATION: apiDocumentation,
       PLUGIN_API_DOCUMENTATION: pluginApiDocumentation,
       PROJECT_RESOURCE_PATH: host.binding?.resourcePath ?? "",
-      INTERACTIVE_DOCUMENT_FORMAT: interactiveDocumentFormatPrompt,
+      CONTEXT_DOCUMENT_FORMAT: contextDocumentFormatPrompt,
     },
     prompt,
   };
@@ -564,7 +557,15 @@ function nodeEntry(node: PluginTreeNode) {
     kind: node.kind,
     id: node.id,
     type: node.kind === "file" ? pluginFileType(node.name) : "folder",
-    ...(node.kind === "file" ? { priority: node.priority } : {}),
+    ...(node.kind === "file"
+      ? {
+          priority: node.priority,
+          dataReferences: clonePlain(node.dataReferences),
+          ...(node.contextConfig
+            ? { contextConfig: clonePlain(node.contextConfig) }
+            : {}),
+        }
+      : {}),
   };
 }
 
@@ -579,11 +580,7 @@ function nodeSummary(plugin: Plugin, node: PluginTreeNode) {
 function pluginSummary(plugin: Plugin) {
   return {
     id: plugin.id,
-    name: plugin.name,
-    icon: plugin.icon,
-    shortDescription: plugin.shortDescription,
-    enabled: plugin.enabled,
-    main: plugin.main,
+    packageId: plugin.packageId,
     root: nodeSummary(plugin, plugin.root),
   };
 }
@@ -607,13 +604,13 @@ function projectApiDocumentation() {
     "`project.list(path = '/')` lists `/`, `/conversations`, `/plugins`, or a plugin folder.",
     "`project.read(path)` reads `/project.json`, `/conversations/<id>.json`, `/plugins/<pluginId>`, or a plugin node.",
     "`await project.create('/conversations', { title, rendererId })` creates a project conversation without leaving this Agent conversation.",
-    "`await project.create('/plugins', { name, icon, shortDescription })` creates a project-local plugin.",
-    "`await project.create('/plugins/<pluginId>/<folder>', { kind: 'file' | 'folder', name, content, priority? })` creates a node; file priority defaults to 100.",
+    "Each project already owns exactly one `/plugins/<pluginId>` resource tree; creating or deleting another local plugin is forbidden.",
+    "`await project.create('/plugins/<pluginId>/<folder>', { kind: 'file' | 'folder', name, content, priority?, dataReferences?, contextConfig? })` creates a node; file priority defaults to 100.",
     "`await project.mkdir('/plugins/<pluginId>/<folder>', name)` creates a folder.",
-    "`await project.write(path, patch)` updates project metadata, conversation metadata, plugin metadata, or a plugin node/content/priority.",
+    "`await project.write(path, patch)` updates project metadata, conversation metadata, or plugin node content/priority/dataReferences/contextConfig.",
     "`await project.move(fromPath, targetFolderPath, beforeName?)` moves a node inside one plugin.",
-    "`await project.remove(path)` removes a project conversation, local plugin, or plugin node.",
-    "`await project.remove('/project.json')` deletes the selected project after removing its own conversations and local plugins.",
+    "`await project.remove(path)` removes a project conversation or a non-reserved plugin node.",
+    "`await project.remove('/project.json')` deletes the selected project together with its conversation and unique resource plugin.",
     "Plugin node paths use names after the plugin id. Read or list a parent before writing.",
   ].join("\n");
 }

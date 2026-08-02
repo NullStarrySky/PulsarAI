@@ -9,6 +9,7 @@ import {
   Trash2,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -36,7 +37,7 @@ const props = withDefaults(
     definitionId?: string;
   }>(),
   {
-    modelValue: "",
+    modelValue: '{\n  "containers": []\n}',
     readonly: false,
     containerDetails: () => [],
     definitionId: "",
@@ -69,7 +70,7 @@ const duplicateKeys = computed(() => {
 function updateDefinitions(
   mutate: (containers: PluginContainerDeclaration[]) => void,
 ) {
-  if (props.readonly) return;
+  if (props.readonly || definitions.value.diagnostics.length) return;
   const containers = structuredClone(definitions.value.containers);
   mutate(containers);
   emit(
@@ -209,6 +210,17 @@ function toggleDetails(
           添加容器
         </Button>
       </div>
+
+      <Alert v-if="definitions.diagnostics.length" class="mb-3" variant="destructive">
+        <AlertTitle>containers.json 存在问题</AlertTitle>
+        <AlertDescription>
+          <ul class="list-disc pl-4">
+            <li v-for="item in definitions.diagnostics" :key="`${item.path}:${item.message}`">
+              {{ item.path }}：{{ item.message }}
+            </li>
+          </ul>
+        </AlertDescription>
+      </Alert>
 
       <div v-if="definitions.containers.length" class="space-y-2">
         <section
@@ -358,6 +370,13 @@ function toggleDetails(
                   </span>
                   <span class="col-span-2 truncate font-mono text-[10px] text-muted-foreground">
                     {{ resource.pluginName }} · {{ resource.path }}
+                  </span>
+                  <span
+                    v-if="resource.condition"
+                    class="col-span-2 truncate font-mono text-[10px] text-muted-foreground"
+                    :title="JSON.stringify(resource.condition)"
+                  >
+                    条件：{{ resource.condition.reference }}{{ 'equals' in resource.condition ? ` = ${JSON.stringify(resource.condition.equals)}` : '' }}
                   </span>
                 </button>
               </div>

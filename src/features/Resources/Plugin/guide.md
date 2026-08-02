@@ -10,20 +10,20 @@ PulsarAI 插件是一棵可持久化的文件树。插件不把全部文件自�
 
 ## 基本设计：用文档引用构建上下文
 
-插件系统把 Markdown、Interactive Document、JavaScript、媒体和组件都视为有稳定 ID 与路径的普通资源。`containers.xml` 只声明可见的命名空间，文件自己的 `memberships` 决定它属于哪些容器；`context.imd`、其他文档和流程脚本再通过 `<@...>` 显式引用需要的资源。
+插件系统把 Markdown、JSON 格式的 `.data`、JavaScript、媒体和组件都视为有稳定 ID 与路径的普通资源。`containers.json` 只声明可见的命名空间，文件自己的 `memberships` 决定它属于哪些容器；资源自己的 `dataReferences` 元数据声明数据依赖；`context.md`、其他文档和流程脚本再通过 `<@...>` 显式引用需要的资源。
 
 一次生成可以沿着一条直接可见的链路理解：
 
 1. 索引当前角色包可见且启用的插件文件，不执行文件内容；
-2. 从 `containers.xml` 建立容器命名空间，把成员文件按优先级挂入容器；
-3. 从根 `context.imd` 出发，只解析它直接或间接引用的文档；
+2. 从 `containers.json` 建立容器命名空间，把成员文件按优先级挂入容器；
+3. 从根 `context.md` 出发，只解析它直接或间接引用的文档，并按资源元数据绑定 `.data`；
 4. 把编译后的角色消息、授权 Feature API 文档与当前对话组成模型上下文；
 5. 按优先级运行根 `regex.json` 中的正则规则，对最终消息列表做后处理；
 6. 运行显式 `agentprocess/index.js`，由其中的 `ToolLoopAgent` 使用唯一的 CodeAct 工具调用上下文 API。
 
 因此最终上下文不是“把插件全部塞给模型”，而是从入口文档出发遍历引用图得到的结果。资源 ID 用于稳定定位，路径便于人类与 Agent 继续向下查看；容器只负责按需组织，不做隐式注入。
 
-![图片占位：插件文档引用图，展示 context.imd、containers.xml、成员文档和 agentprocess 如何互相引用并形成最终上下文](/images/plugin-document-graph-placeholder.svg)
+![图片占位：插件文档引用图，展示 context.md、.data 元数据引用、containers.json、成员文档和 agentprocess 如何互相引用并形成最终上下文](/images/plugin-document-graph-placeholder.svg)
 
 ## 推荐目录结构
 
@@ -33,9 +33,11 @@ PulsarAI 插件是一棵可持久化的文件树。插件不把全部文件自�
 /
 ├─ info.md
 ├─ manifest.json
-├─ containers.xml
+├─ containers.json
 ├─ regex.json
-├─ context.imd
+├─ context.md
+├─ data/
+│  └─ character.data
 ├─ instruction/
 │  └─ default.md
 ├─ agentprocess/
@@ -55,7 +57,7 @@ PulsarAI 插件是一棵可持久化的文件树。插件不把全部文件自�
 └─ background/
 ```
 
-推荐把稳定的插件说明放在 `info.md`，插件配置放在 `manifest.json`，容器拓扑放在 `containers.xml`，消息后处理规则放在 `regex.json`，上下文模板放在 `context.imd`，生成步骤放在 `agentprocess/`，CodeAct 可调用函数放在 `tools/`。根级 `Override.vue` 是默认对话渲染器的覆盖入口，`components/` 用来存放它和其他插件界面复用的 Vue 组件。
+推荐把稳定的插件说明放在 `info.md`，插件配置放在 `manifest.json`，容器拓扑放在 `containers.json`，消息后处理规则放在 `regex.json`，上下文模板放在 `context.md`，可复用 JSON 状态定义放在 `.data`，生成步骤放在 `agentprocess/`，CodeAct 可调用函数放在 `tools/`。根级 `Override.vue` 是默认对话渲染器的覆盖入口，`components/` 用来存放它和其他插件界面复用的 Vue 组件。
 
 ## 插件级属性
 
@@ -63,11 +65,17 @@ PulsarAI 插件是一棵可持久化的文件树。插件不把全部文件自�
 
 - 本地插件的 `packageId` 指向所属角色包；
 - 全局插件的 `packageId` 为 `null`，由默认项管理；
-- `enabled` 决定插件是否参与当前角色包的索引；
-- 本地插件可以标记为主要插件；
+- 每个角色包通过 `pluginId` 只拥有一个本地资源插件；
+- 角色包通过 `mainPluginId` 显式选择负责根上下文和生成流程的本地或全局插件；
+- `enabledGlobalPluginIds` 是无顺序的全局插件启用集合；
+- 包内插件仍保存名称、图标和简介字段，但普通界面只把它显示为“角色资源”；全局插件继续显示这些元信息；
 - `builtIn` 表示带默认快照的系统插件；它仍可编辑，并可随时“还原默认”。
 
-一次生成只索引当前角色包可见且启用的插件。本地插件优先，外部全局插件按角色包保存的顺序参与，内置全局兜底插件最后参与。
+一次生成索引唯一包内插件、显式主要插件和已启用全局插件。`context.md` 与 `agentprocess/index.js` 必须来自同一个主要插件，不再通过插件顺序分别选择。包内插件可以只保存角色文档，通过全局“会话上下文”容器把内容交给内置主要插件。
+
+插件列表位于应用左侧栏，点击条目会直接打开独立插件工作区页面。插件之间不存在用户可配置顺序；Action、Tool 与全局容器命名冲突会明确失败。
+
+获得 Plugin Feature 读取权限后，Agent 也可以直接查询和修改这组稳定配置：`plugin.getPackageConfiguration()` 返回 `pluginId`、`mainPluginId` 与 `enabledGlobalPluginIds`；`plugin.setMainPlugin(pluginId)` 切换主要插件；`plugin.setGlobalPluginEnabled(pluginId, enabled)` 控制当前角色包是否启用某个全局插件。`plugin.list()` 同时给出每个插件的 `id`、`packageId`、`local`、`main` 和 `active` 状态。
 
 ### 插件测试会话
 
@@ -83,8 +91,8 @@ PulsarAI 插件是一棵可持久化的文件树。插件不把全部文件自�
 
 | 后缀 | 类型 | 工作区渲染 |
 | --- | --- | --- |
-| `.md`、`.markdown` | Markdown | Milkdown/Crepe 编辑与 Markdown 渲染 |
-| `.imd` | Interactive Document | 模板、数据、源码与预览 |
+| `.md`、`.markdown` | Markdown | Milkdown/Crepe 所见即所得编辑 |
+| `.data` | Data definition | JSON 定义编辑；隔离级别在文件内声明 |
 | `.js`、`.mjs`、`.cjs`、`.ts` | JavaScript | CodeMirror |
 | `.json` | JSON | CodeMirror 与 JSON 校验 |
 | 常见图片、视频后缀 | Media | 图片或视频预览 |
@@ -92,9 +100,9 @@ PulsarAI 插件是一棵可持久化的文件树。插件不把全部文件自�
 | `.jsx`、`.tsx` | Component source | 代码编辑 |
 | 其他后缀 | Text | 纯文本编辑 |
 
-文件优先级不改变文件树显示顺序。它用于容器收集成员时的排序：数值越大越靠前；相同优先级保留启用插件顺序和树扫描顺序。
+文件优先级不改变文件树显示顺序。它用于容器、Regex 和自定义工具收集：数值越大越靠前；相同优先级使用插件 ID、资源路径和资源 ID 作为无业务含义的稳定排序键。
 
-Markdown 文件默认打开预览。文件栏右侧可以切换“原始内容”和“预览”：预览使用带背景、限制阅读宽度的文档页面；原始内容使用等宽编辑器，并高亮 `<@...>`、<code>&#123;&#123;...&#125;&#125;</code> 与 `[[...]]`。输入 `<@` 会补全当前可见引用，输入宏起始符会给出对应语法提示。
+Markdown 文件直接打开 Milkdown 所见即所得编辑器，不显示冗余的“原始内容/预览”切换。输入 `<@` 会补全当前可见引用，输入宏起始符会给出对应语法提示。源码切换只保留给 `.vue` 和拥有结构化覆盖渲染器的约定 JSON（例如 `regex.json`）。
 
 ## `info.md`
 
@@ -110,30 +118,70 @@ Markdown 文件默认打开预览。文件栏右侧可以切换“原始内容�
 
 ## `manifest.json`
 
-根目录 `manifest.json` 是预留的插件配置文件。当前配置结构尚未开放，因此新插件只保存空对象：
+根目录 `manifest.json` 是唯一的插件配置文件，根类型固定为 `GroupContent[]`。组和配置项都有稳定 ID，配置值统一通过 `group.id/content.id` 寻址：
 
 ```json
-{}
+[
+  {
+    "group": {
+      "id": "appearance",
+      "title": "外观"
+    },
+    "content": [
+      {
+        "id": "background",
+        "title": "对话背景",
+        "description": "选择当前角色使用的背景资源。",
+        "component": "MediaSelect",
+        "props": { "allowEmpty": true },
+        "value": {
+          "pluginId": "builtin-core-plugin",
+          "path": "background/classroom.png"
+        }
+      }
+    ]
+  }
+]
 ```
 
-工作区根据完整文件名使用插件配置编辑器，并进行 JSON 语法校验。`manifest.json` 固定在插件根目录，不能重命名、移动或删除。当前运行时不从中读取配置；以后正式开放配置项时，应继续在这个文件中扩展，不再另建并行配置文件。
+`component` 可以使用内置的 `Switch`、`Checkbox`、`Input`、`Textarea`、`Select`、`Slider` 和 `MediaSelect`，`props` 会传给对应的单体 shadcn 封装。也可以填写当前插件 `components/` 下的 Vue 组件名；自定义组件使用模板预览运行时，不执行 `<script>`，通过 `modelValue` 和 `update:modelValue` 收发值。所有 `value` 和 `props` 都必须是 JSON 值。
 
-## `containers.xml`
+工作区根据完整文件名打开设置式预览，按组显示标题、说明和控件，并保留原始 JSON 视图供规范文件维护。`manifest.json` 固定在插件根目录，不能重命名、移动或删除。背景配置位于 `appearance/background`；目标插件、路径或媒体类型失效时会清除该值并回退到内置背景。系统不会迁移旧的自由对象格式。
 
-根目录 `containers.xml` 是容器声明和容器命名空间引用的唯一来源，类似插件自己的依赖清单。
+Markdown 和其他显式引用位置使用同一套 ID 路径：
 
-```xml
-<containers>
-  <container name="角色上下文" scope="plugin">
-    <description>角色身份、表达方式与持续对话所需的上下文。</description>
-    <include as="base">container:global/基础上下文</include>
-  </container>
-</containers>
+```text
+<@config:local/appearance/background>
+<@config:global/builtin-core-plugin/appearance/background>
 ```
 
-工作区会根据完整文件名为它打开结构化编辑器。这个约定文件不能重命名、移动或删除。
+`local` 指引用来源所在插件；`global` 必须携带已启用全局插件的稳定 ID。Agent 可用 `plugin.getPluginManifest(pluginId)` 查询文件 ID、路径、来源插件、GroupContent[] 和诊断，用 `plugin.resolveConfig(reference)` 解析同一种引用。插件流程还可用 `plugin.getManifest()`、`getConfig(groupId, contentId)`、`setConfig(...)` 与 `replaceManifest(...)` 维护自身配置。
 
-每个容器可以添加一个可选的 `<description>`。说明不会成为容器成员，也不会自动进入模型上下文；它用于解释容器提供什么内容，并在 IMD 编辑器的引用提示中帮助作者选择正确容器。
+## `containers.json`
+
+根目录 `containers.json` 是容器声明和容器命名空间引用的唯一来源，根节点固定为带有 `containers` 数组的 JSON 对象。
+
+```json
+{
+  "containers": [
+    {
+      "name": "角色上下文",
+      "scope": "plugin",
+      "description": "角色身份、表达方式与持续对话所需的上下文。",
+      "imports": [
+        {
+          "alias": "base",
+          "target": "container:global/基础上下文"
+        }
+      ]
+    }
+  ]
+}
+```
+
+工作区会根据完整文件名在原始 JSON 和结构化编辑器之间切换。JSON 语法与字段错误会显示带路径的诊断；这个约定文件不能重命名、移动或删除。
+
+每个容器可以添加一个可选的 `description`。说明不会成为容器成员，也不会自动进入模型上下文；它用于解释容器提供什么内容，并在 Markdown 编辑器的引用提示中帮助作者选择正确容器。
 
 ### 容器作用域
 
@@ -153,7 +201,20 @@ Markdown 文件默认打开预览。文件栏右侧可以切换“原始内容�
 
 ### 成员元数据
 
-容器成员关系保存在文件节点的 `memberships` 元数据中，由文件属性面板管理，不写进 Markdown、IMD 或其他文件正文。
+容器成员关系保存在文件节点的 `memberships` 元数据中，由文件属性面板管理，不写进 Markdown 或其他文件正文。成员可以附加本地配置条件：
+
+```json
+{
+  "container": "container:plugin/角色上下文",
+  "alias": "world",
+  "condition": {
+    "reference": "config:local/story/world",
+    "equals": true
+  }
+}
+```
+
+条件省略 `equals` 时按配置值真假判断；填写时按 JSON 值相等判断。条件只接受 `config:local/group/content`，不允许用全局配置隐式控制另一个插件的成员注入。
 
 `as` 是容器内的稳定别名。没有填写时，会使用不带后缀的文件名。别名冲突会产生诊断，不会静默覆盖。
 
@@ -184,41 +245,41 @@ const containers = plugin.listContainers()
 const details = plugin.getContainer(containers[0].id)
 ```
 
-`listContainers()` 返回容器查询 ID、定义文件 ID/路径、来源插件、使用数量和内容数量。`getContainer(containerId)` 的 `usedBy` 与 `contents` 条目都带有资源 `id`、插件内 `path`、`pluginId`、`pluginName`、文件类型和优先级，便于 Agent 继续读取文件树或使用显式 ID 引用。这里的“使用文档”只统计直接写有该容器引用的文件，不把间接依赖重复计数。
+`listContainers()` 返回容器查询 ID、定义文件 ID/路径、来源插件、使用数量和当前生效内容数量。`getContainer(containerId)` 的 `usedBy` 与 `contents` 条目都带有资源 `id`、插件内 `path`、`pluginId`、`pluginName`、文件类型和优先级；内容还会返回条件元数据，便于 Agent 继续读取文件树或使用显式 ID 引用。这里的“使用文档”只统计直接写有该容器引用的文件，不把间接依赖重复计数。
 
 容器声明与内容关系也可以通过 `createContainer`、`updateContainer`、`removeContainer`、`addContainerContent`、`updateContainerContent` 和 `removeContainerContent` 完整维护。这些写入 API 只在插件流程中可用，并且只能修改当前插件。
 
 ![图片占位：容器详情页面，展示单行说明、使用文档列表、容器内容、来源插件、优先级和点击跳转](/images/plugin-container-details-placeholder.svg)
 
-## `context.imd`
+## `context.md` 与 `.data`
 
-根目录 `context.imd` 是角色感知的上下文入口。它使用 Interactive Document 格式，可以包含多个带角色的模板：
+根目录 `context.md` 是角色感知的 Markdown 上下文入口。普通块默认是 system；需要显式角色时使用围栏：
 
-```html
-<prompt_template name="main" role="system">
+```md
+:::pulsar role=system
 {{ <@角色上下文>.get("character") }}
 
 [[chat]]
-</prompt_template>
-
-<data>
-</data>
+:::
 ```
 
 `role` 可以是 `system`、`user` 或 `assistant`。`[[chat]]` 会把当前有效对话路径按原角色拼入消息序列。
 
-Interactive Document 中可以使用：
+上下文 Markdown 中可以使用：
 
 - <code>&#123;&#123; expression &#125;&#125;</code>：把表达式结果渲染进当前文本；
 - `[[ expression ]]`：把消息或数组拼入消息序列；
-- `<@local:name>`：读取当前 `.imd` 的本地数据；
 - `<@...>`：读取显式插件资源或容器。
 
-在 IMD 模板中输入 `<@` 后，编辑器会列出当前文档可见的容器。候选项包含容器名称、作用域、所属插件和可选说明；名称有歧义时会插入完整的 `container:scope/name` 引用。上下方向键用于选择，`Enter` 或 `Tab` 用于插入。当前文档的 `<data>` 项也会进入同一提示，并显示自己的说明。
+在 Markdown 中输入 `<@` 后，编辑器会列出当前文档可见的容器。候选项包含容器名称、作用域、所属插件和可选说明；名称有歧义时会插入完整的 `container:scope/name` 引用。
 
-容器声明只从插件根级 `containers.xml` 读取；写在 `.imd` 或其他资源中的 `<container>` 不属于插件格式，也不会被解析。成员关系只读取文件元数据。
+`.data` 是独立 JSON 定义，内部声明 `resource` 或 `conversation` 隔离、初始值、说明与可选 updater wrapper。资源在属性面板通过 `{ alias, dataId }` 元数据引用它，Markdown 和 `.data` 正文都不记录引用路径。运行值属于 Conversation 分支，不会写回 `.data`。
 
-如果所有启用插件都没有可用的根 `context.imd`，生成流程使用只包含 `[[chat]]` 的回退上下文。
+普通 CodeAct 使用 `data.readForResource(resourceId, dataId)` 读取；`variable-update` 意图可使用 `data.writeForResource(resourceId, dataId, value)` 事务式写入。接口同时提供 ID 与路径信息，便于 Agent 顺着查询。
+
+容器声明只从插件根级 `containers.json` 读取；其他资源中的相似 JSON 字段不属于插件格式，也不会被解析。成员关系只读取文件元数据。
+
+如果所有启用插件都没有可用的根 `context.md`，生成流程使用只包含 `[[chat]]` 的回退上下文。
 
 ## `regex.json`
 
@@ -241,7 +302,7 @@ Interactive Document 中可以使用：
 - `replace_regex` 默认为空，支持 `$1` 等 JavaScript 替换分组；
 - `range` 为 `user_input`、`ai_output` 或 `all`；
 - 深度从最终消息列表末尾按 1 开始计算，`INF` 表示对应一侧不设边界，反向填写的数字边界也会自动规范为有效区间；
-- 所有启用插件的根规则按文件优先级从高到低执行，同优先级保持插件与文件树顺序，单文件内部保持数组顺序；
+- 所有启用插件的根规则按文件优先级从高到低执行，同优先级使用稳定插件 ID 和资源 ID，单文件内部保持数组顺序；
 - 生成阶段处理最终上下文中的全部有效规则；会话和任务面板只处理 `applyOnRending: true` 的规则，并且只改变显示结果，不改写数据库消息。
 
 工作区会为根 `regex.json` 打开结构化编辑器。该约定文件不能重命名、移动或删除。无效 JSON、无效规则或无法编译的表达式会进入插件诊断，而不是中断整条消息历史。
@@ -323,7 +384,7 @@ return [...contextMessages, {
 
 常用流程环境包括：
 
-- `contextMessages`：由 Feature API 文档和 `context.imd` 编译出的消息；
+- `contextMessages`：由 Feature API 文档和 `context.md` 编译出的消息；
 - `chat` / `CHAT`：当前有效对话路径；
 - `conversation`、`conversationId`、`packageId`、`containerId`；
 - `reasoningEffort`：当前会话选择的 AI SDK 思考深度；
@@ -345,10 +406,10 @@ return [...contextMessages, {
 
 流程最终可以返回字符串或 `{ text, modelName }`。流程可以像内置范例一样实例化 Agent，也可以运行纯 JavaScript 或直接返回已有结果；系统不会暗中补跑 Agent。
 
-入口优先级为：
+入口选择为：
 
 1. 当前消息选择的 `action/` 动作；
-2. 第一个启用插件的非空 `agentprocess/index.js`；
+2. 当前角色包显式指定的主要插件的非空 `agentprocess/index.js`；其 `context.md` 也必须来自同一个插件；
 3. 没有流程时明确报错，避免隐式执行不可见的默认逻辑。
 
 ## `tools/`
@@ -388,7 +449,7 @@ async function lookupCharacter(name) {
 
 工作区在约定目录中新建这两个文件时会自动写入对应成员元数据。运行时仍按精确目录结构发现它们，因此导入的旧插件不需要改写文件正文。
 
-所有启用插件的工具按 `tool.js` 文件优先级从高到低收集，同优先级保持插件和目录顺序。同名工具只保留第一个并报告冲突，不采用后写覆盖。说明文档先经过普通插件引用解析，再组成一个 `# 自定义工具` 系统区块，其中同时包含插件 ID、函数/说明资源 ID 与路径。
+所有启用插件的工具按 `tool.js` 文件优先级从高到低收集，同优先级使用稳定插件 ID、目录顺序和资源 ID。同名工具会阻止生成并报告冲突，不采用先到或后写覆盖。说明文档先经过普通插件引用解析，再组成一个 `# 自定义工具` 系统区块，其中同时包含插件 ID、函数/说明资源 ID 与路径。
 
 模型侧仍然只有 `codeAct` 一个工具。它从该文档区块读取定义，然后在 CodeAct 函数中调用：
 
@@ -453,7 +514,6 @@ return {
 
 | 形式 | 含义 |
 | --- | --- |
-| `<@local:name>` | 当前 `.imd` 的本地数据 |
 | `<@path:./file.md>` | 相对当前资源的路径 |
 | `<@id:resource-id>` | 稳定资源 ID |
 | `<@容器名>` | 唯一可见的同名容器 |
@@ -461,7 +521,7 @@ return {
 
 路径不能越出当前插件根目录。ID 只能访问当前启用插件集合中的资源。
 
-Markdown、文本、组件源码和 Interactive Document 在转换为字符串时使用各自的渲染器。JavaScript 引用会变成受保护的资源值，而不是经过字符串宏替换。
+Markdown、文本和组件源码在转换为字符串时使用各自的渲染器。JavaScript 引用会变成受保护的资源值，而不是经过字符串宏替换。
 
 ## 诊断与可追踪性
 
@@ -480,9 +540,9 @@ Markdown、文本、组件源码和 Interactive Document 在转换为字符串�
 ## 推荐工作方式
 
 1. 在 `info.md` 写清楚插件提供什么。
-2. 在 `containers.xml` 建立稳定的依赖拓扑。
+2. 在 `containers.json` 建立稳定的依赖拓扑。
 3. 在文件属性中把资源加入容器并设置稳定别名。
-4. 在 `context.imd` 只组装模型真正需要的上下文。
+4. 在资源元数据中绑定 `.data`，并在 `context.md` 只组装模型真正需要的上下文。
 5. 在 `agentprocess/` 用普通 JavaScript 拆分准备、生成和收尾步骤。
 6. 使用 `<@...>` 显式连接资源，不依赖隐式全局变量。
 7. 用文件优先级表达容器成员顺序，用树顺序表达工作区组织顺序。

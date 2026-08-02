@@ -13,7 +13,7 @@ For package-bound `task` conversations, Conversation calls `createProjectAgentRu
 - selected-project identity and API signatures;
 - inspect-before-write and read-back guidance;
 - role-playing architecture guidance for identity, setting, relationships, voice, goals, boundaries, continuity, context assembly, and interaction rules;
-- the current `.imd` data definition from `InteractiveDoc/domain/interactive-document-format.ts`.
+- the current `context.md` role-fence and metadata-bound `.data` definition from `InteractiveDoc/domain/interactive-document-format.ts`.
 
 The task then enters the same selected Plugin workflow as ordinary conversations. Project operations are performed through the single sandboxed `codeAct` tool.
 
@@ -21,7 +21,7 @@ The task then enters the same selected Plugin workflow as ordinary conversations
 
 - Project filesystem API operations for `/project.json`, `/conversations`, and `/plugins`;
 - authorized Plugin Feature API documentation generated from the shared Plugin capability definition;
-- the InteractiveDocument format prompt.
+- the context-document format prompt.
 
 This keeps the model-facing Plugin API inventory aligned with `Plugin/domain/plugin-capability.ts`, its capability builder, and VitePress instead of maintaining another handwritten signature list.
 
@@ -33,10 +33,10 @@ When the host conversation has this context, the runtime adds the bound path to 
 
 ## CodeAct
 
-- `application/default-agent.ts` exposes the constructor immediately and hydrates the selected chat model, one `codeAct` tool, stop condition, lifecycle hooks, and conversation reasoning level only after a plugin process calls `agent.prepare()`. It does not call `new ToolLoopAgent`.
+- `application/default-agent.ts` exposes the constructor immediately, forces `allowSystemInMessages: true`, and hydrates the selected chat model, one `codeAct` tool, stop condition, lifecycle hooks, and conversation reasoning level only after a plugin process calls `agent.prepare()`. It does not call `new ToolLoopAgent`.
 - The conversation-bound constructor supplies the current AI SDK top-level `reasoning` default even to persisted process scripts created before the setting existed. `agent.prepare()` also returns it as `runtime.reasoning`, so current built-in and custom processes can pass it explicitly.
 - `application/code-act.ts` accepts only one JavaScript function with an explicit `return`, executes it against the authorized Sandbox environment, and returns either `{ ok: true, value }` or `{ ok: false, error }`.
-- CodeAct input has an optional `intent`. Ordinary `action` calls use the authorized runtime environment; synchronous `variable-update` calls receive only transactional IMD variable facades. They cannot use Feature/Plugin APIs, network/files, detached async work, current time, or randomness. Errors return to the ToolLoopAgent for correction, the third consecutive failure throws, and `runtime.finish()` rejects if the model abandons an unresolved update error.
+- CodeAct input has an optional `intent`. Ordinary `action` calls use the authorized runtime environment; synchronous `variable-update` calls receive only the transactional Data container with `readForResource` and `writeForResource`. They cannot use Feature/Plugin APIs, network/files, detached async work, current time, or randomness. Errors return to the ToolLoopAgent for correction, the third consecutive failure throws, and `runtime.finish()` rejects if the model abandons an unresolved update error.
 - `application/ask-user-tool.ts` retains the `askUser` Zod schema and result normalization, but ask-user is now `agent.askUser(...)` / `api.askUser(...)` inside CodeAct rather than a second model tool.
 - `application/agent-extension-registry.ts` keeps Skill and MCP registrations behind `agent.callExtension(...)`, `skills.call(...)`, and `mcp.call(...)`. Registered extensions no longer expand the model-visible tool list.
 - Plugin `tools/<name>/tool.js` functions also stay out of the AI SDK tool set. Conversation injects their `prompt.md` contracts into a `# 自定义工具` context block and exposes the compiled functions through `ctx.tools[name](...args)` inside CodeAct.

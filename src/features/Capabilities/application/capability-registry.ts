@@ -10,7 +10,7 @@ import * as notification from "@/features/Notification/capabilities";
 import * as resources from "@/features/Resources/capabilities";
 import * as component from "@/features/Resources/Component/capabilities";
 import * as conversation from "@/features/Resources/Conversation/capabilities";
-import * as interactiveDoc from "@/features/Resources/InteractiveDoc/capabilities";
+import * as contextDocument from "@/features/Resources/InteractiveDoc/capabilities";
 import * as plugin from "@/features/Resources/Plugin/capabilities";
 import * as preset from "@/features/Resources/Preset/capabilities";
 import * as sandbox from "@/features/Sandbox/capabilities";
@@ -46,7 +46,7 @@ export const capabilityModules: CapabilityModule[] = [
   resources,
   component,
   conversation,
-  interactiveDoc,
+  contextDocument,
   plugin,
   preset,
   sandbox,

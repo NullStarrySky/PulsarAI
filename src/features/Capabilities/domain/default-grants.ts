@@ -12,7 +12,7 @@ export const fallbackCapabilityGrants: CapabilityGrants = {
   resources: ["read"],
   component: ["createTemplate"],
   conversation: ["read"],
-  interactiveDoc: ["compile"],
+  contextDocument: ["compile"],
   plugin: ["read"],
   sandbox: ["execute"],
   setting: ["read"],

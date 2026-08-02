@@ -7,7 +7,8 @@ import {
 
 const props = defineProps<{
   packageId: string;
-  globalPluginOrder?: string[];
+  enabledGlobalPluginIds?: string[];
+  mainPluginId?: string;
 }>();
 
 const pluginStore = usePluginStore();
@@ -15,7 +16,8 @@ const runtime = computed(() =>
   resolvePluginConversationOverride(
     pluginStore.enabledPluginsForPackage(
       props.packageId,
-      props.globalPluginOrder,
+      props.enabledGlobalPluginIds,
+      props.mainPluginId,
     ),
   ),
 );

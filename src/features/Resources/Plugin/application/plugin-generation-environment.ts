@@ -19,6 +19,7 @@ export interface GenerationPathEnvironmentInput {
   conversationId: string;
   conversation: unknown;
   packageId: string;
+  mainPluginId: string;
   containerId: string;
   action?: {
     pluginId: string;
@@ -47,7 +48,12 @@ export async function buildPluginGenerationEnvironment(
   plugins: Plugin[],
   input: GenerationPathEnvironmentInput,
 ): Promise<PluginGenerationEnvironment> {
-  const enabledPlugins = plugins.filter((plugin) => plugin.enabled);
+  const enabledPlugins = plugins.filter(
+    (plugin) =>
+      plugin.enabled
+      || plugin.id === input.mainPluginId
+      || plugin.packageId === input.packageId,
+  );
   const environment: SandboxEnvironment = {
     ...(input.baseEnvironment ?? {}),
     activePath: input.activePath,
@@ -64,45 +70,52 @@ export async function buildPluginGenerationEnvironment(
   const resolver = createPluginReferenceResolver(enabledPlugins, {
     environment,
   });
+  const blockingConflict = resolver.diagnostics.find((item) =>
+    item.message.includes("冲突")
+  );
+  if (blockingConflict) {
+    throw new Error(`插件组合冲突：${blockingConflict.message}`);
+  }
 
-  let processPlugin: Plugin | null = null;
+  const processPlugin = enabledPlugins.find(
+    (plugin) => plugin.id === input.mainPluginId,
+  ) ?? null;
   let processResource: GenerationResourceValue | null = null;
   let contextResource: GenerationResourceValue | null = null;
 
-  for (const plugin of enabledPlugins) {
-    if (!contextResource) {
-      const context = findPluginNodeByPath(
-        plugin.root,
-        pluginConventions.context,
-      );
-      if (
-        context?.kind === "file"
-        && pluginFileType(context.name) === "interactive-document"
-      ) {
-        contextResource = resolver.resourceById(context.id);
-      }
-    }
-
-    if (!processResource) {
-      const agentProcess = findPluginNodeByPath(
-        plugin.root,
-        [
-          pluginConventions.agentProcessFolder,
-          pluginConventions.agentProcessEntry,
-        ],
-      );
-      if (
-        agentProcess?.kind === "file"
-        && pluginFileType(agentProcess.name) === "javascript"
-        && typeof agentProcess.content === "string"
-        && agentProcess.content.trim()
-      ) {
-        processPlugin = plugin;
-        processResource = resolver.resourceById(agentProcess.id);
-        continue;
-      }
-
-    }
+  if (!processPlugin) {
+    throw new Error(`主要插件不存在或未启用：${input.mainPluginId}`);
+  }
+  const context = findPluginNodeByPath(
+    processPlugin.root,
+    pluginConventions.context,
+  );
+  if (
+    context?.kind === "file"
+    && pluginFileType(context.name) === "markdown"
+  ) {
+    contextResource = resolver.resourceById(context.id);
+  } else {
+    throw new Error(`主要插件 ${processPlugin.name} 缺少有效的 context.md。`);
+  }
+  const agentProcess = findPluginNodeByPath(
+    processPlugin.root,
+    [
+      pluginConventions.agentProcessFolder,
+      pluginConventions.agentProcessEntry,
+    ],
+  );
+  if (
+    agentProcess?.kind === "file"
+    && pluginFileType(agentProcess.name) === "javascript"
+    && typeof agentProcess.content === "string"
+    && agentProcess.content.trim()
+  ) {
+    processResource = resolver.resourceById(agentProcess.id);
+  } else {
+    throw new Error(
+      `主要插件 ${processPlugin.name} 缺少有效的 agentprocess/index.js。`,
+    );
   }
 
   const actionProcessResource = input.action

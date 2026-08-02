@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { storeToRefs } from "pinia";
-import { BookOpen, Check, FileCheck2, FlaskConical, ListTodo, MessageSquare, MoreHorizontal, Plus, Search, Trash2, Wrench } from "lucide-vue-next";
+import { BookOpen, Check, FileCheck2, FlaskConical, ListTodo, MessageSquare, MoreHorizontal, Plus, Search, Trash2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenu,
@@ -28,7 +28,6 @@ import { cn } from "@/lib/utils";
 import { useResponsiveStore } from "@/features/Misc/application/responsive-store";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 import type { ConversationRendererId } from "@/features/Resources/Conversation/domain/conversation-types";
-import PluginRightSidebarPanel from "@/features/Resources/Plugin/presentation/PluginRightSidebarPanel.vue";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import InlineEditInput from "@/features/UI/presentation/InlineEditInput.vue";
 import ConversationTaskPanel from "./ConversationTaskPanel.vue";
@@ -38,7 +37,7 @@ const responsive = useResponsiveStore();
 const conversation = useConversationStore();
 const { rightSidebarOpen } = storeToRefs(layout);
 const { isMobileLayout } = storeToRefs(responsive);
-const tab = ref<"conversation" | "task" | "plugin">("conversation");
+const tab = ref<"conversation" | "task">("conversation");
 const editingConversationId = ref("");
 const editingConversationTitle = ref("");
 
@@ -135,7 +134,7 @@ async function setRenderer(conversationId: string, rendererId: ConversationRende
     data-mobile-sidebar
   >
     <div class="min-w-72 border-b p-2">
-      <div class="grid grid-cols-3 rounded-md bg-muted p-1">
+      <div class="grid grid-cols-2 rounded-md bg-muted p-1">
         <Button
           :variant="tab === 'conversation' ? 'secondary' : 'ghost'"
           class="h-8 gap-1 px-1 text-xs"
@@ -151,14 +150,6 @@ async function setRenderer(conversationId: string, rendererId: ConversationRende
         >
           <ListTodo data-icon="inline-start" />
           任务
-        </Button>
-        <Button
-          :variant="tab === 'plugin' ? 'secondary' : 'ghost'"
-          class="h-8 gap-1 px-1 text-xs"
-          @click="tab = 'plugin'"
-        >
-          <Wrench data-icon="inline-start" />
-          插件
         </Button>
       </div>
     </div>
@@ -287,6 +278,5 @@ async function setRenderer(conversationId: string, rendererId: ConversationRende
     </template>
 
     <ConversationTaskPanel v-else-if="tab === 'task'" />
-    <PluginRightSidebarPanel v-else-if="tab === 'plugin'" />
   </aside>
 </template>

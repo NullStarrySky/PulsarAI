@@ -19,15 +19,19 @@ import {
   createPluginReferenceResolver,
 } from "@/features/Resources/Plugin/application/plugin-reference-resolver";
 import {
-  collectInteractiveVariableDefinitions,
-  parseInteractiveDocumentSource,
-  type InteractiveVariableDefinition,
+  collectContextDataDefinitions,
+  createDataDescriptionContainer,
+  type ContextDataDefinition,
 } from "@/features/Resources/InteractiveDoc/domain/interactive-document";
 import {
   collectPluginCustomTools,
   createPluginCustomToolFunction,
 } from "@/features/Resources/Plugin/application/plugin-custom-tools";
-import type { Plugin } from "@/features/Resources/Plugin/domain/plugin-types";
+import {
+  findPluginNodeByPath,
+  pluginConventions,
+  type Plugin,
+} from "@/features/Resources/Plugin/domain/plugin-types";
 import {
   applyPluginRegexToMessages,
   collectPluginRegexRules,
@@ -54,6 +58,7 @@ import type {
 } from "@/features/Resources/Conversation/domain/conversation-types";
 import {
   appendConversationVariableUpdate,
+  createConversationDataApi,
   evaluateConversationVariables,
   executeVariableUpdateIntent,
   prepareConversationMemoryContext,
@@ -74,6 +79,7 @@ export type GenerationComponentRequester = (
 export interface RunConversationGenerationInput {
   plugins: Plugin[];
   packageId: string;
+  mainPluginId: string;
   conversationId: string;
   conversation: Conversation;
   reasoningEffort: ConversationReasoningEffort;
@@ -122,12 +128,19 @@ function currentComponentRequester() {
 export async function runConversationGeneration(
   input: RunConversationGenerationInput,
 ): Promise<RunConversationGenerationResult> {
-  const capabilityRuntime = buildCapabilityRuntime(
-    mergeCapabilityGrants(
-      await getDefaultCapabilities(),
-      input.capabilityGrants,
-    ),
-  );
+  const capabilityRuntime: ReturnType<typeof buildCapabilityRuntime> =
+    input.conversation.featureApiEnabled
+    ? buildCapabilityRuntime(
+        mergeCapabilityGrants(
+          await getDefaultCapabilities(),
+          input.capabilityGrants,
+        ),
+      )
+      : {
+          environment: {},
+          prompt: "",
+          grants: {},
+        };
   const projectAgentRuntime = isProjectAgentConversation(input.conversation)
     ? await createProjectAgentRuntime(input.conversationId, {
         pluginSubCapIds: capabilityRuntime.grants.plugin ?? [],
@@ -139,6 +152,7 @@ export async function runConversationGeneration(
       activePath: input.activePath,
       chat: input.chat,
       packageId: input.packageId,
+      mainPluginId: input.mainPluginId,
       conversationId: input.conversationId,
       conversation: input.conversation,
       containerId: input.emptyContainer.id,
@@ -177,20 +191,29 @@ export async function runConversationGeneration(
     pluginEnvironment.resolver,
   );
   pluginEnvironment.diagnostics.push(...customToolContainer.diagnostics);
+  const customToolConflict = customToolContainer.diagnostics.find((item) =>
+    item.message.includes("名称冲突")
+  );
+  if (customToolConflict) {
+    throw new Error(`插件组合冲突：${customToolConflict.message}`);
+  }
 
-  let variableDefinitions: InteractiveVariableDefinition[] = [];
-  let compressionThreshold = 0;
+  let dataDefinitions: ContextDataDefinition[] = [];
+  const compressionThreshold = Math.max(
+    0,
+    pluginEnvironment.contextResource?.contextConfig?.compressionThreshold ?? 0,
+  );
   if (pluginEnvironment.contextResource) {
-    const contextSource = pluginEnvironment.contextResource.content;
-    compressionThreshold = parseInteractiveDocumentSource(contextSource)
-      .memory.compressionThreshold;
     try {
-      variableDefinitions = collectInteractiveVariableDefinitions(contextSource);
+      dataDefinitions = collectContextDataDefinitions(
+        pluginEnvironment.contextResource.content,
+        pluginEnvironment.resolver.listDataBindings(),
+      );
     } catch (error) {
       pluginEnvironment.diagnostics.push({
         pluginId: pluginEnvironment.contextResource.pluginId,
         resourceId: pluginEnvironment.contextResource.id,
-        message: `无法读取 IMD 变量定义：${
+        message: `无法读取 .data 定义：${
           error instanceof Error ? error.message : String(error)
         }`,
       });
@@ -198,11 +221,17 @@ export async function runConversationGeneration(
   }
 
   let variableEvaluation: ConversationVariableEvaluation =
-    await evaluateConversationVariables(variableDefinitions, input.activePath);
+    await evaluateConversationVariables(dataDefinitions, input.activePath);
   Object.assign(finalEnvironment, {
     variables: variableEvaluation.facades,
     VARIABLES: variableEvaluation.facades,
+    data: createConversationDataApi(
+      dataDefinitions,
+      variableEvaluation.state,
+      true,
+    ),
   });
+  finalEnvironment.DATA = finalEnvironment.data;
 
   const memoryContext = await prepareConversationMemoryContext({
     conversationId: input.conversationId,
@@ -222,7 +251,7 @@ export async function runConversationGeneration(
   }
 
   const compiledContext = pluginEnvironment.contextResource
-    ? pluginEnvironment.resolver.compileInteractiveDocument(
+    ? pluginEnvironment.resolver.compileContextDocument(
         pluginEnvironment.contextResource.id,
         { dataOverrides: variableEvaluation.state },
       )
@@ -245,10 +274,11 @@ export async function runConversationGeneration(
       content: customToolContainer.prompt,
     });
   }
-  if (compiledContext?.variableDescriptionContainer) {
+  const dataDescriptionContainer = createDataDescriptionContainer(dataDefinitions);
+  if (dataDescriptionContainer) {
     contextMessages.splice(capabilityRuntime.prompt ? 1 : 0, 0, {
       role: "system",
-      content: compiledContext.variableDescriptionContainer,
+      content: dataDescriptionContainer,
     });
   }
   if (input.resourceContext) {
@@ -291,12 +321,12 @@ export async function runConversationGeneration(
     environment: finalEnvironment,
     reasoningEffort: input.reasoningEffort,
     onStep: input.onStep,
-    variableUpdate: variableDefinitions.length
+    variableUpdate: dataDefinitions.some((item) => item.enableUpdater)
       ? {
           execute: async (source) => {
             const result = await executeVariableUpdateIntent(
               source,
-              variableDefinitions,
+              dataDefinitions,
               variableEvaluation,
             );
             if (!result.ok) return result;
@@ -311,10 +341,22 @@ export async function runConversationGeneration(
             };
             finalEnvironment.variables = result.facades;
             finalEnvironment.VARIABLES = result.facades;
+            finalEnvironment.data = createConversationDataApi(
+              dataDefinitions,
+              result.state,
+              true,
+            );
+            finalEnvironment.DATA = finalEnvironment.data;
             return {
               ok: true,
               value: result.value,
-              updatedVariables: variableDefinitions.map((item) => item.name),
+              updatedVariables: dataDefinitions
+                .filter((item) => item.enableUpdater)
+                .map((item) => ({
+                  id: item.dataId,
+                  path: item.path,
+                  resourceId: item.resourceId,
+                })),
             };
           },
         }
@@ -334,6 +376,21 @@ export async function runConversationGeneration(
       listContainers: () => currentContainerResolver().listContainers(),
       getContainer: (containerId: string) =>
         currentContainerResolver().getContainer(containerId),
+      resolveConfig: (reference: string) => {
+        const plugin = pluginEnvironment.enabledPlugins.find(
+          (item) => item.id === pluginId,
+        );
+        const manifest = plugin
+          ? findPluginNodeByPath(plugin.root, pluginConventions.manifest)
+          : null;
+        if (manifest?.kind !== "file") {
+          throw new Error("当前插件缺少 manifest.json。");
+        }
+        return currentContainerResolver().resolveFromResource(
+          manifest.id,
+          reference.trim().replace(/^<@|>$/g, ""),
+        );
+      },
       ...createPluginSelfApi(
         pluginId,
         capabilityRuntime.grants.plugin ?? [],

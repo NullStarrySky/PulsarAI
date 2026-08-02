@@ -40,26 +40,32 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { useResponsiveStore } from "@/features/Misc/application/responsive-store";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
-import ConversationMarkdown from "@/features/Resources/Conversation/presentation/ConversationMarkdown.vue";
+import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
+import ConversationComposerEditor from "@/features/Resources/Conversation/presentation/ConversationComposerEditor.vue";
 import JavaScriptCodeMirrorEditor from "@/features/Resources/Preset/presentation/JavaScriptCodeMirrorEditor.vue";
-import InteractiveDocumentWorkspacePage from "@/features/Resources/InteractiveDoc/presentation/InteractiveDocumentWorkspacePage.vue";
 import {
-  createEmptyInteractiveDocumentSource,
-} from "@/features/Resources/InteractiveDoc/domain/interactive-document";
+  serializePluginDataDefinition,
+} from "@/features/Resources/Plugin/domain/plugin-data";
+import {
+  parsePluginManifestReference,
+} from "@/features/Resources/Plugin/domain/plugin-manifest";
 import {
   createPluginReferenceResolver,
   type PluginContainerResourceQuery,
 } from "@/features/Resources/Plugin/application/plugin-reference-resolver";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
 import PluginContainerDefinitionsEditor from "@/features/Resources/Plugin/presentation/PluginContainerDefinitionsEditor.vue";
+import PluginManifestEditor from "@/features/Resources/Plugin/presentation/PluginManifestEditor.vue";
 import PluginRegexEditor from "@/features/Resources/Plugin/presentation/PluginRegexEditor.vue";
 import PluginVuePreview from "@/features/Resources/Plugin/presentation/PluginVuePreview.vue";
 import {
   findPluginNodeByPath,
   findPluginTreeNode,
   findPluginTreeParent,
+  flattenPluginFiles,
   pluginConventions,
   pluginFileType,
   pluginNodePath,
@@ -85,7 +91,7 @@ interface TreeRow {
 type NewPluginFileType =
   | "agents"
   | "markdown"
-  | "interactive-document"
+  | "data"
   | "javascript"
   | "json"
   | "media"
@@ -99,7 +105,7 @@ const newFileTypes: Array<{
 }> = [
   { id: "agents", label: "AGENTS.md", extension: ".md" },
   { id: "markdown", label: "Markdown", extension: ".md" },
-  { id: "interactive-document", label: "交互式文档", extension: ".imd" },
+  { id: "data", label: "数据定义", extension: ".data" },
   { id: "javascript", label: "JavaScript", extension: ".js" },
   { id: "json", label: "JSON", extension: ".json" },
   { id: "media", label: "媒体", extension: ".png" },
@@ -114,6 +120,7 @@ const props = defineProps<{
 }>();
 
 const pluginStore = usePluginStore();
+const conversation = useConversationStore();
 const layout = useLayoutStore();
 const responsive = useResponsiveStore();
 const { isMobileLayout } = storeToRefs(responsive);
@@ -174,6 +181,10 @@ const selectedIsOverride = computed(
     selectedPath.value.toLocaleLowerCase()
       === pluginConventions.override.toLocaleLowerCase(),
 );
+const selectedIsContext = computed(
+  () => selectedPath.value.toLocaleLowerCase()
+    === pluginConventions.context.toLocaleLowerCase(),
+);
 const selectedIsFixedConvention = computed(
   () =>
     selectedIsContainerDefinitions.value
@@ -207,13 +218,51 @@ const mediaSource = computed(() => pluginMediaSource(selectedFile.value?.content
 const mediaKind = computed(() =>
   pluginMediaType(selectedFile.value?.content, mediaSource.value),
 );
+const availableDataResources = computed(() => {
+  const currentPlugin = plugin.value;
+  if (!currentPlugin) return [];
+  const contextPackageId = props.packageId ?? currentPlugin.packageId;
+  const packageItem = conversation.packages.find(
+    (item) => item.id === contextPackageId,
+  );
+  const visible = contextPackageId
+    ? pluginStore.enabledPluginsForPackage(
+        contextPackageId,
+        packageItem?.enabledGlobalPluginIds,
+        packageItem?.mainPluginId,
+      )
+    : pluginStore.globalPlugins.filter((item) => item.enabled);
+  const plugins = visible.some((item) => item.id === currentPlugin.id)
+    ? visible
+    : [currentPlugin, ...visible];
+  return plugins.flatMap((sourcePlugin) =>
+    flattenPluginFiles(sourcePlugin.root).flatMap((file) =>
+      pluginFileType(file.name) === "data"
+        ? [{
+            id: file.id,
+            name: file.name,
+            path: `/${pluginNodePath(sourcePlugin.root, file.id).join("/")}`,
+            pluginId: sourcePlugin.id,
+            pluginName: sourcePlugin.name,
+          }]
+        : [],
+    )
+  );
+});
 const pluginReferenceResolver = computed(() => {
   const currentPlugin = plugin.value;
   const file = selectedFile.value;
   if (!currentPlugin) return null;
   const contextPackageId = props.packageId ?? currentPlugin.packageId;
+  const packageItem = conversation.packages.find(
+    (item) => item.id === contextPackageId,
+  );
   const visiblePlugins = contextPackageId
-    ? pluginStore.enabledPluginsForPackage(contextPackageId)
+    ? pluginStore.enabledPluginsForPackage(
+        contextPackageId,
+        packageItem?.enabledGlobalPluginIds,
+        packageItem?.mainPluginId,
+      )
     : pluginStore.globalPlugins.filter((item) => item.enabled);
   const previewPlugins = visiblePlugins.some(
     (item) => item.id === currentPlugin.id,
@@ -236,35 +285,24 @@ const containerDetails = computed(() =>
     return details ? [details] : [];
   }),
 );
-const interactiveDocumentPreviewContext = computed(() => {
+const manifestVisiblePlugins = computed(() =>
+  pluginReferenceResolver.value?.plugins ?? (plugin.value ? [plugin.value] : []),
+);
+const markdownReferenceSuggestions = computed(() => {
   const file = selectedFile.value;
   const resolver = pluginReferenceResolver.value;
   if (
     !file
     || !resolver
-    || !["interactive-document", "markdown"].includes(selectedType.value ?? "")
+    || selectedType.value !== "markdown"
   ) {
-    return null;
+    return [];
   }
-  return {
-    resolveReference: (target: string) =>
-      resolver.resolveFromResource(file.id, target),
-    diagnostics: resolver.diagnostics.map((item) => item.message),
-    suggestions: resolver.referenceSuggestionsFromResource(file.id),
-  };
-});
-const interactiveDocumentReferenceResolver = computed(
-  () => interactiveDocumentPreviewContext.value?.resolveReference,
-);
-const interactiveDocumentReferenceDiagnostics = computed(
-  () => interactiveDocumentPreviewContext.value?.diagnostics ?? [],
-);
-const interactiveDocumentReferenceSuggestions = computed(() => {
-  return interactiveDocumentPreviewContext.value?.suggestions ?? [];
+  return resolver.referenceSuggestionsFromResource(file.id);
 });
 
 onMounted(async () => {
-  await pluginStore.initialize();
+  await Promise.all([pluginStore.initialize(), conversation.initialize()]);
   pluginStore.openPlugin(props.resourceId);
   selectInitialNode();
   try {
@@ -316,8 +354,11 @@ watch(
   () => selectedFile.value?.id,
   () => {
     loadContentDraft();
-    fileViewMode.value =
-      selectedType.value === "markdown" ? "preview" : "source";
+    fileViewMode.value = selectedIsContainerDefinitions.value
+      || selectedIsRegex.value
+      || selectedIsManifest.value
+      ? "preview"
+      : "source";
   },
   { immediate: true },
 );
@@ -400,7 +441,9 @@ function selectNode(node: PluginTreeNode) {
   if (isMobileLayout.value) treeVisibleOnMobile.value = false;
 }
 
-function openContainerResource(resource: PluginContainerResourceQuery) {
+function openContainerResource(
+  resource: Pick<PluginContainerResourceQuery, "id" | "pluginId" | "path">,
+) {
   if (contentSaveTimer) {
     clearTimeout(contentSaveTimer);
     contentSaveTimer = null;
@@ -464,7 +507,7 @@ async function persistContent() {
   if (!currentPlugin || !file) return;
   let content: unknown = contentDraft.value;
   if (
-    selectedType.value === "json"
+    selectedType.value === "json" || selectedType.value === "data"
   ) {
     try {
       content = JSON.parse(contentDraft.value || "null");
@@ -500,6 +543,20 @@ async function updateSelectedPriority(delta: number) {
   });
 }
 
+async function persistContextCompressionThreshold(event: Event) {
+  const current = plugin.value;
+  const file = selectedFile.value;
+  if (!current || !file) return;
+  const value = Number.parseInt((event.target as HTMLInputElement).value, 10);
+  await pluginStore.updateNode(current.id, file.id, {
+    contextConfig: {
+      compressionThreshold: Number.isFinite(value) && value > 0
+        ? Math.max(4, value)
+        : 0,
+    },
+  });
+}
+
 async function persistSelectedMemberships() {
   const current = plugin.value;
   const file = selectedFile.value;
@@ -510,6 +567,9 @@ async function persistSelectedMemberships() {
       .map((item) => ({
         container: item.container.trim(),
         alias: item.alias.trim(),
+        ...(item.condition?.reference.trim()
+          ? { condition: structuredClone(item.condition) }
+          : {}),
       })),
   });
 }
@@ -529,6 +589,93 @@ async function removeSelectedMembership(index: number) {
   if (!file) return;
   file.memberships.splice(index, 1);
   await persistSelectedMemberships();
+}
+
+function updateSelectedMembershipConditionReference(index: number, value: string) {
+  const membership = selectedFile.value?.memberships[index];
+  if (!membership) return;
+  const reference = value.trim();
+  if (!reference) {
+    delete membership.condition;
+  } else {
+    try {
+      const parsed = parsePluginManifestReference(reference);
+      if (parsed.scope !== "local") throw new Error("注入条件只允许 local 配置引用。");
+    } catch (error) {
+      push.error(error instanceof Error ? error.message : "配置引用无效。");
+      return;
+    }
+    membership.condition = {
+      reference: reference.replace(/^<@|>$/g, ""),
+      ...(membership.condition && Object.prototype.hasOwnProperty.call(
+        membership.condition,
+        "equals",
+      ) ? { equals: membership.condition.equals } : {}),
+    };
+  }
+  void persistSelectedMemberships();
+}
+
+function updateSelectedMembershipConditionEquals(index: number, value: string) {
+  const membership = selectedFile.value?.memberships[index];
+  if (!membership?.condition) return;
+  if (!value.trim()) {
+    delete membership.condition.equals;
+    void persistSelectedMemberships();
+    return;
+  }
+  try {
+    membership.condition.equals = JSON.parse(value);
+    void persistSelectedMemberships();
+  } catch {
+    push.error("注入条件的期望值必须是合法 JSON；留空表示判断真值。");
+  }
+}
+
+function selectedMembershipConditionEquals(index: number) {
+  const condition = selectedFile.value?.memberships[index]?.condition;
+  return condition && Object.prototype.hasOwnProperty.call(condition, "equals")
+    ? JSON.stringify(condition.equals)
+    : "";
+}
+
+async function persistSelectedDataReferences() {
+  const current = plugin.value;
+  const file = selectedFile.value;
+  if (!current || !file) return;
+  await pluginStore.updateNode(current.id, file.id, {
+    dataReferences: file.dataReferences
+      .filter((item) => item.alias.trim() && item.dataId.trim())
+      .map((item) => ({
+        alias: item.alias.trim(),
+        dataId: item.dataId.trim(),
+      })),
+  });
+}
+
+async function addSelectedDataReference() {
+  const file = selectedFile.value;
+  const first = availableDataResources.value[0];
+  if (!file || !first) return;
+  let alias = first.name.replace(/\.data$/i, "") || "data";
+  let suffix = 2;
+  while (file.dataReferences.some((item) => item.alias === alias)) {
+    alias = `${first.name.replace(/\.data$/i, "") || "data"}-${suffix++}`;
+  }
+  file.dataReferences.push({ alias, dataId: first.id });
+  await persistSelectedDataReferences();
+}
+
+async function removeSelectedDataReference(index: number) {
+  const file = selectedFile.value;
+  if (!file) return;
+  file.dataReferences.splice(index, 1);
+  await persistSelectedDataReferences();
+}
+
+function openSelectedDataReference(dataId: string) {
+  const resource = availableDataResources.value.find((item) => item.id === dataId);
+  if (resource) openContainerResource(resource);
 }
 
 async function createFile(
@@ -551,10 +698,17 @@ function newFileTemplate(type: NewPluginFileType) {
       content: "# Plugin Instructions\n\n",
     };
   }
-  if (type === "interactive-document") {
+  if (type === "data") {
     return {
-      name: "untitled.imd",
-      content: createEmptyInteractiveDocumentSource(),
+      name: "untitled.data",
+      content: serializePluginDataDefinition({
+        version: 1,
+        isolation: "resource",
+        description: "",
+        initialValue: {},
+        enableUpdater: false,
+        wrapperSource: "",
+      }),
     };
   }
   if (type === "javascript") {
@@ -686,7 +840,7 @@ function nativeFileContent(name: string, bytes: Uint8Array) {
 
 function parseStructuredFileContent(name: string, source: string) {
   const type = pluginFileType(name);
-  if (type !== "json" && type !== "interactive-document") return source;
+  if (type !== "json" && type !== "data") return source;
   try {
     return JSON.parse(source) as unknown;
   } catch {
@@ -797,7 +951,7 @@ function nodeIcon(node: PluginTreeNode) {
   switch (pluginFileType(node.name)) {
     case "markdown":
       return FileText;
-    case "interactive-document":
+    case "data":
     case "json":
       return Braces;
     case "javascript":
@@ -1085,7 +1239,7 @@ async function restoreBuiltInPlugin() {
             {{ selectedTypeLabel }}
           </span>
           <div
-            v-if="selectedType === 'markdown' || selectedIsVue"
+            v-if="selectedIsVue || selectedIsContainerDefinitions || selectedIsRegex || selectedIsManifest"
             class="flex items-center rounded-md border bg-muted/30 p-0.5"
           >
             <Button
@@ -1176,6 +1330,23 @@ async function restoreBuiltInPlugin() {
               @change="persistNodeIcon"
             />
           </label>
+          <label
+            v-if="selectedIsContext"
+            class="col-span-full flex items-center justify-between gap-4 border-t pt-2 mobile:col-span-1"
+          >
+            <span>
+              <span class="block text-xs font-medium">压缩记忆阈值</span>
+              <span class="text-xs text-muted-foreground">0 关闭；正数至少按 4 个消息容器计算。</span>
+            </span>
+            <input
+              :value="selectedFile.contextConfig?.compressionThreshold ?? 0"
+              type="number"
+              min="0"
+              step="1"
+              class="h-8 w-24 rounded-md border bg-background px-2 text-right font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
+              @change="persistContextCompressionThreshold"
+            />
+          </label>
           <div class="col-span-full border-t pt-2 mobile:col-span-1">
             <div class="mb-1.5 flex items-center justify-between">
               <span class="text-xs font-medium">容器成员关系（资源元数据）</span>
@@ -1187,33 +1358,117 @@ async function restoreBuiltInPlugin() {
             <div
               v-for="(membership, index) in selectedFile.memberships"
               :key="index"
-              class="mb-1 grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] gap-2"
+              class="mb-2 rounded-md border bg-background p-2"
             >
-              <input
-                v-model="membership.container"
-                class="h-8 rounded-md border bg-background px-2 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
-                placeholder="container:plugin/会话上下文"
-                @change="persistSelectedMemberships"
-              />
-              <input
-                v-model="membership.alias"
-                class="h-8 rounded-md border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
-                placeholder="别名（可选）"
-                @change="persistSelectedMemberships"
-              />
-              <Button size="icon" variant="ghost" class="size-8" title="移除成员关系" @click="removeSelectedMembership(index)">
-                <Trash2 class="size-3.5" />
-              </Button>
+              <div class="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] gap-2 mobile:grid-cols-[minmax(0,1fr)_auto]">
+                <input
+                  v-model="membership.container"
+                  class="h-8 rounded-md border bg-background px-2 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="container:plugin/会话上下文"
+                  @change="persistSelectedMemberships"
+                />
+                <input
+                  v-model="membership.alias"
+                  class="h-8 rounded-md border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring mobile:col-start-1"
+                  placeholder="别名（可选）"
+                  @change="persistSelectedMemberships"
+                />
+                <Button size="icon" variant="ghost" class="size-8 mobile:col-start-2 mobile:row-start-1" title="移除成员关系" @click="removeSelectedMembership(index)">
+                  <Trash2 class="size-3.5" />
+                </Button>
+              </div>
+              <div class="mt-2 grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-2 mobile:grid-cols-1">
+                <Input
+                  :model-value="membership.condition?.reference ?? ''"
+                  class="h-8 font-mono text-xs"
+                  placeholder="条件（可选）：config:local/group/content"
+                  @change="updateSelectedMembershipConditionReference(index, ($event.target as HTMLInputElement).value)"
+                />
+                <Input
+                  :model-value="selectedMembershipConditionEquals(index)"
+                  :disabled="!membership.condition?.reference"
+                  class="h-8 font-mono text-xs"
+                  placeholder="期望 JSON；留空判断真值"
+                  @change="updateSelectedMembershipConditionEquals(index, ($event.target as HTMLInputElement).value)"
+                />
+              </div>
             </div>
             <p v-if="!selectedFile.memberships.length" class="text-xs text-muted-foreground">
               此资源暂未加入容器。元数据不会显示在文件正文或 Markdown 预览中。
+            </p>
+          </div>
+          <div class="col-span-full border-t pt-2 mobile:col-span-1">
+            <div class="mb-1.5 flex items-center justify-between">
+              <span class="text-xs font-medium">Data 引用（资源元数据）</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                class="h-7 text-xs"
+                :disabled="!availableDataResources.length"
+                @click="addSelectedDataReference"
+              >
+                <Plus class="mr-1 size-3.5" />
+                引用 .data
+              </Button>
+            </div>
+            <div
+              v-for="(reference, index) in selectedFile.dataReferences"
+              :key="`${reference.alias}:${index}`"
+              class="mb-1 grid grid-cols-[minmax(0,.8fr)_minmax(0,1.6fr)_auto_auto] gap-2"
+            >
+              <input
+                v-model="reference.alias"
+                class="h-8 rounded-md border bg-background px-2 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
+                placeholder="alias"
+                @change="persistSelectedDataReferences"
+              />
+              <select
+                v-model="reference.dataId"
+                class="h-8 min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+                @change="persistSelectedDataReferences"
+              >
+                <option
+                  v-if="!availableDataResources.some((item) => item.id === reference.dataId)"
+                  :value="reference.dataId"
+                >
+                  缺失的 Data · {{ reference.dataId }}
+                </option>
+                <option
+                  v-for="dataResource in availableDataResources"
+                  :key="dataResource.id"
+                  :value="dataResource.id"
+                >
+                  {{ dataResource.pluginName }} · {{ dataResource.path }} · {{ dataResource.id }}
+                </option>
+              </select>
+              <Button
+                size="icon"
+                variant="ghost"
+                class="size-8"
+                title="打开 Data 资源"
+                @click="openSelectedDataReference(reference.dataId)"
+              >
+                <Eye class="size-3.5" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                class="size-8"
+                title="移除 Data 引用"
+                @click="removeSelectedDataReference(index)"
+              >
+                <Trash2 class="size-3.5" />
+              </Button>
+            </div>
+            <p v-if="!selectedFile.dataReferences.length" class="text-xs text-muted-foreground">
+              此资源尚未引用 .data；引用关系不会写进 Markdown 或数据定义正文。
             </p>
           </div>
         </div>
 
         <div v-if="selectedFile" class="min-h-0 flex-1 overflow-hidden">
           <PluginContainerDefinitionsEditor
-            v-if="selectedIsContainerDefinitions"
+            v-if="selectedIsContainerDefinitions && fileViewMode === 'preview'"
             :key="selectedFile.id"
             :model-value="contentDraft"
             :definition-id="selectedFile.id"
@@ -1222,10 +1477,57 @@ async function restoreBuiltInPlugin() {
             @open-resource="openContainerResource"
           />
 
+          <div
+            v-else-if="selectedIsContainerDefinitions"
+            class="relative h-full"
+          >
+            <JavaScriptCodeMirrorEditor
+              :key="`${selectedFile.id}:containers-source`"
+              :model-value="contentDraft"
+              language="json"
+              frameless
+              @update:model-value="scheduleContentSave"
+            />
+            <span
+              v-if="contentError"
+              class="absolute bottom-3 right-4 rounded bg-destructive px-2 py-1 text-xs text-destructive-foreground"
+            >
+              {{ contentError }}
+            </span>
+          </div>
+
           <PluginRegexEditor
-            v-else-if="selectedIsRegex"
+            v-else-if="selectedIsRegex && fileViewMode === 'preview'"
             :key="selectedFile.id"
             :model-value="contentDraft"
+            @update:model-value="scheduleContentSave"
+          />
+
+          <div
+            v-else-if="selectedIsRegex"
+            class="relative h-full"
+          >
+            <JavaScriptCodeMirrorEditor
+              :key="`${selectedFile.id}:regex-source`"
+              :model-value="contentDraft"
+              language="json"
+              frameless
+              @update:model-value="scheduleContentSave"
+            />
+            <span
+              v-if="contentError"
+              class="absolute bottom-3 right-4 rounded bg-destructive px-2 py-1 text-xs text-destructive-foreground"
+            >
+              {{ contentError }}
+            </span>
+          </div>
+
+          <PluginManifestEditor
+            v-else-if="selectedIsManifest && fileViewMode === 'preview' && plugin"
+            :key="selectedFile.id"
+            :model-value="contentDraft"
+            :plugin="plugin"
+            :plugins="manifestVisiblePlugins"
             @update:model-value="scheduleContentSave"
           />
 
@@ -1236,7 +1538,7 @@ async function restoreBuiltInPlugin() {
             <div class="border-b px-4 py-3">
               <div class="text-sm font-medium">插件配置</div>
               <p class="mt-0.5 text-xs text-muted-foreground">
-                配置结构暂未开放；当前文件保持为空对象。
+                根节点使用 GroupContent[]；每项通过 component、props 和 value 定义一个设置控件。
               </p>
             </div>
             <div class="min-h-0 flex-1">
@@ -1286,26 +1588,16 @@ async function restoreBuiltInPlugin() {
 
           <div
             v-else-if="selectedType === 'markdown'"
-            class="h-full min-h-0"
+            class="h-full min-h-0 overflow-y-auto"
           >
-            <div
-              v-if="fileViewMode === 'preview'"
-              class="h-full overflow-y-auto bg-muted/35 px-6 py-8 mobile:px-3 mobile:py-4"
-            >
-              <article class="plugin-document mx-auto max-w-3xl rounded-xl border bg-background px-12 py-10 shadow-sm mobile:px-5 mobile:py-6">
-                <ConversationMarkdown
-                  :model-value="contentDraft"
-                  enable-reference-syntax
-                />
-              </article>
-            </div>
-            <JavaScriptCodeMirrorEditor
-              v-else
-              :key="`${selectedFile.id}:markdown-source`"
+            <ConversationComposerEditor
+              :key="`${selectedFile.id}:markdown-editor`"
               :model-value="contentDraft"
-              language="markdown"
-              :reference-suggestions="interactiveDocumentReferenceSuggestions"
-              frameless
+              enable-block-edit
+              enable-reference-syntax
+              :reference-suggestions="markdownReferenceSuggestions"
+              :enable-ai="false"
+              class="plugin-markdown-editor min-h-full px-6 py-8 mobile:px-3 mobile:py-4"
               @update:model-value="scheduleContentSave"
             />
           </div>
@@ -1342,19 +1634,8 @@ async function restoreBuiltInPlugin() {
             />
           </div>
 
-          <InteractiveDocumentWorkspacePage
-            v-else-if="selectedType === 'interactive-document'"
-            :key="selectedFile.id"
-            :model-value="contentDraft"
-            :resolve-reference="interactiveDocumentReferenceResolver"
-            :reference-diagnostics="interactiveDocumentReferenceDiagnostics"
-            :reference-suggestions="interactiveDocumentReferenceSuggestions"
-            class="h-full"
-            @update:model-value="scheduleContentSave"
-          />
-
           <div
-            v-else-if="selectedType === 'json'"
+            v-else-if="selectedType === 'json' || selectedType === 'data'"
             class="relative h-full"
           >
             <JavaScriptCodeMirrorEditor

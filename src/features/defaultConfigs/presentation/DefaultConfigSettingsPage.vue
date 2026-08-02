@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { GripVertical, MoreHorizontal, Plus, Trash2, Upload } from "lucide-vue-next";
+import { MoreHorizontal, Plus, Trash2, Upload } from "lucide-vue-next";
 import { push } from "notivue";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +24,6 @@ const defaults = useDefaultConfigStore();
 const pluginStore = usePluginStore();
 const layout = useLayoutStore();
 const importInput = ref<HTMLInputElement | null>(null);
-const draggingPluginId = ref("");
 const globalPlugins = computed(() => pluginStore.globalPlugins);
 
 onMounted(async () => {
@@ -66,20 +65,14 @@ async function deleteGlobalPlugin(plugin: Plugin) {
   if (plugin.builtIn) {
     return;
   }
-  layout.closeTabsByResource("plugin", plugin.id);
-  await pluginStore.deletePlugin(plugin.id);
+  try {
+    await pluginStore.deletePlugin(plugin.id);
+    layout.closeTabsByResource("plugin", plugin.id);
+  } catch (error) {
+    push.error(error instanceof Error ? error.message : "插件删除失败");
+  }
 }
 
-async function onDrop(target: Plugin) {
-  if (!draggingPluginId.value) {
-    return;
-  }
-  await pluginStore.moveGlobalPluginBefore(
-    draggingPluginId.value,
-    target.builtIn ? undefined : target.id,
-  );
-  draggingPluginId.value = "";
-}
 </script>
 
 <template>
@@ -129,7 +122,7 @@ async function onDrop(target: Plugin) {
 
     <SettingGroup
       title="全局插件"
-      description="在所有角色包中可用。这里的顺序是新角色包和未单独调整角色包的默认顺序。"
+      description="管理全局插件的安装级可用状态；每个角色包再按稳定 ID 独立选择主要插件和启用集合。"
     >
       <div class="flex items-center justify-end gap-1 px-4 py-2">
         <Button
@@ -155,18 +148,8 @@ async function onDrop(target: Plugin) {
       <div
         v-for="plugin in globalPlugins"
         :key="plugin.id"
-        :draggable="!plugin.builtIn"
         class="group flex min-h-14 items-center gap-3 px-4 py-2.5"
-        :class="draggingPluginId === plugin.id && 'opacity-50'"
-        @dragstart="draggingPluginId = plugin.id"
-        @dragend="draggingPluginId = ''"
-        @dragover.prevent
-        @drop.prevent="onDrop(plugin)"
       >
-        <GripVertical
-          class="size-4 shrink-0 text-muted-foreground"
-          :class="plugin.builtIn ? 'opacity-20' : 'cursor-grab'"
-        />
         <img
           v-if="plugin.icon"
           :src="plugin.icon"

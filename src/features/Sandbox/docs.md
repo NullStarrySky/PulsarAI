@@ -12,7 +12,7 @@ Core exports live in `domain/sandbox.ts`:
 - `resolveSandboxMessages` expands message arrays and preserves AI SDK message roles where possible.
 - `mergeSandboxEnvironments` remains available for non-Plugin callers that intentionally compose explicit environment fragments.
 
-Plugin resources are not merged into the Sandbox. Plugin and InteractiveDoc preprocess explicit `<@...>` tokens, then call Sandbox with only authorized base APIs, active conversation values, local IMD data through guarded `ref`, and process helpers. `resolveSandboxMessages` continues to preserve roles when `[[...]]` splices message arrays.
+Plugin resources are not merged into the Sandbox. Plugin and context-document compilation preprocess explicit `<@...>` tokens, then call Sandbox with only authorized base APIs, active conversation values, resource-metadata-bound `.data`, and process helpers. `resolveSandboxMessages` continues to preserve roles when `[[...]]` splices message arrays.
 
 The sandbox is intentionally frontend-side and minimal. Future plugin work should add explicit helpers to the environment object rather than widening global access.
 

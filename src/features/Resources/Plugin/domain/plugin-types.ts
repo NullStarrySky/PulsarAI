@@ -1,3 +1,5 @@
+import type { PluginManifestValue } from "./plugin-manifest";
+
 export interface PluginTreeNodeBase {
   id: string;
   name: string;
@@ -10,11 +12,28 @@ export interface PluginFile extends PluginTreeNodeBase {
   content: unknown;
   priority: number;
   memberships: PluginFileMembership[];
+  /**
+   * Data dependencies are resource metadata. They deliberately do not live in
+   * Markdown content, and paths are resolved from the stable data resource ID.
+   */
+  dataReferences: PluginDataReference[];
+  contextConfig?: {
+    compressionThreshold: number;
+  };
 }
 
 export interface PluginFileMembership {
   container: string;
   alias: string;
+  condition?: {
+    reference: string;
+    equals?: PluginManifestValue;
+  };
+}
+
+export interface PluginDataReference {
+  alias: string;
+  dataId: string;
 }
 
 export interface PluginFolder extends PluginTreeNodeBase {
@@ -36,9 +55,7 @@ export interface Plugin {
   shortDescription: string;
   root: PluginFolder;
   enabled: boolean;
-  main: boolean;
   builtIn: boolean;
-  order: number;
 }
 
 export interface ResolvedPluginAction {
@@ -50,7 +67,7 @@ export interface ResolvedPluginAction {
 
 export type PluginFileType =
   | "markdown"
-  | "interactive-document"
+  | "data"
   | "javascript"
   | "json"
   | "media"
@@ -60,9 +77,9 @@ export type PluginFileType =
 export const pluginConventions = {
   info: "info.md",
   manifest: "manifest.json",
-  containers: "containers.xml",
+  containers: "containers.json",
   regex: "regex.json",
-  context: "context.imd",
+  context: "context.md",
   override: "Override.vue",
   agentProcessFolder: "agentprocess",
   agentProcessEntry: "index.js",
@@ -75,7 +92,7 @@ export const pluginConventions = {
 } as const;
 
 const markdownExtensions = new Set(["md", "markdown"]);
-const interactiveDocumentExtensions = new Set(["imd"]);
+const dataExtensions = new Set(["data"]);
 const javascriptExtensions = new Set(["js", "mjs", "cjs", "ts"]);
 const jsonExtensions = new Set(["json"]);
 const mediaExtensions = new Set([
@@ -102,7 +119,7 @@ export function pluginFileExtension(name: string) {
 export function pluginFileType(name: string): PluginFileType {
   const extension = pluginFileExtension(name);
   if (markdownExtensions.has(extension)) return "markdown";
-  if (interactiveDocumentExtensions.has(extension)) return "interactive-document";
+  if (dataExtensions.has(extension)) return "data";
   if (javascriptExtensions.has(extension)) return "javascript";
   if (jsonExtensions.has(extension)) return "json";
   if (mediaExtensions.has(extension)) return "media";

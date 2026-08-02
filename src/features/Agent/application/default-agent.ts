@@ -47,7 +47,7 @@ export interface AgentResourceProvider {
 
 const jsInputSchema = z.object({
   intent: z.enum(["action", "variable-update"]).optional().describe(
-    "Use `variable-update` only to update IMD variables without side effects. Omit it or use `action` for normal API operations.",
+    "Use `variable-update` only to update Conversation-owned .data instances without side effects. Omit it or use `action` for normal API operations.",
   ),
   code: z.string().describe(
     "One JavaScript function with an explicit return, for example `async function () { return await plugin.listContainers(); }`.",
@@ -62,7 +62,7 @@ const codeActInstructions = [
   "For a blocking user decision, call `await agent.askUser({ question, options })` or `await api.askUser(...)` inside the function.",
   "Registered Skill and MCP extensions are context APIs: inspect with `agent.listExtensions(...)` and call with `agent.callExtension(source, name, input)`.",
   "Plugin custom functions documented under `# 自定义工具` are context functions: call them with `await ctx.tools[name](...args)`.",
-  "To update IMD variables, set `intent` to `variable-update` and submit a synchronous function. This intent is optional, receives only `variables`, and must not read time or randomness, start async work, call APIs, access files or the network, or cause any other side effect.",
+  "To update a .data instance, set `intent` to `variable-update` and submit a synchronous function that calls `data.readForResource(resourceId, dataId)` and `data.writeForResource(resourceId, dataId, value)`. This intent must not read time or randomness, start async work, call other APIs, access files or the network, or cause any other side effect.",
   "A variable-update error is returned to you so you can correct the function. After three failed variable-update attempts, generation stops with an error.",
   "The tool result contains either `{ ok: true, value }` or `{ ok: false, error }`; inspect errors and correct the next function.",
 ].join("\n");
@@ -84,7 +84,7 @@ function createCodeActTool(
         if (input.intent === "variable-update") {
           output = variableUpdate
             ? await variableUpdate.execute(input.code)
-            : { ok: false, error: "当前上下文没有可更新的 IMD 变量。" };
+            : { ok: false, error: "当前上下文没有可更新的 .data 实例。" };
           const succeeded = Boolean(
             output && typeof output === "object" && "ok" in output
             && (output as { ok?: unknown }).ok === true,
@@ -180,7 +180,7 @@ export function createAgentResourceProvider(
       const settings = (args[0] ?? {}) as Record<string, unknown>;
       return Reflect.construct(
         target,
-        [{ reasoning, ...settings }],
+        [{ reasoning, ...settings, allowSystemInMessages: true }],
         newTarget,
       );
     },

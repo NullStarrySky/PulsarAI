@@ -1,107 +1,83 @@
-# Interactive Document Resources
+# Context Markdown and Data Resources
 
-Interactive documents are UTF-8 SFC-like source files. Persisted `.imd` content remains readable and diffable while the domain compiler produces role-preserving AI SDK messages plus a Markdown diagnostic view.
+Pulsar context documents are ordinary UTF-8 Markdown. Data definitions never live inside Markdown.
 
-## Source format
+## Role-aware Markdown
 
-One document may contain multiple prompt templates:
+Text outside a role fence compiles as `system`. Use an explicit, non-nesting fence when a document needs another role:
 
-```html
-<prompt_template name="identity" role="system">
-# {{ <@local:profile>.name }}
+```md
+:::pulsar role=system
+System instructions.
+:::
 
-<@path:./rules.md>
-</prompt_template>
+:::pulsar role=user
+Few-shot user input.
+:::
+
+:::pulsar role=assistant
+Few-shot assistant output.
+:::
 ```
 
-`role` is `system`, `user`, or `assistant`. Templates retain normal Markdown, `{{...}}` expressions, `[[...]]` message splices, and explicit Plugin references.
+The parser ignores Pulsar markers inside normal backtick or tilde code fences. Malformed, nested, orphaned, or unclosed role fences produce structured diagnostics. Markdown still supports Sandbox `{{...}}`, role-preserving `[[...]]`, and explicit Plugin `<@...>` references.
 
-Local values live under one data block:
+The root context entry is the exact Plugin path `context.md`. Its compression-memory threshold is resource metadata, not Markdown content.
 
-```html
-<data>
-  <sub_data name="profile">
-    <enable_updater>
-      true
-    </enable_updater>
-    <description>
-      Character profile used by the identity template.
-    </description>
-    <content type="json">
-      { "name": "Alice" }
-    </content>
-    <wrapper>
-      function (value, variable) {
-        return {
-          get name() { return variable.value.name; },
-          rename(name) { variable.value.name = String(name); return variable.value.name; },
-          replace(next) { variable.replace(next); return variable.value; },
-        };
-      }
-    </wrapper>
-  </sub_data>
-</data>
+## `.data` definitions
 
-<memory>
-  <compression_threshold>24</compression_threshold>
-</memory>
-```
+A `.data` file is JSON that defines reusable state rather than storing a Conversation's current value:
 
-`content` supports `json` or raw `value`. When `enable_updater` is true, it is the initial anemic state for a replayable variable. `description` is automatically collected into the `# 变量说明` system context, so it should document the facade methods and invariants the model is allowed to use.
-
-`wrapper` is an optional sandboxed `function (value, variable) { return facade; }`. Object and array methods may mutate the cloned `value` draft. Primitive or whole-value replacement uses `variable.replace(nextValue)` and reads the replacement through `variable.value`. During normal prompt compilation the facade is read-only; during a `variable-update` intent it receives a transactional clone. A failed function is discarded in full.
-
-`memory.compression_threshold` controls compression memory by message-container count. Omission or `0` disables compression; positive values are normalized to a minimum of four.
-
-## Compilation
-
-`domain/interactive-document.ts` owns:
-
-- parsing and normalized serialization;
-- legacy block-JSON conversion;
-- local JSON/value construction;
-- variable-definition, wrapper-facade, and description-context construction;
-- optional data overrides from the active conversation variable state;
-- compression-memory threshold parsing;
-- explicit reference preprocessing;
-- guarded `ref` access;
-- Sandbox macro and message-splice expansion;
-- role-preserving messages, Markdown output, dependency inventory, and diagnostics.
-
-Local data is never injected under a bare name. It is available only through `<@local:name>`. External resolution is provided by the Plugin reference resolver, so the InteractiveDoc domain does not inspect plugin trees. `<@容器名称>` resolves a uniquely visible container; scoped container, path, and ID forms remain available when the target must be explicit.
-
-## Conversation variable updates
-
-At generation start, Conversation evaluates enabled variables from their IMD initial values and replays the update function bound to each selected message version on the active path. The cache key includes the definition revision, parent state key, container ID, selected message version ID, and function source hash. Cached states are bounded in-memory checkpoints, not snapshots persisted on every message.
-
-The model requests an update through the only model-visible tool:
-
-```js
-// codeAct intent: variable-update
-function () {
-  variables.profile.rename("Alicia");
-  return variables.profile.name;
+```json
+{
+  "version": 1,
+  "isolation": "resource",
+  "description": "Character health and its invariants.",
+  "initialValue": { "hp": 100, "maxHp": 100 },
+  "enableUpdater": true,
+  "wrapperSource": ""
 }
 ```
 
-This intent receives only the variable facades. Network, files, Plugin/Feature APIs, real current time, randomness, detached async work, and other external side effects are unavailable. Execution errors are returned to the ToolLoopAgent for correction; a third consecutive failed variable update throws. Successful calls in one generation are composed in original order and stored at `ChatMessage.meta.variableUpdate` for the current assistant message version. Historical replay failure stops generation instead of silently accepting a partial state.
+`isolation` is owned by the `.data` definition:
 
-Each generation recompiles the IMD with the latest replayed anemic values, so `<@local:...>` resolves through fresh read-only wrappers. Switching a message version or branch selects a different update chain without rewriting descendants.
+- `resource` creates one Conversation state instance for each referencing resource ID.
+- `conversation` shares one instance among all referencing resources in the same Conversation.
 
-## Compression memory
+Runtime values remain replayable Conversation state bound to concrete message versions. `.data` files are never rewritten when values change and no data instance is shared across Conversations.
 
-When the active path contains at least two threshold-sized windows, Conversation keeps the newest threshold containers raw and sends older fixed-size ranges to the configured fast model. Leaf summaries are generated with bounded parallelism and stored as immutable conversation-memory segments containing exact container and message-version IDs.
+## Resource metadata references
 
-Four adjacent segments at the same level can be summarized again into a parent segment. Parents point to child segment IDs, so compression can form multiple levels without changing message content or container topology. On read, the resolver validates all descendant pointers against the active path and chooses the farthest valid segment at each position; uncovered and recent ranges remain raw messages. A changed version invalidates affected pointers by identity/hash. Compression failure falls back to raw messages and emits a diagnostic. Deleting a conversation deletes its derived segments as well.
+Every Plugin file has `dataReferences: Array<{ alias, dataId }>` metadata. The stable Data ID is persisted; path, source Plugin, isolation, and current value are resolved when queried. Moving a `.data` file therefore does not change its state identity.
 
-## Workspace
+Markdown content does not contain Data imports. During compilation, the referencing resource receives its aliases as `data.<alias>` and `DATA.<alias>` inside Sandbox expressions. One resource may reference multiple definitions, and one definition may be referenced by multiple resources.
 
-`presentation/InteractiveDocumentWorkspacePage.vue` has three views:
+## Data container API
 
-- Edit presents each `prompt_template` in Milkdown with `<@...>` syntax highlighting, each `sub_data` with updater/description/content/wrapper fields, and the compression threshold. Typing `<@` opens reference completion for local data and currently visible Plugin containers; suggestions show their optional descriptions and insert a scoped container target when a short name would be ambiguous.
-- Source edits the complete SFC text. Container declarations and namespaced container references belong to the owning plugin root `containers.xml`; resource memberships are Plugin file metadata and never appear in IMD source.
-- Preview compiles the current source and renders each output message with its role and any parser/linker diagnostics.
+Ordinary CodeAct context receives a read-only Conversation data container:
 
-The layout becomes a single-column data grid below 768px and keeps usable touch targets.
+```js
+function () {
+  return data.readForResource(resourceId, dataId);
+}
+```
 
-The workspace is registered for `resourceType: "interactive-doc"` and is reused by Plugin `.imd` files.
+The synchronous `variable-update` intent receives the transactional form:
+
+```js
+function () {
+  const value = data.readForResource(resourceId, dataId);
+  value.hp = Math.max(0, value.hp - 10);
+  return data.writeForResource(resourceId, dataId, value);
+}
+```
+
+It cannot use Feature or Plugin APIs, files, network, current time, randomness, detached async work, or other effects. A failed update discards the whole draft; successful functions are stored in order on `ChatMessage.meta.variableUpdate` and replayed only along the active message-version path.
+
+`listForResource(resourceId)` returns Data IDs, paths, isolation, writability, and values so an agent can continue querying with stable identities.
+
+## Compilation and editing
+
+`domain/interactive-document.ts` parses role-aware Markdown, links explicit references through the Plugin resolver, binds metadata-provided Data aliases, evaluates Sandbox expressions, and returns role-preserving model messages plus diagnostics.
+
+Ordinary `.md` files use the Milkdown editing surface directly. They do not expose a redundant raw-source/preview switch. Raw-source switching is reserved for Vue files and convention JSON files that have a structured renderer, such as root `regex.json`.

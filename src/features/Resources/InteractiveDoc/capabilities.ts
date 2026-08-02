@@ -3,46 +3,46 @@ import {
   type CapabilityDefinition,
 } from "@/features/Capabilities/domain/capability";
 import {
-  compileInteractiveDocumentSource,
+  compileContextDocumentSource,
 } from "./domain/interactive-document";
 
 export const capabilities: CapabilityDefinition = {
-  id: "interactiveDoc",
-  title: "交互式文档",
-  description: "把 SFC 风格的交互式文档源码编译为角色消息和 Markdown。",
+  id: "contextDocument",
+  title: "上下文文档",
+  description: "把带 Pulsar 角色围栏的 Markdown 编译为角色消息。",
   documentation: {
-    overview: "解析 .imd 源码中的 prompt_template、data、sub_data 与显式资源引用，生成可加入上下文的角色消息和可预览 Markdown。",
+    overview: "解析普通 Markdown、:::pulsar role=... 角色围栏与显式资源引用，生成可加入上下文的角色消息。数据引用来自资源元数据，不写入 Markdown。",
     notes: [
-      "编译过程不会隐式扫描资源，外部数据必须通过显式引用进入。",
+      "编译过程不会隐式扫描资源；.data 绑定由 Plugin resolver 从资源 dataReferences 元数据提供。",
       "返回 errors 时调用方应先展示或处理诊断，再决定是否使用部分编译结果。",
     ],
     types: [
       {
-        name: "InteractiveValue",
-        description: "交互式文档本地 data 可以安全保存的递归值。",
-        definition: `type InteractiveValue =
+        name: "ContextDataValue",
+        description: ".data 可以安全保存的递归值。",
+        definition: `type ContextDataValue =
   | string
   | number
   | boolean
   | null
-  | InteractiveValue[]
-  | { [key: string]: InteractiveValue };`,
+  | ContextDataValue[]
+  | { [key: string]: ContextDataValue };`,
       },
       {
-        name: "InteractiveDocumentCompileResult",
+        name: "ContextDocumentCompileResult",
         description: "一次交互式文档编译的完整结果。",
-        definition: `interface InteractiveDocumentCompileResult {
+        definition: `interface ContextDocumentCompileResult {
   messages: ModelMessage[];
   markdown: string;
-  data: Record<string, InteractiveValue>;
-  errors: InteractiveDocumentCompileError[];
+  data: Record<string, ContextDataValue>;
+  errors: ContextDocumentCompileError[];
   dependencies: string[];
 }`,
       },
       {
-        name: "InteractiveDocumentCompileError",
+        name: "ContextDocumentCompileError",
         description: "指向源文档问题的结构化诊断。",
-        definition: `interface InteractiveDocumentCompileError {
+        definition: `interface ContextDocumentCompileError {
   sourceId: string;
   message: string;
 }`,
@@ -56,15 +56,15 @@ export const capabilities: CapabilityDefinition = {
   api: {
     compile: [{
       name: "compile",
-      signature: "compile(source: string): InteractiveDocumentCompileResult",
-      description: "解析 prompt_template、本地 sub_data 与显式引用并返回编译结果。",
-      example: "interactiveDoc.compile(source)",
+      signature: "compile(source: string): ContextDocumentCompileResult",
+      description: "解析角色围栏 Markdown 与显式引用并返回编译结果。",
+      example: "contextDocument.compile(source)",
     }],
   },
 };
 
 export const builder = createCapabilityBuilder(capabilities, (granted) => ({
   ...(granted.has("compile") ? {
-    compile: (source: string) => compileInteractiveDocumentSource(source),
+    compile: (source: string) => compileContextDocumentSource(source),
   } : {}),
 }));

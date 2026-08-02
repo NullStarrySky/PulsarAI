@@ -17,6 +17,7 @@ import {
   Search,
   Settings,
   Trash2,
+  Wrench,
 } from "lucide-vue-next";
 import {
   AlertDialog,
@@ -48,6 +49,7 @@ import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { useCommandStore } from "@/features/Hotkey/application/command-store";
 import InlineEditInput from "@/features/UI/presentation/InlineEditInput.vue";
 import { useNotificationStore } from "@/features/Notification/application/notification-store";
+import PluginRightSidebarPanel from "@/features/Resources/Plugin/presentation/PluginRightSidebarPanel.vue";
 
 const layout = useLayoutStore();
 const responsive = useResponsiveStore();
@@ -63,6 +65,7 @@ const uploadPackageId = ref("");
 const editing = ref<{ kind: "package-name" | "package-description" | "category-name"; id: string } | null>(null);
 const editingValue = ref("");
 const deleteCategoryId = ref("");
+const leftMode = ref<"packages" | "plugins">("packages");
 
 onMounted(() => {
   void conversation.initialize();
@@ -84,6 +87,7 @@ const categorySections = computed(() => [
 ]);
 
 async function openPackage(packageId: string) {
+  leftMode.value = "packages";
   await conversation.openPackage(packageId);
   const active = conversation.activeConversation;
   if (active) {
@@ -204,6 +208,22 @@ async function uploadIcon(event: Event) {
   >
     <div class="min-w-72 border-b p-2">
       <nav class="grid gap-1">
+        <Button
+          class="h-9 justify-start gap-2"
+          :variant="leftMode === 'packages' ? 'secondary' : 'ghost'"
+          @click="leftMode = 'packages'"
+        >
+          <LayoutGrid class="size-4" />
+          角色包
+        </Button>
+        <Button
+          class="h-9 justify-start gap-2"
+          :variant="leftMode === 'plugins' ? 'secondary' : 'ghost'"
+          @click="leftMode = 'plugins'"
+        >
+          <Wrench class="size-4" />
+          插件
+        </Button>
         <Button class="relative h-9 justify-start gap-2" variant="ghost" @click="openBuiltinPage('notifications', '通知')">
           <Bell class="size-4" />
           通知
@@ -225,7 +245,9 @@ async function uploadIcon(event: Event) {
       </nav>
     </div>
 
-    <div class="min-w-72 flex-1 overflow-y-auto p-2">
+    <PluginRightSidebarPanel v-if="leftMode === 'plugins'" />
+
+    <div v-else class="min-w-72 flex-1 overflow-y-auto p-2">
       <div class="mb-2 flex items-center justify-between px-1">
         <span class="text-xs font-medium text-muted-foreground">角色包</span>
         <Button

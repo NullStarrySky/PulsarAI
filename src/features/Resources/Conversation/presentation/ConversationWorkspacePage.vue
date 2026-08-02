@@ -152,14 +152,16 @@ const emptyPrompt = computed(() => `今天想和 ${conversation.activePackage?.n
 const availableActions = computed(() =>
   pluginStore.actionResourcesForPackage(
     conversation.activePackageId,
-    conversation.activePackage?.globalPluginOrder,
+    conversation.activePackage?.enabledGlobalPluginIds,
+    conversation.activePackage?.mainPluginId,
   ),
 );
 const renderingRegexRules = computed(() =>
   collectPluginRegexRules(
     pluginStore.enabledPluginsForPackage(
       conversation.activePackageId,
-      conversation.activePackage?.globalPluginOrder,
+      conversation.activePackage?.enabledGlobalPluginIds,
+      conversation.activePackage?.mainPluginId,
     ),
   ).value,
 );
@@ -182,7 +184,8 @@ const renderedNovelPath = computed(() =>
 const conversationBackground = computed(() => {
   const resource = pluginStore.activeBackgroundResourceForPackage(
     conversation.activePackageId,
-    conversation.activePackage?.globalPluginOrder,
+    conversation.activePackage?.enabledGlobalPluginIds,
+    conversation.activePackage?.mainPluginId,
   );
   const source = pluginMediaSource(resource?.content);
   return source
@@ -581,7 +584,8 @@ async function handleMessageNavigationRequest() {
 
     <PluginConversationOverride
       :package-id="conversation.activePackageId"
-      :global-plugin-order="conversation.activePackage?.globalPluginOrder"
+      :enabled-global-plugin-ids="conversation.activePackage?.enabledGlobalPluginIds"
+      :main-plugin-id="conversation.activePackage?.mainPluginId"
     >
     <MessageScrollerProvider
       v-if="conversation.activeConversation?.rendererId !== 'novel'"

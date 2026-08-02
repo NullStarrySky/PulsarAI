@@ -9,13 +9,13 @@ import {
   pluginNodePath,
   sortPluginTreeNodes,
   type Plugin,
+  type PluginFile,
   pluginFileType,
   type PluginTreeNode,
 } from "./domain/plugin-types";
 import {
   findPluginReferenceTokens,
   parsePluginContainerDefinitions,
-  serializePluginContainerDefinitions,
   type PluginContainerDeclaration,
   type PluginContainerImport,
   type PluginContainerScope,
@@ -28,8 +28,29 @@ import {
 import {
   pluginCapabilitiesDefinition,
 } from "./domain/plugin-capability";
+import {
+  isJsonValue,
+  manifestValueAt,
+  parsePluginManifest,
+  parsePluginManifestReference,
+  setManifestValue,
+  type PluginManifest,
+  type PluginManifestValue,
+} from "./domain/plugin-manifest";
 
 export const capabilities = pluginCapabilitiesDefinition;
+
+function activePackagePluginConfiguration() {
+  const activePackage = useConversationStore().activePackage;
+  return activePackage
+    ? {
+        packageId: activePackage.id,
+        pluginId: activePackage.pluginId,
+        mainPluginId: activePackage.mainPluginId,
+        enabledGlobalPluginIds: [...activePackage.enabledGlobalPluginIds],
+      }
+    : null;
+}
 
 function nodeSummary(
   node: PluginTreeNode,
@@ -57,11 +78,27 @@ function nodeSummary(
           containers:
             nodePath.join("/").toLocaleLowerCase()
               === pluginConventions.containers.toLocaleLowerCase()
-              ? parsePluginContainerDefinitions(source).containers
+              ? parsePluginContainerDefinitions(node.content).containers
               : [],
           memberships: node.memberships,
+          dataReferences: node.dataReferences,
+          ...(node.contextConfig ? { contextConfig: node.contextConfig } : {}),
         }
       : { children: node.children.map((child) => nodeSummary(child, nodePath)) }),
+  };
+}
+
+function manifestSummary(plugin: Plugin) {
+  const file = findPluginNodeByPath(plugin.root, pluginConventions.manifest);
+  if (file?.kind !== "file") return null;
+  const parsed = parsePluginManifest(file.content);
+  return {
+    id: file.id,
+    path: `/${pluginConventions.manifest}`,
+    pluginId: plugin.id,
+    pluginName: plugin.name,
+    groups: structuredClone(parsed.manifest),
+    diagnostics: structuredClone(parsed.diagnostics),
   };
 }
 
@@ -69,25 +106,118 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
   ...(granted.has("read") ? {
     list: () => {
       const conversation = useConversationStore();
-      return usePluginStore().visiblePluginsForPackage(
-        conversation.activePackageId,
-        conversation.activePackage?.globalPluginOrder,
-      ).map(({ id, name, shortDescription, enabled, builtIn, packageId }) => ({
+      const activePackage = conversation.activePackage;
+      return usePluginStore().plugins
+        .filter((plugin) =>
+          plugin.packageId === null || plugin.id === activePackage?.pluginId
+        )
+        .map(({ id, name, shortDescription, enabled, builtIn, packageId }) => ({
         id,
         name,
         shortDescription,
         enabled,
         builtIn,
         packageId,
+        local: id === activePackage?.pluginId,
+        main: id === activePackage?.mainPluginId,
+        active: id === activePackage?.pluginId
+          || id === activePackage?.mainPluginId
+          || (
+            enabled
+            && activePackage?.enabledGlobalPluginIds.includes(id) === true
+          ),
       }));
     },
-    getTree: (pluginId: string) => {
+    getPackageConfiguration: activePackagePluginConfiguration,
+    async setMainPlugin(pluginId: string) {
+      const conversation = useConversationStore();
+      const activePackage = conversation.activePackage;
       const plugin = usePluginStore().plugins.find((item) => item.id === pluginId);
+      if (!activePackage || !plugin) throw new Error("角色包或插件不存在。");
+      if (plugin.packageId !== null && plugin.id !== activePackage.pluginId) {
+        throw new Error("主要插件必须是当前角色资源插件或全局插件。");
+      }
+      const process = findPluginNodeByPath(plugin.root, [
+        pluginConventions.agentProcessFolder,
+        pluginConventions.agentProcessEntry,
+      ]);
+      const context = findPluginNodeByPath(plugin.root, pluginConventions.context);
+      if (
+        context?.kind !== "file"
+        || pluginFileType(context.name) !== "markdown"
+        || process?.kind !== "file"
+        || pluginFileType(process.name) !== "javascript"
+        || typeof process.content !== "string"
+        || !process.content.trim()
+      ) {
+        throw new Error(`插件 ${plugin.name} 缺少有效的 context.md 或 agentprocess/index.js。`);
+      }
+      if (!plugin.enabled) {
+        await usePluginStore().updatePlugin(plugin.id, { enabled: true });
+      }
+      await conversation.updatePackage(activePackage.id, {
+        mainPluginId: plugin.id,
+        enabledGlobalPluginIds: plugin.packageId === null
+          ? [...new Set([...activePackage.enabledGlobalPluginIds, plugin.id])]
+          : activePackage.enabledGlobalPluginIds,
+      });
+      return activePackagePluginConfiguration();
+    },
+    async setGlobalPluginEnabled(pluginId: string, enabled: boolean) {
+      const conversation = useConversationStore();
+      const activePackage = conversation.activePackage;
+      const plugin = usePluginStore().plugins.find((item) => item.id === pluginId);
+      if (!activePackage || !plugin || plugin.packageId !== null) {
+        throw new Error("全局插件不存在。");
+      }
+      if (!enabled && activePackage.mainPluginId === plugin.id) {
+        throw new Error("主要插件不能停用，请先选择另一个主要插件。");
+      }
+      if (enabled && !plugin.enabled) {
+        throw new Error("该全局插件已在默认项中停用，需先启用安装级开关。");
+      }
+      await conversation.updatePackage(activePackage.id, {
+        enabledGlobalPluginIds: enabled
+          ? [...new Set([...activePackage.enabledGlobalPluginIds, plugin.id])]
+          : activePackage.enabledGlobalPluginIds.filter((id) => id !== plugin.id),
+      });
+      return activePackagePluginConfiguration();
+    },
+    getTree: (pluginId: string) => {
+      const activePackage = useConversationStore().activePackage;
+      const plugin = usePluginStore().plugins.find((item) =>
+        item.id === pluginId
+        && (item.packageId === null || item.id === activePackage?.pluginId)
+      );
       return plugin ? nodeSummary(plugin.root) : null;
+    },
+    getPluginManifest: (pluginId: string) => {
+      const activePackage = useConversationStore().activePackage;
+      const plugin = usePluginStore().plugins.find((item) =>
+        item.id === pluginId
+        && (item.packageId === null || item.id === activePackage?.pluginId)
+      );
+      return plugin ? manifestSummary(plugin) : null;
+    },
+    resolveConfig: (reference: string) => {
+      const conversation = useConversationStore();
+      const plugin = usePluginStore().plugins.find(
+        (item) => item.id === conversation.activePackage?.pluginId,
+      );
+      const manifest = plugin
+        ? findPluginNodeByPath(plugin.root, pluginConventions.manifest)
+        : null;
+      if (manifest?.kind !== "file") throw new Error("当前角色资源插件缺少 manifest.json。");
+      return createVisibleContainerResolver().resolveFromResource(
+        manifest.id,
+        reference.trim().replace(/^<@|>$/g, ""),
+      );
     },
     listContainers: () => createVisibleContainerResolver().listContainers(),
     getContainer: (containerId: string) =>
       createVisibleContainerResolver().getContainer(containerId),
+    getDataReferences: (resourceId: string) =>
+      createVisibleContainerResolver().getDataReferences(resourceId),
   } : {}),
 }));
 
@@ -95,7 +225,8 @@ function createVisibleContainerResolver() {
   const conversation = useConversationStore();
   const plugins = usePluginStore().enabledPluginsForPackage(
     conversation.activePackageId,
-    conversation.activePackage?.globalPluginOrder,
+    conversation.activePackage?.enabledGlobalPluginIds,
+    conversation.activePackage?.mainPluginId,
   );
   return createPluginReferenceResolver(plugins);
 }
@@ -134,14 +265,15 @@ export function createPluginSelfApi(
       plugin.root,
       pluginConventions.containers,
     );
-    if (node?.kind !== "file" || typeof node.content !== "string") {
-      throw new Error("当前插件缺少根 containers.xml。");
+    if (node?.kind !== "file") {
+      throw new Error("当前插件缺少根 containers.json。");
     }
     return { plugin, node };
   };
   const requireOwnContainer = (containerId: string) => {
     const { plugin, node } = requireContainersFile();
-    const definitions = parsePluginContainerDefinitions(node.content as string);
+    const definitions = parsePluginContainerDefinitions(node.content);
+    assertValidContainerDefinitions(definitions);
     const index = definitions.containers.findIndex(
       (container) =>
         createPluginContainerQueryId(
@@ -179,14 +311,71 @@ export function createPluginSelfApi(
     getSelf() {
       requireRead();
       const plugin = requirePlugin();
+      const activePackage = useConversationStore().activePackage;
+      const main = activePackage?.mainPluginId === plugin.id;
+      const local = activePackage?.pluginId === plugin.id;
       return {
         id: plugin.id,
         name: plugin.name,
         shortDescription: plugin.shortDescription,
         packageId: plugin.packageId,
         enabled: plugin.enabled,
-        main: plugin.main,
+        builtIn: plugin.builtIn,
+        main,
+        local,
+        active: local
+          || main
+          || (
+            plugin.enabled
+            && activePackage?.enabledGlobalPluginIds.includes(plugin.id) === true
+          ),
       };
+    },
+    getManifest() {
+      requireRead();
+      const summary = manifestSummary(requirePlugin());
+      if (!summary) throw new Error("当前插件缺少 manifest.json。");
+      return summary;
+    },
+    getConfig(groupId: string, contentId: string) {
+      requireRead();
+      const plugin = requirePlugin();
+      const summary = manifestSummary(plugin);
+      if (!summary) throw new Error("当前插件缺少 manifest.json。");
+      if (summary.diagnostics.length) {
+        throw new Error(`manifest.json 无效：${summary.diagnostics[0]!.message}`);
+      }
+      return manifestValueAt(summary.groups, groupId, contentId);
+    },
+    async setConfig(
+      groupId: string,
+      contentId: string,
+      value: PluginManifestValue,
+    ) {
+      requireWrite();
+      if (!isJsonValue(value)) throw new Error("Manifest 配置只能写入 JSON 值。");
+      const plugin = requirePlugin();
+      const node = findPluginNodeByPath(plugin.root, pluginConventions.manifest);
+      if (node?.kind !== "file") throw new Error("当前插件缺少 manifest.json。");
+      const parsed = parsePluginManifest(node.content);
+      if (parsed.diagnostics.length) {
+        throw new Error(`manifest.json 无效：${parsed.diagnostics[0]!.message}`);
+      }
+      setManifestValue(parsed.manifest, groupId, contentId, value);
+      await store.updateNode(plugin.id, node.id, { content: parsed.manifest });
+      return manifestSummary(plugin);
+    },
+    async replaceManifest(manifest: PluginManifest) {
+      requireWrite();
+      const plugin = requirePlugin();
+      const node = findPluginNodeByPath(plugin.root, pluginConventions.manifest);
+      if (node?.kind !== "file") throw new Error("当前插件缺少 manifest.json。");
+      const parsed = parsePluginManifest(manifest);
+      if (parsed.diagnostics.length) {
+        throw new Error(`manifest.json 无效：${parsed.diagnostics[0]!.message}`);
+      }
+      await store.updateNode(plugin.id, node.id, { content: parsed.manifest });
+      return manifestSummary(plugin);
     },
     read(path: string) {
       requireRead();
@@ -201,12 +390,13 @@ export function createPluginSelfApi(
     }) {
       requireWrite();
       const { plugin, node } = requireContainersFile();
-      const definitions = parsePluginContainerDefinitions(node.content as string);
+      const definitions = parsePluginContainerDefinitions(node.content);
+      assertValidContainerDefinitions(definitions);
       const container = normalizeContainerDeclaration(input);
       assertUniqueContainer(definitions.containers, container);
       definitions.containers.push(container);
       await store.updateNode(plugin.id, node.id, {
-        content: serializePluginContainerDefinitions(definitions),
+        content: { containers: structuredClone(definitions.containers) },
       });
       return selfContainerSummary(plugin, node.id, container);
     },
@@ -229,7 +419,7 @@ export function createPluginSelfApi(
       assertUniqueContainer(definitions.containers, updated, index);
       definitions.containers[index] = updated;
       await store.updateNode(plugin.id, node.id, {
-        content: serializePluginContainerDefinitions(definitions),
+        content: { containers: structuredClone(definitions.containers) },
       });
       return selfContainerSummary(plugin, node.id, updated);
     },
@@ -239,14 +429,18 @@ export function createPluginSelfApi(
         requireOwnContainer(containerId);
       definitions.containers.splice(index, 1);
       await store.updateNode(plugin.id, node.id, {
-        content: serializePluginContainerDefinitions(definitions),
+        content: { containers: structuredClone(definitions.containers) },
       });
       return selfContainerSummary(plugin, node.id, container);
     },
     async addContainerContent(
       containerId: string,
       path: string,
-      input: { alias?: string; priority?: number } = {},
+      input: {
+        alias?: string;
+        priority?: number;
+        condition?: PluginFile["memberships"][number]["condition"];
+      } = {},
     ) {
       requireWrite();
       const { container } = requireOwnContainer(containerId);
@@ -267,6 +461,7 @@ export function createPluginSelfApi(
         {
           container: target,
           alias: input.alias?.trim() ?? "",
+          ...(input.condition ? { condition: normalizeMembershipCondition(input.condition) } : {}),
         },
       ];
       await store.updateNode(plugin.id, node.id, {
@@ -280,7 +475,11 @@ export function createPluginSelfApi(
     async updateContainerContent(
       containerId: string,
       path: string,
-      patch: { alias?: string; priority?: number },
+      patch: {
+        alias?: string;
+        priority?: number;
+        condition?: PluginFile["memberships"][number]["condition"] | null;
+      },
     ) {
       requireWrite();
       const { container } = requireOwnContainer(containerId);
@@ -293,7 +492,17 @@ export function createPluginSelfApi(
       if (!membership) throw new Error(`资源不属于容器：${container.name}`);
       const memberships = node.memberships.map((item) =>
         item === membership
-          ? { ...item, alias: patch.alias?.trim() ?? item.alias }
+          ? {
+              ...item,
+              alias: patch.alias?.trim() ?? item.alias,
+              ...("condition" in patch
+                ? {
+                    condition: patch.condition
+                      ? normalizeMembershipCondition(patch.condition)
+                      : undefined,
+                  }
+                : {}),
+            }
           : item
       );
       await store.updateNode(plugin.id, node.id, {
@@ -317,6 +526,48 @@ export function createPluginSelfApi(
         throw new Error(`资源不属于容器：${container.name}`);
       }
       await store.updateNode(plugin.id, node.id, { memberships });
+      return scopedNodeSummary(plugin, node);
+    },
+    getDataReferences(path: string) {
+      requireRead();
+      const { node } = requireNode(path);
+      if (node.kind !== "file") throw new Error("只有文件可以引用 .data。");
+      return createVisibleContainerResolver().getDataReferences(node.id);
+    },
+    async addDataReference(
+      path: string,
+      input: { alias: string; dataId: string },
+    ) {
+      requireWrite();
+      const { plugin, node } = requireNode(path);
+      if (node.kind !== "file") throw new Error("只有文件可以引用 .data。");
+      const alias = input.alias.trim();
+      const dataId = input.dataId.trim();
+      if (!alias || !dataId) throw new Error("alias 与 dataId 不能为空。");
+      if (node.dataReferences.some((item) => item.alias === alias)) {
+        throw new Error(`Data 引用 alias 已存在：${alias}`);
+      }
+      const target = createVisibleContainerResolver().resourceById(dataId);
+      if (!target || target.type !== "data") {
+        throw new Error(`可见的 .data 资源不存在：${dataId}`);
+      }
+      await store.updateNode(plugin.id, node.id, {
+        dataReferences: [...node.dataReferences, { alias, dataId }],
+      });
+      return scopedNodeSummary(plugin, node);
+    },
+    async removeDataReference(path: string, alias: string) {
+      requireWrite();
+      const { plugin, node } = requireNode(path);
+      if (node.kind !== "file") throw new Error("只有文件可以引用 .data。");
+      const normalizedAlias = alias.trim();
+      const dataReferences = node.dataReferences.filter(
+        (item) => item.alias !== normalizedAlias,
+      );
+      if (dataReferences.length === node.dataReferences.length) {
+        throw new Error(`Data 引用不存在：${normalizedAlias}`);
+      }
+      await store.updateNode(plugin.id, node.id, { dataReferences });
       return scopedNodeSummary(plugin, node);
     },
     async write(path: string, content: unknown) {
@@ -450,4 +701,33 @@ function selfContainerSummary(
     definitionId,
     path: `/${pluginConventions.containers}`,
   };
+}
+
+function normalizeMembershipCondition(
+  condition: NonNullable<PluginFile["memberships"][number]["condition"]>,
+) {
+  const parsed = parsePluginManifestReference(condition.reference);
+  if (parsed.scope !== "local") {
+    throw new Error("容器成员注入条件只允许引用 config:local/group/content。");
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(condition, "equals")
+    && !isJsonValue(condition.equals)
+  ) {
+    throw new Error("容器成员注入条件的 equals 必须是 JSON 值。");
+  }
+  return {
+    reference: `config:local/${parsed.groupId}/${parsed.contentId}`,
+    ...(Object.prototype.hasOwnProperty.call(condition, "equals")
+      ? { equals: structuredClone(condition.equals ?? null) }
+      : {}),
+  };
+}
+
+function assertValidContainerDefinitions(
+  definitions: ReturnType<typeof parsePluginContainerDefinitions>,
+) {
+  if (!definitions.diagnostics.length) return;
+  const diagnostic = definitions.diagnostics[0]!;
+  throw new Error(`containers.json 无效：${diagnostic.path}：${diagnostic.message}`);
 }

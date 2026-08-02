@@ -6,7 +6,6 @@ import { useBackupStore } from "@/features/Backup/application/backup-store";
 import "@/features/Agent/presentation/register-agent-generation-components";
 import "@/features/Resources/Conversation/presentation/register-conversation-workspace";
 import "@/features/Notification/presentation/register-notification-workspace";
-import "@/features/Resources/InteractiveDoc/presentation/register-interactive-document-workspace";
 import "@/features/Resources/Plugin/presentation/register-plugin-workspace";
 import "@/features/UI/schedule/presentation/register-schedule-workspace";
 import "./styles/globals.css";

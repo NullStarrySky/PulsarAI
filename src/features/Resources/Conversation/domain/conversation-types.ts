@@ -7,12 +7,6 @@ export type ConversationReasoningEffort =
   | "high"
   | "xhigh";
 
-export interface Plugin {
-  id: string;
-  name: string;
-  enabled?: boolean;
-}
-
 export interface CharacterPackageConversationLink {
   id: string;
   lastContainerid: string;
@@ -27,8 +21,12 @@ export interface CharacterPackage {
   categoryId?: string | null;
   order: number;
   conversations: CharacterPackageConversationLink[];
-  plugins: Plugin[];
-  globalPluginOrder?: string[];
+  /** The package-owned resource plugin. Exactly one plugin may own this package. */
+  pluginId: string;
+  /** The enabled plugin that owns both context.md and the selected generation process. */
+  mainPluginId: string;
+  /** Package-local activation set for optional global plugins. Ordering is not semantic. */
+  enabledGlobalPluginIds: string[];
   capabilities?: CapabilityGrants;
   syncEnabled?: boolean;
 }
@@ -61,6 +59,7 @@ export interface Conversation {
   isTemplate?: boolean;
   rendererId?: ConversationRendererId;
   reasoningEffort: ConversationReasoningEffort;
+  featureApiEnabled: boolean;
   rootContainerId: string | null;
   lastContainerId: string | null;
   createdAt: string;
