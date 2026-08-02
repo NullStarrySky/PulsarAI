@@ -59,6 +59,8 @@ PulsarAI 插件是一棵可持久化的文件树。插件不把全部文件自�
 
 推荐把稳定的插件说明放在 `info.md`，插件配置放在 `manifest.json`，容器拓扑放在 `containers.json`，消息后处理规则放在 `regex.json`，上下文模板放在 `context.md`，可复用 JSON 状态定义放在 `.data`，生成步骤放在 `agentprocess/`，CodeAct 可调用函数放在 `tools/`。根级 `Override.vue` 是默认对话渲染器的覆盖入口，`components/` 用来存放它和其他插件界面复用的 Vue 组件。
 
+插件 Markdown 可以带有位于文件开头、由 `---` 包围的 YAML frontmatter。Milkdown 会保留这段元数据但不把它渲染成正文，避免出现错误的分割线和大标题；需要修改时，使用文件栏上的源码按钮切换到原始 Markdown。
+
 ## 插件级属性
 
 插件分为角色包本地插件和全局插件：
@@ -183,6 +185,20 @@ Markdown 和其他显式引用位置使用同一套 ID 路径：
 
 每个容器可以添加一个可选的 `description`。说明不会成为容器成员，也不会自动进入模型上下文；它用于解释容器提供什么内容，并在 Markdown 编辑器的引用提示中帮助作者选择正确容器。
 
+容器还可以配置 `delivery`：
+
+```json
+{
+  "mode": "on_demand",
+  "index": "members",
+  "max_results": 8,
+  "extractor": "<@path:./container-tools/extractor.js>",
+  "transformer": "<@path:./container-tools/transformer.js>"
+}
+```
+
+显式引用按需容器时，只渲染说明、容器 ID 和可选成员索引。模型随后在 CodeAct 中调用 `ctx.containers.retrieve(containerId, { query, resourceIds, limit })`。提取器只能返回当前容器的资源 ID；转换器只能读取系统已经验证的成员。返回值仍携带资源 ID、插件内路径、来源插件和优先级。
+
 ### 容器作用域
 
 | 作用域 | 可见范围 |
@@ -243,11 +259,29 @@ const inventory = container.list()
 ```js
 const containers = plugin.listContainers()
 const details = plugin.getContainer(containers[0].id)
+const page = plugin.listContainerContents(containers[0].id, { limit: 20 })
+const selected = await plugin.retrieveContainer(containers[0].id, {
+  query: "Alice 的角色资料",
+  limit: 5,
+})
 ```
 
 `listContainers()` 返回容器查询 ID、定义文件 ID/路径、来源插件、使用数量和当前生效内容数量。`getContainer(containerId)` 的 `usedBy` 与 `contents` 条目都带有资源 `id`、插件内 `path`、`pluginId`、`pluginName`、文件类型和优先级；内容还会返回条件元数据，便于 Agent 继续读取文件树或使用显式 ID 引用。这里的“使用文档”只统计直接写有该容器引用的文件，不把间接依赖重复计数。
 
 容器声明与内容关系也可以通过 `createContainer`、`updateContainer`、`removeContainer`、`addContainerContent`、`updateContainerContent` 和 `removeContainerContent` 完整维护。这些写入 API 只在插件流程中可用，并且只能修改当前插件。
+
+### 深度容器
+
+`container:depth/N` 是不写入 `containers.json` 的虚拟容器。资源属性面板可以直接把文件加入该目标：
+
+```json
+{
+  "container": "container:depth/0",
+  "alias": "dynamic-state"
+}
+```
+
+深度从最终基础消息列表的底部边界按 0 开始：0 放在所有基础消息之后，1 放在最后一条基础消息之前。所有深度都基于插入前的同一列表计算，不会因前一个插入块改变含义；超过列表长度时落在顶部。同一深度继续按资源优先级和稳定 ID/路径排序。Markdown 的 `:::pulsar role=...` 会保留消息角色，最终 Regex 在深度块插入后运行。
 
 ![图片占位：容器详情页面，展示单行说明、使用文档列表、容器内容、来源插件、优先级和点击跳转](/images/plugin-container-details-placeholder.svg)
 
@@ -393,6 +427,7 @@ return [...contextMessages, {
 - `prompt`：去除动作前缀后的用户输入；
 - `skills.list()` / `mcp.list()` 与 `skills.call(...)` / `mcp.call(...)`：检查并调用扩展；`skills.tools`、`mcp.tools` 保留名称列表；
 - `ctx.tools`：当前启用插件的自定义函数表；函数定义来自 `tools/<name>/tool.js`，使用说明来自同目录 `prompt.md`；
+- `ctx.containers`：容器与 Skills 的统一惰性入口，提供 `list`、`get`、`listContents`、`retrieve`；Skills 使用 `container:system/skills`；
 - 已授权 Feature API 与当前流程作用域内的 Plugin API；
 - `agent`：Agent Feature API、`ToolLoopAgent` 构造器与惰性 `prepare()`；只有流程调用 `prepare()` 时才加载模型、当前思考深度、唯一 CodeAct 工具和生命周期钩子。
 

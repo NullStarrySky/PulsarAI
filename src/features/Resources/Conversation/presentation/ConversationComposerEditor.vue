@@ -6,6 +6,7 @@ import { computed, defineComponent, h, ref, watch, type PropType } from "vue";
 import { conversationCrepeFeatureConfigs, conversationCrepeFeatures } from "./conversation-crepe";
 import { createPluginReferenceHighlightFeature } from "@/features/Resources/Plugin/presentation/plugin-reference-milkdown";
 import type { PluginReferenceSuggestion } from "@/features/Resources/Plugin/domain/plugin-reference";
+import { yamlFrontmatterFeature } from "@/features/Resources/InteractiveDoc/presentation/frontmatter-milkdown";
 
 const props = withDefaults(
   defineProps<{
@@ -83,6 +84,7 @@ const ComposerInner = defineComponent({
           },
         },
       });
+      editor.addFeature(yamlFrontmatterFeature);
       if (innerProps.enableReferenceSyntax) {
         editor.addFeature(
           createPluginReferenceHighlightFeature(

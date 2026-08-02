@@ -63,6 +63,8 @@ Every plugin owns one fixed UTF-8 JSON root `containers.json`:
 
 `description` is optional metadata. It is not a member value and is never injected into generation automatically. Markdown `<@...>` completion displays it together with the container name, scope, and owning plugin.
 
+`delivery` optionally selects `eager` or `on_demand`, descriptor-only or member-index disclosure, a bounded result count, and explicit JavaScript extractor/transformer references. An on-demand container emits that metadata only when explicitly referenced. Its extractor receives the current member index and may return only member resource IDs; its transformer receives only the validated selected contents. Full content is read through `ctx.containers.retrieve(...)` or `plugin.retrieveContainer(...)`, and results always retain IDs, paths, sources, and priorities.
+
 Member resources store `{ container, alias, condition? }` rows in `PluginFile.memberships`. A condition references only `config:local/group/content` and either checks truthiness or JSON equality through `equals`. Membership is authoring metadata and never appears in file content or Markdown rendering.
 
 Because the definition file is at plugin root, `scope="root"` is visible to root-level resources only. `plugin` is visible within the owning plugin, and `global` is visible across the enabled plugin set. Scope controls lookup and never performs automatic injection.
@@ -81,8 +83,11 @@ The shared resolver also exposes container inspection data to both the workspace
 
 - `plugin.listContainers()` returns each active container's query ID, definition-file ID/path, source plugin, description, direct-use count, and content count;
 - `plugin.getContainer(containerId)` returns direct documents that reference the container and the currently enabled member contents, including member conditions;
+- `plugin.listContainerContents(containerId, page)` pages the member index without rendering full content, while `plugin.retrieveContainer(containerId, request)` runs bounded selection and optional transformation;
 - every returned document or content row includes its resource `id`, plugin-local `path`, type, priority, and source plugin so an Agent can continue with `plugin.getTree(...)`, explicit `<@id:...>` references, or the current plugin's `plugin.read(path)`.
 - plugin-process-only CRUD uses `createContainer`, `updateContainer`, and `removeContainer`; content membership uses `addContainerContent`, `updateContainerContent`, and `removeContainerContent`, while keeping declarations in `containers.json` and membership rows on files.
+
+`container:depth/N` is a virtual membership target and is never declared in `containers.json`. Every N is a non-negative integer measured from the bottom message boundary; zero appends after the base messages. All anchors are computed from the same unmodified base list, same-depth members keep normal priority/stable ordering, role-aware Markdown stays role-aware, and Regex runs after insertion. The runtime `ctx.containers` API also adapts registered Skills as `container:system/skills` without adding model-visible tools.
 - `plugin.getPackageConfiguration()`, `plugin.setMainPlugin(pluginId)`, and `plugin.setGlobalPluginEnabled(pluginId, enabled)` expose the package's stable local/main/global activation IDs without reintroducing plugin ordering.
 
 ## Workspace
@@ -99,7 +104,7 @@ The shared resolver also exposes container inspection data to both the workspace
 - root `manifest.json` switches between its GroupContent[] source and a settings-style preview. Built-in `Switch`, `Checkbox`, `Input`, `Textarea`, `Select`, `Slider`, and `MediaSelect` names map to singleton shadcn wrappers; other names resolve template-only Vue files from the owning plugin's `components/` folder;
 - root `Override.vue` and ordinary `.vue` files switch between source and template preview; preview registers template-only components from `components/` and does not execute `<script>`;
 - root `manifest.json`, `containers.json`, `regex.json`, `Override.vue`, `components/`, and `tools/` cannot be renamed, moved, or deleted;
-- Markdown opens directly in the Milkdown WYSIWYG editor, with reference and macro support but no redundant source/preview toggle;
+- Markdown defaults to the Milkdown WYSIWYG editor and supports references and macros; plugin Markdown also exposes a source/preview toggle for editing leading YAML frontmatter, which is preserved but omitted from rendered content;
 - `.data` and ordinary JavaScript/JSON use code-oriented editing; root `regex.json` switches between its structured renderer and raw JSON, while Vue switches between source and template preview;
 - media files provide direct image or video preview;
 - built-in files are editable, while the plugin header offers a full restore-to-default action.

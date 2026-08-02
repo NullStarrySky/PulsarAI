@@ -131,6 +131,7 @@ function createStarterRoot(name: string): PluginFolder {
           "Every codeAct call must be one function with an explicit return.",
           "Treat Feature API documentation as the exact permission boundary.",
           "Read the custom tool documentation block and call plugin functions through ctx.tools when relevant.",
+          "Inspect lazy Plugin and Skill containers through ctx.containers and retrieve full content only when needed.",
           "When a real user decision is required, call agent.askUser(...) or api.askUser(...) inside codeAct and continue from its result.",
         ].join("\n"),
         { order: 0 },

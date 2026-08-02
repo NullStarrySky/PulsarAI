@@ -24,4 +24,4 @@ This Proxy boundary is intended to prevent accidental ambient browser access and
 
 `Capabilities` supplies the default base environment. Authorized Feature objects are available at both `<featureId>` and `capabilities.<featureId>`, while `CAPABILITIES_PROMPT` contains the model-facing API reference generated from the same definitions. This controls the application APIs Pulsar exposes; frontend JavaScript execution itself is not an operating-system isolation boundary.
 
-The model does not receive one AI SDK tool per capability. `codeAct` is the only model tool; Feature APIs, Plugin APIs, ask-user interaction, registered Skill/MCP extensions, and Plugin `ctx.tools` functions are ordinary functions in the merged environment. CodeAct returns either the function's value or a structured error to the model.
+The model does not receive one AI SDK tool per capability. `codeAct` is the only model tool; Feature APIs, Plugin APIs, ask-user interaction, registered Skill/MCP extensions, Plugin `ctx.tools`, and lazy `ctx.containers` retrieval are ordinary functions in the merged environment. CodeAct returns either the function's value or a structured error to the model.

@@ -62,6 +62,7 @@ const codeActInstructions = [
   "For a blocking user decision, call `await agent.askUser({ question, options })` or `await api.askUser(...)` inside the function.",
   "Registered Skill and MCP extensions are context APIs: inspect with `agent.listExtensions(...)` and call with `agent.callExtension(source, name, input)`.",
   "Plugin custom functions documented under `# 自定义工具` are context functions: call them with `await ctx.tools[name](...args)`.",
+  "Inspect lazy Plugin and Skill containers with `ctx.containers.list()` / `get()` and retrieve full content with `await ctx.containers.retrieve(containerId, { query, resourceIds, limit })`.",
   "To update a .data instance, set `intent` to `variable-update` and submit a synchronous function that calls `data.readForResource(resourceId, dataId)` and `data.writeForResource(resourceId, dataId, value)`. This intent must not read time or randomness, start async work, call other APIs, access files or the network, or cause any other side effect.",
   "A variable-update error is returned to you so you can correct the function. After three failed variable-update attempts, generation stops with an error.",
   "The tool result contains either `{ ok: true, value }` or `{ ok: false, error }`; inspect errors and correct the next function.",

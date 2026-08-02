@@ -1,4 +1,13 @@
 export type PluginContainerScope = "root" | "plugin" | "global";
+export type PluginContainerQueryScope = PluginContainerScope | "depth";
+
+export interface PluginContainerDelivery {
+  mode: "eager" | "on_demand";
+  extractor?: string;
+  transformer?: string;
+  index: "members" | "description";
+  max_results: number;
+}
 
 export interface PluginReferenceToken {
   raw: string;
@@ -16,6 +25,7 @@ export interface PluginContainerDeclaration {
   name: string;
   scope: PluginContainerScope;
   description?: string;
+  delivery?: PluginContainerDelivery;
   imports: PluginContainerImport[];
 }
 
@@ -125,14 +135,75 @@ function parseContainerDeclarations(
       diagnostics.push({ path: `${path}.description`, message: "description 必须是字符串。" });
     }
     const description = normalizedText(rawContainer.description);
+    const delivery = parseContainerDelivery(
+      rawContainer.delivery,
+      `${path}.delivery`,
+      diagnostics,
+    );
     containers.push({
       name,
       scope,
       ...(description ? { description } : {}),
+      ...(delivery ? { delivery } : {}),
       imports,
     });
   });
   return containers;
+}
+
+function parseContainerDelivery(
+  value: unknown,
+  path: string,
+  diagnostics: PluginContainerDefinitions["diagnostics"],
+): PluginContainerDelivery | undefined {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) {
+    diagnostics.push({ path, message: "delivery 必须是对象。" });
+    return undefined;
+  }
+  const mode = value.mode;
+  if (mode !== "eager" && mode !== "on_demand") {
+    diagnostics.push({
+      path: `${path}.mode`,
+      message: "mode 必须是 eager 或 on_demand。",
+    });
+    return undefined;
+  }
+  const index = value.index === undefined ? "members" : value.index;
+  if (index !== "members" && index !== "description") {
+    diagnostics.push({
+      path: `${path}.index`,
+      message: "index 必须是 members 或 description。",
+    });
+  }
+  const maxResults = value.max_results === undefined
+    ? 8
+    : Number(value.max_results);
+  if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 100) {
+    diagnostics.push({
+      path: `${path}.max_results`,
+      message: "max_results 必须是 1 到 100 的整数。",
+    });
+  }
+  for (const key of ["extractor", "transformer"] as const) {
+    if (value[key] !== undefined && typeof value[key] !== "string") {
+      diagnostics.push({
+        path: `${path}.${key}`,
+        message: `${key} 必须是显式资源引用字符串。`,
+      });
+    }
+  }
+  const extractor = normalizedText(value.extractor);
+  const transformer = normalizedText(value.transformer);
+  return {
+    mode,
+    index: index === "description" ? "description" : "members",
+    max_results: Number.isInteger(maxResults) && maxResults >= 1 && maxResults <= 100
+      ? maxResults
+      : 8,
+    ...(extractor ? { extractor } : {}),
+    ...(transformer ? { transformer } : {}),
+  };
 }
 
 export function parsePluginContainerDefinitions(
@@ -189,16 +260,19 @@ export function normalizePluginReferenceTarget(target: string) {
 }
 
 export function parseContainerReferenceTarget(target: string): {
-  scope: PluginContainerScope | "auto";
+  scope: PluginContainerQueryScope | "auto";
   name: string;
 } {
   const normalized = normalizePluginReferenceTarget(target);
-  const match = /^container:(root|plugin|global|auto)\/(.+)$/.exec(normalized);
+  const match = /^container:(root|plugin|global|depth|auto)\/(.+)$/.exec(normalized);
   if (!match) {
     throw new Error(`容器引用格式无效：${normalized}`);
   }
+  if (match[1] === "depth" && !/^(0|[1-9]\d*)$/.test(match[2]!.trim())) {
+    throw new Error(`深度容器必须使用非负整数：${normalized}`);
+  }
   return {
-    scope: match[1] as PluginContainerScope | "auto",
+    scope: match[1] as PluginContainerQueryScope | "auto",
     name: match[2]!.trim(),
   };
 }

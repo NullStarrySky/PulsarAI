@@ -107,6 +107,13 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
   name: string;
   scope: "root" | "plugin" | "global";
   description?: string;
+  delivery?: {
+    mode: "eager" | "on_demand";
+    extractor?: string;
+    transformer?: string;
+    index: "members" | "description";
+    max_results: number;
+  };
   imports: Array<{ alias: string; target: string }>;
 };`,
       },
@@ -116,8 +123,14 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
         definition: `type PluginContainerSummary = {
   id: string;
   name: string;
-  scope: "root" | "plugin" | "global";
+  scope: "root" | "plugin" | "global" | "depth";
   description?: string;
+  delivery?: PluginContainerDeclaration["delivery"];
+  deliveryFunctions?: {
+    extractor?: PluginContainerResource;
+    transformer?: PluginContainerResource;
+  };
+  depth?: number;
   pluginId: string;
   pluginName: string;
   definitionId: string;
@@ -236,7 +249,7 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
         name: "listContainers",
         signature: "listContainers(): PluginContainerSummary[]",
         description: "列出当前生成上下文中已启用的容器，并返回容器 ID、定义文件 ID/路径、来源插件和使用/内容数量。",
-        returns: "数组条目包含 `{ id, name, scope, description?, pluginId, pluginName, definitionId, path, usedByCount, contentCount }`；id 可继续传给 getContainer。",
+        returns: "数组条目包含容器 ID、作用域、定义路径、数量、delivery，以及已解析提取器/转换器的资源 ID 与路径；id 可继续查询或提取。",
         example: "plugin.listContainers()",
       },
       {
@@ -247,6 +260,20 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
         example: "plugin.getContainer(plugin.listContainers()[0].id)",
       },
       {
+        name: "listContainerContents",
+        signature: "listContainerContents(containerId: string, input?: { cursor?: number; limit?: number }): { containerId: string; containerPath: string; total: number; cursor: number; nextCursor: number | null; contents: PluginContainerResource[] } | null",
+        description: "分页读取容器成员索引，不展开正文。",
+        returns: "成员保留资源 ID、路径和来源；不存在的容器返回 null。",
+        example: "plugin.listContainerContents(containerId, { limit: 20 })",
+      },
+      {
+        name: "retrieveContainer",
+        signature: "retrieveContainer(containerId: string, input?: { query?: string; resourceIds?: string[]; limit?: number }): Promise<{ containerId: string; containerPath: string; query?: string; contents: PluginContainerResource[]; value: unknown }>",
+        description: "主动提取容器正文。extractor 只能选择当前成员 ID，transformer 只接收已授权成员；缺省时按名称、别名和路径选择。",
+        returns: "contents 保留 ID、路径、来源插件和优先级；value 是标准内容或转换结果。",
+        example: "await plugin.retrieveContainer(containerId, { query: 'Alice', limit: 5 })",
+      },
+      {
         name: "getDataReferences",
         signature: "getDataReferences(resourceId: string): PluginDataBinding[]",
         description: "查询资源元数据中的 .data 引用，并解析实际隔离级别和来源。",
@@ -255,7 +282,7 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
       },
       {
         name: "createContainer",
-        signature: "createContainer(input: { name: string; scope?: 'root' | 'plugin' | 'global'; description?: string; imports?: Array<{ alias: string; target: string }> }): Promise<PluginContainerDefinition>",
+        signature: "createContainer(input: { name: string; scope?: 'root' | 'plugin' | 'global'; description?: string; delivery?: PluginContainerDeclaration['delivery']; imports?: Array<{ alias: string; target: string }> }): Promise<PluginContainerDefinition>",
         description: "在当前插件根 containers.json 中创建容器；说明会规范为单行短文本。",
         returns: "新容器的 ID、定义文件 ID/路径、来源插件和完整声明。",
         example: "await plugin.createContainer({ name: '知识', scope: 'plugin', description: '按需加载的知识文档。' })",
@@ -277,7 +304,7 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
       {
         name: "addContainerContent",
         signature: "addContainerContent(containerId: string, path: string, input?: { alias?: string; priority?: number; condition?: PluginContainerCondition }): Promise<PluginNode>",
-        description: "把当前插件中的文件加入容器，并可同时设置别名、文件优先级和基于当前插件 manifest 的注入条件。",
+        description: "把当前插件文件加入声明容器或虚拟 container:depth/N，并可设置别名、优先级和本地 manifest 条件。",
         returns: "更新后的文件节点，包含 ID 与插件内路径。",
         example: "await plugin.addContainerContent(containerId, '/knowledge/world.md', { alias: 'world', priority: 120, condition: { reference: 'config:local/story/world', equals: true } })",
       },

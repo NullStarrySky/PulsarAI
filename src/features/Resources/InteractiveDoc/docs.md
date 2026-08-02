@@ -24,6 +24,8 @@ The parser ignores Pulsar markers inside normal backtick or tilde code fences. M
 
 The root context entry is the exact Plugin path `context.md`. Its compression-memory threshold is resource metadata, not Markdown content.
 
+Leading YAML frontmatter delimited by `---` is recognized by the shared Milkdown feature, retained as an atomic node for Markdown serialization, and omitted from rendered content. Metadata is therefore not misread as thematic breaks or Setext headings. Plugin Markdown can switch to its raw source editor when the frontmatter itself needs to be changed.
+
 ## `.data` definitions
 
 A `.data` file is JSON that defines reusable state rather than storing a Conversation's current value:

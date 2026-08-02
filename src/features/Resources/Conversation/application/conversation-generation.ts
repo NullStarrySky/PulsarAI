@@ -17,6 +17,7 @@ import {
 } from "@/features/Resources/Plugin/application/plugin-generation-environment";
 import {
   createPluginReferenceResolver,
+  type PluginReferenceResolver,
 } from "@/features/Resources/Plugin/application/plugin-reference-resolver";
 import {
   collectContextDataDefinitions,
@@ -119,6 +120,134 @@ export function registerGenerationComponentRequester(
       componentRequesters.splice(index, 1);
     }
   };
+}
+
+const skillsContainerId = "container:system/skills";
+
+function createContextContainerApi(
+  resolver: PluginReferenceResolver,
+  skillApi: ReturnType<typeof createAgentExtensionApi>,
+) {
+  const skillContents = () => skillApi.list().map((item) => ({
+    id: `skill:${item.name}`,
+    name: item.name,
+    path: `skill://${item.name}`,
+    type: "skill",
+    priority: 100,
+    pluginId: "system:skills",
+    pluginName: "Skills",
+    alias: item.name,
+    description: item.description,
+  }));
+  const skillSummary = () => ({
+    id: skillsContainerId,
+    name: "Skills",
+    scope: "system",
+    description: "已注册 Skill 的按需调用入口。",
+    pluginId: "system:skills",
+    pluginName: "Skills",
+    definitionId: "agent-extension-registry",
+    path: "skill://",
+    usedByCount: 0,
+    contentCount: skillContents().length,
+    delivery: {
+      mode: "on_demand",
+      index: "members",
+      max_results: 8,
+    },
+  });
+  return {
+    list: () => [
+      ...resolver.listContainers(),
+      ...(skillContents().length ? [skillSummary()] : []),
+    ],
+    get: (containerId: string) => containerId === skillsContainerId
+      ? {
+          ...skillSummary(),
+          usedBy: [],
+          contents: skillContents(),
+        }
+      : resolver.getContainer(containerId),
+    listContents: (
+      containerId: string,
+      input: { cursor?: number; limit?: number } = {},
+    ) => {
+      if (containerId !== skillsContainerId) {
+        return resolver.listContainerContents(containerId, input);
+      }
+      const all = skillContents();
+      const cursor = Math.max(0, Math.trunc(input.cursor ?? 0));
+      const limit = Math.min(100, Math.max(1, Math.trunc(input.limit ?? 50)));
+      const contents = all.slice(cursor, cursor + limit);
+      return {
+        containerId,
+        containerPath: "skill://",
+        total: all.length,
+        cursor,
+        nextCursor: cursor + contents.length < all.length
+          ? cursor + contents.length
+          : null,
+        contents,
+      };
+    },
+    retrieve: async (
+      containerId: string,
+      input: {
+        query?: string;
+        resourceIds?: string[];
+        limit?: number;
+        input?: unknown;
+      } = {},
+    ) => {
+      if (containerId !== skillsContainerId) {
+        return resolver.retrieveContainer(containerId, input);
+      }
+      const needle = input.query?.trim().toLocaleLowerCase() ?? "";
+      const requested = new Set(input.resourceIds ?? []);
+      const selected = skillContents()
+        .filter((item) =>
+          requested.size
+            ? requested.has(item.id)
+            : !needle
+              || item.name.toLocaleLowerCase().includes(needle)
+              || item.description?.toLocaleLowerCase().includes(needle)
+        )
+        .slice(0, Math.min(20, Math.max(1, Math.trunc(input.limit ?? 8))));
+      const values = await Promise.all(selected.map(async (item) => ({
+        id: item.id,
+        path: item.path,
+        value: await skillApi.call(
+          item.name,
+          input.input ?? { query: input.query ?? "" },
+        ),
+      })));
+      return {
+        containerId,
+        containerPath: "skill://",
+        ...(input.query?.trim() ? { query: input.query.trim() } : {}),
+        contents: selected,
+        value: values,
+      };
+    },
+  };
+}
+
+function insertContextDepthBlocks(
+  messages: ModelMessage[],
+  blocks: Array<{ depth: number; messages: ModelMessage[] }>,
+) {
+  if (!blocks.length) return messages;
+  const buckets = new Map<number, ModelMessage[]>();
+  for (const block of blocks) {
+    const index = Math.max(0, messages.length - block.depth);
+    buckets.set(index, [...(buckets.get(index) ?? []), ...block.messages]);
+  }
+  const result: ModelMessage[] = [];
+  for (let index = 0; index <= messages.length; index += 1) {
+    result.push(...(buckets.get(index) ?? []));
+    if (index < messages.length) result.push(messages[index]!);
+  }
+  return result;
 }
 
 function currentComponentRequester() {
@@ -294,9 +423,13 @@ export async function runConversationGeneration(
       ].join("\n\n"),
     });
   }
+  const depthContextMessages = insertContextDepthBlocks(
+    contextMessages,
+    pluginEnvironment.resolver.compileDepthContainerMessages(),
+  );
   const regexContainer = collectPluginRegexRules(pluginEnvironment.enabledPlugins);
   const regexResult = applyPluginRegexToMessages(
-    contextMessages,
+    depthContextMessages,
     regexContainer.value,
   );
   pluginEnvironment.diagnostics.push(
@@ -376,6 +509,14 @@ export async function runConversationGeneration(
       listContainers: () => currentContainerResolver().listContainers(),
       getContainer: (containerId: string) =>
         currentContainerResolver().getContainer(containerId),
+      listContainerContents: (
+        containerId: string,
+        input?: { cursor?: number; limit?: number },
+      ) => currentContainerResolver().listContainerContents(containerId, input),
+      retrieveContainer: (
+        containerId: string,
+        input?: { query?: string; resourceIds?: string[]; limit?: number },
+      ) => currentContainerResolver().retrieveContainer(containerId, input),
       resolveConfig: (reference: string) => {
         const plugin = pluginEnvironment.enabledPlugins.find(
           (item) => item.id === pluginId,
@@ -506,6 +647,10 @@ export async function runConversationGeneration(
     askUser: requestUser,
   };
   const customToolFunctions: Record<string, (...args: unknown[]) => unknown> = {};
+  const contextContainerApi = createContextContainerApi(
+    pluginEnvironment.resolver,
+    skillApi,
+  );
   Object.assign(finalEnvironment, {
     contextTemplate: compiledContext?.markdown ?? "[[chat]]",
     contextMessages: processedContextMessages,
@@ -517,6 +662,7 @@ export async function runConversationGeneration(
     askUser: api.askUser,
     renderComponent: api.renderComponent,
     tools: customToolFunctions,
+    containers: contextContainerApi,
   });
   finalEnvironment.ctx = finalEnvironment;
   for (const definition of customToolContainer.definitions) {

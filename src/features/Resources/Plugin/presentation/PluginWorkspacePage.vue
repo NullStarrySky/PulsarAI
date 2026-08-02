@@ -357,6 +357,7 @@ watch(
     fileViewMode.value = selectedIsContainerDefinitions.value
       || selectedIsRegex.value
       || selectedIsManifest.value
+      || selectedType.value === "markdown"
       ? "preview"
       : "source";
   },
@@ -579,6 +580,20 @@ async function addSelectedMembership() {
   if (!file) return;
   file.memberships.push({
     container: "container:plugin/会话上下文",
+    alias: "",
+  });
+  await persistSelectedMemberships();
+}
+
+async function addSelectedDepthMembership() {
+  const file = selectedFile.value;
+  if (!file) return;
+  if (file.memberships.some((item) => item.container === "container:depth/0")) {
+    push.error("此资源已经位于深度 0 容器。");
+    return;
+  }
+  file.memberships.push({
+    container: "container:depth/0",
     alias: "",
   });
   await persistSelectedMemberships();
@@ -1239,7 +1254,7 @@ async function restoreBuiltInPlugin() {
             {{ selectedTypeLabel }}
           </span>
           <div
-            v-if="selectedIsVue || selectedIsContainerDefinitions || selectedIsRegex || selectedIsManifest"
+            v-if="selectedIsVue || selectedIsContainerDefinitions || selectedIsRegex || selectedIsManifest || selectedType === 'markdown'"
             class="flex items-center rounded-md border bg-muted/30 p-0.5"
           >
             <Button
@@ -1348,12 +1363,17 @@ async function restoreBuiltInPlugin() {
             />
           </label>
           <div class="col-span-full border-t pt-2 mobile:col-span-1">
-            <div class="mb-1.5 flex items-center justify-between">
+            <div class="mb-1.5 flex items-center justify-between gap-2">
               <span class="text-xs font-medium">容器成员关系（资源元数据）</span>
-              <Button size="sm" variant="ghost" class="h-7 text-xs" @click="addSelectedMembership">
-                <Plus class="mr-1 size-3.5" />
-                加入容器
-              </Button>
+              <div class="flex items-center gap-1">
+                <Button size="sm" variant="ghost" class="h-7 text-xs" @click="addSelectedDepthMembership">
+                  加入底部
+                </Button>
+                <Button size="sm" variant="ghost" class="h-7 text-xs" @click="addSelectedMembership">
+                  <Plus class="mr-1 size-3.5" />
+                  加入容器
+                </Button>
+              </div>
             </div>
             <div
               v-for="(membership, index) in selectedFile.memberships"
@@ -1587,7 +1607,7 @@ async function restoreBuiltInPlugin() {
           </div>
 
           <div
-            v-else-if="selectedType === 'markdown'"
+            v-else-if="selectedType === 'markdown' && fileViewMode === 'preview'"
             class="h-full min-h-0 overflow-y-auto"
           >
             <ConversationComposerEditor
@@ -1601,6 +1621,16 @@ async function restoreBuiltInPlugin() {
               @update:model-value="scheduleContentSave"
             />
           </div>
+
+          <JavaScriptCodeMirrorEditor
+            v-else-if="selectedType === 'markdown'"
+            :key="`${selectedFile.id}:markdown-source`"
+            :model-value="contentDraft"
+            language="markdown"
+            frameless
+            :reference-suggestions="markdownReferenceSuggestions"
+            @update:model-value="scheduleContentSave"
+          />
 
           <div
             v-else-if="selectedType === 'javascript'"

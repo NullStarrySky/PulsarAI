@@ -40,6 +40,7 @@ When the host conversation has this context, the runtime adds the bound path to 
 - `application/ask-user-tool.ts` retains the `askUser` Zod schema and result normalization, but ask-user is now `agent.askUser(...)` / `api.askUser(...)` inside CodeAct rather than a second model tool.
 - `application/agent-extension-registry.ts` keeps Skill and MCP registrations behind `agent.callExtension(...)`, `skills.call(...)`, and `mcp.call(...)`. Registered extensions no longer expand the model-visible tool list.
 - Plugin `tools/<name>/tool.js` functions also stay out of the AI SDK tool set. Conversation injects their `prompt.md` contracts into a `# 自定义工具` context block and exposes the compiled functions through `ctx.tools[name](...args)` inside CodeAct.
+- Plugin lazy containers and registered Skills use the ordinary `ctx.containers` context API. Skills are exposed as the runtime-only `container:system/skills`; container retrieval never adds another AI SDK tool.
 
 ## Ask-user interaction
 

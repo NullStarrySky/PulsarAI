@@ -5,6 +5,7 @@ import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/vue";
 import { defineComponent, h, ref, watch } from "vue";
 import { conversationCrepeFeatureConfigs, conversationCrepeFeatures } from "./conversation-crepe";
 import { pluginReferenceHighlightFeature } from "@/features/Resources/Plugin/presentation/plugin-reference-milkdown";
+import { yamlFrontmatterFeature } from "@/features/Resources/InteractiveDoc/presentation/frontmatter-milkdown";
 
 const props = withDefaults(
   defineProps<{
@@ -39,6 +40,7 @@ const MarkdownInner = defineComponent({
         features: conversationCrepeFeatures,
         featureConfigs: conversationCrepeFeatureConfigs,
       });
+      editor.addFeature(yamlFrontmatterFeature);
       if (innerProps.enableReferenceSyntax) {
         editor.addFeature(pluginReferenceHighlightFeature);
       }

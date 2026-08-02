@@ -17,6 +17,7 @@ import {
   findPluginReferenceTokens,
   parsePluginContainerDefinitions,
   type PluginContainerDeclaration,
+  type PluginContainerDelivery,
   type PluginContainerImport,
   type PluginContainerScope,
 } from "./domain/plugin-reference";
@@ -216,6 +217,14 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
     listContainers: () => createVisibleContainerResolver().listContainers(),
     getContainer: (containerId: string) =>
       createVisibleContainerResolver().getContainer(containerId),
+    listContainerContents: (
+      containerId: string,
+      input?: { cursor?: number; limit?: number },
+    ) => createVisibleContainerResolver().listContainerContents(containerId, input),
+    retrieveContainer: (
+      containerId: string,
+      input?: { query?: string; resourceIds?: string[]; limit?: number },
+    ) => createVisibleContainerResolver().retrieveContainer(containerId, input),
     getDataReferences: (resourceId: string) =>
       createVisibleContainerResolver().getDataReferences(resourceId),
   } : {}),
@@ -292,6 +301,21 @@ export function createPluginSelfApi(
       index,
       container: definitions.containers[index]!,
     };
+  };
+  const requireOwnContentContainer = (containerId: string) => {
+    const depthMatch = /^container:depth\/(0|[1-9]\d*)$/.exec(containerId);
+    if (depthMatch) {
+      return {
+        plugin: requirePlugin(),
+        container: {
+          name: depthMatch[1]!,
+          scope: "depth" as const,
+          description: `最终上下文深度 ${depthMatch[1]}`,
+          imports: [],
+        },
+      };
+    }
+    return requireOwnContainer(containerId);
   };
   const requireWrite = () => {
     if (!grantedSubCaps.includes("read") && !grantedSubCaps.includes("all")) {
@@ -386,6 +410,7 @@ export function createPluginSelfApi(
       name: string;
       scope?: PluginContainerScope;
       description?: string;
+      delivery?: PluginContainerDelivery;
       imports?: PluginContainerImport[];
     }) {
       requireWrite();
@@ -406,6 +431,7 @@ export function createPluginSelfApi(
         name: string;
         scope: PluginContainerScope;
         description: string;
+        delivery: PluginContainerDelivery;
         imports: PluginContainerImport[];
       }>,
     ) {
@@ -443,7 +469,7 @@ export function createPluginSelfApi(
       } = {},
     ) {
       requireWrite();
-      const { container } = requireOwnContainer(containerId);
+      const { container } = requireOwnContentContainer(containerId);
       const { plugin, node } = requireNode(path);
       if (node.kind !== "file") throw new Error("只有文件可以加入容器。");
       if (
@@ -482,7 +508,7 @@ export function createPluginSelfApi(
       },
     ) {
       requireWrite();
-      const { container } = requireOwnContainer(containerId);
+      const { container } = requireOwnContentContainer(containerId);
       const { plugin, node } = requireNode(path);
       if (node.kind !== "file") throw new Error("只有文件可以属于容器。");
       const target = explicitContainerTarget(container);
@@ -515,7 +541,7 @@ export function createPluginSelfApi(
     },
     async removeContainerContent(containerId: string, path: string) {
       requireWrite();
-      const { container } = requireOwnContainer(containerId);
+      const { container } = requireOwnContentContainer(containerId);
       const { plugin, node } = requireNode(path);
       if (node.kind !== "file") throw new Error("只有文件可以属于容器。");
       const target = explicitContainerTarget(container);
@@ -631,6 +657,7 @@ function normalizeContainerDeclaration(input: {
   name?: string;
   scope?: PluginContainerScope;
   description?: string;
+  delivery?: PluginContainerDelivery;
   imports?: PluginContainerImport[];
 }): PluginContainerDeclaration {
   const name = input.name?.trim() ?? "";
@@ -640,6 +667,22 @@ function normalizeContainerDeclaration(input: {
       ? input.scope
       : "plugin";
   const description = input.description?.trim().replace(/\s+/g, " ") ?? "";
+  const delivery = input.delivery
+    ? {
+        mode: input.delivery.mode === "on_demand" ? "on_demand" as const : "eager" as const,
+        index: input.delivery.index === "description" ? "description" as const : "members" as const,
+        max_results: Math.min(
+          100,
+          Math.max(1, Math.trunc(input.delivery.max_results || 8)),
+        ),
+        ...(input.delivery.extractor?.trim()
+          ? { extractor: input.delivery.extractor.trim() }
+          : {}),
+        ...(input.delivery.transformer?.trim()
+          ? { transformer: input.delivery.transformer.trim() }
+          : {}),
+      }
+    : undefined;
   const imports = (input.imports ?? []).map((item) => ({
     alias: item.alias.trim(),
     target: item.target.trim(),
@@ -654,6 +697,7 @@ function normalizeContainerDeclaration(input: {
     name,
     scope,
     description,
+    ...(delivery ? { delivery } : {}),
     imports,
   };
 }
@@ -677,7 +721,11 @@ function assertUniqueContainer(
   }
 }
 
-function explicitContainerTarget(container: PluginContainerDeclaration) {
+function explicitContainerTarget(
+  container: Pick<PluginContainerDeclaration, "name"> & {
+    scope: PluginContainerScope | "depth";
+  },
+) {
   return `container:${container.scope}/${container.name}`;
 }
 
@@ -695,6 +743,9 @@ function selfContainerSummary(
     name: container.name,
     scope: container.scope,
     description: container.description,
+    ...(container.delivery
+      ? { delivery: structuredClone(container.delivery) }
+      : {}),
     imports: structuredClone(container.imports),
     pluginId: plugin.id,
     pluginName: plugin.name,
