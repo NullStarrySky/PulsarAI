@@ -19,7 +19,6 @@ import {
   type PluginManifestValue,
 } from "@/features/Resources/Plugin/domain/plugin-manifest";
 import {
-  createSandboxFunction,
   resolveSandboxText,
   stringifySandboxValue,
   type SandboxEnvironment,
@@ -31,8 +30,6 @@ import {
   parseContainerReferenceTarget,
   replacePluginReferenceTokens,
   type PluginContainerDeclaration,
-  type PluginContainerDelivery,
-  type PluginContainerQueryScope,
   type PluginContainerScope,
   type PluginReferenceSuggestion,
 } from "@/features/Resources/Plugin/domain/plugin-reference";
@@ -73,7 +70,7 @@ export interface GenerationResourceValue {
 
 export interface PluginContainerValue {
   readonly name: string;
-  readonly scope: PluginContainerQueryScope;
+  readonly scope: PluginContainerScope;
   get(alias: string): GenerationResourceValue;
   use(alias: string): PluginContainerValue;
   list(): {
@@ -101,14 +98,8 @@ export interface PluginContainerContentQuery extends PluginContainerResourceQuer
 export interface PluginContainerQuery {
   id: string;
   name: string;
-  scope: PluginContainerQueryScope;
+  scope: PluginContainerScope;
   description?: string;
-  delivery?: PluginContainerDelivery;
-  deliveryFunctions?: {
-    extractor?: PluginContainerResourceQuery;
-    transformer?: PluginContainerResourceQuery;
-  };
-  depth?: number;
   pluginId: string;
   pluginName: string;
   definitionId: string;
@@ -122,18 +113,11 @@ export interface PluginContainerDetailsQuery extends PluginContainerQuery {
   contents: PluginContainerContentQuery[];
 }
 
-export interface PluginContainerRetrieveInput {
-  query?: string;
-  resourceIds?: string[];
-  limit?: number;
-}
-
-export interface PluginContainerRetrieveResult {
+export interface PluginContainerReadResult {
   containerId: string;
   containerPath: string;
-  query?: string;
   contents: PluginContainerContentQuery[];
-  value: unknown;
+  resources: Array<PluginContainerContentQuery & { content: string }>;
 }
 
 export interface ResolvedPluginDataBinding extends ContextDocumentDataBinding {
@@ -164,15 +148,9 @@ interface ContainerRecord {
   id: string;
   key: string;
   name: string;
-  scope: PluginContainerQueryScope;
-  declaration: PluginContainerDeclaration | {
-    name: string;
-    scope: "depth";
-    description: string;
-    imports: [];
-  };
+  scope: PluginContainerScope;
+  declaration: PluginContainerDeclaration;
   source: ResourceRecord;
-  depth?: number;
   resources: Map<string, {
     record: ResourceRecord;
     membership: PluginFile["memberships"][number];
@@ -336,10 +314,10 @@ export class PluginReferenceResolver {
     };
   }
 
-  async retrieveContainer(
+  readContainer(
     containerId: string,
-    input: PluginContainerRetrieveInput = {},
-  ): Promise<PluginContainerRetrieveResult> {
+    resourceIds?: string[],
+  ): PluginContainerReadResult {
     const container = [...this.containers.values()].find(
       (item) => item.id === containerId,
     );
@@ -355,80 +333,56 @@ export class PluginReferenceResolver {
           : {}),
       } satisfies PluginContainerContentQuery,
     }));
-    const delivery = "delivery" in container.declaration
-      ? container.declaration.delivery
-      : undefined;
-    const configuredLimit = delivery?.max_results ?? 8;
-    const limit = Math.min(
-      configuredLimit,
-      Math.max(1, Math.trunc(input.limit ?? configuredLimit)),
-    );
-    let selectionProvided = input.resourceIds !== undefined;
-    let selectedIds = [...new Set(
-      (input.resourceIds ?? []).map((item) => item.trim()).filter(Boolean),
+    const selectedIds = [...new Set(
+      (resourceIds ?? entries.map((item) => item.entry.record.file.id))
+        .map((item) => item.trim())
+        .filter(Boolean),
     )];
-    if (!selectionProvided && delivery?.extractor) {
-      const extractor = this.createContainerFunction(container, delivery.extractor);
-      const result = await extractor({
-        container: this.createContainerQuery(container),
-        query: input.query?.trim() || undefined,
-        limit,
-        contents: entries.map((item) => item.query),
-      });
-      selectedIds = normalizeExtractorResourceIds(result);
-      selectionProvided = true;
-    }
-    if (!selectionProvided) {
-      const needle = input.query?.trim().toLocaleLowerCase() ?? "";
-      selectedIds = entries
-        .filter((item) =>
-          !needle
-          || [item.alias, item.entry.record.file.name, item.entry.record.path]
-            .some((value) => value.toLocaleLowerCase().includes(needle))
-        )
-        .slice(0, limit)
-        .map((item) => item.entry.record.file.id);
-    }
     const allowedIds = new Set(entries.map((item) => item.entry.record.file.id));
     const invalidId = selectedIds.find((id) => !allowedIds.has(id));
     if (invalidId) {
-      throw new Error(`提取器返回了容器之外的资源：${invalidId}`);
+      throw new Error(`资源不属于容器 ${container.name}：${invalidId}`);
     }
-    const selected = selectedIds.slice(0, limit).map((id) =>
+    const selected = selectedIds.map((id) =>
       entries.find((item) => item.entry.record.file.id === id)!
     );
-    const resources = selected.map((item) => ({
-      ...item.query,
-      content: this.renderResource(item.entry.record.file.id),
-    }));
-    const value = delivery?.transformer
-      ? await this.createContainerFunction(container, delivery.transformer)({
-          container: this.createContainerQuery(container),
-          query: input.query?.trim() || undefined,
-          resources: structuredClone(resources),
-        })
-      : resources;
     return {
       containerId,
       containerPath: this.createContainerQuery(container).path,
-      ...(input.query?.trim() ? { query: input.query.trim() } : {}),
       contents: selected.map((item) => item.query),
-      value,
+      resources: selected.map((item) => ({
+        ...item.query,
+        content: this.renderResource(item.entry.record.file.id),
+      })),
     };
   }
 
   compileDepthContainerMessages(): Array<{
     depth: number;
-    containerId: string;
     messages: ModelMessage[];
   }> {
-    return [...this.containers.values()]
-      .filter((container) => container.scope === "depth" && container.depth != null)
-      .sort((a, b) => b.depth! - a.depth!)
-      .map((container) => ({
-        depth: container.depth!,
-        containerId: container.id,
-        messages: [...container.resources.values()].flatMap(({ record }) => {
+    const depthContainers = new Map<number, ResourceRecord[]>();
+    for (const record of [...this.records].sort(compareResourceRecords)) {
+      const depth = record.file.contextPlacement?.depth;
+      if (depth == null) continue;
+      const records = depthContainers.get(depth) ?? [];
+      const duplicate = records.find(
+        (item) => item.file.name.toLocaleLowerCase()
+          === record.file.name.toLocaleLowerCase(),
+      );
+      if (duplicate) {
+        throw new Error(
+          `深度容器 ${depth} 内容名称冲突：${record.file.name}（${duplicate.plugin.name} / ${record.plugin.name}）`,
+        );
+      }
+      records.push(record);
+      depthContainers.set(depth, records);
+    }
+    return [...depthContainers.entries()]
+      .sort(([left], [right]) => right - left)
+      .map(([depth, records]) => ({
+        depth,
+        messages: records.flatMap((record) => {
           const type = pluginFileType(record.file.name);
           if (type === "markdown") {
             return this.compileContextDocument(record.file.id).messages;
@@ -775,12 +729,6 @@ export class PluginReferenceResolver {
       for (const membership of record.file.memberships ?? []) {
         try {
           if (!this.membershipEnabled(record, membership.condition)) continue;
-          const parsedTarget = parseContainerReferenceTarget(
-            membership.container,
-          );
-          if (parsedTarget.scope === "depth") {
-            this.ensureDepthContainer(Number(parsedTarget.name), record);
-          }
           const container = this.resolveContainer(
             membership.container,
             record,
@@ -908,11 +856,6 @@ export class PluginReferenceResolver {
       if (!match) throw new Error(`容器不存在：${parsed.name}`);
       return match;
     }
-    if (parsed.scope === "depth") {
-      const container = this.containers.get(`depth:${parsed.name}`);
-      if (!container) throw new Error(`深度容器不存在或没有内容：${normalized}`);
-      return container;
-    }
     if (!from && parsed.scope !== "global") {
       throw new Error(`容器引用缺少来源文档：${normalized}`);
     }
@@ -924,42 +867,6 @@ export class PluginReferenceResolver {
     const container = this.containers.get(key);
     if (!container) throw new Error(`容器不存在：${normalized}`);
     return container;
-  }
-
-  private ensureDepthContainer(depth: number, source: ResourceRecord) {
-    const key = `depth:${depth}`;
-    if (this.containers.has(key)) return this.containers.get(key)!;
-    const container: ContainerRecord = {
-      id: `container:depth/${depth}`,
-      key,
-      name: String(depth),
-      scope: "depth",
-      depth,
-      declaration: {
-        name: String(depth),
-        scope: "depth",
-        description: `在最终上下文倒数第 ${depth} 个消息边界插入；0 表示底部。`,
-        imports: [],
-      },
-      source,
-      resources: new Map(),
-      imports: new Map(),
-    };
-    this.containers.set(key, container);
-    return container;
-  }
-
-  private createContainerFunction(
-    container: ContainerRecord,
-    rawReference: string,
-  ) {
-    const target = rawReference.trim().replace(/^<@|>$/g, "");
-    const value = this.resolve(target, container.source);
-    if (!this.isResourceValue(value) || value.type !== "javascript") {
-      throw new Error(`容器函数必须引用 JavaScript 资源：${rawReference}`);
-    }
-    const prepared = this.prepareJavaScript(value.id);
-    return createSandboxFunction(prepared.source, [prepared.environment]);
   }
 
   private createContainerValue(record: ContainerRecord): PluginContainerValue {
@@ -987,34 +894,12 @@ export class PluginReferenceResolver {
         containers: [...record.imports.keys()],
       }),
       toString: () =>
-        this.containerDescription(record),
+        `[Container ${record.scope}/${record.name}: ${
+          [...record.resources.keys()].join(", ")
+        }]`,
     };
     record.value = Object.freeze(value);
     return record.value;
-  }
-
-  private containerDescription(record: ContainerRecord) {
-    const delivery = "delivery" in record.declaration
-      ? record.declaration.delivery
-      : undefined;
-    const aliases = [...record.resources.keys()];
-    if (delivery?.mode !== "on_demand") {
-      return `[Container ${record.scope}/${record.name}: ${aliases.join(", ")}]`;
-    }
-    const query = this.createContainerQuery(record);
-    return [
-      `容器：${query.name}`,
-      `ID：${query.id}`,
-      `说明：${query.description ?? "未提供说明"}`,
-      `数量：${query.contentCount}`,
-      ...(delivery.index === "members"
-        ? ["成员：", ...[...record.resources.entries()].map(
-            ([alias, entry]) =>
-              `- ${alias} · ${entry.record.file.id} · /${entry.record.path} · ${entry.record.plugin.name}`,
-          )]
-        : []),
-      `需要完整内容时，在 codeAct 中调用 ctx.containers.retrieve(${JSON.stringify(query.id)}, { query, resourceIds?, limit? })。`,
-    ].join("\n");
   }
 
   private createContainerQuery(
@@ -1030,28 +915,10 @@ export class PluginReferenceResolver {
       name: record.name,
       scope: record.scope,
       description: record.declaration.description?.trim() || undefined,
-      ...("delivery" in record.declaration && record.declaration.delivery
-        ? { delivery: structuredClone(record.declaration.delivery) }
-        : {}),
-      ...("delivery" in record.declaration && record.declaration.delivery
-        ? {
-            deliveryFunctions: Object.fromEntries(
-              (["extractor", "transformer"] as const).flatMap((kind) => {
-                const reference = record.declaration.delivery?.[kind];
-                if (!reference) return [];
-                const resource = this.containerFunctionResource(record, reference);
-                return resource ? [[kind, resource]] : [];
-              }),
-            ),
-          }
-        : {}),
-      ...(record.depth != null ? { depth: record.depth } : {}),
       pluginId: record.source.plugin.id,
       pluginName: record.source.plugin.name,
-      definitionId: record.scope === "depth" ? "" : record.source.file.id,
-      path: record.scope === "depth"
-        ? `container:depth/${record.depth}`
-        : `/${record.source.path}`,
+      definitionId: record.source.file.id,
+      path: `/${record.source.path}`,
       usedByCount,
       contentCount: counts?.contentCount ?? record.resources.size,
     };
@@ -1072,34 +939,6 @@ export class PluginReferenceResolver {
       pluginId: record.plugin.id,
       pluginName: record.plugin.name,
     };
-  }
-
-  private containerFunctionResource(
-    container: ContainerRecord,
-    rawReference: string,
-  ) {
-    try {
-      const target = rawReference.trim().replace(/^<@|>$/g, "");
-      const value = this.resolve(target, container.source);
-      if (!this.isResourceValue(value) || value.type !== "javascript") {
-        throw new Error(`容器函数必须引用 JavaScript 资源：${rawReference}`);
-      }
-      return this.createResourceQuery(this.requireRecord(value.id));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!this.diagnostics.some((item) =>
-        item.pluginId === container.source.plugin.id
-        && item.resourceId === container.source.file.id
-        && item.message === message
-      )) {
-        this.diagnostics.push({
-          pluginId: container.source.plugin.id,
-          resourceId: container.source.file.id,
-          message,
-        });
-      }
-      return null;
-    }
   }
 
   private resourceUsesContainer(
@@ -1240,14 +1079,9 @@ function manifestValuesEqual(
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function normalizeExtractorResourceIds(value: unknown) {
-  const ids = Array.isArray(value)
-    ? value
-    : value && typeof value === "object" && "resourceIds" in value
-      ? (value as { resourceIds?: unknown }).resourceIds
-      : null;
-  if (!Array.isArray(ids) || ids.some((item) => typeof item !== "string")) {
-    throw new Error("容器提取器必须返回 string[] 或 { resourceIds: string[] }。");
-  }
-  return [...new Set(ids.map((item) => item.trim()).filter(Boolean))];
+function compareResourceRecords(left: ResourceRecord, right: ResourceRecord) {
+  return right.file.priority - left.file.priority
+    || left.plugin.id.localeCompare(right.plugin.id)
+    || left.path.localeCompare(right.path)
+    || left.file.id.localeCompare(right.file.id);
 }

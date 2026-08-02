@@ -42,6 +42,30 @@ function clonePlain<T>(value: T): T {
   }
 }
 
+function assertContextPlacementAvailable(
+  plugins: Plugin[],
+  input: {
+    fileId?: string;
+    name: string;
+    contextPlacement?: PluginFile["contextPlacement"];
+  },
+) {
+  const depth = input.contextPlacement?.depth;
+  if (depth === undefined) return;
+  if (!Number.isInteger(depth) || depth < 0) {
+    throw new Error("深度容器 K 必须是非负整数。");
+  }
+  const normalizedName = input.name.trim().toLocaleLowerCase();
+  const conflict = plugins.flatMap((item) => flattenPluginFiles(item.root)).find(
+    (file) => file.id !== input.fileId
+      && file.contextPlacement?.depth === depth
+      && file.name.trim().toLocaleLowerCase() === normalizedName,
+  );
+  if (conflict) {
+    throw new Error(`深度容器 ${depth} 中已存在同名资源：${conflict.name}`);
+  }
+}
+
 function createNodeBase(
   name: string,
   input: Partial<PluginTreeNodeBase> = {},
@@ -62,6 +86,7 @@ function createFile(
     memberships?: PluginFile["memberships"];
     dataReferences?: PluginFile["dataReferences"];
     contextConfig?: PluginFile["contextConfig"];
+    contextPlacement?: PluginFile["contextPlacement"];
   } = {},
 ): PluginFile {
   return {
@@ -71,6 +96,9 @@ function createFile(
     memberships: clonePlain(input.memberships ?? []),
     dataReferences: clonePlain(input.dataReferences ?? []),
     ...(input.contextConfig ? { contextConfig: clonePlain(input.contextConfig) } : {}),
+    ...(input.contextPlacement
+      ? { contextPlacement: clonePlain(input.contextPlacement) }
+      : {}),
     content: clonePlain(content),
   };
 }
@@ -131,7 +159,7 @@ function createStarterRoot(name: string): PluginFolder {
           "Every codeAct call must be one function with an explicit return.",
           "Treat Feature API documentation as the exact permission boundary.",
           "Read the custom tool documentation block and call plugin functions through ctx.tools when relevant.",
-          "Inspect lazy Plugin and Skill containers through ctx.containers and retrieve full content only when needed.",
+          "Inspect pure Plugin containers through ctx.containers and keep selection, transformation, and templates in explicit resources.",
           "When a real user decision is required, call agent.askUser(...) or api.askUser(...) inside codeAct and continue from its result.",
         ].join("\n"),
         { order: 0 },
@@ -452,6 +480,7 @@ function normalizeTreeNode(value: unknown, order = 0): PluginTreeNode | null {
     memberships?: unknown;
     dataReferences?: unknown;
     contextConfig?: unknown;
+    contextPlacement?: unknown;
   };
   const name = typeof source.name === "string" && source.name.trim()
     ? source.name.trim()
@@ -545,6 +574,19 @@ function normalizeTreeNode(value: unknown, order = 0): PluginTreeNode | null {
                 (source.contextConfig as { compressionThreshold?: unknown })
                   .compressionThreshold,
               ) || 0),
+            ),
+          },
+        }
+      : {}),
+    ...(source.contextPlacement && typeof source.contextPlacement === "object"
+      && Number.isInteger(
+        Number((source.contextPlacement as { depth?: unknown }).depth),
+      )
+      && Number((source.contextPlacement as { depth?: unknown }).depth) >= 0
+      ? {
+          contextPlacement: {
+            depth: Number(
+              (source.contextPlacement as { depth?: unknown }).depth,
             ),
           },
         }
@@ -1088,6 +1130,7 @@ export const usePluginStore = defineStore("plugin-resource", {
         priority?: number;
         dataReferences?: PluginFile["dataReferences"];
         contextConfig?: PluginFile["contextConfig"];
+        contextPlacement?: PluginFile["contextPlacement"];
       } = {},
     ) {
       const plugin = this.plugins.find((item) => item.id === pluginId);
@@ -1132,8 +1175,14 @@ export const usePluginStore = defineStore("plugin-resource", {
           ),
           dataReferences: input.dataReferences,
           contextConfig: input.contextConfig,
+          contextPlacement: input.contextPlacement,
         },
       );
+      assertContextPlacementAvailable(this.plugins, {
+        fileId: file.id,
+        name: file.name,
+        contextPlacement: file.contextPlacement,
+      });
       parent.children.push(file);
       parent.collapsed = false;
       try {
@@ -1200,6 +1249,7 @@ export const usePluginStore = defineStore("plugin-resource", {
           memberships: PluginFile["memberships"];
           dataReferences: PluginFile["dataReferences"];
           contextConfig: PluginFile["contextConfig"];
+          contextPlacement: PluginFile["contextPlacement"];
         }
       >,
     ) {
@@ -1207,6 +1257,17 @@ export const usePluginStore = defineStore("plugin-resource", {
       const node = plugin ? findPluginTreeNode(plugin.root, nodeId) : null;
       if (!plugin || !node) return;
       const previousRoot = clonePlain(plugin.root);
+      if (node.kind === "file") {
+        assertContextPlacementAvailable(this.plugins, {
+          fileId: node.id,
+          name: typeof patch.name === "string" && patch.name.trim()
+            ? patch.name.trim()
+            : node.name,
+          contextPlacement: "contextPlacement" in patch
+            ? patch.contextPlacement
+            : node.contextPlacement,
+        });
+      }
       if (
         !isFixedConventionNode(plugin, nodeId)
         && typeof patch.name === "string"
@@ -1239,6 +1300,13 @@ export const usePluginStore = defineStore("plugin-resource", {
       }
       if (node.kind === "file" && patch.contextConfig) {
         node.contextConfig = clonePlain(patch.contextConfig);
+      }
+      if (node.kind === "file" && "contextPlacement" in patch) {
+        if (patch.contextPlacement) {
+          node.contextPlacement = clonePlain(patch.contextPlacement);
+        } else {
+          delete node.contextPlacement;
+        }
       }
       if (node.kind === "folder" && typeof patch.collapsed === "boolean") {
         node.collapsed = patch.collapsed;

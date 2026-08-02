@@ -20,6 +20,9 @@ export interface PluginFile extends PluginTreeNodeBase {
   contextConfig?: {
     compressionThreshold: number;
   };
+  contextPlacement?: {
+    depth: number;
+  };
 }
 
 export interface PluginFileMembership {

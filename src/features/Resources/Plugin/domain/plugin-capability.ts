@@ -53,6 +53,7 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
     condition?: PluginContainerCondition;
   }>;
   dataReferences?: Array<{ alias: string; dataId: string }>;
+  contextPlacement?: { depth: number };
   containers?: PluginContainerDeclaration[];
   children?: PluginNode[];
 };`,
@@ -107,13 +108,6 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
   name: string;
   scope: "root" | "plugin" | "global";
   description?: string;
-  delivery?: {
-    mode: "eager" | "on_demand";
-    extractor?: string;
-    transformer?: string;
-    index: "members" | "description";
-    max_results: number;
-  };
   imports: Array<{ alias: string; target: string }>;
 };`,
       },
@@ -123,14 +117,8 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
         definition: `type PluginContainerSummary = {
   id: string;
   name: string;
-  scope: "root" | "plugin" | "global" | "depth";
+  scope: "root" | "plugin" | "global";
   description?: string;
-  delivery?: PluginContainerDeclaration["delivery"];
-  deliveryFunctions?: {
-    extractor?: PluginContainerResource;
-    transformer?: PluginContainerResource;
-  };
-  depth?: number;
   pluginId: string;
   pluginName: string;
   definitionId: string;
@@ -161,6 +149,16 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
     alias: string;
     condition?: PluginContainerCondition;
   }>;
+};`,
+      },
+      {
+        name: "PluginContainerReadResult",
+        description: "通用容器读取结果；容器不拥有提取、转换或模板逻辑。",
+        definition: `type PluginContainerReadResult = {
+  containerId: string;
+  containerPath: string;
+  contents: Array<PluginContainerResource & { alias: string }>;
+  resources: Array<PluginContainerResource & { alias: string; content: string }>;
 };`,
       },
       {
@@ -249,7 +247,7 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
         name: "listContainers",
         signature: "listContainers(): PluginContainerSummary[]",
         description: "列出当前生成上下文中已启用的容器，并返回容器 ID、定义文件 ID/路径、来源插件和使用/内容数量。",
-        returns: "数组条目包含容器 ID、作用域、定义路径、数量、delivery，以及已解析提取器/转换器的资源 ID 与路径；id 可继续查询或提取。",
+        returns: "数组条目包含容器 ID、作用域、定义路径、来源和数量；id 可继续传给 getContainer、listContainerContents 或 readContainer。",
         example: "plugin.listContainers()",
       },
       {
@@ -267,11 +265,11 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
         example: "plugin.listContainerContents(containerId, { limit: 20 })",
       },
       {
-        name: "retrieveContainer",
-        signature: "retrieveContainer(containerId: string, input?: { query?: string; resourceIds?: string[]; limit?: number }): Promise<{ containerId: string; containerPath: string; query?: string; contents: PluginContainerResource[]; value: unknown }>",
-        description: "主动提取容器正文。extractor 只能选择当前成员 ID，transformer 只接收已授权成员；缺省时按名称、别名和路径选择。",
-        returns: "contents 保留 ID、路径、来源插件和优先级；value 是标准内容或转换结果。",
-        example: "await plugin.retrieveContainer(containerId, { query: 'Alice', limit: 5 })",
+        name: "readContainer",
+        signature: "readContainer(containerId: string, resourceIds?: string[]): PluginContainerReadResult",
+        description: "按成员 ID 读取容器中的标准渲染结果；容器不承载提取器、转换器或模板。省略 resourceIds 时读取全部成员。",
+        returns: "contents 与 resources 均保留 ID、路径、来源插件和优先级；容器外 ID 会报错。",
+        example: "plugin.readContainer(containerId, [resourceId])",
       },
       {
         name: "getDataReferences",
@@ -282,7 +280,7 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
       },
       {
         name: "createContainer",
-        signature: "createContainer(input: { name: string; scope?: 'root' | 'plugin' | 'global'; description?: string; delivery?: PluginContainerDeclaration['delivery']; imports?: Array<{ alias: string; target: string }> }): Promise<PluginContainerDefinition>",
+        signature: "createContainer(input: { name: string; scope?: 'root' | 'plugin' | 'global'; description?: string; imports?: Array<{ alias: string; target: string }> }): Promise<PluginContainerDefinition>",
         description: "在当前插件根 containers.json 中创建容器；说明会规范为单行短文本。",
         returns: "新容器的 ID、定义文件 ID/路径、来源插件和完整声明。",
         example: "await plugin.createContainer({ name: '知识', scope: 'plugin', description: '按需加载的知识文档。' })",
@@ -304,7 +302,7 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
       {
         name: "addContainerContent",
         signature: "addContainerContent(containerId: string, path: string, input?: { alias?: string; priority?: number; condition?: PluginContainerCondition }): Promise<PluginNode>",
-        description: "把当前插件文件加入声明容器或虚拟 container:depth/N，并可设置别名、优先级和本地 manifest 条件。",
+        description: "把当前插件文件加入声明容器，并可设置别名、优先级和本地 manifest 条件。",
         returns: "更新后的文件节点，包含 ID 与插件内路径。",
         example: "await plugin.addContainerContent(containerId, '/knowledge/world.md', { alias: 'world', priority: 120, condition: { reference: 'config:local/story/world', equals: true } })",
       },
@@ -321,6 +319,13 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
         description: "移除当前插件文件与容器的成员关系，不删除文件本身。",
         returns: "更新后的文件节点。",
         example: "await plugin.removeContainerContent(containerId, '/knowledge/world.md')",
+      },
+      {
+        name: "setContextDepth",
+        signature: "setContextDepth(path: string, depth: number | null): Promise<PluginNode>",
+        description: "把文件加入数字深度容器 K；0 位于最终上下文底部，null 清除放置。K 必须是非负整数，同一 K 内文件名不允许重复。",
+        returns: "更新后的文件节点及 contextPlacement 元数据。",
+        example: "await plugin.setContextDepth('/dynamic/state.md', 0)",
       },
       {
         name: "addDataReference",

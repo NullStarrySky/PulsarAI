@@ -585,18 +585,60 @@ async function addSelectedMembership() {
   await persistSelectedMemberships();
 }
 
-async function addSelectedDepthMembership() {
+async function placeSelectedAtContextBottom() {
+  const current = plugin.value;
   const file = selectedFile.value;
-  if (!file) return;
-  if (file.memberships.some((item) => item.container === "container:depth/0")) {
-    push.error("此资源已经位于深度 0 容器。");
+  if (!current || !file) return;
+  const conflict = pluginStore.plugins.flatMap((item) =>
+    flattenPluginFiles(item.root).map((resource) => ({ plugin: item, resource })),
+  ).find(({ resource }) =>
+    resource.id !== file.id
+    && resource.contextPlacement?.depth === 0
+    && resource.name.toLocaleLowerCase() === file.name.toLocaleLowerCase()
+  );
+  if (conflict) {
+    push.error(
+      `深度容器 0 已有同名内容：${conflict.plugin.name}/${conflict.resource.name}`,
+    );
     return;
   }
-  file.memberships.push({
-    container: "container:depth/0",
-    alias: "",
+  await pluginStore.updateNode(current.id, file.id, {
+    contextPlacement: { depth: 0 },
   });
-  await persistSelectedMemberships();
+}
+
+async function persistSelectedContextDepth(event: Event) {
+  const current = plugin.value;
+  const file = selectedFile.value;
+  if (!current || !file) return;
+  const raw = (event.target as HTMLInputElement).value.trim();
+  if (!raw) {
+    await pluginStore.updateNode(current.id, file.id, {
+      contextPlacement: undefined,
+    });
+    return;
+  }
+  const depth = Number(raw);
+  if (!Number.isInteger(depth) || depth < 0) {
+    push.error("深度 K 必须是非负整数。");
+    return;
+  }
+  const conflict = pluginStore.plugins.flatMap((item) =>
+    flattenPluginFiles(item.root).map((resource) => ({ plugin: item, resource })),
+  ).find(({ resource }) =>
+    resource.id !== file.id
+    && resource.contextPlacement?.depth === depth
+    && resource.name.toLocaleLowerCase() === file.name.toLocaleLowerCase()
+  );
+  if (conflict) {
+    push.error(
+      `深度容器 ${depth} 已有同名内容：${conflict.plugin.name}/${conflict.resource.name}`,
+    );
+    return;
+  }
+  await pluginStore.updateNode(current.id, file.id, {
+    contextPlacement: { depth },
+  });
 }
 
 async function removeSelectedMembership(index: number) {
@@ -1362,18 +1404,33 @@ async function restoreBuiltInPlugin() {
               @change="persistContextCompressionThreshold"
             />
           </label>
+          <label class="col-span-full flex items-center justify-between gap-4 border-t pt-2 mobile:col-span-1">
+            <span>
+              <span class="block text-xs font-medium">深度容器 K</span>
+              <span class="text-xs text-muted-foreground">非负整数；0 位于最终上下文底部。留空则不自动插入。</span>
+            </span>
+            <div class="flex items-center gap-1">
+              <Button size="sm" variant="ghost" class="h-8 text-xs" @click.prevent="placeSelectedAtContextBottom">
+                置于底部
+              </Button>
+              <input
+                :value="selectedFile.contextPlacement?.depth ?? ''"
+                type="number"
+                min="0"
+                step="1"
+                class="h-8 w-24 rounded-md border bg-background px-2 text-right font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
+                placeholder="未设置"
+                @change="persistSelectedContextDepth"
+              />
+            </div>
+          </label>
           <div class="col-span-full border-t pt-2 mobile:col-span-1">
             <div class="mb-1.5 flex items-center justify-between gap-2">
               <span class="text-xs font-medium">容器成员关系（资源元数据）</span>
-              <div class="flex items-center gap-1">
-                <Button size="sm" variant="ghost" class="h-7 text-xs" @click="addSelectedDepthMembership">
-                  加入底部
-                </Button>
-                <Button size="sm" variant="ghost" class="h-7 text-xs" @click="addSelectedMembership">
-                  <Plus class="mr-1 size-3.5" />
-                  加入容器
-                </Button>
-              </div>
+              <Button size="sm" variant="ghost" class="h-7 text-xs" @click="addSelectedMembership">
+                <Plus class="mr-1 size-3.5" />
+                加入容器
+              </Button>
             </div>
             <div
               v-for="(membership, index) in selectedFile.memberships"

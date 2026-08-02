@@ -53,9 +53,6 @@ const expandedContainerIds = ref<string[]>([]);
 const definitions = computed(() =>
   parsePluginContainerDefinitions(props.modelValue),
 );
-const virtualDepthDetails = computed(() =>
-  props.containerDetails.filter((item) => item.scope === "depth"),
-);
 
 const duplicateKeys = computed(() => {
   const counts = new Map<string, number>();
@@ -105,23 +102,6 @@ function updateContainer(
   updateDefinitions((containers) => {
     const container = containers[index];
     if (container) Object.assign(container, patch);
-  });
-}
-
-function updateDelivery(
-  index: number,
-  patch: Partial<NonNullable<PluginContainerDeclaration["delivery"]>>,
-) {
-  updateDefinitions((containers) => {
-    const container = containers[index];
-    if (!container) return;
-    container.delivery = {
-      mode: "eager",
-      index: "members",
-      max_results: 8,
-      ...(container.delivery ?? {}),
-      ...patch,
-    };
   });
 }
 
@@ -337,85 +317,6 @@ function toggleDetails(
             v-if="isDetailsOpen(container, containerIndex)"
             class="grid grid-cols-2 gap-3 border-t bg-muted/10 p-3 mobile:grid-cols-1"
           >
-            <section class="col-span-2 grid grid-cols-[10rem_10rem_6rem_minmax(0,1fr)_minmax(0,1fr)] gap-2 rounded-md border bg-background p-2.5 mobile:col-span-1 mobile:grid-cols-1">
-              <label>
-                <span class="mb-1 block text-[11px] text-muted-foreground">内容交付</span>
-                <Select
-                  :model-value="container.delivery?.mode ?? 'eager'"
-                  :disabled="readonly"
-                  @update:model-value="updateDelivery(containerIndex, { mode: $event as 'eager' | 'on_demand' })"
-                >
-                  <SelectTrigger class="h-8"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="eager">直接引用</SelectItem>
-                    <SelectItem value="on_demand">按需提取</SelectItem>
-                  </SelectContent>
-                </Select>
-              </label>
-              <label>
-                <span class="mb-1 block text-[11px] text-muted-foreground">索引内容</span>
-                <Select
-                  :model-value="container.delivery?.index ?? 'members'"
-                  :disabled="readonly || (container.delivery?.mode ?? 'eager') !== 'on_demand'"
-                  @update:model-value="updateDelivery(containerIndex, { index: $event as 'members' | 'description' })"
-                >
-                  <SelectTrigger class="h-8"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="members">说明与成员</SelectItem>
-                    <SelectItem value="description">仅说明</SelectItem>
-                  </SelectContent>
-                </Select>
-              </label>
-              <label>
-                <span class="mb-1 block text-[11px] text-muted-foreground">最多返回</span>
-                <input
-                  :value="container.delivery?.max_results ?? 8"
-                  :disabled="readonly || (container.delivery?.mode ?? 'eager') !== 'on_demand'"
-                  type="number"
-                  min="1"
-                  max="100"
-                  class="h-8 w-full rounded-md border bg-background px-2 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
-                  @change="updateDelivery(containerIndex, { max_results: Number(($event.target as HTMLInputElement).value) })"
-                />
-              </label>
-              <label>
-                <span class="mb-1 block text-[11px] text-muted-foreground">提取器（可选）</span>
-                <Input
-                  :model-value="container.delivery?.extractor ?? ''"
-                  :disabled="readonly || (container.delivery?.mode ?? 'eager') !== 'on_demand'"
-                  class="h-8 font-mono text-xs"
-                  placeholder="&lt;@path:./extractor.js&gt;"
-                  @update:model-value="updateDelivery(containerIndex, { extractor: String($event) })"
-                />
-              </label>
-              <label>
-                <span class="mb-1 block text-[11px] text-muted-foreground">转换器（可选）</span>
-                <Input
-                  :model-value="container.delivery?.transformer ?? ''"
-                  :disabled="readonly || (container.delivery?.mode ?? 'eager') !== 'on_demand'"
-                  class="h-8 font-mono text-xs"
-                  placeholder="&lt;@path:./transformer.js&gt;"
-                  @update:model-value="updateDelivery(containerIndex, { transformer: String($event) })"
-                />
-              </label>
-              <p class="col-span-full text-[10px] leading-4 text-muted-foreground mobile:col-span-1">
-                提取器返回成员 resourceIds；转换器只接收已授权内容。模型通过 ctx.containers.retrieve(...) 主动读取。
-              </p>
-              <div
-                v-if="detailsFor(container)?.deliveryFunctions"
-                class="col-span-full flex flex-wrap gap-1.5 mobile:col-span-1"
-              >
-                <button
-                  v-for="(resource, kind) in detailsFor(container)?.deliveryFunctions"
-                  :key="kind"
-                  type="button"
-                  class="rounded border px-2 py-1 text-left font-mono text-[10px] text-muted-foreground hover:bg-accent"
-                  @click="resource && emit('open-resource', resource)"
-                >
-                  {{ kind }} · {{ resource?.id }} · {{ resource?.path }}
-                </button>
-              </div>
-            </section>
             <section class="min-w-0 rounded-md border bg-background">
               <div class="flex h-8 items-center gap-1.5 border-b px-2.5">
                 <FileText class="size-3.5 text-muted-foreground" />
@@ -575,42 +476,9 @@ function toggleDetails(
         </Button>
       </div>
 
-      <section v-if="virtualDepthDetails.length" class="mt-4 rounded-lg border bg-card/35 p-3">
-        <div class="mb-2 flex items-center gap-2">
-          <Boxes class="size-4 text-muted-foreground" />
-          <h3 class="text-sm font-semibold">虚拟深度容器</h3>
-          <span class="text-xs text-muted-foreground">{{ virtualDepthDetails.length }} 个</span>
-        </div>
-        <div class="grid grid-cols-2 gap-2 mobile:grid-cols-1">
-          <div
-            v-for="details in virtualDepthDetails"
-            :key="details.id"
-            class="rounded-md border bg-background p-2"
-          >
-            <div class="flex items-center justify-between gap-2">
-              <span class="font-mono text-xs font-medium">container:depth/{{ details.depth }}</span>
-              <span class="text-[10px] text-muted-foreground">{{ details.contentCount }} 内容</span>
-            </div>
-            <p class="mt-1 text-[10px] text-muted-foreground">{{ details.description }}</p>
-            <div class="mt-1.5 space-y-1">
-              <button
-                v-for="resource in details.contents"
-                :key="`${resource.pluginId}:${resource.id}:${resource.alias}`"
-                type="button"
-                class="flex w-full items-center justify-between gap-2 rounded px-1.5 py-1 text-left hover:bg-accent"
-                @click="emit('open-resource', resource)"
-              >
-                <span class="min-w-0 truncate text-xs">{{ resource.name }} · {{ resource.pluginName }}</span>
-                <span class="shrink-0 font-mono text-[10px] text-muted-foreground">P{{ resource.priority }}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <p class="mt-5 text-[11px] leading-5 text-muted-foreground">
         root 只对插件根目录资源可见；plugin 对当前插件可见；global
-        对当前启用的插件集合可见。资源也可直接加入 container:depth/N；N 为从最终上下文底部向上的消息边界，0 表示底部。
+        对当前启用的插件集合可见。最终上下文深度由资源自身的放置元数据控制，不属于普通容器声明。
       </p>
     </div>
   </div>
