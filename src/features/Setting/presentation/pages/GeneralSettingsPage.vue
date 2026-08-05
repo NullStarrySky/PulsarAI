@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useWindowLifecycleStore } from "@/features/UI/application/window-lifecycle-store";
+import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
 import SettingGroup from "../SettingGroup.vue";
 import SettingItem from "../SettingItem.vue";
 import SettingPage from "../SettingPage.vue";
@@ -17,6 +18,7 @@ import type { WindowCloseBehavior } from "@/features/UI/application/window-lifec
 const compactMode = ref(false);
 const enableAnimations = ref(true);
 const windowLifecycle = useWindowLifecycleStore();
+const appearance = useAppearanceStore();
 
 function setCloseBehavior(value: unknown) {
   if (value === "ask" || value === "exit" || value === "tray") {
@@ -33,6 +35,12 @@ function setCloseBehavior(value: unknown) {
       </SettingItem>
       <SettingItem title="启用动画" description="侧栏、弹窗和交互反馈默认保留平滑过渡。">
         <SettingSwitch v-model="enableAnimations" />
+      </SettingItem>
+      <SettingItem
+        title="Enter 发送消息"
+        description="开启时 Enter 发送、Shift+Enter 换行；关闭后交换两者的行为。"
+      >
+        <SettingSwitch v-model="appearance.composerSendWithEnter" />
       </SettingItem>
     </SettingGroup>
 

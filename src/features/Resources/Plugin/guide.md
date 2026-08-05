@@ -10,7 +10,7 @@ PulsarAI 插件是一棵可持久化的文件树。插件不把全部文件自�
 
 ## 基本设计：用文档引用构建上下文
 
-插件系统把 Markdown、JSON 格式的 `.data`、JavaScript、媒体和组件都视为有稳定 ID 与路径的普通资源。`containers.json` 只声明可见的命名空间，文件自己的 `memberships` 决定它属于哪些容器；资源自己的 `dataReferences` 元数据声明数据依赖；`context.md`、其他文档和流程脚本再通过 `<@...>` 显式引用需要的资源。
+插件系统把 Markdown、JSON 格式的 `.data`、JavaScript、媒体和组件都视为有稳定 ID 与路径的普通资源。`containers.json` 只声明可见的命名空间，文件自己的 `memberships` 决定它属于哪些容器；`context.md`、其他文档和流程脚本通过同构的 `imports.*(...)` 函数显式导入资源，字面量调用同时构成可静态发现的依赖。
 
 一次生成可以沿着一条直接可见的链路理解：
 
@@ -104,7 +104,7 @@ PulsarAI 插件是一棵可持久化的文件树。插件不把全部文件自�
 
 文件优先级不改变文件树显示顺序。它用于容器、Regex 和自定义工具收集：数值越大越靠前；相同优先级使用插件 ID、资源路径和资源 ID 作为无业务含义的稳定排序键。
 
-Markdown 文件直接打开 Milkdown 所见即所得编辑器，不显示冗余的“原始内容/预览”切换。输入 `<@` 会补全当前可见引用，输入宏起始符会给出对应语法提示。源码切换只保留给 `.vue` 和拥有结构化覆盖渲染器的约定 JSON（例如 `regex.json`）。
+Markdown 文件直接打开 Milkdown 所见即所得编辑器，不显示冗余的“原始内容/预览”切换。源码编辑中的 `imports.` 会补全当前可见资源、容器与配置，输入宏起始符会给出对应语法提示。源码切换只保留给插件 Markdown、`.vue` 和拥有结构化覆盖渲染器的约定 JSON（例如 `regex.json`）。
 
 ## `info.md`
 
@@ -150,18 +150,18 @@ Markdown 文件直接打开 Milkdown 所见即所得编辑器，不显示冗余�
 
 工作区根据完整文件名打开设置式预览，按组显示标题、说明和控件，并保留原始 JSON 视图供规范文件维护。`manifest.json` 固定在插件根目录，不能重命名、移动或删除。背景配置位于 `appearance/background`；目标插件、路径或媒体类型失效时会清除该值并回退到内置背景。系统不会迁移旧的自由对象格式。
 
-Markdown 和其他显式引用位置使用同一套 ID 路径：
+Markdown 宏和 JavaScript 使用同一组配置导入函数：
 
-```text
-<@config:local/appearance/background>
-<@config:global/builtin-core-plugin/appearance/background>
+```js
+imports.config.local("appearance", "background")
+imports.config.global("builtin-core-plugin", "appearance", "background")
 ```
 
 `local` 指引用来源所在插件；`global` 必须携带已启用全局插件的稳定 ID。Agent 可用 `plugin.getPluginManifest(pluginId)` 查询文件 ID、路径、来源插件、GroupContent[] 和诊断，用 `plugin.resolveConfig(reference)` 解析同一种引用。插件流程还可用 `plugin.getManifest()`、`getConfig(groupId, contentId)`、`setConfig(...)` 与 `replaceManifest(...)` 维护自身配置。
 
 ## `containers.json`
 
-根目录 `containers.json` 是容器声明和容器命名空间引用的唯一来源，根节点固定为带有 `containers` 数组的 JSON 对象。
+根目录 `containers.json` 是容器声明的唯一来源，根节点固定为带有 `containers` 数组的 JSON 对象。
 
 ```json
 {
@@ -169,13 +169,7 @@ Markdown 和其他显式引用位置使用同一套 ID 路径：
     {
       "name": "角色上下文",
       "scope": "plugin",
-      "description": "角色身份、表达方式与持续对话所需的上下文。",
-      "imports": [
-        {
-          "alias": "base",
-          "target": "container:global/基础上下文"
-        }
-      ]
+      "description": "角色身份、表达方式与持续对话所需的上下文。"
     }
   ]
 }
@@ -195,12 +189,12 @@ Markdown 和其他显式引用位置使用同一套 ID 路径：
 | `plugin` | 当前插件中的资源 |
 | `global` | 当前启用插件集合 |
 
-短引用 `<@角色上下文>` 会依次检查当前根作用域、当前插件作用域和全局作用域。如果同名容器在多个可见作用域中同时存在，解析器会要求写成完整形式。
+容器导入显式给出作用域，不执行模糊的短名称猜测：
 
-```text
-<@container:root/局部上下文>
-<@container:plugin/角色上下文>
-<@container:global/基础上下文>
+```js
+imports.container("root", "局部上下文")
+imports.container("plugin", "角色上下文")
+imports.container("global", "基础上下文")
 ```
 
 ### 成员元数据
@@ -209,7 +203,7 @@ Markdown 和其他显式引用位置使用同一套 ID 路径：
 
 ```json
 {
-  "container": "container:plugin/角色上下文",
+  "container": "container:local/角色上下文",
   "alias": "world",
   "condition": {
     "reference": "config:local/story/world",
@@ -225,18 +219,16 @@ Markdown 和其他显式引用位置使用同一套 ID 路径：
 容器值是惰性命名空间：
 
 ```js
-const container = <@角色上下文>
+const container = imports.container("plugin", "角色上下文")
 const character = container.get("character")
-const base = container.use("base")
 const inventory = container.list()
 ```
 
 - `get(alias)` 返回成员资源；
-- `use(alias)` 返回导入的子容器；
-- `list()` 返回可用成员别名和导入别名；
+- `list()` 返回可用成员别名；
 - 资源转换为字符串时才执行对应文件类型的渲染。
 
-引用的容器始终保留命名空间，不会复制或把所有成员摊平到当前容器。“引用容器命名空间”只让当前容器通过 `use(alias)` 访问另一个既有容器。
+导入的容器始终保留命名空间，不会复制或把所有成员摊平到当前环境。
 
 ### 查询容器
 
@@ -277,7 +269,7 @@ K 必须是非负整数，并从最终基础消息列表的底部边界按 0 开
 
 ```md
 :::pulsar role=system
-{{ <@角色上下文>.get("character") }}
+{{ imports.container("plugin", "角色上下文").get("character") }}
 
 [[chat]]
 :::
@@ -289,11 +281,11 @@ K 必须是非负整数，并从最终基础消息列表的底部边界按 0 开
 
 - <code>&#123;&#123; expression &#125;&#125;</code>：把表达式结果渲染进当前文本；
 - `[[ expression ]]`：把消息或数组拼入消息序列；
-- `<@...>`：读取显式插件资源或容器。
+- `imports.*(...)`：读取显式插件资源、容器或配置；导入 `.data` 时得到水合后的包装对象。
 
-在 Markdown 中输入 `<@` 后，编辑器会列出当前文档可见的容器。候选项包含容器名称、作用域、所属插件和可选说明；名称有歧义时会插入完整的 `container:scope/name` 引用。
+在源码编辑中输入 `imports.` 后，编辑器会列出当前文档可见的资源、容器与配置。容器候选项包含名称、作用域、所属插件和可选说明，并插入带显式作用域的函数调用。
 
-`.data` 是独立 JSON 定义，内部声明 `resource` 或 `conversation` 隔离、初始值、说明与可选 updater wrapper。资源在属性面板通过 `{ alias, dataId }` 元数据引用它，Markdown 和 `.data` 正文都不记录引用路径。运行值属于 Conversation 分支，不会写回 `.data`。
+`.data` 是独立 JSON 定义，内部声明 `resource` 或 `conversation` 隔离、初始值、说明与可选 updater wrapper。资源通过 `imports.resource(...)` 或 `imports.resourceById(...)` 导入它；返回值是按当前资源与会话水合后的包装对象，而不是裸 JSON 文本。运行值属于 Conversation 分支，不会写回 `.data`。
 
 普通 CodeAct 使用 `data.readForResource(resourceId, dataId)` 读取；`variable-update` 意图可使用 `data.writeForResource(resourceId, dataId, value)` 事务式写入。接口同时提供 ID 与路径信息，便于 Agent 顺着查询。
 
@@ -346,16 +338,16 @@ async function () {
 
 ```js
 const messages = await api.runProcess(
-  <@path:./step1-prepare.js>,
+  imports.resource("./step1-prepare.js"),
 )
 
 const result = await api.runProcess(
-  <@path:./step2-generate.js>,
+  imports.resource("./step2-generate.js"),
   { processInput: messages },
 )
 
 return api.runProcess(
-  <@path:./step3-finalize.js>,
+  imports.resource("./step3-finalize.js"),
   { processInput: result },
 )
 ```
@@ -373,7 +365,7 @@ const runtime = await agent.prepare()
 const runner = new agent.ToolLoopAgent({
   model: runtime.model,
   reasoning: runtime.reasoning,
-  instructions: [String(<@path:../instruction/default.md>), runtime.instructions].join("\n\n"),
+  instructions: [String(imports.resource("../instruction/default.md")), runtime.instructions].join("\n\n"),
   tools: runtime.tools,
   stopWhen: runtime.stopWhen,
   onStepStart: runtime.onStepStart,
@@ -388,13 +380,13 @@ return { text: result.text, modelName: runtime.modelName }
 return processInput
 ```
 
-`api.runProcess(resource, overrides?)` 只接受当前脚本通过 `<@...>` 显式引用到的 JavaScript 资源。第二个参数会作为当前子步骤的环境覆盖层。流程递归调用会被拒绝，并给出调用路径。
+`api.runProcess(resource, overrides?)` 只接受当前脚本通过 `imports.resource(...)` 显式导入的 JavaScript 资源。第二个参数会作为当前子步骤的环境覆盖层。流程递归调用会被拒绝，并给出调用路径。
 
-JavaScript 文件不会执行 <code>&#123;&#123;...&#125;&#125;</code> 或 `[[...]]` 文本宏。JavaScript 使用原生语法组织控制流，只通过 `<@...>` 获得受保护的资源值：
+JavaScript 文件不会执行 <code>&#123;&#123;...&#125;&#125;</code> 或 `[[...]]` 文本宏。JavaScript 使用原生语法组织控制流，并通过同一个 `imports` 对象获得资源值：
 
 ```js
-const rules = <@path:../rules.md>
-const profile = <@container:plugin/角色上下文>.get("character")
+const rules = imports.resource("../rules.md")
+const profile = imports.container("plugin", "角色上下文").get("character")
 
 return [...contextMessages, {
   role: "system",
@@ -404,7 +396,7 @@ return [...contextMessages, {
 
 常用流程环境包括：
 
-- `contextMessages`：由 Feature API 文档和 `context.md` 编译出的消息；
+- `contextMessages`：由 Feature API 简短引导、Data/工具说明和 `context.md` 编译出的消息；完整 API 文档通过 `readDocs()` 按需获取；
 - `chat` / `CHAT`：当前有效对话路径；
 - `conversation`、`conversationId`、`packageId`、`containerId`；
 - `reasoningEffort`：当前会话选择的 AI SDK 思考深度；
@@ -414,7 +406,7 @@ return [...contextMessages, {
 - `skills.list()` / `mcp.list()` 与 `skills.call(...)` / `mcp.call(...)`：检查并调用扩展；`skills.tools`、`mcp.tools` 保留名称列表；
 - `ctx.tools`：当前启用插件的自定义函数表；函数定义来自 `tools/<name>/tool.js`，使用说明来自同目录 `prompt.md`；
 - `ctx.containers`：普通容器的只读入口，提供 `list`、`get`、`listContents`、`read`；
-- 已授权 Feature API 与当前流程作用域内的 Plugin API；
+- 始终可用的安全 Feature API 与当前流程作用域内的 Plugin API；具有特殊副作用的方法会被明确封锁；
 - `agent`：Agent Feature API、`ToolLoopAgent` 构造器与惰性 `prepare()`；只有流程调用 `prepare()` 时才加载模型、当前思考深度、唯一 CodeAct 工具和生命周期钩子。
 
 流程可以调用：
@@ -444,7 +436,7 @@ tools/
    └─ prompt.md
 ```
 
-`tool.js` 的完整内容是一个函数。它可以接收普通参数，也可以像其他插件 JavaScript 一样使用已授权 Feature API、来源插件作用域内的 `plugin` API 和显式 `<@...>` 引用：
+`tool.js` 的完整内容是一个函数。它可以接收普通参数，也可以像其他插件 JavaScript 一样使用安全 Feature API、来源插件作用域内的 `plugin` API 和显式 `imports.*(...)` 导入：
 
 ```js
 async function lookupCharacter(name) {
@@ -515,7 +507,7 @@ return {
 
 一条用户消息最多保存一个动作，而且动作始终是消息的第一个 part。动作只替换当前这一次生成的流程入口，不修改插件的默认 `agentprocess/`。
 
-动作脚本可以读取 `action` 和 `prompt`，也可以使用与普通流程相同的 `api`、Feature API 和显式资源引用。
+动作脚本可以读取 `action` 和 `prompt`，也可以使用与普通流程相同的 `api`、Feature API 和 `imports` 资源导入。
 
 ## `background/`
 
@@ -525,7 +517,7 @@ return {
 
 ## 其他目录
 
-`character/`、`instruction/` 等目录是推荐的组织方式，不是固定容器。资源是否参与生成仍由成员元数据、`<@...>` 或入口文件决定。
+`character/`、`instruction/` 等目录是推荐的组织方式，不是固定容器。资源是否参与生成仍由成员元数据、`imports.*(...)` 或入口文件决定。
 
 流程中通过 `api.askUserWithComponent` 或 `api.renderComponent` 使用的生成组件仍需进入 generation component registry；它们和覆盖整个默认对话区域的 `Override.vue` 是两个不同入口。
 
@@ -535,10 +527,11 @@ return {
 
 | 形式 | 含义 |
 | --- | --- |
-| `<@path:./file.md>` | 相对当前资源的路径 |
-| `<@id:resource-id>` | 稳定资源 ID |
-| `<@容器名>` | 唯一可见的同名容器 |
-| `<@container:scope/name>` | 指定作用域的容器 |
+| `imports.resource("./file.md")` | 相对当前资源的路径 |
+| `imports.resourceById("resource-id")` | 稳定资源 ID |
+| `imports.container("scope", "name")` | 指定作用域的容器 |
+| `imports.config.local("group", "content")` | 当前插件配置 |
+| `imports.config.global("plugin", "group", "content")` | 已启用全局插件配置 |
 
 路径不能越出当前插件根目录。ID 只能访问当前启用插件集合中的资源。
 
@@ -565,6 +558,6 @@ Markdown、文本和组件源码在转换为字符串时使用各自的渲染器
 3. 在文件属性中把资源加入容器并设置稳定别名。
 4. 在资源元数据中绑定 `.data`，并在 `context.md` 只组装模型真正需要的上下文。
 5. 在 `agentprocess/` 用普通 JavaScript 拆分准备、生成和收尾步骤。
-6. 使用 `<@...>` 显式连接资源，不依赖隐式全局变量。
+6. 使用 `imports.*(...)` 显式连接资源，不依赖隐式全局变量。
 7. 用文件优先级表达容器成员顺序，用树顺序表达工作区组织顺序。
 8. 查看生成消息的资源追踪和诊断，再调整依赖关系。

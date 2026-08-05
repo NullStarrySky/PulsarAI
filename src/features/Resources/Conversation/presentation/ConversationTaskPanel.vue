@@ -21,7 +21,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
+import type { Plugin } from "@/features/Resources/Plugin/domain/plugin-types";
 import {
   applyPluginRegexToText,
   collectPluginRegexRules,
@@ -38,6 +40,7 @@ import type {
 
 const conversation = useConversationStore();
 const plugins = usePluginStore();
+const pluginItems = () => (plugins as unknown as { plugins: Plugin[] }).plugins;
 const layout = useLayoutStore();
 const selectedConversationId = ref("");
 const selectedPackageId = ref("");
@@ -55,7 +58,7 @@ const currentBinding = computed<ConversationResourceBinding | null>(() => {
     return null;
   }
   if (tab.resourceType === "plugin") {
-    const plugin = plugins.plugins.find((item) => item.id === tab.resourceId);
+    const plugin = pluginItems().find((item) => item.id === tab.resourceId);
     if (!plugin) return null;
     const resourcePath =
       typeof tab.resourceParams?.projectPath === "string"
@@ -260,16 +263,15 @@ async function send() {
 </script>
 
 <template>
-  <div class="flex min-h-0 min-w-72 flex-1 flex-col">
+  <div class="flex min-h-0 min-w-0 flex-1 flex-col">
     <GenerationComponentDialog />
     <div class="border-b p-2">
       <div class="mb-2 min-w-0 px-1">
         <div class="truncate text-xs font-medium">
           {{ currentBinding?.resourceTitle ?? "任务" }}
         </div>
-        <div class="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+        <div class="mt-0.5 truncate text-[10px] text-muted-foreground">
           {{ resourcePackage?.name ?? "全局资源" }}
-          <template v-if="currentBinding"> · {{ currentBinding.resourcePath }}</template>
         </div>
       </div>
 
@@ -361,8 +363,9 @@ async function send() {
       </div>
     </div>
 
-    <div v-if="selectedConversation" class="min-h-0 flex-1 overflow-y-auto p-3">
-      <div
+    <ScrollArea v-if="selectedConversation" class="min-h-0 flex-1">
+      <div class="p-3">
+        <div
         v-for="(container, index) in messages"
         :key="container.id"
         class="mb-3"
@@ -382,8 +385,9 @@ async function send() {
           />
           <span v-else class="text-xs text-muted-foreground">生成中…</span>
         </div>
+        </div>
       </div>
-    </div>
+    </ScrollArea>
     <div
       v-else
       class="flex min-h-0 flex-1 flex-col items-center justify-center px-5 text-center"

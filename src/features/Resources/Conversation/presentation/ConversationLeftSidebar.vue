@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { storeToRefs } from "pinia";
 import {
   ArrowDown,
   ArrowUp,
@@ -17,7 +16,6 @@ import {
   Search,
   Settings,
   Trash2,
-  Wrench,
 } from "lucide-vue-next";
 import {
   AlertDialog,
@@ -30,6 +28,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,23 +40,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { useResponsiveStore } from "@/features/Misc/application/responsive-store";
 import { saveImageFile } from "@/features/Resources/application/resource-file-service";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 import ResourceAvatar from "@/features/Resources/Conversation/presentation/ResourceAvatar.vue";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { useCommandStore } from "@/features/Hotkey/application/command-store";
+import AppIcon from "@/features/UI/presentation/AppIcon.vue";
 import InlineEditInput from "@/features/UI/presentation/InlineEditInput.vue";
 import { useNotificationStore } from "@/features/Notification/application/notification-store";
-import PluginRightSidebarPanel from "@/features/Resources/Plugin/presentation/PluginRightSidebarPanel.vue";
 
 const layout = useLayoutStore();
-const responsive = useResponsiveStore();
 const commandStore = useCommandStore();
 const conversation = useConversationStore();
 const notifications = useNotificationStore();
-const { leftSidebarOpen } = storeToRefs(layout);
-const { isMobileLayout } = storeToRefs(responsive);
 const packageViewMode = ref<"list" | "grid">("list");
 const collapsedCategoryIds = ref<string[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -65,7 +60,6 @@ const uploadPackageId = ref("");
 const editing = ref<{ kind: "package-name" | "package-description" | "category-name"; id: string } | null>(null);
 const editingValue = ref("");
 const deleteCategoryId = ref("");
-const leftMode = ref<"packages" | "plugins">("packages");
 
 onMounted(() => {
   void conversation.initialize();
@@ -87,7 +81,6 @@ const categorySections = computed(() => [
 ]);
 
 async function openPackage(packageId: string) {
-  leftMode.value = "packages";
   await conversation.openPackage(packageId);
   const active = conversation.activeConversation;
   if (active) {
@@ -116,7 +109,8 @@ function openBuiltinPage(resourceId: "schedule" | "notifications", title: string
 }
 
 async function createPackage(categoryId: string | null) {
-  await conversation.createPackage({ categoryId });
+  const item = await conversation.createPackage({ categoryId }, { activate: false });
+  await openPackage(item.id);
 }
 
 function toggleCategory(categoryId: string) {
@@ -192,37 +186,23 @@ async function uploadIcon(event: Event) {
 </script>
 
 <template>
-  <aside
-    :class="
-      cn(
-        'flex shrink-0 flex-col overflow-hidden border-r bg-background transition-[width,opacity,transform] duration-300 ease-out',
-        isMobileLayout
-          ? [
-              'fixed bottom-0 left-0 top-12 z-40 shadow-xl',
-              leftSidebarOpen ? 'translate-x-0 opacity-100' : '-translate-x-full pointer-events-none opacity-100',
-            ]
-          : leftSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0',
-      )
-    "
-    data-mobile-sidebar
-  >
-    <div class="min-w-72 border-b p-2">
+  <aside class="flex h-full min-w-0 flex-col overflow-hidden border-r bg-background">
+    <div class="flex min-w-0 items-center gap-3 border-b px-3 py-3">
+      <AppIcon class="size-9" />
+      <div class="min-w-0">
+        <div class="truncate text-sm font-semibold tracking-tight">PulsarAI</div>
+        <div class="truncate text-xs text-muted-foreground">开放的 AI 工作空间</div>
+      </div>
+    </div>
+
+    <div class="min-w-0 border-b p-2">
       <nav class="grid gap-1">
         <Button
           class="h-9 justify-start gap-2"
-          :variant="leftMode === 'packages' ? 'secondary' : 'ghost'"
-          @click="leftMode = 'packages'"
+          variant="secondary"
         >
           <LayoutGrid class="size-4" />
           角色包
-        </Button>
-        <Button
-          class="h-9 justify-start gap-2"
-          :variant="leftMode === 'plugins' ? 'secondary' : 'ghost'"
-          @click="leftMode = 'plugins'"
-        >
-          <Wrench class="size-4" />
-          插件
         </Button>
         <Button class="relative h-9 justify-start gap-2" variant="ghost" @click="openBuiltinPage('notifications', '通知')">
           <Bell class="size-4" />
@@ -245,9 +225,8 @@ async function uploadIcon(event: Event) {
       </nav>
     </div>
 
-    <PluginRightSidebarPanel v-if="leftMode === 'plugins'" />
-
-    <div v-else class="min-w-72 flex-1 overflow-y-auto p-2">
+    <ScrollArea class="min-h-0 flex-1">
+      <div class="min-w-0 p-2">
       <div class="mb-2 flex items-center justify-between px-1">
         <span class="text-xs font-medium text-muted-foreground">角色包</span>
         <Button
@@ -424,9 +403,10 @@ async function uploadIcon(event: Event) {
           </div>
         </div>
       </section>
-    </div>
+      </div>
+    </ScrollArea>
 
-    <div class="min-w-72 border-t p-2">
+    <div class="min-w-0 border-t p-2">
       <Button class="w-full justify-start text-muted-foreground" variant="ghost" @click="layout.openSettings">
         <Settings data-icon="inline-start" />
         设置

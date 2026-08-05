@@ -367,6 +367,19 @@ async function send() {
   await conversation.send(resolved.content, undefined, attachments, resolved.action);
 }
 
+function onFullscreenKeydown(event: KeyboardEvent) {
+  if (event.key !== "Enter" || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) {
+    return;
+  }
+  const shouldSubmit = appearance.composerSendWithEnter
+    ? !event.shiftKey
+    : event.shiftKey;
+  if (!shouldSubmit) return;
+  event.preventDefault();
+  fullscreenInputOpen.value = false;
+  void send();
+}
+
 function resolveComposerAction(content: string) {
   if (selectedAction.value) {
     return { content, action: selectedAction.value, promptContent: undefined };
@@ -961,7 +974,7 @@ async function handleMessageNavigationRequest() {
             v-model="input"
             class="min-h-[46vh] resize-none"
             placeholder="输入消息..."
-            @keydown.enter.exact.prevent="fullscreenInputOpen = false; send()"
+            @keydown="onFullscreenKeydown"
           />
         </div>
         <DialogFooter>

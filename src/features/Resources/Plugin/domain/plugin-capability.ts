@@ -16,7 +16,7 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
       "getSelf、文件写入和 Container CRUD 只在插件流程中可用，并且只能修改当前正在执行的插件。",
       "容器定义保存在根 containers.json；内容关系保存在文件 memberships 元数据中，API 不会把成员声明写进正文。",
       "manifest.json 的根类型固定为 PluginManifestGroupContent[]；配置值统一通过 group.id/content.id 寻址。",
-      "Markdown 可用 <@config:local/group/content> 读取当前插件配置，或用 <@config:global/pluginId/group/content> 读取已启用全局插件配置。容器成员条件只允许 local 引用。",
+      "Markdown 与脚本通过 imports.config.local(groupId, contentId) 或 imports.config.global(pluginId, groupId, contentId) 读取配置。容器成员条件只允许 local 配置路径。",
     ],
     types: [
       {
@@ -52,8 +52,10 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
     alias: string;
     condition?: PluginContainerCondition;
   }>;
-  dataReferences?: Array<{ alias: string; dataId: string }>;
-  contextPlacement?: { depth: number };
+  contextPlacement?: {
+    depth: number;
+    condition?: PluginContainerCondition;
+  };
   containers?: PluginContainerDeclaration[];
   children?: PluginNode[];
 };`,
@@ -106,7 +108,7 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
         description: "写入 containers.json 的容器声明。",
         definition: `type PluginContainerDeclaration = {
   name: string;
-  scope: "root" | "plugin" | "global";
+  scope: "local" | "global";
   description?: string;
   imports: Array<{ alias: string; target: string }>;
 };`,
@@ -117,7 +119,7 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
         definition: `type PluginContainerSummary = {
   id: string;
   name: string;
-  scope: "root" | "plugin" | "global";
+  scope: "local" | "global";
   description?: string;
   pluginId: string;
   pluginName: string;
@@ -237,13 +239,6 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
         example: "plugin.getPluginManifest(pluginId)",
       },
       {
-        name: "resolveConfig",
-        signature: "resolveConfig(reference: string): PluginManifestValue",
-        description: "按与文档 <@...> 相同的命名空间解析配置值。local 指当前角色资源插件，global 必须显式携带已启用全局插件 ID。",
-        returns: "group.id/content.id 对应配置项的 JSON 值；同时跟踪实际 manifest 资源。",
-        example: "plugin.resolveConfig('<@config:global/builtin-core-plugin/appearance/background>')",
-      },
-      {
         name: "listContainers",
         signature: "listContainers(): PluginContainerSummary[]",
         description: "列出当前生成上下文中已启用的容器，并返回容器 ID、定义文件 ID/路径、来源插件和使用/内容数量。",
@@ -272,23 +267,16 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
         example: "plugin.readContainer(containerId, [resourceId])",
       },
       {
-        name: "getDataReferences",
-        signature: "getDataReferences(resourceId: string): PluginDataBinding[]",
-        description: "查询资源元数据中的 .data 引用，并解析实际隔离级别和来源。",
-        returns: "每项包含 alias、dataId、resourceId、path、isolation、pluginId 和 pluginName；ID 与路径可继续查询。",
-        example: "plugin.getDataReferences(resourceId)",
-      },
-      {
         name: "createContainer",
-        signature: "createContainer(input: { name: string; scope?: 'root' | 'plugin' | 'global'; description?: string; imports?: Array<{ alias: string; target: string }> }): Promise<PluginContainerDefinition>",
+        signature: "createContainer(input: { name: string; scope?: 'local' | 'global'; description?: string }): Promise<PluginContainerDefinition>",
         description: "在当前插件根 containers.json 中创建容器；说明会规范为单行短文本。",
         returns: "新容器的 ID、定义文件 ID/路径、来源插件和完整声明。",
-        example: "await plugin.createContainer({ name: '知识', scope: 'plugin', description: '按需加载的知识文档。' })",
+        example: "await plugin.createContainer({ name: '知识', scope: 'local', description: '按需加载的知识文档。' })",
       },
       {
         name: "updateContainer",
         signature: "updateContainer(containerId: string, patch: Partial<PluginContainerDeclaration>): Promise<PluginContainerDefinition>",
-        description: "更新当前插件中的容器名称、作用域、说明或命名空间引用。",
+        description: "更新当前插件中的容器名称、作用域或说明。",
         returns: "更新后的容器定位信息；名称或作用域变化时 ID 也会变化。",
         example: "await plugin.updateContainer(containerId, { description: '角色可选知识。' })",
       },
@@ -326,20 +314,6 @@ export const pluginCapabilitiesDefinition: CapabilityDefinition = {
         description: "把文件加入数字深度容器 K；0 位于最终上下文底部，null 清除放置。K 必须是非负整数，同一 K 内文件名不允许重复。",
         returns: "更新后的文件节点及 contextPlacement 元数据。",
         example: "await plugin.setContextDepth('/dynamic/state.md', 0)",
-      },
-      {
-        name: "addDataReference",
-        signature: "addDataReference(path: string, input: { alias: string; dataId: string }): Promise<PluginNode>",
-        description: "在当前插件资源元数据中加入 .data 引用；隔离级别由目标 .data 自身定义。",
-        returns: "更新后的资源节点，包含 dataReferences、资源 ID 与路径。",
-        example: "await plugin.addDataReference('/character/alice.md', { alias: 'stats', dataId })",
-      },
-      {
-        name: "removeDataReference",
-        signature: "removeDataReference(path: string, alias: string): Promise<PluginNode>",
-        description: "按 alias 移除当前插件资源元数据中的 .data 引用，不修改 .data 内容。",
-        returns: "更新后的资源节点。",
-        example: "await plugin.removeDataReference('/character/alice.md', 'stats')",
       },
       {
         name: "getSelf",

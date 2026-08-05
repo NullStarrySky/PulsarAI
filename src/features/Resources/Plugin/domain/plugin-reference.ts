@@ -1,69 +1,14 @@
-export type PluginContainerScope = "root" | "plugin" | "global";
-
-export interface PluginReferenceToken {
-  raw: string;
-  target: string;
-  start: number;
-  end: number;
-}
-
-export interface PluginContainerImport {
-  alias: string;
-  target: string;
-}
+export type PluginContainerScope = "local" | "global";
 
 export interface PluginContainerDeclaration {
   name: string;
   scope: PluginContainerScope;
-  description?: string;
-  imports: PluginContainerImport[];
-}
-
-export interface PluginReferenceSuggestion {
-  target: string;
-  label: string;
-  detail: string;
   description?: string;
 }
 
 export interface PluginContainerDefinitions {
   containers: PluginContainerDeclaration[];
   diagnostics: Array<{ path: string; message: string }>;
-}
-
-const referencePattern = /<@([^>\r\n]+)>/g;
-
-export function findPluginReferenceTokens(source: string): PluginReferenceToken[] {
-  const tokens: PluginReferenceToken[] = [];
-  for (const match of source.matchAll(referencePattern)) {
-    if (match.index == null) continue;
-    const raw = match[0];
-    const target = (match[1] ?? "").trim();
-    if (!target) continue;
-    tokens.push({
-      raw,
-      target,
-      start: match.index,
-      end: match.index + raw.length,
-    });
-  }
-  return tokens;
-}
-
-export function replacePluginReferenceTokens(
-  source: string,
-  replace: (token: PluginReferenceToken, index: number) => string,
-) {
-  const tokens = findPluginReferenceTokens(source);
-  if (!tokens.length) return source;
-  let cursor = 0;
-  let result = "";
-  tokens.forEach((token, index) => {
-    result += source.slice(cursor, token.start);
-    result += replace(token, index);
-    cursor = token.end;
-  });
-  return result + source.slice(cursor);
 }
 
 function parseContainerDeclarations(
@@ -87,36 +32,9 @@ function parseContainerDeclarations(
       return;
     }
     const scope = rawContainer.scope;
-    if (scope !== "root" && scope !== "plugin" && scope !== "global") {
-      diagnostics.push({ path: `${path}.scope`, message: "scope 必须是 root、plugin 或 global。" });
+    if (scope !== "local" && scope !== "global") {
+      diagnostics.push({ path: `${path}.scope`, message: "scope 必须是 local 或 global。" });
       return;
-    }
-    const imports: PluginContainerImport[] = [];
-    if (rawContainer.imports !== undefined && !Array.isArray(rawContainer.imports)) {
-      diagnostics.push({ path: `${path}.imports`, message: "imports 必须是数组。" });
-    }
-    for (const [importIndex, rawImport] of (
-      Array.isArray(rawContainer.imports) ? rawContainer.imports : []
-    ).entries()) {
-      const importPath = `${path}.imports[${importIndex}]`;
-      if (!isRecord(rawImport)) {
-        diagnostics.push({ path: importPath, message: "容器引用必须是对象。" });
-        continue;
-      }
-      const target = normalizedText(rawImport.target);
-      const alias = normalizedText(rawImport.alias);
-      if (!alias) {
-        diagnostics.push({ path: `${importPath}.alias`, message: "引用别名不能为空。" });
-        continue;
-      }
-      if (!target) {
-        diagnostics.push({ path: `${importPath}.target`, message: "引用目标不能为空。" });
-        continue;
-      }
-      imports.push({
-        alias,
-        target,
-      });
     }
     if (
       rawContainer.description !== undefined
@@ -129,7 +47,6 @@ function parseContainerDeclarations(
       name,
       scope,
       ...(description ? { description } : {}),
-      imports,
     });
   });
   return containers;
@@ -171,29 +88,15 @@ export function serializePluginContainerDefinitions(
   return JSON.stringify({ containers: definitions.containers }, null, 2);
 }
 
-export function normalizePluginReferenceTarget(target: string) {
-  const normalized = target.trim();
-  if (
-    normalized.startsWith("local:")
-    || normalized.startsWith("path:")
-    || normalized.startsWith("id:")
-    || normalized.startsWith("container:")
-    || normalized.startsWith("config:")
-  ) {
-    return normalized;
-  }
-  if (normalized) {
-    return `container:auto/${normalized}`;
-  }
-  throw new Error("引用目标不能为空。");
-}
-
 export function parseContainerReferenceTarget(target: string): {
   scope: PluginContainerScope | "auto";
   name: string;
 } {
-  const normalized = normalizePluginReferenceTarget(target);
-  const match = /^container:(root|plugin|global|auto)\/(.+)$/.exec(normalized);
+  const raw = target.trim();
+  const normalized = raw.startsWith("container:")
+    ? raw
+    : `container:auto/${raw}`;
+  const match = /^container:(local|global|auto)\/(.+)$/.exec(normalized);
   if (!match) {
     throw new Error(`容器引用格式无效：${normalized}`);
   }
@@ -201,16 +104,6 @@ export function parseContainerReferenceTarget(target: string): {
     scope: match[1] as PluginContainerScope | "auto",
     name: match[2]!.trim(),
   };
-}
-
-export function pluginReferenceKind(target: string) {
-  const separator = target.indexOf(":");
-  return separator < 0 ? "container" : target.slice(0, separator);
-}
-
-export function pluginReferenceLabel(target: string) {
-  const separator = target.indexOf(":");
-  return separator < 0 ? target : target.slice(separator + 1);
 }
 
 function normalizedText(value: unknown) {

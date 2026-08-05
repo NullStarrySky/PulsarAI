@@ -15,12 +15,11 @@ import {
   type PluginTreeNode,
 } from "./domain/plugin-types";
 import {
-  findPluginReferenceTokens,
   parsePluginContainerDefinitions,
   type PluginContainerDeclaration,
-  type PluginContainerImport,
   type PluginContainerScope,
 } from "./domain/plugin-reference";
+import { findPluginImportCalls } from "./domain/plugin-import";
 import { usePluginStore } from "./application/plugin-store";
 import {
   createPluginContainerQueryId,
@@ -38,6 +37,10 @@ import {
   type PluginManifest,
   type PluginManifestValue,
 } from "./domain/plugin-manifest";
+
+function pluginList(store = usePluginStore()) {
+  return (store as unknown as { plugins: Plugin[] }).plugins;
+}
 
 export const capabilities = pluginCapabilitiesDefinition;
 
@@ -73,16 +76,13 @@ function nodeSummary(
       ? {
           type: pluginFileType(node.name),
           priority: node.priority,
-          references: findPluginReferenceTokens(source).map(
-            ({ target }) => target,
-          ),
+          imports: findPluginImportCalls(source),
           containers:
             nodePath.join("/").toLocaleLowerCase()
               === pluginConventions.containers.toLocaleLowerCase()
               ? parsePluginContainerDefinitions(node.content).containers
               : [],
           memberships: node.memberships,
-          dataReferences: node.dataReferences,
           ...(node.contextConfig ? { contextConfig: node.contextConfig } : {}),
           ...(node.contextPlacement
             ? { contextPlacement: node.contextPlacement }
@@ -111,7 +111,7 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
     list: () => {
       const conversation = useConversationStore();
       const activePackage = conversation.activePackage;
-      return usePluginStore().plugins
+      return pluginList()
         .filter((plugin) =>
           plugin.packageId === null || plugin.id === activePackage?.pluginId
         )
@@ -136,7 +136,7 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
     async setMainPlugin(pluginId: string) {
       const conversation = useConversationStore();
       const activePackage = conversation.activePackage;
-      const plugin = usePluginStore().plugins.find((item) => item.id === pluginId);
+      const plugin = pluginList().find((item) => item.id === pluginId);
       if (!activePackage || !plugin) throw new Error("角色包或插件不存在。");
       if (plugin.packageId !== null && plugin.id !== activePackage.pluginId) {
         throw new Error("主要插件必须是当前角色资源插件或全局插件。");
@@ -170,7 +170,7 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
     async setGlobalPluginEnabled(pluginId: string, enabled: boolean) {
       const conversation = useConversationStore();
       const activePackage = conversation.activePackage;
-      const plugin = usePluginStore().plugins.find((item) => item.id === pluginId);
+      const plugin = pluginList().find((item) => item.id === pluginId);
       if (!activePackage || !plugin || plugin.packageId !== null) {
         throw new Error("全局插件不存在。");
       }
@@ -189,7 +189,7 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
     },
     getTree: (pluginId: string) => {
       const activePackage = useConversationStore().activePackage;
-      const plugin = usePluginStore().plugins.find((item) =>
+      const plugin = pluginList().find((item) =>
         item.id === pluginId
         && (item.packageId === null || item.id === activePackage?.pluginId)
       );
@@ -197,25 +197,11 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
     },
     getPluginManifest: (pluginId: string) => {
       const activePackage = useConversationStore().activePackage;
-      const plugin = usePluginStore().plugins.find((item) =>
+      const plugin = pluginList().find((item) =>
         item.id === pluginId
         && (item.packageId === null || item.id === activePackage?.pluginId)
       );
       return plugin ? manifestSummary(plugin) : null;
-    },
-    resolveConfig: (reference: string) => {
-      const conversation = useConversationStore();
-      const plugin = usePluginStore().plugins.find(
-        (item) => item.id === conversation.activePackage?.pluginId,
-      );
-      const manifest = plugin
-        ? findPluginNodeByPath(plugin.root, pluginConventions.manifest)
-        : null;
-      if (manifest?.kind !== "file") throw new Error("当前角色资源插件缺少 manifest.json。");
-      return createVisibleContainerResolver().resolveFromResource(
-        manifest.id,
-        reference.trim().replace(/^<@|>$/g, ""),
-      );
     },
     listContainers: () => createVisibleContainerResolver().listContainers(),
     getContainer: (containerId: string) =>
@@ -228,8 +214,6 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
       containerId: string,
       resourceIds?: string[],
     ) => createVisibleContainerResolver().readContainer(containerId, resourceIds),
-    getDataReferences: (resourceId: string) =>
-      createVisibleContainerResolver().getDataReferences(resourceId),
   } : {}),
 }));
 
@@ -261,7 +245,7 @@ export function createPluginSelfApi(
 ) {
   const store = usePluginStore();
   const requirePlugin = () => {
-    const plugin = store.plugins.find((item) => item.id === pluginId);
+    const plugin = pluginList(store).find((item) => item.id === pluginId);
     if (!plugin) throw new Error("当前插件不存在。");
     return plugin;
   };
@@ -402,7 +386,7 @@ export function createPluginSelfApi(
         throw new Error("深度 K 必须是非负整数或 null。");
       }
       if (depth !== null) {
-        const conflict = store.plugins.flatMap((item) =>
+        const conflict = pluginList(store).flatMap((item) =>
           flattenPluginFiles(item.root).map((resource) => ({ plugin: item, resource })),
         ).find(({ resource }) =>
           resource.id !== node.id
@@ -417,6 +401,7 @@ export function createPluginSelfApi(
       }
       await store.updateNode(plugin.id, node.id, {
         contextPlacement: depth === null ? undefined : { depth },
+        ...(depth === null ? {} : { memberships: [] }),
       });
       return scopedNodeSummary(plugin, node);
     },
@@ -424,7 +409,6 @@ export function createPluginSelfApi(
       name: string;
       scope?: PluginContainerScope;
       description?: string;
-      imports?: PluginContainerImport[];
     }) {
       requireWrite();
       const { plugin, node } = requireContainersFile();
@@ -444,7 +428,6 @@ export function createPluginSelfApi(
         name: string;
         scope: PluginContainerScope;
         description: string;
-        imports: PluginContainerImport[];
       }>,
     ) {
       requireWrite();
@@ -484,18 +467,11 @@ export function createPluginSelfApi(
       const { container } = requireOwnContainer(containerId);
       const { plugin, node } = requireNode(path);
       if (node.kind !== "file") throw new Error("只有文件可以加入容器。");
-      if (
-        container.scope === "root"
-        && pluginNodePath(plugin.root, node.id).length > 1
-      ) {
-        throw new Error("root 容器只对插件根目录中的文件可见。");
-      }
       const target = explicitContainerTarget(container);
       if (node.memberships.some((item) => item.container === target)) {
         throw new Error(`资源已经属于容器：${container.name}`);
       }
       const memberships = [
-        ...node.memberships,
         {
           container: target,
           alias: input.alias?.trim() ?? "",
@@ -504,6 +480,7 @@ export function createPluginSelfApi(
       ];
       await store.updateNode(plugin.id, node.id, {
         memberships,
+        contextPlacement: undefined,
         ...(typeof input.priority === "number"
           ? { priority: input.priority }
           : {}),
@@ -564,48 +541,6 @@ export function createPluginSelfApi(
         throw new Error(`资源不属于容器：${container.name}`);
       }
       await store.updateNode(plugin.id, node.id, { memberships });
-      return scopedNodeSummary(plugin, node);
-    },
-    getDataReferences(path: string) {
-      requireRead();
-      const { node } = requireNode(path);
-      if (node.kind !== "file") throw new Error("只有文件可以引用 .data。");
-      return createVisibleContainerResolver().getDataReferences(node.id);
-    },
-    async addDataReference(
-      path: string,
-      input: { alias: string; dataId: string },
-    ) {
-      requireWrite();
-      const { plugin, node } = requireNode(path);
-      if (node.kind !== "file") throw new Error("只有文件可以引用 .data。");
-      const alias = input.alias.trim();
-      const dataId = input.dataId.trim();
-      if (!alias || !dataId) throw new Error("alias 与 dataId 不能为空。");
-      if (node.dataReferences.some((item) => item.alias === alias)) {
-        throw new Error(`Data 引用 alias 已存在：${alias}`);
-      }
-      const target = createVisibleContainerResolver().resourceById(dataId);
-      if (!target || target.type !== "data") {
-        throw new Error(`可见的 .data 资源不存在：${dataId}`);
-      }
-      await store.updateNode(plugin.id, node.id, {
-        dataReferences: [...node.dataReferences, { alias, dataId }],
-      });
-      return scopedNodeSummary(plugin, node);
-    },
-    async removeDataReference(path: string, alias: string) {
-      requireWrite();
-      const { plugin, node } = requireNode(path);
-      if (node.kind !== "file") throw new Error("只有文件可以引用 .data。");
-      const normalizedAlias = alias.trim();
-      const dataReferences = node.dataReferences.filter(
-        (item) => item.alias !== normalizedAlias,
-      );
-      if (dataReferences.length === node.dataReferences.length) {
-        throw new Error(`Data 引用不存在：${normalizedAlias}`);
-      }
-      await store.updateNode(plugin.id, node.id, { dataReferences });
       return scopedNodeSummary(plugin, node);
     },
     async write(path: string, content: unknown) {
@@ -669,30 +604,15 @@ function normalizeContainerDeclaration(input: {
   name?: string;
   scope?: PluginContainerScope;
   description?: string;
-  imports?: PluginContainerImport[];
 }): PluginContainerDeclaration {
   const name = input.name?.trim() ?? "";
   if (!name) throw new Error("容器名称不能为空。");
-  const scope =
-    input.scope === "root" || input.scope === "global"
-      ? input.scope
-      : "plugin";
+  const scope = input.scope === "global" ? "global" : "local";
   const description = input.description?.trim().replace(/\s+/g, " ") ?? "";
-  const imports = (input.imports ?? []).map((item) => ({
-    alias: item.alias.trim(),
-    target: item.target.trim(),
-  }));
-  if (imports.some((item) => !item.alias || !item.target)) {
-    throw new Error("容器引用必须同时包含 alias 与 target。");
-  }
-  if (new Set(imports.map((item) => item.alias)).size !== imports.length) {
-    throw new Error("容器引用别名不能重复。");
-  }
   return {
     name,
     scope,
     description,
-    imports,
   };
 }
 
@@ -733,7 +653,6 @@ function selfContainerSummary(
     name: container.name,
     scope: container.scope,
     description: container.description,
-    imports: structuredClone(container.imports),
     pluginId: plugin.id,
     pluginName: plugin.name,
     definitionId,

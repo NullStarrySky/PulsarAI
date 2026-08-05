@@ -1,19 +1,28 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { push } from "notivue";
 import {
-  Bot,
   Check,
   ChevronDown,
-  FolderKanban,
   ListTodo,
   MessageSquare,
+  Paperclip,
   Plus,
   Search,
   Send,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Popover,
   PopoverContent,
@@ -22,14 +31,25 @@ import {
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import ConversationComposerEditor from "./ConversationComposerEditor.vue";
+import ConversationComposerToolbarTools from "./ConversationComposerToolbarTools.vue";
+import MessageAttachmentStrip from "./MessageAttachmentStrip.vue";
 import ResourceAvatar from "./ResourceAvatar.vue";
+import { fileToMessagePart } from "@/features/Resources/Conversation/application/message-attachment";
+import type { FilePart } from "@/features/Resources/Conversation/domain/conversation-types";
+import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
 
 const props = defineProps<{
   packageId?: string;
 }>();
 const conversation = useConversationStore();
 const layout = useLayoutStore();
+const appearance = useAppearanceStore();
 const input = ref("");
+const greeting = ref(createGreeting());
+const pendingAttachments = ref<FilePart[]>([]);
+const attachmentInput = ref<HTMLInputElement | null>(null);
+const fullscreenInputOpen = ref(false);
+const whiteboardOpen = ref(false);
 const selectedPackageId = ref("");
 const createPackageMode = ref(false);
 const newPackageName = ref("");
@@ -60,13 +80,46 @@ const selectedPackage = computed(() =>
 );
 
 onMounted(async () => {
-  await conversation.initialize();
-  if (props.packageId && conversation.packages.some((item) => item.id === props.packageId)) {
-    selectedPackageId.value = props.packageId;
+  try {
+    await conversation.initialize();
+  } catch (error) {
+    push.error(
+      error instanceof Error
+        ? error.message
+        : String(error || "无法加载角色包数据。"),
+    );
+  } finally {
+    syncSelectedPackage(props.packageId);
   }
 });
 
-function selectPackage(packageId: string) {
+watch(
+  () => props.packageId,
+  (packageId) => {
+    if (conversation.loaded) syncSelectedPackage(packageId);
+  },
+);
+
+function syncSelectedPackage(packageId?: string) {
+  const targetId = packageId && conversation.packages.some((item) => item.id === packageId)
+    ? packageId
+    : conversation.packages.some((item) => item.id === conversation.activePackageId)
+      ? conversation.activePackageId
+      : "";
+  selectedPackageId.value = targetId;
+  createPackageMode.value = false;
+  projectPopoverOpen.value = false;
+  projectSearch.value = "";
+}
+
+async function selectPackage(packageId: string) {
+  await conversation.openPackage(packageId);
+  layout.openResourceTab({
+    resourceType: "builtin",
+    resourceId: "conversation-new",
+    packageId,
+    title: "新建对话",
+  });
   selectedPackageId.value = packageId;
   createPackageMode.value = false;
   projectPopoverOpen.value = false;
@@ -81,7 +134,7 @@ function chooseNewPackage() {
 
 async function startConversation() {
   const prompt = input.value.trim();
-  if (!prompt || starting.value) return;
+  if ((!prompt && pendingAttachments.value.length === 0) || starting.value) return;
   starting.value = true;
   try {
     await conversation.initialize();
@@ -128,43 +181,74 @@ async function startConversation() {
       packageId: targetPackage.id,
       title: created.title,
     });
+    const attachments = [...pendingAttachments.value];
     input.value = "";
+    pendingAttachments.value = [];
     await nextTick();
-    await conversation.send(prompt);
+    await conversation.send(prompt, undefined, attachments);
   } catch (error) {
     push.error(
-      error instanceof Error ? error.message : "无法新建对话。",
+      error instanceof Error ? error.message : String(error || "无法新建对话。"),
     );
   } finally {
     starting.value = false;
   }
 }
+
+async function onAttachmentsSelected(event: Event) {
+  const element = event.target as HTMLInputElement;
+  const files = Array.from(element.files ?? []);
+  element.value = "";
+  if (!files.length) return;
+  try {
+    pendingAttachments.value.push(...await Promise.all(files.map(fileToMessagePart)));
+  } catch (error) {
+    push.error(error instanceof Error ? error.message : "读取附件失败");
+  }
+}
+
+function onFullscreenKeydown(event: KeyboardEvent) {
+  if (event.key !== "Enter" || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) {
+    return;
+  }
+  const shouldSubmit = appearance.composerSendWithEnter
+    ? !event.shiftKey
+    : event.shiftKey;
+  if (!shouldSubmit) return;
+  event.preventDefault();
+  fullscreenInputOpen.value = false;
+  void startConversation();
+}
+
+function createGreeting() {
+  const hour = new Date().getHours();
+  const greetings = hour < 5
+    ? ["夜深了，还想聊点什么？", "还没休息吗？我在这里。", "安静的夜里，想从哪里开始？"]
+    : hour < 11
+      ? ["早上好，今天想聊点什么？", "新的一天，从哪里开始？", "早安，有什么想一起完成的？"]
+      : hour < 14
+        ? ["中午好，现在想聊点什么？", "午间好，有什么新想法？", "中午好，今天过得怎么样？"]
+        : hour < 18
+          ? ["下午好，想从哪里开始？", "下午好，有什么可以一起完成？", "今天还顺利吗？"]
+          : ["晚上好，今天想聊点什么？", "辛苦一天了，想聊聊什么？", "晚上好，有什么想一起梳理的？"];
+  return greetings[Math.floor(Math.random() * greetings.length)] ?? greetings[0]!;
+}
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col overflow-y-auto bg-background [scrollbar-gutter:stable]">
+  <ScrollArea class="min-h-0 flex-1 bg-background">
     <div class="mx-auto flex min-h-full w-full max-w-[800px] flex-col justify-center px-6 py-12 mobile:px-3 mobile:py-6">
-      <div class="mb-8 flex items-start gap-3 mobile:mb-5">
-        <div class="flex size-9 shrink-0 items-center justify-center rounded-md border bg-card mobile:size-8">
-          <Bot class="size-4" />
-        </div>
-        <div class="min-w-0 pt-1">
-          <div class="text-sm font-medium">新建对话</div>
-          <p class="mt-1 text-sm leading-6 text-muted-foreground">
-            选择角色包和会话类型，然后开始。
-          </p>
-        </div>
-      </div>
+      <h1 class="mb-8 text-center text-2xl font-semibold tracking-tight mobile:mb-5 mobile:text-xl">
+        {{ greeting }}
+      </h1>
 
       <section class="overflow-hidden rounded-lg border bg-card shadow-sm">
-        <div class="flex min-h-11 items-center gap-2 border-b px-3">
-          <FolderKanban class="size-4 shrink-0 text-muted-foreground" />
-          <span class="text-xs text-muted-foreground">角色包</span>
+        <div class="flex min-h-11 items-center justify-between gap-2 border-b px-3">
           <Popover v-model:open="projectPopoverOpen">
             <PopoverTrigger as-child>
               <Button
                 variant="ghost"
-                class="h-8 min-w-0 max-w-full justify-start gap-2 px-2 font-normal"
+                class="h-8 min-w-0 max-w-[70%] justify-start gap-2 px-2 font-normal"
               >
                 <ResourceAvatar
                   v-if="selectedPackage"
@@ -173,119 +257,159 @@ async function startConversation() {
                   class="size-5"
                 />
                 <span class="min-w-0 truncate">
-                  {{
-                    createPackageMode
-                      ? newPackageName || "新角色包"
-                      : selectedPackage?.name ?? "请选择"
-                  }}
+                  {{ createPackageMode ? newPackageName || "新角色包" : selectedPackage?.name ?? "选择角色包" }}
                 </span>
-                <ChevronDown class="size-3.5 shrink-0 text-muted-foreground" />
+                <ChevronDown class="shrink-0 text-muted-foreground" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent
-              align="start"
-              class="w-[min(22rem,calc(100vw-2rem))] p-2"
-            >
+            <PopoverContent align="start" class="w-[min(22rem,calc(100vw-2rem))] p-2">
               <div class="relative mb-2">
-                <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  v-model="projectSearch"
-                  class="h-8 pl-8"
-                  placeholder="搜索角色包"
-                />
+                <Search class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Input v-model="projectSearch" class="h-8 pl-8" placeholder="搜索角色包" />
               </div>
-              <div class="max-h-64 overflow-y-auto">
-                <button
-                  type="button"
-                  class="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors hover:bg-accent"
-                  @click="chooseNewPackage"
-                >
-                  <span class="flex size-6 items-center justify-center rounded bg-muted">
-                    <Plus class="size-3.5 text-muted-foreground" />
-                  </span>
-                  <span class="min-w-0 flex-1 truncate">新建角色包并开始</span>
-                  <Check v-if="createPackageMode" class="size-4" />
-                </button>
-                <button
-                  v-for="project in filteredProjects"
-                  :key="project.id"
-                  type="button"
-                  class="flex min-h-10 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent"
-                  @click="selectPackage(project.id)"
-                >
-                  <ResourceAvatar
-                    :name="project.name"
-                    :icon="project.icon"
-                    class="size-6"
-                  />
-                  <span class="min-w-0 flex-1">
-                    <span class="block truncate text-sm">{{ project.name }}</span>
-                    <span
-                      v-if="project.description"
-                      class="block truncate text-xs text-muted-foreground"
-                    >
-                      {{ project.description }}
+              <ScrollArea class="h-64">
+                <div class="pr-2">
+                  <button
+                    type="button"
+                    class="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors hover:bg-accent"
+                    @click="chooseNewPackage"
+                  >
+                    <span class="flex size-6 items-center justify-center rounded bg-muted">
+                      <Plus class="text-muted-foreground" />
                     </span>
-                  </span>
-                  <Check
-                    v-if="selectedPackageId === project.id"
-                    class="size-4 shrink-0"
-                  />
-                </button>
-                <p
-                  v-if="filteredProjects.length === 0"
-                  class="px-2 py-6 text-center text-xs text-muted-foreground"
-                >
-                  没有匹配的角色包
-                </p>
-              </div>
+                    <span class="min-w-0 flex-1 truncate">新建角色包并开始</span>
+                    <Check v-if="createPackageMode" />
+                  </button>
+                  <button
+                    v-for="project in filteredProjects"
+                    :key="project.id"
+                    type="button"
+                    class="flex min-h-10 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent"
+                    @click="selectPackage(project.id)"
+                  >
+                    <ResourceAvatar :name="project.name" :icon="project.icon" class="size-6" />
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate text-sm">{{ project.name }}</span>
+                      <span v-if="project.description" class="block truncate text-xs text-muted-foreground">
+                        {{ project.description }}
+                      </span>
+                    </span>
+                    <Check v-if="selectedPackageId === project.id" class="shrink-0" />
+                  </button>
+                  <p v-if="filteredProjects.length === 0" class="px-2 py-6 text-center text-xs text-muted-foreground">
+                    没有匹配的角色包
+                  </p>
+                </div>
+              </ScrollArea>
             </PopoverContent>
           </Popover>
+
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            :model-value="conversationKind"
+            aria-label="会话类型"
+            @update:model-value="$event && (conversationKind = $event as 'chat' | 'task')"
+          >
+            <ToggleGroupItem value="chat" aria-label="聊天" title="聊天">
+              <MessageSquare />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="task" aria-label="任务" title="任务">
+              <ListTodo />
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
+
         <div v-if="createPackageMode" class="border-b px-3 py-2">
           <Input v-model="newPackageName" class="h-8" placeholder="新角色包名称" />
         </div>
-        <div class="flex items-center gap-1 border-b px-3 py-2">
-          <Button
-            size="sm"
-            :variant="conversationKind === 'chat' ? 'secondary' : 'ghost'"
-            class="h-8"
-            @click="conversationKind = 'chat'"
-          >
-            <MessageSquare class="size-4" />
-            普通对话
-          </Button>
-          <Button
-            size="sm"
-            :variant="conversationKind === 'task' ? 'secondary' : 'ghost'"
-            class="h-8"
-            @click="conversationKind = 'task'"
-          >
-            <ListTodo class="size-4" />
-            任务对话
-          </Button>
-        </div>
 
-        <div class="px-4 pb-2 pt-3 mobile:px-3">
-          <ConversationComposerEditor
-            v-model="input"
-            :enable-ai="false"
-            placeholder="输入消息..."
-            @submit="startConversation"
+        <div class="px-3 pb-2 pt-3">
+          <MessageAttachmentStrip
+            v-if="pendingAttachments.length"
+            :attachments="pendingAttachments"
+            removable
+            class="mb-1"
+            @remove="pendingAttachments.splice($event, 1)"
           />
-        </div>
-        <div class="flex h-11 items-center justify-end px-3 pb-2">
-          <Button
-            size="icon"
-            class="size-8"
-            title="发送"
-            :disabled="!input.trim() || starting"
-            @click="startConversation"
-          >
-            <Send class="size-4" />
-          </Button>
+          <ConversationComposerEditor v-model="input" :enable-ai="false" placeholder="输入消息..." @submit="startConversation" />
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex min-w-0 items-center gap-1">
+              <ConversationComposerToolbarTools
+                :tool-ids="appearance.composerToolbar.left"
+                @attach="attachmentInput?.click()"
+                @whiteboard="whiteboardOpen = true"
+                @fullscreen="fullscreenInputOpen = true"
+              />
+            </div>
+            <div class="flex shrink-0 items-center gap-1">
+              <ConversationComposerToolbarTools
+                :tool-ids="appearance.composerToolbar.right"
+                @attach="attachmentInput?.click()"
+                @whiteboard="whiteboardOpen = true"
+                @fullscreen="fullscreenInputOpen = true"
+              />
+              <Button
+                size="icon"
+                class="size-8 mobile:size-10"
+                title="发送"
+                :disabled="(!input.trim() && pendingAttachments.length === 0) || starting"
+                @click="startConversation"
+              >
+                <Send />
+              </Button>
+            </div>
+          </div>
         </div>
       </section>
     </div>
-  </div>
+  </ScrollArea>
+
+  <input ref="attachmentInput" class="hidden" type="file" multiple @change="onAttachmentsSelected" />
+
+  <Dialog v-model:open="fullscreenInputOpen">
+    <DialogContent class="sm:max-w-3xl">
+      <DialogHeader>
+        <DialogTitle>输入消息</DialogTitle>
+      </DialogHeader>
+      <MessageAttachmentStrip
+        v-if="pendingAttachments.length"
+        :attachments="pendingAttachments"
+        removable
+        @remove="pendingAttachments.splice($event, 1)"
+      />
+      <Textarea
+        v-model="input"
+        class="min-h-[46vh] resize-none"
+        placeholder="输入消息..."
+        @keydown="onFullscreenKeydown"
+      />
+      <DialogFooter>
+        <Button size="icon" variant="ghost" class="mr-auto" title="附加文件" @click="attachmentInput?.click()">
+          <Paperclip />
+        </Button>
+        <Button variant="outline" @click="fullscreenInputOpen = false">取消</Button>
+        <Button
+          :disabled="(!input.trim() && pendingAttachments.length === 0) || starting"
+          @click="fullscreenInputOpen = false; startConversation()"
+        >
+          <Send data-icon="inline-start" />
+          发送
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+
+  <Dialog v-model:open="whiteboardOpen">
+    <DialogContent class="h-[min(820px,92vh)] w-[min(1200px,calc(100vw-32px))] max-w-none overflow-hidden p-0 sm:max-w-none mobile:h-[100dvh] mobile:w-screen mobile:rounded-none mobile:border-0">
+      <DialogTitle class="sr-only">白板</DialogTitle>
+      <iframe
+        class="h-full w-full border-0 bg-background"
+        src="https://excalidraw.com/"
+        title="Excalidraw 白板"
+        allow="clipboard-read; clipboard-write"
+      />
+    </DialogContent>
+  </Dialog>
 </template>

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { storeToRefs } from "pinia";
-import { BookOpen, Check, FileCheck2, FlaskConical, ListTodo, MessageSquare, MoreHorizontal, Plus, Search, Trash2 } from "lucide-vue-next";
+import { BookOpen, Check, FileCheck2, FlaskConical, ListTodo, MessageSquare, MoreHorizontal, Plus, Search, Trash2, Wrench } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -25,19 +25,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { useResponsiveStore } from "@/features/Misc/application/responsive-store";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 import type { ConversationRendererId } from "@/features/Resources/Conversation/domain/conversation-types";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import InlineEditInput from "@/features/UI/presentation/InlineEditInput.vue";
+import PluginRightSidebarPanel from "@/features/Resources/Plugin/presentation/PluginRightSidebarPanel.vue";
 import ConversationTaskPanel from "./ConversationTaskPanel.vue";
 
 const layout = useLayoutStore();
-const responsive = useResponsiveStore();
 const conversation = useConversationStore();
-const { rightSidebarOpen } = storeToRefs(layout);
-const { isMobileLayout } = storeToRefs(responsive);
-const tab = ref<"conversation" | "task">("conversation");
+const tab = ref<"conversation" | "task" | "plugin">("conversation");
 const editingConversationId = ref("");
 const editingConversationTitle = ref("");
 
@@ -119,22 +116,9 @@ async function setRenderer(conversationId: string, rendererId: ConversationRende
 </script>
 
 <template>
-  <aside
-    :class="
-      cn(
-        'flex shrink-0 flex-col overflow-hidden border-l bg-background transition-[width,opacity,transform] duration-300 ease-out',
-        isMobileLayout
-          ? [
-              'fixed bottom-0 right-0 top-12 z-40 shadow-xl',
-              rightSidebarOpen ? 'translate-x-0 opacity-100' : 'translate-x-full pointer-events-none opacity-100',
-            ]
-          : rightSidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0',
-      )
-    "
-    data-mobile-sidebar
-  >
-    <div class="min-w-72 border-b p-2">
-      <div class="grid grid-cols-2 rounded-md bg-muted p-1">
+  <aside class="flex h-full min-w-0 flex-col overflow-hidden border-l bg-background">
+    <div class="min-w-0 border-b p-2">
+      <div class="grid grid-cols-3 rounded-md bg-muted p-1">
         <Button
           :variant="tab === 'conversation' ? 'secondary' : 'ghost'"
           class="h-8 gap-1 px-1 text-xs"
@@ -151,11 +135,19 @@ async function setRenderer(conversationId: string, rendererId: ConversationRende
           <ListTodo data-icon="inline-start" />
           任务
         </Button>
+        <Button
+          :variant="tab === 'plugin' ? 'secondary' : 'ghost'"
+          class="h-8 gap-1 px-1 text-xs"
+          @click="tab = 'plugin'"
+        >
+          <Wrench data-icon="inline-start" />
+          插件
+        </Button>
       </div>
     </div>
 
     <template v-if="tab === 'conversation'">
-      <div class="flex min-w-72 items-center gap-2 border-b p-2">
+      <div class="flex min-w-0 items-center gap-2 border-b p-2">
         <div class="relative min-w-0 flex-1">
           <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input v-model="conversation.conversationSearch" class="h-8 pl-8" placeholder="搜索对话" />
@@ -165,7 +157,8 @@ async function setRenderer(conversationId: string, rendererId: ConversationRende
         </Button>
       </div>
 
-      <div class="min-w-72 flex-1 overflow-y-auto p-2">
+      <ScrollArea class="min-h-0 flex-1">
+        <div class="min-w-0 p-2">
         <ContextMenu
           v-for="item in conversation.activePackageConversations"
           :key="item.id"
@@ -274,9 +267,11 @@ async function setRenderer(conversationId: string, rendererId: ConversationRende
             </ContextMenuItem>
           </ContextMenuContent>
         </ContextMenu>
-      </div>
+        </div>
+      </ScrollArea>
     </template>
 
     <ConversationTaskPanel v-else-if="tab === 'task'" />
+    <PluginRightSidebarPanel v-else />
   </aside>
 </template>

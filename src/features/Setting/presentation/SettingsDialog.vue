@@ -4,6 +4,7 @@ import { storeToRefs } from "pinia";
 import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -106,8 +107,9 @@ function pagesInGroup(groupId: string) {
                 <PanelLeftClose class="size-4" />
               </Button>
             </div>
-            <div class="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-              <section
+            <ScrollArea class="min-h-0 flex-1">
+              <div class="px-3 pb-3">
+                <section
                 v-for="group in groups"
                 v-show="pagesInGroup(group.id).length"
                 :key="group.id"
@@ -117,15 +119,21 @@ function pagesInGroup(groupId: string) {
                 <Button
                   v-for="page in pagesInGroup(group.id)"
                   :key="page.meta.id"
-                  :class="cn('h-9 justify-start px-2', activePage?.meta.id === page.meta.id && 'bg-accent text-accent-foreground')"
-                  variant="ghost"
+                  :class="cn(
+                    'h-9 justify-start px-2',
+                    activePage?.meta.id === page.meta.id
+                      ? 'bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground'
+                      : 'hover:bg-accent/50',
+                  )"
+                  :variant="activePage?.meta.id === page.meta.id ? 'secondary' : 'ghost'"
                   @click="selectPage(page.meta.id)"
                 >
                   <component :is="page.meta.icon" data-icon="inline-start" />
                   {{ page.meta.title }}
                 </Button>
-              </section>
-            </div>
+                </section>
+              </div>
+            </ScrollArea>
           </nav>
         </aside>
 

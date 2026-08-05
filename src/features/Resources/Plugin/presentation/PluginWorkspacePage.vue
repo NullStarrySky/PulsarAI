@@ -27,6 +27,7 @@ import {
   Plus,
   RotateCcw,
   Search,
+  SlidersHorizontal,
   Trash2,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,22 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useResponsiveStore } from "@/features/Misc/application/responsive-store";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
@@ -70,6 +87,7 @@ import {
   pluginFileType,
   pluginNodePath,
   sortPluginTreeNodes,
+  type Plugin,
   type PluginFolder,
   type PluginTreeNode,
 } from "@/features/Resources/Plugin/domain/plugin-types";
@@ -120,6 +138,7 @@ const props = defineProps<{
 }>();
 
 const pluginStore = usePluginStore();
+const pluginItems = () => (pluginStore as unknown as { plugins: Plugin[] }).plugins;
 const conversation = useConversationStore();
 const layout = useLayoutStore();
 const responsive = useResponsiveStore();
@@ -128,7 +147,7 @@ const search = ref("");
 const selectedNodeId = ref("");
 const treeCollapsed = ref(false);
 const treeVisibleOnMobile = ref(true);
-const showProperties = ref(false);
+const conditionDialogOpen = ref(false);
 const contentDraft = ref("");
 const contentError = ref("");
 const fileViewMode = ref<"source" | "preview">("source");
@@ -140,7 +159,7 @@ let contentSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let unlistenNativeFileDrop: (() => void) | null = null;
 
 const plugin = computed(
-  () => pluginStore.plugins.find((item) => item.id === props.resourceId) ?? null,
+  () => pluginItems().find((item) => item.id === props.resourceId) ?? null,
 );
 const selectedNode = computed(() =>
   plugin.value
@@ -181,10 +200,6 @@ const selectedIsOverride = computed(
     selectedPath.value.toLocaleLowerCase()
       === pluginConventions.override.toLocaleLowerCase(),
 );
-const selectedIsContext = computed(
-  () => selectedPath.value.toLocaleLowerCase()
-    === pluginConventions.context.toLocaleLowerCase(),
-);
 const selectedIsFixedConvention = computed(
   () =>
     selectedIsContainerDefinitions.value
@@ -203,6 +218,42 @@ const selectedTypeLabel = computed(() =>
           ? "conversation renderer override"
           : selectedType.value,
 );
+const selectedContextPlacementConflict = computed(() => {
+  const file = selectedFile.value;
+  const depth = file?.contextPlacement?.depth;
+  if (!file || depth === undefined) return null;
+  return (pluginReferenceResolver.value?.plugins ?? []).flatMap((item) =>
+    flattenPluginFiles(item.root).map((resource) => ({ plugin: item, resource })),
+  ).find(({ resource }) =>
+    resource.id !== file.id
+    && resource.contextPlacement?.depth === depth
+    && resource.name.toLocaleLowerCase() === file.name.toLocaleLowerCase()
+  ) ?? null;
+});
+const availablePositionContainers = computed(() =>
+  containerDetails.value.filter(
+    (container) =>
+      container.scope === "global"
+      || container.pluginId === plugin.value?.id,
+  ),
+);
+const selectedInsertionMode = computed<"none" | "position" | "depth">(() => {
+  if (selectedFile.value?.contextPlacement) return "depth";
+  if (selectedFile.value?.memberships[0]) return "position";
+  return "none";
+});
+const selectedPositionContainerId = computed(() => {
+  const target = selectedFile.value?.memberships[0]?.container;
+  if (!target) return "";
+  return availablePositionContainers.value.find(
+    (container) => containerTarget(container.scope, container.name) === target,
+  )?.id ?? "";
+});
+const selectedInsertionCondition = computed(() =>
+  selectedInsertionMode.value === "depth"
+    ? selectedFile.value?.contextPlacement?.condition
+    : selectedFile.value?.memberships[0]?.condition,
+);
 const activeParentFolder = computed(() => {
   if (!plugin.value) return null;
   return selectedNode.value
@@ -218,37 +269,6 @@ const mediaSource = computed(() => pluginMediaSource(selectedFile.value?.content
 const mediaKind = computed(() =>
   pluginMediaType(selectedFile.value?.content, mediaSource.value),
 );
-const availableDataResources = computed(() => {
-  const currentPlugin = plugin.value;
-  if (!currentPlugin) return [];
-  const contextPackageId = props.packageId ?? currentPlugin.packageId;
-  const packageItem = conversation.packages.find(
-    (item) => item.id === contextPackageId,
-  );
-  const visible = contextPackageId
-    ? pluginStore.enabledPluginsForPackage(
-        contextPackageId,
-        packageItem?.enabledGlobalPluginIds,
-        packageItem?.mainPluginId,
-      )
-    : pluginStore.globalPlugins.filter((item) => item.enabled);
-  const plugins = visible.some((item) => item.id === currentPlugin.id)
-    ? visible
-    : [currentPlugin, ...visible];
-  return plugins.flatMap((sourcePlugin) =>
-    flattenPluginFiles(sourcePlugin.root).flatMap((file) =>
-      pluginFileType(file.name) === "data"
-        ? [{
-            id: file.id,
-            name: file.name,
-            path: `/${pluginNodePath(sourcePlugin.root, file.id).join("/")}`,
-            pluginId: sourcePlugin.id,
-            pluginName: sourcePlugin.name,
-          }]
-        : [],
-    )
-  );
-});
 const pluginReferenceResolver = computed(() => {
   const currentPlugin = plugin.value;
   const file = selectedFile.value;
@@ -273,7 +293,6 @@ const pluginReferenceResolver = computed(() => {
     environment: {
       chat: [],
       CHAT: [],
-      CAPABILITIES_PROMPT: "[CAPABILITIES_PROMPT]",
       PROJECT_AGENT_PROMPT: "[PROJECT_AGENT_PROMPT]",
     },
     sourceOverrides: file ? { [file.id]: contentDraft.value } : {},
@@ -288,17 +307,17 @@ const containerDetails = computed(() =>
 const manifestVisiblePlugins = computed(() =>
   pluginReferenceResolver.value?.plugins ?? (plugin.value ? [plugin.value] : []),
 );
-const markdownReferenceSuggestions = computed(() => {
+const importSuggestions = computed(() => {
   const file = selectedFile.value;
   const resolver = pluginReferenceResolver.value;
   if (
     !file
     || !resolver
-    || selectedType.value !== "markdown"
+    || (selectedType.value !== "markdown" && selectedType.value !== "javascript")
   ) {
     return [];
   }
-  return resolver.referenceSuggestionsFromResource(file.id);
+  return resolver.importSuggestionsFromResource(file.id);
 });
 
 onMounted(async () => {
@@ -397,7 +416,6 @@ function selectNodeById(nodeId: string) {
   const node = findPluginTreeNode(current.root, nodeId);
   if (!node) return false;
   selectedNodeId.value = node.id;
-  showProperties.value = false;
   if (isMobileLayout.value) treeVisibleOnMobile.value = false;
   return true;
 }
@@ -438,7 +456,6 @@ function selectNode(node: PluginTreeNode) {
   layout.updateResourceTabParams("plugin", props.resourceId, {
     nodeId: node.id,
   });
-  showProperties.value = false;
   if (isMobileLayout.value) treeVisibleOnMobile.value = false;
 }
 
@@ -450,7 +467,7 @@ function openContainerResource(
     contentSaveTimer = null;
     void persistContent();
   }
-  const targetPlugin = pluginStore.plugins.find(
+  const targetPlugin = pluginItems().find(
     (item) => item.id === resource.pluginId,
   );
   if (!targetPlugin) return;
@@ -528,13 +545,6 @@ async function persistNodeName() {
   loadContentDraft();
 }
 
-async function persistNodeIcon() {
-  const current = plugin.value;
-  const node = selectedNode.value;
-  if (!current || !node) return;
-  await pluginStore.updateNode(current.id, node.id, { icon: node.icon });
-}
-
 async function updateSelectedPriority(delta: number) {
   const current = plugin.value;
   const file = selectedFile.value;
@@ -544,86 +554,20 @@ async function updateSelectedPriority(delta: number) {
   });
 }
 
-async function persistContextCompressionThreshold(event: Event) {
-  const current = plugin.value;
-  const file = selectedFile.value;
-  if (!current || !file) return;
-  const value = Number.parseInt((event.target as HTMLInputElement).value, 10);
-  await pluginStore.updateNode(current.id, file.id, {
-    contextConfig: {
-      compressionThreshold: Number.isFinite(value) && value > 0
-        ? Math.max(4, value)
-        : 0,
-    },
-  });
+function containerTarget(scope: "local" | "global", name: string) {
+  return `container:${scope}/${name}`;
 }
 
-async function persistSelectedMemberships() {
+async function setResourceContextDepth(file: PluginTreeNode, depth: number | null) {
   const current = plugin.value;
-  const file = selectedFile.value;
-  if (!current || !file) return;
-  await pluginStore.updateNode(current.id, file.id, {
-    memberships: file.memberships
-      .filter((item) => item.container.trim())
-      .map((item) => ({
-        container: item.container.trim(),
-        alias: item.alias.trim(),
-        ...(item.condition?.reference.trim()
-          ? { condition: structuredClone(item.condition) }
-          : {}),
-      })),
-  });
-}
-
-async function addSelectedMembership() {
-  const file = selectedFile.value;
-  if (!file) return;
-  file.memberships.push({
-    container: "container:plugin/会话上下文",
-    alias: "",
-  });
-  await persistSelectedMemberships();
-}
-
-async function placeSelectedAtContextBottom() {
-  const current = plugin.value;
-  const file = selectedFile.value;
-  if (!current || !file) return;
-  const conflict = pluginStore.plugins.flatMap((item) =>
-    flattenPluginFiles(item.root).map((resource) => ({ plugin: item, resource })),
-  ).find(({ resource }) =>
-    resource.id !== file.id
-    && resource.contextPlacement?.depth === 0
-    && resource.name.toLocaleLowerCase() === file.name.toLocaleLowerCase()
-  );
-  if (conflict) {
-    push.error(
-      `深度容器 0 已有同名内容：${conflict.plugin.name}/${conflict.resource.name}`,
-    );
-    return;
-  }
-  await pluginStore.updateNode(current.id, file.id, {
-    contextPlacement: { depth: 0 },
-  });
-}
-
-async function persistSelectedContextDepth(event: Event) {
-  const current = plugin.value;
-  const file = selectedFile.value;
-  if (!current || !file) return;
-  const raw = (event.target as HTMLInputElement).value.trim();
-  if (!raw) {
+  if (!current || file.kind !== "file") return;
+  if (depth === null) {
     await pluginStore.updateNode(current.id, file.id, {
       contextPlacement: undefined,
     });
     return;
   }
-  const depth = Number(raw);
-  if (!Number.isInteger(depth) || depth < 0) {
-    push.error("深度 K 必须是非负整数。");
-    return;
-  }
-  const conflict = pluginStore.plugins.flatMap((item) =>
+  const conflict = (pluginReferenceResolver.value?.plugins ?? []).flatMap((item) =>
     flattenPluginFiles(item.root).map((resource) => ({ plugin: item, resource })),
   ).find(({ resource }) =>
     resource.id !== file.id
@@ -637,24 +581,89 @@ async function persistSelectedContextDepth(event: Event) {
     return;
   }
   await pluginStore.updateNode(current.id, file.id, {
-    contextPlacement: { depth },
+    contextPlacement: {
+      depth,
+      ...(file.contextPlacement?.condition
+        ? { condition: structuredClone(file.contextPlacement.condition) }
+        : {}),
+    },
+    memberships: [],
   });
 }
 
-async function removeSelectedMembership(index: number) {
+async function setInsertionMode(value: unknown) {
+  const current = plugin.value;
   const file = selectedFile.value;
-  if (!file) return;
-  file.memberships.splice(index, 1);
-  await persistSelectedMemberships();
+  if (!current || !file || (value !== "none" && value !== "position" && value !== "depth")) {
+    return;
+  }
+  if (value === "none") {
+    await pluginStore.updateNode(current.id, file.id, {
+      contextPlacement: undefined,
+      memberships: [],
+    });
+    return;
+  }
+  if (value === "depth") {
+    await pluginStore.updateNode(current.id, file.id, {
+      contextPlacement: { depth: 0 },
+      memberships: [],
+    });
+    return;
+  }
+  const target = availablePositionContainers.value[0];
+  await pluginStore.updateNode(current.id, file.id, {
+    contextPlacement: undefined,
+    memberships: target
+      ? [{ container: containerTarget(target.scope, target.name), alias: "" }]
+      : [],
+  });
+  if (!target) push.warning("当前没有可用的本地或全局位置容器。");
 }
 
-function updateSelectedMembershipConditionReference(index: number, value: string) {
-  const membership = selectedFile.value?.memberships[index];
-  if (!membership) return;
+async function setPositionContainer(containerId: unknown) {
+  const current = plugin.value;
+  const file = selectedFile.value;
+  const target = availablePositionContainers.value.find(
+    (container) => container.id === containerId,
+  );
+  if (!current || !file || !target) return;
+  const condition = file.memberships[0]?.condition;
+  await pluginStore.updateNode(current.id, file.id, {
+    contextPlacement: undefined,
+    memberships: [{
+      container: containerTarget(target.scope, target.name),
+      alias: "",
+      ...(condition ? { condition: structuredClone(condition) } : {}),
+    }],
+  });
+}
+
+async function adjustSelectedDepth(delta: number) {
+  const file = selectedFile.value;
+  if (!file?.contextPlacement) return;
+  await setResourceContextDepth(file, Math.max(0, file.contextPlacement.depth + delta));
+}
+
+async function setSelectedContextDepth(value: string) {
+  const file = selectedFile.value;
+  const depth = Number(value);
+  if (!file || !Number.isInteger(depth) || depth < 0) {
+    push.error("深度 K 必须是非负整数。");
+    return;
+  }
+  await setResourceContextDepth(file, depth);
+}
+
+async function updateInsertionConditionReference(value: string) {
+  const current = plugin.value;
+  const file = selectedFile.value;
+  if (!current || !file || selectedInsertionMode.value === "none") return;
   const reference = value.trim();
-  if (!reference) {
-    delete membership.condition;
-  } else {
+  let condition = reference
+    ? { reference, ...(selectedInsertionCondition.value && Object.prototype.hasOwnProperty.call(selectedInsertionCondition.value, "equals") ? { equals: selectedInsertionCondition.value.equals } : {}) }
+    : undefined;
+  if (condition) {
     try {
       const parsed = parsePluginManifestReference(reference);
       if (parsed.scope !== "local") throw new Error("注入条件只允许 local 配置引用。");
@@ -662,77 +671,71 @@ function updateSelectedMembershipConditionReference(index: number, value: string
       push.error(error instanceof Error ? error.message : "配置引用无效。");
       return;
     }
-    membership.condition = {
-      reference: reference.replace(/^<@|>$/g, ""),
-      ...(membership.condition && Object.prototype.hasOwnProperty.call(
-        membership.condition,
-        "equals",
-      ) ? { equals: membership.condition.equals } : {}),
-    };
   }
-  void persistSelectedMemberships();
-}
-
-function updateSelectedMembershipConditionEquals(index: number, value: string) {
-  const membership = selectedFile.value?.memberships[index];
-  if (!membership?.condition) return;
-  if (!value.trim()) {
-    delete membership.condition.equals;
-    void persistSelectedMemberships();
+  if (selectedInsertionMode.value === "depth" && file.contextPlacement) {
+    await pluginStore.updateNode(current.id, file.id, {
+      contextPlacement: {
+        depth: file.contextPlacement.depth,
+        ...(condition ? { condition } : {}),
+      },
+    });
     return;
   }
-  try {
-    membership.condition.equals = JSON.parse(value);
-    void persistSelectedMemberships();
-  } catch {
-    push.error("注入条件的期望值必须是合法 JSON；留空表示判断真值。");
-  }
+  const membership = file.memberships[0];
+  if (!membership) return;
+  await pluginStore.updateNode(current.id, file.id, {
+    memberships: [{
+      container: membership.container,
+      alias: membership.alias,
+      ...(condition ? { condition } : {}),
+    }],
+  });
 }
 
-function selectedMembershipConditionEquals(index: number) {
-  const condition = selectedFile.value?.memberships[index]?.condition;
+async function updateInsertionConditionEquals(value: string) {
+  const condition = selectedInsertionCondition.value;
+  if (!condition) return;
+  let equals: unknown;
+  try {
+    equals = value.trim() ? JSON.parse(value) : undefined;
+  } catch {
+    push.error("注入条件的期望值必须是合法 JSON；留空表示判断真值。");
+    return;
+  }
+  const next = {
+    reference: condition.reference,
+    ...(value.trim() ? { equals: equals as never } : {}),
+  };
+  const current = plugin.value;
+  const file = selectedFile.value;
+  if (!current || !file) return;
+  if (selectedInsertionMode.value === "depth" && file.contextPlacement) {
+    await pluginStore.updateNode(current.id, file.id, {
+      contextPlacement: { depth: file.contextPlacement.depth, condition: next },
+    });
+    return;
+  }
+  const membership = file.memberships[0];
+  if (!membership) return;
+  await pluginStore.updateNode(current.id, file.id, {
+    memberships: [{ ...membership, condition: next }],
+  });
+}
+
+function selectedInsertionConditionEquals() {
+  const condition = selectedInsertionCondition.value;
   return condition && Object.prototype.hasOwnProperty.call(condition, "equals")
     ? JSON.stringify(condition.equals)
     : "";
 }
 
-async function persistSelectedDataReferences() {
-  const current = plugin.value;
-  const file = selectedFile.value;
-  if (!current || !file) return;
-  await pluginStore.updateNode(current.id, file.id, {
-    dataReferences: file.dataReferences
-      .filter((item) => item.alias.trim() && item.dataId.trim())
-      .map((item) => ({
-        alias: item.alias.trim(),
-        dataId: item.dataId.trim(),
-      })),
-  });
-}
-
-async function addSelectedDataReference() {
-  const file = selectedFile.value;
-  const first = availableDataResources.value[0];
-  if (!file || !first) return;
-  let alias = first.name.replace(/\.data$/i, "") || "data";
-  let suffix = 2;
-  while (file.dataReferences.some((item) => item.alias === alias)) {
-    alias = `${first.name.replace(/\.data$/i, "") || "data"}-${suffix++}`;
-  }
-  file.dataReferences.push({ alias, dataId: first.id });
-  await persistSelectedDataReferences();
-}
-
-async function removeSelectedDataReference(index: number) {
-  const file = selectedFile.value;
-  if (!file) return;
-  file.dataReferences.splice(index, 1);
-  await persistSelectedDataReferences();
-}
-
-function openSelectedDataReference(dataId: string) {
-  const resource = availableDataResources.value.find((item) => item.id === dataId);
-  if (resource) openContainerResource(resource);
+function insertionLabel(node: PluginTreeNode) {
+  if (node.kind !== "file") return "";
+  if (node.contextPlacement) return `深度 ${node.contextPlacement.depth}`;
+  const target = node.memberships[0]?.container;
+  if (!target) return "";
+  const match = /^container:(?:local|global)\/(.+)$/.exec(target);
+  return match?.[1] ?? target;
 }
 
 async function createFile(
@@ -1026,9 +1029,13 @@ function openTreeRowMenu(event: MouseEvent) {
   row?.querySelector<HTMLButtonElement>("[data-tree-row-menu-trigger]")?.click();
 }
 
-function showNodeProperties(node: PluginTreeNode) {
+function handleTreeRowContextMenu(event: MouseEvent) {
+  if (isMobileLayout.value) return;
+  openTreeRowMenu(event);
+}
+
+function selectTreeRowNode(node: PluginTreeNode) {
   selectNode(node);
-  if (node.kind === "file") showProperties.value = true;
 }
 
 async function restoreBuiltInPlugin() {
@@ -1125,119 +1132,126 @@ async function restoreBuiltInPlugin() {
           </Button>
         </div>
 
-        <div class="min-h-0 flex-1 overflow-y-auto px-1.5 py-2">
-          <div
+        <ScrollArea class="min-h-0 flex-1">
+          <div class="px-1.5 py-2">
+            <div
             v-for="row in treeRows"
             :key="row.node.id"
-            :draggable="!isFixedConventionNode(row.node)"
-            class="group relative mb-0.5 flex h-8 items-center rounded-md transition-colors hover:bg-accent/55"
-            :class="[
-              selectedNodeId === row.node.id && 'bg-accent text-accent-foreground',
-              draggingNodeId === row.node.id && 'opacity-45',
-            ]"
-            @dragstart="draggingNodeId = row.node.id"
-            @dragend="draggingNodeId = ''"
-            @dragover.prevent
-            @drop.stop.prevent="dropOnRow(row)"
-            @contextmenu.prevent.stop="openTreeRowMenu"
           >
-            <button
-              type="button"
-              class="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-1 text-left"
-              :style="{ paddingLeft: `${row.depth * 16 + 6}px` }"
-              @click="selectNode(row.node)"
-            >
-              <span class="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
-                <ChevronRight
-                  v-if="row.node.kind === 'folder' && row.node.collapsed"
-                  class="size-3.5"
-                />
-                <ChevronDown
-                  v-else-if="row.node.kind === 'folder'"
-                  class="size-3.5"
-                />
-              </span>
-              <img
-                v-if="row.node.icon"
-                :src="row.node.icon"
-                alt=""
-                class="size-4 shrink-0 rounded-sm object-cover"
-              />
-              <component
-                :is="nodeIcon(row.node)"
-                v-else
-                class="size-4 shrink-0 text-muted-foreground"
-              />
-              <span class="min-w-0 flex-1 truncate text-[13px]">
-                {{ row.node.name }}
-              </span>
-            </button>
+              <div
+                :draggable="!isMobileLayout && !isFixedConventionNode(row.node)"
+                class="group relative mb-0.5 flex h-8 items-center rounded-md transition-colors hover:bg-accent/55"
+                :class="[
+                  selectedNodeId === row.node.id && 'bg-accent text-accent-foreground',
+                  draggingNodeId === row.node.id && 'opacity-45',
+                ]"
+                @dragstart="draggingNodeId = row.node.id"
+                @dragend="draggingNodeId = ''"
+                @dragover.prevent
+                @drop.stop.prevent="dropOnRow(row)"
+                @contextmenu.prevent.stop="handleTreeRowContextMenu"
+              >
+                <button
+                  type="button"
+                  class="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-1 text-left"
+                  :style="{ paddingLeft: `${row.depth * 16 + 6}px` }"
+                  @click="selectTreeRowNode(row.node)"
+                >
+                  <span class="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
+                    <ChevronRight
+                      v-if="row.node.kind === 'folder' && row.node.collapsed"
+                      class="size-3.5"
+                    />
+                    <ChevronDown
+                      v-else-if="row.node.kind === 'folder'"
+                      class="size-3.5"
+                    />
+                  </span>
+                  <img
+                    v-if="row.node.icon"
+                    :src="row.node.icon"
+                    alt=""
+                    class="size-4 shrink-0 rounded-sm object-cover"
+                  />
+                  <component
+                    :is="nodeIcon(row.node)"
+                    v-else
+                    class="size-4 shrink-0 text-muted-foreground"
+                  />
+                  <span class="min-w-0 flex-1 truncate text-[13px]">
+                    {{ row.node.name }}
+                  </span>
+                </button>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger as-child>
-                <Button
-                  data-tree-row-menu-trigger
-                  size="icon"
-                  variant="ghost"
-                  class="mobile-touch-actions mr-0.5 size-7 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
-                  title="文件菜单"
-                  @click.stop
+                <span
+                  v-if="insertionLabel(row.node)"
+                  class="max-w-24 shrink-0 truncate px-1 text-[10px] text-muted-foreground"
+                  :title="insertionLabel(row.node)"
                 >
-                  <MoreHorizontal class="size-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" class="w-40">
-                <DropdownMenuItem
-                  v-if="row.node.kind === 'file'"
-                  @click="showNodeProperties(row.node)"
-                >
-                  文件属性
-                </DropdownMenuItem>
-                <template v-if="row.node.kind === 'folder'">
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <FilePlus2 class="mr-2 size-4" />
-                      新建文件
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent class="w-48">
-                      <DropdownMenuItem
-                        v-for="fileType in newFileTypes"
-                        :key="fileType.id"
-                        @click="createFile(fileType.id, row.node)"
-                      >
-                        <span class="min-w-0 flex-1">{{ fileType.label }}</span>
-                        <span class="font-mono text-[11px] text-muted-foreground">
-                          {{ fileType.extension }}
-                        </span>
+                  {{ insertionLabel(row.node) }}
+                </span>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger as-child>
+                    <Button
+                      data-tree-row-menu-trigger
+                      size="icon"
+                      variant="ghost"
+                      class="mobile-touch-actions mr-0.5 size-7 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+                      title="文件菜单"
+                      @click.stop
+                    >
+                      <MoreHorizontal class="size-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" class="w-40">
+                    <template v-if="row.node.kind === 'folder'">
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                          <FilePlus2 class="mr-2 size-4" />
+                          新建文件
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent class="w-48">
+                          <DropdownMenuItem
+                            v-for="fileType in newFileTypes"
+                            :key="fileType.id"
+                            @click="createFile(fileType.id, row.node)"
+                          >
+                            <span class="min-w-0 flex-1">{{ fileType.label }}</span>
+                            <span class="font-mono text-[11px] text-muted-foreground">
+                              {{ fileType.extension }}
+                            </span>
+                          </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                      <DropdownMenuItem @click="createFolder(row.node)">
+                        <FolderPlus class="mr-2 size-4" />
+                        新建文件夹
                       </DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuItem @click="createFolder(row.node)">
-                    <FolderPlus class="mr-2 size-4" />
-                    新建文件夹
-                  </DropdownMenuItem>
-                  <DropdownMenuItem @click="chooseImport(row.node)">
-                    <FileDown class="mr-2 size-4" />
-                    导入文件
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                </template>
-                <DropdownMenuItem
-                  v-if="!isFixedConventionNode(row.node)"
-                  class="text-destructive focus:text-destructive"
-                  @click="removeNode(row.node.id)"
-                >
-                  <Trash2 class="mr-2 size-4" />
-                  删除
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+                      <DropdownMenuItem @click="chooseImport(row.node)">
+                        <FileDown class="mr-2 size-4" />
+                        导入文件
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </template>
+                    <DropdownMenuItem
+                      v-if="!isFixedConventionNode(row.node)"
+                      class="text-destructive focus:text-destructive"
+                      @click="removeNode(row.node.id)"
+                    >
+                      <Trash2 class="mr-2 size-4" />
+                      删除
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
 
-          <p v-if="treeRows.length === 0" class="px-3 py-8 text-center text-xs text-muted-foreground">
-            没有匹配的文件
-          </p>
-        </div>
+            <p v-if="treeRows.length === 0" class="px-3 py-8 text-center text-xs text-muted-foreground">
+              没有匹配的文件
+            </p>
+          </div>
+        </ScrollArea>
       </aside>
 
       <main
@@ -1246,7 +1260,7 @@ async function restoreBuiltInPlugin() {
       >
         <div
           v-if="selectedFile || !isMobileLayout"
-          class="flex min-h-12 items-center gap-2 border-b px-3"
+          class="flex min-h-12 flex-wrap items-center gap-2 border-b px-3 py-2"
         >
           <Button
             v-if="isMobileLayout"
@@ -1296,6 +1310,123 @@ async function restoreBuiltInPlugin() {
             {{ selectedTypeLabel }}
           </span>
           <div
+            v-if="selectedFile"
+            class="ml-auto flex min-h-8 min-w-0 items-center gap-1.5 mobile:order-last mobile:ml-0 mobile:w-full mobile:flex-wrap"
+          >
+            <Select :model-value="selectedInsertionMode" @update:model-value="setInsertionMode">
+              <SelectTrigger class="h-8 w-36 text-xs" aria-label="资源插入方式">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="none">不插入</SelectItem>
+                  <SelectItem value="position">插入到位置：</SelectItem>
+                  <SelectItem value="depth">插入到深度：</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+
+            <Select
+              v-if="selectedInsertionMode === 'position'"
+              :model-value="selectedPositionContainerId"
+              @update:model-value="setPositionContainer"
+            >
+              <SelectTrigger class="h-8 min-w-48 max-w-72 flex-1 text-xs" aria-label="位置容器">
+                <SelectValue placeholder="选择本地或全局容器" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem
+                    v-for="container in availablePositionContainers"
+                    :key="container.id"
+                    :value="container.id"
+                    :text-value="`${container.name} ${container.description ?? ''}`"
+                  >
+                    <span class="flex min-w-0 flex-col">
+                      <span class="truncate text-xs">
+                        {{ container.scope === "local" ? "本地" : "全局" }} · {{ container.name }}
+                      </span>
+                      <span v-if="container.description" class="truncate text-[11px] text-muted-foreground">
+                        {{ container.description }}
+                      </span>
+                    </span>
+                  </SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+
+            <div
+              v-else-if="selectedInsertionMode === 'depth'"
+              class="inline-flex h-8 items-center overflow-hidden rounded-md border bg-background"
+            >
+              <Button
+                size="icon"
+                variant="ghost"
+                class="size-7 rounded-none"
+                title="减小深度"
+                :disabled="(selectedFile.contextPlacement?.depth ?? 0) <= 0"
+                @click="adjustSelectedDepth(-1)"
+              >
+                <Minus />
+              </Button>
+              <Input
+                :model-value="selectedFile.contextPlacement?.depth ?? 0"
+                type="number"
+                min="0"
+                step="1"
+                class="h-7 w-14 rounded-none border-y-0 px-1 text-center font-mono text-xs shadow-none"
+                aria-label="上下文深度 K"
+                @change="setSelectedContextDepth(($event.target as HTMLInputElement).value)"
+              />
+              <Button
+                size="icon"
+                variant="ghost"
+                class="size-7 rounded-none"
+                title="增大深度"
+                @click="adjustSelectedDepth(1)"
+              >
+                <Plus />
+              </Button>
+            </div>
+
+            <span
+              v-if="selectedInsertionMode === 'depth' && selectedContextPlacementConflict"
+              class="min-w-0 truncate text-[11px] text-destructive"
+              :title="`与 ${selectedContextPlacementConflict.plugin.name}/${selectedContextPlacementConflict.resource.name} 冲突`"
+            >
+              位置冲突
+            </span>
+
+            <Button
+              v-if="selectedInsertionMode !== 'none'"
+              size="sm"
+              :variant="selectedInsertionCondition ? 'secondary' : 'outline'"
+              class="h-8 px-2 text-xs"
+              @click="conditionDialogOpen = true"
+            >
+              条件
+            </Button>
+
+            <DropdownMenu v-if="selectedInsertionMode !== 'none'">
+              <DropdownMenuTrigger as-child>
+                <Button size="sm" variant="outline" class="h-8 px-2 font-mono text-xs" title="优先级">
+                  <SlidersHorizontal data-icon="inline-start" />
+                  P{{ selectedFile.priority }}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" class="w-40">
+                <DropdownMenuItem @click="updateSelectedPriority(1)">
+                  <Plus data-icon="inline-start" />
+                  提高优先级
+                </DropdownMenuItem>
+                <DropdownMenuItem @click="updateSelectedPriority(-1)">
+                  <Minus data-icon="inline-start" />
+                  降低优先级
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <div
             v-if="selectedIsVue || selectedIsContainerDefinitions || selectedIsRegex || selectedIsManifest || selectedType === 'markdown'"
             class="flex items-center rounded-md border bg-muted/30 p-0.5"
           >
@@ -1320,21 +1451,14 @@ async function restoreBuiltInPlugin() {
               <Eye class="size-3.5" />
             </Button>
           </div>
-          <DropdownMenu v-if="selectedFile">
+          <DropdownMenu v-if="selectedFile && !selectedIsFixedConvention">
             <DropdownMenuTrigger as-child>
-              <Button size="icon" variant="ghost" class="size-8" title="文件属性">
+              <Button size="icon" variant="ghost" class="size-8" title="文件操作">
                 <MoreHorizontal class="size-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" class="w-44">
-              <DropdownMenuItem @click="showProperties = !showProperties">
-                {{ showProperties ? "收起属性" : "编辑属性" }}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator
-                v-if="!selectedIsFixedConvention"
-              />
               <DropdownMenuItem
-                v-if="!selectedIsFixedConvention"
                 class="text-destructive focus:text-destructive"
                 @click="removeSelectedNode"
               >
@@ -1346,204 +1470,10 @@ async function restoreBuiltInPlugin() {
         </div>
 
         <div
-          v-if="selectedFile && showProperties"
-          class="grid min-h-11 grid-cols-[minmax(0,1fr)_auto_minmax(0,1.5fr)] items-center gap-4 border-b px-4 py-2 mobile:grid-cols-1 mobile:gap-2"
+          v-if="selectedFile"
+          class="min-h-0 flex-1 overflow-hidden bg-muted/30 p-4 mobile:p-2"
         >
-          <span class="truncate font-mono text-[11px] text-muted-foreground">
-            {{ selectedPath || "/" }} · {{ selectedFile.id }}
-          </span>
-          <div class="flex items-center gap-2">
-            <span class="text-xs text-muted-foreground">优先级</span>
-            <div class="inline-flex items-center rounded-md border">
-              <Button
-                size="icon"
-                variant="ghost"
-                class="size-7 rounded-r-none"
-                title="降低优先级"
-                @click="updateSelectedPriority(-1)"
-              >
-                <Minus class="size-3.5" />
-              </Button>
-              <span class="min-w-11 border-x px-2 text-center font-mono text-xs">
-                {{ selectedFile.priority }}
-              </span>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="size-7 rounded-l-none"
-                title="提高优先级"
-                @click="updateSelectedPriority(1)"
-              >
-                <Plus class="size-3.5" />
-              </Button>
-            </div>
-          </div>
-          <label class="flex min-w-0 items-center gap-2">
-            <span class="shrink-0 text-xs text-muted-foreground">图标</span>
-            <input
-              v-model="selectedFile.icon"
-              class="h-7 min-w-0 flex-1 bg-transparent px-1 text-xs outline-none placeholder:text-muted-foreground"
-              placeholder="URL，可留空"
-              @change="persistNodeIcon"
-            />
-          </label>
-          <label
-            v-if="selectedIsContext"
-            class="col-span-full flex items-center justify-between gap-4 border-t pt-2 mobile:col-span-1"
-          >
-            <span>
-              <span class="block text-xs font-medium">压缩记忆阈值</span>
-              <span class="text-xs text-muted-foreground">0 关闭；正数至少按 4 个消息容器计算。</span>
-            </span>
-            <input
-              :value="selectedFile.contextConfig?.compressionThreshold ?? 0"
-              type="number"
-              min="0"
-              step="1"
-              class="h-8 w-24 rounded-md border bg-background px-2 text-right font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
-              @change="persistContextCompressionThreshold"
-            />
-          </label>
-          <label class="col-span-full flex items-center justify-between gap-4 border-t pt-2 mobile:col-span-1">
-            <span>
-              <span class="block text-xs font-medium">深度容器 K</span>
-              <span class="text-xs text-muted-foreground">非负整数；0 位于最终上下文底部。留空则不自动插入。</span>
-            </span>
-            <div class="flex items-center gap-1">
-              <Button size="sm" variant="ghost" class="h-8 text-xs" @click.prevent="placeSelectedAtContextBottom">
-                置于底部
-              </Button>
-              <input
-                :value="selectedFile.contextPlacement?.depth ?? ''"
-                type="number"
-                min="0"
-                step="1"
-                class="h-8 w-24 rounded-md border bg-background px-2 text-right font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
-                placeholder="未设置"
-                @change="persistSelectedContextDepth"
-              />
-            </div>
-          </label>
-          <div class="col-span-full border-t pt-2 mobile:col-span-1">
-            <div class="mb-1.5 flex items-center justify-between gap-2">
-              <span class="text-xs font-medium">容器成员关系（资源元数据）</span>
-              <Button size="sm" variant="ghost" class="h-7 text-xs" @click="addSelectedMembership">
-                <Plus class="mr-1 size-3.5" />
-                加入容器
-              </Button>
-            </div>
-            <div
-              v-for="(membership, index) in selectedFile.memberships"
-              :key="index"
-              class="mb-2 rounded-md border bg-background p-2"
-            >
-              <div class="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] gap-2 mobile:grid-cols-[minmax(0,1fr)_auto]">
-                <input
-                  v-model="membership.container"
-                  class="h-8 rounded-md border bg-background px-2 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
-                  placeholder="container:plugin/会话上下文"
-                  @change="persistSelectedMemberships"
-                />
-                <input
-                  v-model="membership.alias"
-                  class="h-8 rounded-md border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring mobile:col-start-1"
-                  placeholder="别名（可选）"
-                  @change="persistSelectedMemberships"
-                />
-                <Button size="icon" variant="ghost" class="size-8 mobile:col-start-2 mobile:row-start-1" title="移除成员关系" @click="removeSelectedMembership(index)">
-                  <Trash2 class="size-3.5" />
-                </Button>
-              </div>
-              <div class="mt-2 grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-2 mobile:grid-cols-1">
-                <Input
-                  :model-value="membership.condition?.reference ?? ''"
-                  class="h-8 font-mono text-xs"
-                  placeholder="条件（可选）：config:local/group/content"
-                  @change="updateSelectedMembershipConditionReference(index, ($event.target as HTMLInputElement).value)"
-                />
-                <Input
-                  :model-value="selectedMembershipConditionEquals(index)"
-                  :disabled="!membership.condition?.reference"
-                  class="h-8 font-mono text-xs"
-                  placeholder="期望 JSON；留空判断真值"
-                  @change="updateSelectedMembershipConditionEquals(index, ($event.target as HTMLInputElement).value)"
-                />
-              </div>
-            </div>
-            <p v-if="!selectedFile.memberships.length" class="text-xs text-muted-foreground">
-              此资源暂未加入容器。元数据不会显示在文件正文或 Markdown 预览中。
-            </p>
-          </div>
-          <div class="col-span-full border-t pt-2 mobile:col-span-1">
-            <div class="mb-1.5 flex items-center justify-between">
-              <span class="text-xs font-medium">Data 引用（资源元数据）</span>
-              <Button
-                size="sm"
-                variant="ghost"
-                class="h-7 text-xs"
-                :disabled="!availableDataResources.length"
-                @click="addSelectedDataReference"
-              >
-                <Plus class="mr-1 size-3.5" />
-                引用 .data
-              </Button>
-            </div>
-            <div
-              v-for="(reference, index) in selectedFile.dataReferences"
-              :key="`${reference.alias}:${index}`"
-              class="mb-1 grid grid-cols-[minmax(0,.8fr)_minmax(0,1.6fr)_auto_auto] gap-2"
-            >
-              <input
-                v-model="reference.alias"
-                class="h-8 rounded-md border bg-background px-2 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
-                placeholder="alias"
-                @change="persistSelectedDataReferences"
-              />
-              <select
-                v-model="reference.dataId"
-                class="h-8 min-w-0 rounded-md border bg-background px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
-                @change="persistSelectedDataReferences"
-              >
-                <option
-                  v-if="!availableDataResources.some((item) => item.id === reference.dataId)"
-                  :value="reference.dataId"
-                >
-                  缺失的 Data · {{ reference.dataId }}
-                </option>
-                <option
-                  v-for="dataResource in availableDataResources"
-                  :key="dataResource.id"
-                  :value="dataResource.id"
-                >
-                  {{ dataResource.pluginName }} · {{ dataResource.path }} · {{ dataResource.id }}
-                </option>
-              </select>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="size-8"
-                title="打开 Data 资源"
-                @click="openSelectedDataReference(reference.dataId)"
-              >
-                <Eye class="size-3.5" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="size-8"
-                title="移除 Data 引用"
-                @click="removeSelectedDataReference(index)"
-              >
-                <Trash2 class="size-3.5" />
-              </Button>
-            </div>
-            <p v-if="!selectedFile.dataReferences.length" class="text-xs text-muted-foreground">
-              此资源尚未引用 .data；引用关系不会写进 Markdown 或数据定义正文。
-            </p>
-          </div>
-        </div>
-
-        <div v-if="selectedFile" class="min-h-0 flex-1 overflow-hidden">
+          <div class="mx-auto h-full w-full max-w-5xl overflow-hidden rounded-lg border bg-background shadow-sm">
           <PluginContainerDefinitionsEditor
             v-if="selectedIsContainerDefinitions && fileViewMode === 'preview'"
             :key="selectedFile.id"
@@ -1671,8 +1601,7 @@ async function restoreBuiltInPlugin() {
               :key="`${selectedFile.id}:markdown-editor`"
               :model-value="contentDraft"
               enable-block-edit
-              enable-reference-syntax
-              :reference-suggestions="markdownReferenceSuggestions"
+              enable-top-bar
               :enable-ai="false"
               class="plugin-markdown-editor min-h-full px-6 py-8 mobile:px-3 mobile:py-4"
               @update:model-value="scheduleContentSave"
@@ -1685,7 +1614,7 @@ async function restoreBuiltInPlugin() {
             :model-value="contentDraft"
             language="markdown"
             frameless
-            :reference-suggestions="markdownReferenceSuggestions"
+            :import-suggestions="importSuggestions"
             @update:model-value="scheduleContentSave"
           />
 
@@ -1696,7 +1625,9 @@ async function restoreBuiltInPlugin() {
             <JavaScriptCodeMirrorEditor
               :key="`${selectedFile.id}:${selectedType}`"
               :model-value="contentDraft"
+              language="javascript"
               frameless
+              :import-suggestions="importSuggestions"
               @update:model-value="scheduleContentSave"
             />
           </div>
@@ -1775,10 +1706,43 @@ async function restoreBuiltInPlugin() {
             class="h-full w-full resize-none bg-transparent p-5 font-mono text-sm leading-6 outline-none disabled:cursor-default"
             @input="scheduleContentSave(($event.target as HTMLTextAreaElement).value)"
           />
+          </div>
         </div>
 
       </main>
     </div>
+
+    <Dialog v-model:open="conditionDialogOpen">
+      <DialogContent class="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>插入条件</DialogTitle>
+          <DialogDescription>
+            条件只引用当前插件 manifest.json 中的本地配置；留空表示始终插入。
+          </DialogDescription>
+        </DialogHeader>
+        <div class="flex flex-col gap-4">
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium">配置引用</span>
+            <Input
+              :model-value="selectedInsertionCondition?.reference ?? ''"
+              class="font-mono text-xs"
+              placeholder="config:local/group/content"
+              @change="updateInsertionConditionReference(($event.target as HTMLInputElement).value)"
+            />
+          </label>
+          <label class="flex flex-col gap-1.5">
+            <span class="text-xs font-medium">期望值</span>
+            <Input
+              :model-value="selectedInsertionConditionEquals()"
+              :disabled="!selectedInsertionCondition?.reference"
+              class="font-mono text-xs"
+              placeholder="合法 JSON；留空时判断真值"
+              @change="updateInsertionConditionEquals(($event.target as HTMLInputElement).value)"
+            />
+          </label>
+        </div>
+      </DialogContent>
+    </Dialog>
 
     <input ref="importInput" type="file" class="hidden" @change="importFile" />
     <div

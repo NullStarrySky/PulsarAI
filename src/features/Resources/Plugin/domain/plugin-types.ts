@@ -12,31 +12,24 @@ export interface PluginFile extends PluginTreeNodeBase {
   content: unknown;
   priority: number;
   memberships: PluginFileMembership[];
-  /**
-   * Data dependencies are resource metadata. They deliberately do not live in
-   * Markdown content, and paths are resolved from the stable data resource ID.
-   */
-  dataReferences: PluginDataReference[];
   contextConfig?: {
     compressionThreshold: number;
   };
   contextPlacement?: {
     depth: number;
+    condition?: PluginInsertionCondition;
   };
+}
+
+export interface PluginInsertionCondition {
+  reference: string;
+  equals?: PluginManifestValue;
 }
 
 export interface PluginFileMembership {
   container: string;
   alias: string;
-  condition?: {
-    reference: string;
-    equals?: PluginManifestValue;
-  };
-}
-
-export interface PluginDataReference {
-  alias: string;
-  dataId: string;
+  condition?: PluginInsertionCondition;
 }
 
 export interface PluginFolder extends PluginTreeNodeBase {

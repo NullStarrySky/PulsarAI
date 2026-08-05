@@ -27,6 +27,7 @@ interface AppearanceSnapshot {
   fontSize: number;
   uiScale: number;
   composerToolbar: ComposerToolbarLayout;
+  composerSendWithEnter: boolean;
   interactiveCodePreview: boolean;
   mobileNavigationBarMode: MobileNavigationBarMode;
 }
@@ -47,6 +48,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
   const fontSize = ref(snapshot.fontSize);
   const uiScale = ref(snapshot.uiScale);
   const composerToolbar = ref(snapshot.composerToolbar);
+  const composerSendWithEnter = ref(snapshot.composerSendWithEnter);
   const interactiveCodePreview = ref(snapshot.interactiveCodePreview);
   const mobileNavigationBarMode = ref(snapshot.mobileNavigationBarMode);
 
@@ -66,6 +68,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
       fontSize,
       uiScale,
       composerToolbar,
+      composerSendWithEnter,
       interactiveCodePreview,
       mobileNavigationBarMode,
     ],
@@ -80,6 +83,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
         fontSize: fontSize.value,
         uiScale: uiScale.value,
         composerToolbar: composerToolbar.value,
+        composerSendWithEnter: composerSendWithEnter.value,
         interactiveCodePreview: interactiveCodePreview.value,
         mobileNavigationBarMode: mobileNavigationBarMode.value,
       });
@@ -134,6 +138,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
     customCss,
     customThemes,
     composerToolbar,
+    composerSendWithEnter,
     interactiveCodePreview,
     fontId,
     fontSize,
@@ -232,6 +237,7 @@ function readSnapshot(): AppearanceSnapshot {
     fontSize: 16,
     uiScale: 100,
     composerToolbar: structuredClone(defaultComposerToolbarLayout),
+    composerSendWithEnter: true,
     interactiveCodePreview: false,
     mobileNavigationBarMode: "topbar",
   };
@@ -249,6 +255,10 @@ function readSnapshot(): AppearanceSnapshot {
       ...parsed,
       customCss: typeof parsed.customCss === "string" ? parsed.customCss : "",
       composerToolbar: normalizeComposerToolbarLayout(parsed.composerToolbar),
+      composerSendWithEnter:
+        typeof parsed.composerSendWithEnter === "boolean"
+          ? parsed.composerSendWithEnter
+          : fallback.composerSendWithEnter,
       interactiveCodePreview:
         typeof parsed.interactiveCodePreview === "boolean"
           ? parsed.interactiveCodePreview

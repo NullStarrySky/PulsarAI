@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { MoreHorizontal, Plus, Search, ShieldCheck, Star, Trash2 } from "lucide-vue-next";
+import { ChevronDown, ChevronRight, File, Folder, MoreHorizontal, Plus, Search, Star, Trash2 } from "lucide-vue-next";
 import { push } from "notivue";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,53 +19,38 @@ import {
   findPluginNodeByPath,
   pluginConventions,
   pluginFileType,
+  sortPluginTreeNodes,
   type Plugin,
 } from "@/features/Resources/Plugin/domain/plugin-types";
-import CapabilityGrantEditor from "@/features/Capabilities/presentation/CapabilityGrantEditor.vue";
-import type { CapabilityGrants } from "@/features/Capabilities/domain/capability";
-import { useDefaultConfigStore } from "@/features/defaultConfigs/application/default-config-store";
 import InlineEditInput from "@/features/UI/presentation/InlineEditInput.vue";
 
 const layout = useLayoutStore();
 const conversation = useConversationStore();
 const pluginStore = usePluginStore();
-const defaults = useDefaultConfigStore();
+const pluginItems = () => (pluginStore as unknown as { plugins: Plugin[] }).plugins;
+const globalPluginItems = () => (pluginStore as unknown as { globalPlugins: Plugin[] }).globalPlugins;
 const editingPluginId = ref("");
 const editingPluginName = ref("");
+const localTreeOpen = ref(true);
 
 onMounted(() => {
-  void Promise.all([conversation.initialize(), pluginStore.initialize(), defaults.load()]);
+  void Promise.all([conversation.initialize(), pluginStore.initialize()]);
 });
-
-const usesDefaultCapabilities = computed(
-  () => conversation.activePackage?.capabilities === undefined,
-);
 const keyword = computed(() => pluginStore.search.trim().toLocaleLowerCase());
-const localPlugin = computed(() => pluginStore.plugins.find(
+const localPlugin = computed(() => pluginItems().find(
   (plugin) => plugin.id === conversation.activePackage?.pluginId,
 ) ?? null);
-const globalPlugins = computed(() => pluginStore.globalPlugins.filter((plugin) =>
+const localRootChildren = computed(() => localPlugin.value
+  ? sortPluginTreeNodes(localPlugin.value.root.children)
+  : []);
+const globalPlugins = computed(() => globalPluginItems().filter((plugin) =>
   !keyword.value
   || plugin.name.toLocaleLowerCase().includes(keyword.value)
   || plugin.shortDescription.toLocaleLowerCase().includes(keyword.value)
 ));
 
-async function setUsesDefaultCapabilities(enabled: boolean) {
-  const active = conversation.activePackage;
-  if (!active) return;
-  await conversation.updatePackage(active.id, {
-    capabilities: enabled
-      ? undefined
-      : structuredClone(defaults.defaultCapabilities),
-  });
-}
 
-async function updatePackageCapabilities(value: CapabilityGrants) {
-  const active = conversation.activePackage;
-  if (active) await conversation.updatePackage(active.id, { capabilities: value });
-}
-
-function openPlugin(plugin: Plugin) {
+function openPlugin(plugin: Plugin, nodeId = plugin.root.id) {
   const activePackage = conversation.activePackage;
   pluginStore.openPlugin(plugin.id);
   layout.openResourceTab({
@@ -74,7 +60,19 @@ function openPlugin(plugin: Plugin) {
     title: plugin.packageId === activePackage?.id
       ? `${activePackage.name}资源`
       : plugin.name,
+    resourceParams: { nodeId },
   });
+}
+
+async function toggleLocalPlugin(enabled: boolean) {
+  const plugin = localPlugin.value;
+  const active = conversation.activePackage;
+  if (!plugin || !active) return;
+  if (!enabled && active.mainPluginId === plugin.id) {
+    push.error("主要插件不能停用，请先选择另一个主要插件。");
+    return;
+  }
+  await pluginStore.updatePlugin(plugin.id, { enabled });
 }
 
 async function createGlobalPlugin() {
@@ -149,7 +147,7 @@ function startRenamePlugin(plugin: Plugin) {
 }
 
 async function confirmRenamePlugin() {
-  const plugin = pluginStore.plugins.find((item) => item.id === editingPluginId.value);
+  const plugin = pluginItems().find((item) => item.id === editingPluginId.value);
   if (!plugin) return;
   const name = editingPluginName.value.trim() || plugin.name;
   await pluginStore.updatePlugin(plugin.id, { name });
@@ -159,7 +157,7 @@ async function confirmRenamePlugin() {
 </script>
 
 <template>
-  <div class="flex min-w-72 flex-1 flex-col overflow-hidden">
+  <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
     <div class="flex h-12 items-center gap-2 border-b px-3">
       <div class="relative min-w-0 flex-1">
         <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -174,59 +172,71 @@ async function confirmRenamePlugin() {
       </Button>
     </div>
 
-    <div class="flex-1 overflow-y-auto px-2 pb-3">
-      <details class="mt-3 rounded-lg border bg-card/40">
-        <summary class="flex min-h-11 cursor-pointer list-none items-center gap-2 px-3 text-sm font-medium">
-          <ShieldCheck class="size-4 text-muted-foreground" />
-          Feature API 权限
-        </summary>
-        <div class="border-t p-2">
-          <div class="mb-2 flex min-h-10 items-center justify-between gap-3 px-1">
-            <div>
-              <div class="text-xs font-medium">继承默认权限</div>
-              <div class="text-[11px] text-muted-foreground">关闭后仅影响当前角色包。</div>
-            </div>
-            <Switch size="sm" :model-value="usesDefaultCapabilities" @update:model-value="setUsesDefaultCapabilities(Boolean($event))" />
-          </div>
-          <CapabilityGrantEditor
-            v-if="conversation.activePackage?.capabilities"
-            compact
-            :model-value="conversation.activePackage.capabilities"
-            @update:model-value="updatePackageCapabilities"
-          />
-          <p v-else class="px-1 pb-1 text-xs leading-5 text-muted-foreground">
-            当前角色包使用“设置 → 默认项”中的权限配置。
-          </p>
-        </div>
-      </details>
-
+    <ScrollArea class="min-h-0 flex-1">
+      <div class="px-2 pb-3">
       <section class="pt-3">
-        <div class="px-2.5 pb-1.5 text-[11px] font-medium text-muted-foreground">角色资源</div>
+        <div class="px-2.5 pb-1.5 text-[11px] font-medium text-muted-foreground">本地插件</div>
         <div
           v-if="localPlugin"
-          role="button"
-          tabindex="0"
-          class="group mb-0.5 flex min-h-12 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-accent/55"
-          @click="openPlugin(localPlugin)"
-          @keydown.enter="openPlugin(localPlugin)"
+          class="overflow-hidden rounded-lg border bg-card/40"
         >
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-1.5">
-              <span class="truncate text-sm font-medium">{{ conversation.activePackage?.name }}资源</span>
-              <span v-if="conversation.activePackage?.mainPluginId === localPlugin.id" class="text-[10px] font-medium text-primary">主要</span>
-            </div>
-            <p class="truncate text-xs text-muted-foreground">角色包唯一的本地文档与资源容器</p>
+          <div class="group flex min-h-11 items-center gap-2 px-2.5">
+            <button
+              type="button"
+              class="flex min-w-0 flex-1 items-center gap-2 text-left"
+              @click="localTreeOpen = !localTreeOpen"
+            >
+              <ChevronDown v-if="localTreeOpen" class="size-3.5 shrink-0 text-muted-foreground" />
+              <ChevronRight v-else class="size-3.5 shrink-0 text-muted-foreground" />
+              <Folder class="size-4 shrink-0 text-muted-foreground" />
+              <span class="min-w-0 flex-1">
+                <span class="flex min-w-0 items-center gap-1.5">
+                  <span class="truncate text-sm font-medium">{{ conversation.activePackage?.name }}资源</span>
+                  <span v-if="conversation.activePackage?.mainPluginId === localPlugin.id" class="shrink-0 text-[10px] font-medium text-primary">主要</span>
+                </span>
+                <span class="block truncate text-[11px] text-muted-foreground">默认本地插件结构</span>
+              </span>
+            </button>
+            <Switch
+              size="sm"
+              :model-value="localPlugin.enabled || conversation.activePackage?.mainPluginId === localPlugin.id"
+              @update:model-value="toggleLocalPlugin(Boolean($event))"
+            />
+            <Button
+              v-if="conversation.activePackage?.mainPluginId !== localPlugin.id && hasGenerationProcess(localPlugin)"
+              size="icon"
+              variant="ghost"
+              class="size-7"
+              title="设为主要插件"
+              @click="setMainPlugin(localPlugin)"
+            >
+              <Star class="size-4" />
+            </Button>
           </div>
-          <Button
-            v-if="conversation.activePackage?.mainPluginId !== localPlugin.id && hasGenerationProcess(localPlugin)"
-            size="icon"
-            variant="ghost"
-            class="size-7"
-            title="设为主要插件"
-            @click.stop="setMainPlugin(localPlugin)"
-          >
-            <Star class="size-4" />
-          </Button>
+
+          <div v-if="localTreeOpen" class="border-t px-2 py-1.5">
+            <button
+              v-for="node in localRootChildren"
+              :key="node.id"
+              type="button"
+              class="flex h-8 w-full items-center gap-2 rounded-md pl-5 pr-2 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              @click="openPlugin(localPlugin, node.id)"
+            >
+              <Folder v-if="node.kind === 'folder'" class="size-3.5 shrink-0" />
+              <File v-else class="size-3.5 shrink-0" />
+              <span class="truncate">{{ node.name }}</span>
+            </button>
+            <button
+              type="button"
+              class="mt-1 flex h-8 w-full items-center rounded-md px-2 text-left text-xs font-medium text-primary transition-colors hover:bg-accent"
+              @click="openPlugin(localPlugin)"
+            >
+              打开完整文件树
+            </button>
+          </div>
+        </div>
+        <div v-else class="rounded-lg border border-dashed px-3 py-4 text-xs text-muted-foreground">
+          请先选择角色包；本地插件会按默认结构自动创建。
         </div>
       </section>
 
@@ -289,6 +299,7 @@ async function confirmRenamePlugin() {
           </div>
         </div>
       </section>
-    </div>
+      </div>
+    </ScrollArea>
   </div>
 </template>

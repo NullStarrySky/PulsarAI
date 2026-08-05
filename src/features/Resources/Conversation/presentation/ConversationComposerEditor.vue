@@ -2,11 +2,10 @@
 import { Crepe, CrepeFeature } from "@milkdown/crepe";
 import { replaceAll } from "@milkdown/kit/utils";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/vue";
-import { computed, defineComponent, h, ref, watch, type PropType } from "vue";
+import { computed, defineComponent, h, ref, watch } from "vue";
 import { conversationCrepeFeatureConfigs, conversationCrepeFeatures } from "./conversation-crepe";
-import { createPluginReferenceHighlightFeature } from "@/features/Resources/Plugin/presentation/plugin-reference-milkdown";
-import type { PluginReferenceSuggestion } from "@/features/Resources/Plugin/domain/plugin-reference";
 import { yamlFrontmatterFeature } from "@/features/Resources/InteractiveDoc/presentation/frontmatter-milkdown";
+import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
 
 const props = withDefaults(
   defineProps<{
@@ -14,16 +13,14 @@ const props = withDefaults(
     placeholder?: string;
     enableBlockEdit?: boolean;
     enableAi?: boolean;
-    enableReferenceSyntax?: boolean;
-    referenceSuggestions?: PluginReferenceSuggestion[];
+    enableTopBar?: boolean;
   }>(),
   {
     modelValue: "",
     placeholder: "输入消息...",
     enableBlockEdit: false,
     enableAi: true,
-    enableReferenceSyntax: false,
-    referenceSuggestions: () => [],
+    enableTopBar: false,
   },
 );
 
@@ -31,6 +28,20 @@ const emit = defineEmits<{
   "update:modelValue": [value: string];
   submit: [];
 }>();
+const appearance = useAppearanceStore();
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key !== "Enter" || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) {
+    return;
+  }
+  const shouldSubmit = appearance.composerSendWithEnter
+    ? !event.shiftKey
+    : event.shiftKey;
+  if (!shouldSubmit) return;
+  event.preventDefault();
+  event.stopPropagation();
+  emit("submit");
+}
 
 const ComposerInner = defineComponent({
   name: "ConversationComposerEditorInner",
@@ -51,13 +62,9 @@ const ComposerInner = defineComponent({
       type: Boolean,
       default: true,
     },
-    enableReferenceSyntax: {
+    enableTopBar: {
       type: Boolean,
       default: false,
-    },
-    referenceSuggestions: {
-      type: Array as PropType<PluginReferenceSuggestion[]>,
-      default: () => [],
     },
   },
   emits: {
@@ -69,6 +76,7 @@ const ComposerInner = defineComponent({
       ...conversationCrepeFeatures,
       [CrepeFeature.BlockEdit]: innerProps.enableBlockEdit,
       [CrepeFeature.AI]: innerProps.enableAi,
+      [CrepeFeature.TopBar]: innerProps.enableTopBar,
     }));
     let applyingExternalValue = false;
     const { loading, get } = useEditor((root) => {
@@ -85,13 +93,6 @@ const ComposerInner = defineComponent({
         },
       });
       editor.addFeature(yamlFrontmatterFeature);
-      if (innerProps.enableReferenceSyntax) {
-        editor.addFeature(
-          createPluginReferenceHighlightFeature(
-            () => innerProps.referenceSuggestions,
-          ),
-        );
-      }
       editor.on((listener) => {
         listener.markdownUpdated((_ctx, nextMarkdown, previousMarkdown) => {
           if (applyingExternalValue || nextMarkdown === previousMarkdown) {
@@ -144,15 +145,14 @@ const ComposerInner = defineComponent({
     <div
       class="conversation-composer-editor min-h-12 mobile:min-h-14"
       :class="{ 'conversation-composer-editor--block-edit': props.enableBlockEdit }"
-      @keydown.ctrl.enter.prevent="emit('submit')"
+      @keydown="handleKeydown"
     >
       <ComposerInner
         :model-value="props.modelValue"
         :placeholder="props.placeholder"
         :enable-block-edit="props.enableBlockEdit"
         :enable-ai="props.enableAi"
-        :enable-reference-syntax="props.enableReferenceSyntax"
-        :reference-suggestions="props.referenceSuggestions"
+        :enable-top-bar="props.enableTopBar"
         @update:model-value="emit('update:modelValue', $event)"
       />
     </div>

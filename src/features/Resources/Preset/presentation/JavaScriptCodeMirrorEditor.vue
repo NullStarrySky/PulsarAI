@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
+import { vue } from "@codemirror/lang-vue";
 import { autocompletion, type CompletionContext } from "@codemirror/autocomplete";
 import { EditorState, type Range } from "@codemirror/state";
-import { oneDark } from "@codemirror/theme-one-dark";
 import {
   Decoration,
   EditorView,
@@ -13,19 +13,28 @@ import {
 } from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { oneDarkPro, oneDarkProColors } from "./one-dark-pro-theme";
 
-const props = defineProps<{
-  modelValue: string;
-  language?: "javascript" | "json" | "markdown" | "vue";
-  frameless?: boolean;
-  readonly?: boolean;
-  referenceSuggestions?: Array<{
-    target: string;
-    label: string;
-    detail?: string;
-    description?: string;
-  }>;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: string;
+    language?: "javascript" | "json" | "markdown" | "vue";
+    frameless?: boolean;
+    readonly?: boolean;
+    importSuggestions?: Array<{
+      label: string;
+      apply: string;
+      detail?: string;
+      description?: string;
+    }>;
+  }>(),
+  {
+    language: "javascript",
+    frameless: false,
+    readonly: false,
+    importSuggestions: () => [],
+  },
+);
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
@@ -41,13 +50,13 @@ function pluginSyntaxDecorations() {
       const source = view.state.doc.sliceString(visible.from, visible.to);
       for (
         const match of source.matchAll(
-          /<@[^>\r\n]+>|\{\{[\s\S]*?\}\}|\[\[[\s\S]*?\]\]/g,
+          /\bimports(?:\s*\.\s*[A-Za-z_$][\w$]*){1,3}\s*\([^\r\n]*?\)|\{\{[\s\S]*?\}\}|\[\[[\s\S]*?\]\]/g,
         )
       ) {
         if (match.index == null) continue;
         const token = match[0];
-        const className = token.startsWith("<@")
-          ? "cm-plugin-reference"
+        const className = token.startsWith("imports")
+          ? "cm-plugin-import"
           : token.startsWith("{{")
             ? "cm-plugin-expression"
             : "cm-plugin-chat";
@@ -78,20 +87,55 @@ function pluginSyntaxDecorations() {
 }
 
 function pluginSyntaxCompletions(context: CompletionContext) {
-  const before = context.matchBefore(/(?:<@|\{\{|\[\[)[^>\]}\r\n]*$/);
-  if (!before) return null;
-  if (before.text.startsWith("<@")) {
+  const importCall = context.matchBefore(
+    /\bimports(?:\s*\.\s*[A-Za-z_$][\w$]*){0,3}(?:\s*\(\s*["'][^"'\r\n]*)?$/,
+  );
+  if (importCall) {
     return {
-      from: before.from,
-      options: (props.referenceSuggestions ?? []).map((item) => ({
-        label: `<@${item.target}>`,
-        displayLabel: item.label,
-        detail: item.detail,
-        info: item.description,
-        type: "variable",
-      })),
+      from: importCall.from,
+      options: [
+        {
+          label: "imports.resource(path)",
+          apply: 'imports.resource("./resource.md")',
+          detail: "按当前资源相对路径导入",
+          type: "function",
+        },
+        {
+          label: "imports.resourceById(id)",
+          apply: 'imports.resourceById("resource-id")',
+          detail: "按稳定资源 ID 导入",
+          type: "function",
+        },
+        {
+          label: "imports.container(scope, name)",
+          apply: 'imports.container("plugin", "容器名")',
+          detail: "读取 local 或 global 容器",
+          type: "function",
+        },
+        {
+          label: "imports.config.local(group, content)",
+          apply: 'imports.config.local("group", "content")',
+          detail: "读取当前插件配置",
+          type: "function",
+        },
+        {
+          label: "imports.config.global(plugin, group, content)",
+          apply: 'imports.config.global("plugin-id", "group", "content")',
+          detail: "读取全局插件配置",
+          type: "function",
+        },
+        ...(props.importSuggestions ?? []).map((item) => ({
+          label: item.label,
+          apply: item.apply,
+          detail: item.detail,
+          info: item.description,
+          type: "variable",
+        })),
+      ],
     };
   }
+  const before = context.matchBefore(/(?:\{\{|\[\[)[^\]}\r\n]*$/);
+  if (!before) return null;
   return {
     from: before.from,
     options: before.text.startsWith("{{")
@@ -111,8 +155,10 @@ onMounted(() => {
         ? [json()]
         : props.language === "javascript"
           ? [javascript()]
-          : []),
-      ...(props.language === "markdown"
+          : props.language === "vue"
+            ? [vue()]
+            : []),
+      ...(props.language === "markdown" || props.language === "javascript"
         ? [
             pluginSyntaxDecorations(),
             autocompletion({
@@ -121,7 +167,7 @@ onMounted(() => {
             }),
           ]
         : []),
-      oneDark,
+      oneDarkPro,
       EditorState.readOnly.of(Boolean(props.readonly)),
       EditorView.editable.of(!props.readonly),
       EditorView.lineWrapping,
@@ -132,26 +178,31 @@ onMounted(() => {
       EditorView.theme({
         "&": {
           height: "100%",
-          backgroundColor: props.frameless ? "transparent" : "hsl(var(--background))",
+          backgroundColor: oneDarkProColors.background,
           border: props.frameless ? "0" : "1px solid hsl(var(--border))",
           borderRadius: props.frameless ? "0" : "0.375rem",
           fontSize: "0.875rem",
         },
         ".cm-scroller": {
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          fontFamily: "var(--font-code)",
+          fontFeatureSettings: '"calt" 1, "liga" 1, "zero" 1',
+          fontVariantLigatures: "common-ligatures contextual",
+          fontVariantNumeric: "tabular-nums slashed-zero",
         },
         ".cm-content": {
           minHeight: "100%",
           padding: "0.75rem",
         },
         ".cm-gutters": {
-          backgroundColor: props.frameless ? "transparent" : "hsl(var(--card))",
-          borderRight: props.frameless ? "0" : "1px solid hsl(var(--border))",
+          backgroundColor: oneDarkProColors.background,
+          borderRight: props.frameless
+            ? "0"
+            : `1px solid ${oneDarkProColors.activeLine}`,
         },
         "&.cm-focused": {
           outline: props.frameless ? "0" : "1px solid hsl(var(--ring))",
         },
-        ".cm-plugin-reference": {
+        ".cm-plugin-import": {
           color: "hsl(var(--primary))",
           backgroundColor: "color-mix(in srgb, hsl(var(--primary)) 14%, transparent)",
           borderRadius: "0.25rem",

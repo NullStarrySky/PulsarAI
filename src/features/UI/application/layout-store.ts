@@ -1,5 +1,50 @@
 import { defineStore } from "pinia";
 
+export const shellSidebarMinWidth = 224;
+export const shellSidebarMaxWidth = 480;
+export const shellSidebarDefaultWidth = 288;
+
+const sidebarStorageKey = "pulsarai:shell-sidebars:v1";
+
+function clampSidebarWidth(width: number) {
+  return Math.min(
+    shellSidebarMaxWidth,
+    Math.max(shellSidebarMinWidth, Math.round(width)),
+  );
+}
+
+function readSidebarWidths() {
+  const fallback = {
+    leftSidebarWidth: shellSidebarDefaultWidth,
+    rightSidebarWidth: shellSidebarDefaultWidth,
+  };
+  if (typeof localStorage === "undefined") return fallback;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(sidebarStorageKey) ?? "{}") as {
+      leftSidebarWidth?: unknown;
+      rightSidebarWidth?: unknown;
+    };
+    return {
+      leftSidebarWidth: typeof parsed.leftSidebarWidth === "number"
+        ? clampSidebarWidth(parsed.leftSidebarWidth)
+        : fallback.leftSidebarWidth,
+      rightSidebarWidth: typeof parsed.rightSidebarWidth === "number"
+        ? clampSidebarWidth(parsed.rightSidebarWidth)
+        : fallback.rightSidebarWidth,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function persistSidebarWidths(leftSidebarWidth: number, rightSidebarWidth: number) {
+  if (typeof localStorage === "undefined") return;
+  localStorage.setItem(sidebarStorageKey, JSON.stringify({
+    leftSidebarWidth,
+    rightSidebarWidth,
+  }));
+}
+
 export interface WorkspaceTab {
   id: string;
   title: string;
@@ -20,6 +65,7 @@ const defaultTabs: WorkspaceTab[] = [];
 
 export const useLayoutStore = defineStore("layout", {
   state: () => ({
+    ...readSidebarWidths(),
     leftSidebarOpen: true,
     rightSidebarOpen: false,
     settingsOpen: false,
@@ -36,6 +82,15 @@ export const useLayoutStore = defineStore("layout", {
     },
     toggleRightSidebar() {
       this.rightSidebarOpen = !this.rightSidebarOpen;
+    },
+    setSidebarWidth(side: "left" | "right", width: number) {
+      const normalized = clampSidebarWidth(width);
+      if (side === "left") {
+        this.leftSidebarWidth = normalized;
+      } else {
+        this.rightSidebarWidth = normalized;
+      }
+      persistSidebarWidths(this.leftSidebarWidth, this.rightSidebarWidth);
     },
     closeSidebars() {
       this.leftSidebarOpen = false;

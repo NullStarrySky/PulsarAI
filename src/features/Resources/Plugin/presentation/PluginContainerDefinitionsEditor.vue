@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -86,9 +87,8 @@ function addContainer() {
     while (names.has(`新容器${index}`)) index += 1;
     containers.push({
       name: `新容器${index}`,
-      scope: "plugin",
+      scope: "local",
       description: "",
-      imports: [],
     });
   });
 }
@@ -111,42 +111,10 @@ function removeContainer(index: number) {
   });
 }
 
-function addImport(containerIndex: number) {
-  updateDefinitions((containers) => {
-    containers[containerIndex]?.imports.push({
-      alias: "container",
-      target: "container:plugin/",
-    });
-  });
-}
-
-function updateImport(
-  containerIndex: number,
-  importIndex: number,
-  patch: Partial<{ alias: string; target: string }>,
-) {
-  updateDefinitions((containers) => {
-    const item = containers[containerIndex]?.imports[importIndex];
-    if (item) Object.assign(item, patch);
-  });
-}
-
-function removeImport(containerIndex: number, importIndex: number) {
-  updateDefinitions((containers) => {
-    containers[containerIndex]?.imports.splice(importIndex, 1);
-  });
-}
-
 function containerIssue(container: PluginContainerDeclaration) {
   if (!container.name.trim()) return "容器名称不能为空";
   if (duplicateKeys.value.has(`${container.scope}:${container.name.trim()}`)) {
     return "同一作用域中的容器名称重复";
-  }
-  const aliases = container.imports.map((item) => item.alias.trim());
-  if (aliases.some((alias) => !alias)) return "引用别名不能为空";
-  if (new Set(aliases).size !== aliases.length) return "引用别名重复";
-  if (container.imports.some((item) => !item.target.trim())) {
-    return "引用目标不能为空";
   }
   return "";
 }
@@ -187,7 +155,7 @@ function toggleDetails(
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto bg-background">
+  <ScrollArea class="h-full bg-background">
     <div class="mx-auto w-full max-w-[1040px] px-4 pb-12 pt-4 mobile:px-3">
       <div class="mb-3 flex items-center justify-between gap-3">
         <div class="min-w-0">
@@ -254,9 +222,8 @@ function toggleDetails(
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="root">root</SelectItem>
-                  <SelectItem value="plugin">plugin</SelectItem>
-                  <SelectItem value="global">global</SelectItem>
+                  <SelectItem value="local">本地</SelectItem>
+                  <SelectItem value="global">全局</SelectItem>
                 </SelectContent>
               </Select>
             </label>
@@ -385,72 +352,6 @@ function toggleDetails(
               </p>
             </section>
 
-            <section class="col-span-2 min-w-0 rounded-md border bg-background p-2.5 mobile:col-span-1">
-              <div class="mb-2 flex items-center justify-between gap-3">
-                <div class="min-w-0">
-                  <h3 class="text-xs font-medium">引用容器命名空间</h3>
-                  <p class="truncate text-[10px] text-muted-foreground">
-                    保留命名空间，不展开、复制或覆盖成员。
-                  </p>
-                </div>
-                <Button
-                  v-if="!readonly"
-                  size="sm"
-                  variant="ghost"
-                  class="h-7 shrink-0 px-2 text-xs"
-                  @click="addImport(containerIndex)"
-                >
-                  <Plus class="mr-1 size-3.5" />
-                  添加引用
-                </Button>
-              </div>
-
-              <div
-                v-for="(item, importIndex) in container.imports"
-                :key="importIndex"
-                class="grid grid-cols-[11rem_minmax(0,1fr)_auto] items-center gap-2 py-1 mobile:grid-cols-[minmax(0,1fr)_auto]"
-              >
-                <Input
-                  :model-value="item.alias"
-                  :disabled="readonly"
-                  class="h-8 font-mono text-xs"
-                  placeholder="别名"
-                  @update:model-value="
-                    updateImport(containerIndex, importIndex, {
-                      alias: String($event),
-                    })
-                  "
-                />
-                <Input
-                  :model-value="item.target"
-                  :disabled="readonly"
-                  class="h-8 font-mono text-xs mobile:col-start-1"
-                  placeholder="container:plugin/容器名称"
-                  @update:model-value="
-                    updateImport(containerIndex, importIndex, {
-                      target: String($event),
-                    })
-                  "
-                />
-                <Button
-                  v-if="!readonly"
-                  size="icon"
-                  variant="ghost"
-                  class="size-8 mobile:col-start-2 mobile:row-start-1"
-                  title="删除导入"
-                  @click="removeImport(containerIndex, importIndex)"
-                >
-                  <Trash2 class="size-3.5" />
-                </Button>
-              </div>
-
-              <p
-                v-if="container.imports.length === 0"
-                class="py-1 text-xs text-muted-foreground"
-              >
-                当前容器没有引用其他容器命名空间。
-              </p>
-            </section>
           </div>
         </section>
       </div>
@@ -477,9 +378,9 @@ function toggleDetails(
       </div>
 
       <p class="mt-5 text-[11px] leading-5 text-muted-foreground">
-        root 只对插件根目录资源可见；plugin 对当前插件可见；global
-        对当前启用的插件集合可见。最终上下文深度由资源自身的放置元数据控制，不属于普通容器声明。
+        本地容器只对当前插件可见；全局容器对当前启用的插件集合可见，不再按文件夹划分范围。
+        最终上下文深度由资源自身的放置元数据控制，不属于普通容器声明。
       </p>
     </div>
-  </div>
+  </ScrollArea>
 </template>
