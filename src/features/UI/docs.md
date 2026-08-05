@@ -16,7 +16,7 @@ ordinary selectors can be overridden without creating or selecting a theme.
 
 `search/presentation/CommandSearchDialog.vue` composes feature-owned results. Commands, character packages, and conversations use their owning stores; plugin metadata comes from the Plugin store, while plugin paths, filenames, and content use the Plugin feature's SurrealDB-backed node search. Plugin resource results retain stable plugin/node IDs and open the matching node in its owning workspace page. Database searches are debounced and stale responses are ignored.
 
-Shell sidebar widths are desktop-resizable, clamped to a shared minimum, and persisted by the layout store. Application-owned scrolling regions use the shared shadcn-vue `ScrollArea` by default so sidebars, settings, trees, and long panels share one scrollbar treatment; specialized editors and virtualizers keep ownership of their own viewport.
+Shell sidebar widths are desktop-resizable, clamped to a shared minimum, and persisted by the layout store. The General settings page can optionally persist and restore the main window's open workspace tabs; subwindows never overwrite that snapshot. Application-owned scrolling regions use the shared shadcn-vue `ScrollArea` by default, whose wrapper mounts visible vertical and horizontal `ScrollBar` components so sidebars, settings, trees, and long panels share one scrollbar treatment; specialized editors and virtualizers keep ownership of their own viewport.
 
 The conversation right sidebar hosts Conversation, Task, and Plugin tabs. The Plugin feature supplies the third tab's contents, including the package-local folder tree and activation control. The conversation left sidebar remains package navigation and generic application entry points only.
 

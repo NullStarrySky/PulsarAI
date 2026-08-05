@@ -91,6 +91,7 @@ import NovelConversationRenderer from "@/features/Resources/Conversation/present
 import ConversationComposerToolbarTools from "@/features/Resources/Conversation/presentation/ConversationComposerToolbarTools.vue";
 import ConversationBranchMapDialog from "@/features/Resources/Conversation/presentation/ConversationBranchMapDialog.vue";
 import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
+import type { ComposerToolId } from "@/features/UI/domain/composer-toolbar";
 
 const props = defineProps<{
   packageId?: string;
@@ -119,6 +120,9 @@ const editing = reactive({
 });
 const pointerStartX = ref<number | null>(null);
 const handledNavigationRequestId = ref(0);
+const promptOptimizationToolIds = computed<ComposerToolId[]>(() =>
+  appearance.composerToolbar.unused.includes("optimize") ? [] : ["optimize"],
+);
 
 const activePath = computed(() =>
   conversation.activePath.filter((container) => container.role !== "system" || conversation.currentMessage(container)?.content),
@@ -915,6 +919,7 @@ async function handleMessageNavigationRequest() {
         <div class="flex items-center justify-between gap-2">
           <div class="flex min-w-0 items-center gap-1">
             <ConversationComposerToolbarTools
+              v-model:prompt="input"
               :tool-ids="appearance.composerToolbar.left"
               @attach="requestAttachments()"
               @whiteboard="whiteboardOpen = true"
@@ -924,6 +929,7 @@ async function handleMessageNavigationRequest() {
           </div>
           <div class="flex shrink-0 items-center gap-1">
             <ConversationComposerToolbarTools
+              v-model:prompt="input"
               :tool-ids="appearance.composerToolbar.right"
               @attach="requestAttachments()"
               @whiteboard="whiteboardOpen = true"
@@ -978,15 +984,20 @@ async function handleMessageNavigationRequest() {
           />
         </div>
         <DialogFooter>
-          <Button
-            size="icon"
-            variant="ghost"
-            class="mr-auto"
-            title="附加文件"
-            @click="requestAttachments()"
-          >
-            <Paperclip class="size-4" />
-          </Button>
+          <div class="mr-auto flex items-center gap-1">
+            <Button
+              size="icon"
+              variant="ghost"
+              title="附加文件"
+              @click="requestAttachments()"
+            >
+              <Paperclip class="size-4" />
+            </Button>
+            <ConversationComposerToolbarTools
+              v-model:prompt="input"
+              :tool-ids="promptOptimizationToolIds"
+            />
+          </div>
           <Button variant="outline" @click="fullscreenInputOpen = false">取消</Button>
           <Button
             :disabled="(!input.trim() && pendingAttachments.length === 0 && !selectedAction) || conversation.activeConversationGenerating"

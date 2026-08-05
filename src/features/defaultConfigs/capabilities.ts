@@ -15,7 +15,7 @@ export const capabilities: CapabilityDefinition = {
   documentation: {
     overview: "管理新资源与未显式覆盖设置时采用的应用级默认值。模型引用以 provider/model 字符串保存，权限默认值不通过此 API 修改。",
     notes: [
-      "可读取和写入默认聊天、快速、向量化与图片生成模型。",
+      "可读取和写入默认聊天、快速、向量化、媒体与提示词优化配置。",
       "模型连接密钥保存在独立 Secret 存储中，永远不会由此 Feature 返回。",
     ],
     types: [{
@@ -25,7 +25,11 @@ export const capabilities: CapabilityDefinition = {
   | "defaultChatModel"
   | "fastModel"
   | "embeddingModel"
-  | "imageModel";`,
+  | "imageModel"
+  | "speechModel"
+  | "transcriptionModel"
+  | "promptOptimizationModel"
+  | "promptOptimizationPrompt";`,
     }],
   },
   subCaps: {

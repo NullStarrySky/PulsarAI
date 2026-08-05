@@ -405,7 +405,7 @@ API 对象：`environment.defaultConfigs`
 <a id="feature-defaultConfigs-notes"></a>
 ### 使用说明
 
-- 可读取和写入默认聊天、快速、向量化与图片生成模型。
+- 可读取和写入默认聊天、快速、向量化、媒体与提示词优化配置。
 - 模型连接密钥保存在独立 Secret 存储中，永远不会由此 Feature 返回。
 
 <a id="feature-defaultConfigs-types"></a>
@@ -420,7 +420,11 @@ type DefaultConfigKey =
   | "defaultChatModel"
   | "fastModel"
   | "embeddingModel"
-  | "imageModel";
+  | "imageModel"
+  | "speechModel"
+  | "transcriptionModel"
+  | "promptOptimizationModel"
+  | "promptOptimizationPrompt";
 ```
 
 <a id="feature-defaultConfigs-api"></a>
@@ -1488,6 +1492,7 @@ API 对象：`environment.ui`
 type ComposerToolId =
   | "model"
   | "reasoning"
+  | "optimize"
   | "attachment"
   | "whiteboard"
   | "map"

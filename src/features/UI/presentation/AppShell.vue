@@ -36,12 +36,13 @@ let unlistenCloseRequested: UnlistenFn | undefined;
 onMounted(async () => {
   appearance.initialize();
   responsive.refreshPlatform();
+  const appWindow = getCurrentWindow();
+  layout.initializeTabSession(appWindow.label === "main");
   applySubWindowParams();
   registerCoreCommands();
   registerMiscCommands();
   void useStatisticStore().recordAppLaunch();
   window.addEventListener("keydown", onGlobalKeydown, { capture: true });
-  const appWindow = getCurrentWindow();
   if (appWindow.label === "main") {
     unlistenCloseRequested = await appWindow.onCloseRequested((event) => {
       event.preventDefault();

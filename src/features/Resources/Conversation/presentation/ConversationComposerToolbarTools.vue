@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import {
   BrainCircuit,
   GitFork,
+  LoaderCircle,
   Maximize2,
   Paperclip,
   PenTool,
+  Sparkles,
 } from "lucide-vue-next";
+import { push } from "notivue";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -19,20 +22,26 @@ import { useDefaultConfigStore } from "@/features/defaultConfigs/application/def
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 import type { ConversationReasoningEffort } from "@/features/Resources/Conversation/domain/conversation-types";
 import type { ComposerToolId } from "@/features/UI/domain/composer-toolbar";
+import { optimizeComposerPrompt } from "@/features/Resources/Conversation/application/prompt-optimizer";
 
-defineProps<{
+const props = withDefaults(defineProps<{
   toolIds: ComposerToolId[];
-}>();
+  prompt?: string;
+}>(), {
+  prompt: "",
+});
 
 const emit = defineEmits<{
   attach: [];
   whiteboard: [];
   map: [];
   fullscreen: [];
+  "update:prompt": [value: string];
 }>();
 
 const defaults = useDefaultConfigStore();
 const conversation = useConversationStore();
+const optimizingPrompt = ref(false);
 const reasoningLevels = [
   { value: "none", label: "关闭" },
   { value: "low", label: "低" },
@@ -66,6 +75,19 @@ function updateReasoning(values: number[] | undefined) {
     return;
   }
   void conversation.setConversationReasoningEffort(conversationId, effort);
+}
+
+async function optimizePrompt() {
+  if (!props.prompt.trim() || optimizingPrompt.value) return;
+  optimizingPrompt.value = true;
+  try {
+    emit("update:prompt", await optimizeComposerPrompt(props.prompt));
+    push.success("提示词已优化");
+  } catch (error) {
+    push.error(error instanceof Error ? error.message : "提示词优化失败");
+  } finally {
+    optimizingPrompt.value = false;
+  }
 }
 
 </script>
@@ -115,6 +137,18 @@ function updateReasoning(values: number[] | undefined) {
         </div>
       </PopoverContent>
     </Popover>
+    <Button
+      v-else-if="toolId === 'optimize'"
+      size="icon"
+      variant="ghost"
+      class="size-8 mobile:size-10"
+      title="优化提示词"
+      :disabled="!props.prompt.trim() || optimizingPrompt"
+      @click="optimizePrompt"
+    >
+      <LoaderCircle v-if="optimizingPrompt" class="animate-spin" />
+      <Sparkles v-else />
+    </Button>
     <Button
       v-else-if="toolId === 'attachment'"
       size="icon"

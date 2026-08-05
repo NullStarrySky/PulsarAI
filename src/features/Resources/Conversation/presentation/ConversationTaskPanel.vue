@@ -30,9 +30,12 @@ import {
 } from "@/features/Resources/Plugin/domain/plugin-regex";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import ConversationComposerEditor from "./ConversationComposerEditor.vue";
+import ConversationComposerToolbarTools from "./ConversationComposerToolbarTools.vue";
 import ConversationMarkdown from "./ConversationMarkdown.vue";
 import GenerationComponentDialog from "./GenerationComponentDialog.vue";
 import { useConversationStore } from "../application/conversation-store";
+import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
+import type { ComposerToolId } from "@/features/UI/domain/composer-toolbar";
 import type {
   Conversation,
   ConversationResourceBinding,
@@ -42,11 +45,15 @@ const conversation = useConversationStore();
 const plugins = usePluginStore();
 const pluginItems = () => (plugins as unknown as { plugins: Plugin[] }).plugins;
 const layout = useLayoutStore();
+const appearance = useAppearanceStore();
 const selectedConversationId = ref("");
 const selectedPackageId = ref("");
 const input = ref("");
 const editingTitle = ref(false);
 const titleDraft = ref("");
+const taskPromptTools = computed<ComposerToolId[]>(() =>
+  appearance.composerToolbar.unused.includes("optimize") ? [] : ["optimize"],
+);
 
 onMounted(() => {
   void Promise.all([conversation.initialize(), plugins.initialize()]);
@@ -408,7 +415,11 @@ async function send() {
         placeholder="围绕当前资源提问…"
         @submit="send"
       />
-      <div class="mt-1 flex justify-end">
+      <div class="mt-1 flex items-center justify-between gap-2">
+        <ConversationComposerToolbarTools
+          v-model:prompt="input"
+          :tool-ids="taskPromptTools"
+        />
         <Button
           size="icon"
           class="size-8"

@@ -23,6 +23,7 @@ export const capabilities: CapabilityDefinition = {
         definition: `type ComposerToolId =
   | "model"
   | "reasoning"
+  | "optimize"
   | "attachment"
   | "whiteboard"
   | "map"

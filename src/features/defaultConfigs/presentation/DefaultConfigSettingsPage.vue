@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { MoreHorizontal, Plus, Trash2, Upload } from "lucide-vue-next";
 import { push } from "notivue";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import SettingGroup from "@/features/Setting/presentation/SettingGroup.vue";
 import SettingItem from "@/features/Setting/presentation/SettingItem.vue";
 import SettingPage from "@/features/Setting/presentation/SettingPage.vue";
@@ -23,11 +24,29 @@ const defaults = useDefaultConfigStore();
 const pluginStore = usePluginStore();
 const layout = useLayoutStore();
 const importInput = ref<HTMLInputElement | null>(null);
+const optimizationPromptDraft = ref("");
 const globalPlugins = computed(() => pluginStore.globalPlugins);
 
 onMounted(async () => {
   await Promise.all([defaults.load(), pluginStore.initialize()]);
+  optimizationPromptDraft.value = defaults.promptOptimizationPrompt;
 });
+
+onBeforeUnmount(() => {
+  if (optimizationPromptDraft.value !== defaults.promptOptimizationPrompt) {
+    void defaults.setPromptOptimizationPrompt(optimizationPromptDraft.value);
+  }
+});
+
+function updateOptimizationPromptDraft(value: string | number) {
+  optimizationPromptDraft.value = String(value);
+}
+
+function saveOptimizationPrompt() {
+  if (optimizationPromptDraft.value !== defaults.promptOptimizationPrompt) {
+    void defaults.setPromptOptimizationPrompt(optimizationPromptDraft.value);
+  }
+}
 
 function openPlugin(plugin: Plugin) {
   pluginStore.openPlugin(plugin.id);
@@ -122,6 +141,30 @@ async function deleteGlobalPlugin(plugin: Plugin) {
           button-class="w-full justify-between sm:w-80"
           @update:model-value="defaults.setTranscriptionModel"
         />
+      </SettingItem>
+    </SettingGroup>
+
+    <SettingGroup title="提示词优化" description="配置会话输入框中的提示词优化工具。">
+      <SettingItem title="优化模型" description="执行提示词优化时使用的文本模型。">
+        <ModelSelect
+          :model-value="defaults.promptOptimizationModel"
+          button-class="w-full justify-between sm:w-80"
+          @update:model-value="defaults.setPromptOptimizationModel"
+        />
+      </SettingItem>
+      <SettingItem
+        title="优化提示词"
+        :description="'定义如何改写输入内容；使用 {{prompt}} 表示当前输入。'"
+      >
+        <template #bottom>
+          <Textarea
+            :model-value="optimizationPromptDraft"
+            class="min-h-36 resize-y"
+            placeholder="输入提示词优化模板"
+            @update:model-value="updateOptimizationPromptDraft"
+            @blur="saveOptimizationPrompt"
+          />
+        </template>
       </SettingItem>
     </SettingGroup>
 

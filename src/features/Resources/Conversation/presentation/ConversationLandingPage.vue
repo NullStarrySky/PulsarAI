@@ -37,6 +37,7 @@ import ResourceAvatar from "./ResourceAvatar.vue";
 import { fileToMessagePart } from "@/features/Resources/Conversation/application/message-attachment";
 import type { FilePart } from "@/features/Resources/Conversation/domain/conversation-types";
 import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
+import type { ComposerToolId } from "@/features/UI/domain/composer-toolbar";
 
 const props = defineProps<{
   packageId?: string;
@@ -46,6 +47,9 @@ const layout = useLayoutStore();
 const appearance = useAppearanceStore();
 const input = ref("");
 const greeting = ref(createGreeting());
+const promptOptimizationToolIds = computed<ComposerToolId[]>(() =>
+  appearance.composerToolbar.unused.includes("optimize") ? [] : ["optimize"],
+);
 const pendingAttachments = ref<FilePart[]>([]);
 const attachmentInput = ref<HTMLInputElement | null>(null);
 const fullscreenInputOpen = ref(false);
@@ -236,7 +240,7 @@ function createGreeting() {
 </script>
 
 <template>
-  <ScrollArea class="min-h-0 flex-1 bg-background">
+  <ScrollArea class="min-h-0 flex-1 bg-background [&_[data-slot=scroll-area-viewport]>div]:min-h-full">
     <div class="mx-auto flex min-h-full w-full max-w-[800px] flex-col justify-center px-6 py-12 mobile:px-3 mobile:py-6">
       <h1 class="mb-8 text-center text-2xl font-semibold tracking-tight mobile:mb-5 mobile:text-xl">
         {{ greeting }}
@@ -337,6 +341,7 @@ function createGreeting() {
           <div class="flex items-center justify-between gap-2">
             <div class="flex min-w-0 items-center gap-1">
               <ConversationComposerToolbarTools
+                v-model:prompt="input"
                 :tool-ids="appearance.composerToolbar.left"
                 @attach="attachmentInput?.click()"
                 @whiteboard="whiteboardOpen = true"
@@ -345,6 +350,7 @@ function createGreeting() {
             </div>
             <div class="flex shrink-0 items-center gap-1">
               <ConversationComposerToolbarTools
+                v-model:prompt="input"
                 :tool-ids="appearance.composerToolbar.right"
                 @attach="attachmentInput?.click()"
                 @whiteboard="whiteboardOpen = true"
@@ -386,9 +392,15 @@ function createGreeting() {
         @keydown="onFullscreenKeydown"
       />
       <DialogFooter>
-        <Button size="icon" variant="ghost" class="mr-auto" title="附加文件" @click="attachmentInput?.click()">
-          <Paperclip />
-        </Button>
+        <div class="mr-auto flex items-center gap-1">
+          <Button size="icon" variant="ghost" title="附加文件" @click="attachmentInput?.click()">
+            <Paperclip />
+          </Button>
+          <ConversationComposerToolbarTools
+            v-model:prompt="input"
+            :tool-ids="promptOptimizationToolIds"
+          />
+        </div>
         <Button variant="outline" @click="fullscreenInputOpen = false">取消</Button>
         <Button
           :disabled="(!input.trim() && pendingAttachments.length === 0) || starting"
