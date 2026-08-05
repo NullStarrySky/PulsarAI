@@ -2,6 +2,14 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@font-face {
+  font-family: "Fira Code";
+  src: url("../assets/fonts/fira-code.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+}
+
 @custom-variant dark (&:is(.dark *));
 @custom-variant mobile (&:where(.mobile-layout, .mobile-layout *));
 
@@ -32,6 +40,8 @@
 }
 
 :root {
+  --font-code: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-mono: var(--font-code);
   --radius: 0.5rem;
   --background: oklch(0.99 0 0);
   --foreground: oklch(0.16 0 0);
@@ -135,8 +145,15 @@
   --crepe-color-inline-area: var(--muted);
   --crepe-font-title: var(--font-sans, Inter, ui-sans-serif, system-ui, sans-serif);
   --crepe-font-default: var(--font-sans, Inter, ui-sans-serif, system-ui, sans-serif);
-  --crepe-font-code: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --crepe-font-code: var(--font-code);
   color: var(--foreground);
+}
+
+:where(code, pre, kbd, samp, .font-mono) {
+  font-family: var(--font-code);
+  font-feature-settings: "calt" 1, "liga" 1, "zero" 1;
+  font-variant-ligatures: common-ligatures contextual;
+  font-variant-numeric: tabular-nums slashed-zero;
 }
 
 .milkdown .ProseMirror-focused {

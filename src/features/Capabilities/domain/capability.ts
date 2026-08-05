@@ -1,5 +1,3 @@
-export type CapabilityGrants = Record<string, string[]>;
-
 export interface CapabilityApiDoc {
   name: string;
   signature: string;
@@ -40,7 +38,6 @@ export interface CapabilityModule<T extends Record<string, unknown> = Record<str
 export interface CapabilityRuntime {
   environment: Record<string, unknown>;
   prompt: string;
-  grants: CapabilityGrants;
 }
 
 export function normalizeSubCapIds(

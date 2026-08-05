@@ -2,14 +2,9 @@ import type { ModelMessage } from "ai";
 import {
   createSandboxFunction,
   resolveSandboxMessages,
-  stringifySandboxValue,
   type SandboxEnvironment,
 } from "@/features/Sandbox/domain/sandbox";
-import {
-  findPluginReferenceTokens,
-  normalizePluginReferenceTarget,
-  replacePluginReferenceTokens,
-} from "@/features/Resources/Plugin/domain/plugin-reference";
+import { findPluginImportCalls } from "@/features/Resources/Plugin/domain/plugin-import";
 
 export type ContextPromptRole = "system" | "user" | "assistant";
 export type ContextDataValue =
@@ -48,8 +43,8 @@ export interface ContextDataValueBinding {
 }
 
 /**
- * Parsed context Markdown. Data does not live in this source: resource metadata
- * supplies zero or more .data bindings to the compiler.
+ * Parsed context Markdown. Data does not live in this source: literal imports
+ * identify zero or more .data bindings before the compiler runs.
  */
 export interface ContextDocumentSource {
   source: string;
@@ -91,7 +86,6 @@ export interface ContextDocumentCompileOptions {
   environment?: SandboxEnvironment;
   dataOverrides?: Record<string, ContextDataValue>;
   dataBindings?: ContextDocumentDataBinding[];
-  resolveReference?: (target: string) => unknown;
 }
 
 const roleOpenPattern = /^\s*:::pulsar\s+role\s*=\s*(system|user|assistant)\s*$/i;
@@ -243,30 +237,16 @@ export function compileContextDocumentSource(
 
   const messages: ModelMessage[] = [];
   for (const template of document.templates) {
-    const tokens = findPluginReferenceTokens(template.content);
-    const allowedTargets = new Set(
-      tokens.map((token) => normalizePluginReferenceTarget(token.target)),
+    findPluginImportCalls(template.content).forEach((call) =>
+      dependencies.add(JSON.stringify(call))
     );
-    allowedTargets.forEach((target) => dependencies.add(target));
-    const ref = (rawTarget: string) => {
-      const target = normalizePluginReferenceTarget(rawTarget);
-      if (!allowedTargets.has(target)) {
-        throw new Error(`ref() 只能访问 Markdown 中显式声明的引用：${target}`);
-      }
-      if (!options.resolveReference) {
-        throw new Error(`当前解析器无法访问外部引用：${target}`);
-      }
-      return options.resolveReference(target);
-    };
     try {
-      const prepared = prepareContextTemplate(template.content, ref);
       messages.push(...resolveSandboxMessages(
-        [{ role: template.role, content: prepared } as ModelMessage],
+        [{ role: template.role, content: template.content } as ModelMessage],
         [{
           ...(options.environment ?? {}),
           data: localFacades,
           DATA: localFacades,
-          ref,
         }],
       ));
     } catch (error) {
@@ -352,7 +332,7 @@ export function createDataDescriptionContainer(
   return [
     "# Data 容器",
     "",
-    "以下数据由资源元数据显式绑定。普通 codeAct 可使用 `data.readForResource(resourceId, dataId)` 读取；需要写入时使用 `variable-update` 意图调用 `data.writeForResource(resourceId, dataId, value)`。接口结果保留资源 ID 与路径，隔离级别只由 `.data` 定义决定。",
+    "以下数据由资源中的字面量 imports 调用显式导入。普通 codeAct 可使用 `data.readForResource(resourceId, dataId)` 读取；需要写入时使用 `variable-update` 意图调用 `data.writeForResource(resourceId, dataId, value)`。接口结果保留资源 ID 与路径，隔离级别只由 `.data` 定义决定。",
     "",
     ...definitions.flatMap((definition) => [
       `## ${definition.path}`,
@@ -369,30 +349,6 @@ export function createDataDescriptionContainer(
   ].join("\n").trim();
 }
 
-function prepareContextTemplate(
-  source: string,
-  resolveReference: (target: string) => unknown,
-) {
-  const macroRanges = findMacroRanges(source);
-  return replacePluginReferenceTokens(source, (token) => {
-    const target = normalizePluginReferenceTarget(token.target);
-    const inMacro = macroRanges.some(
-      ([start, end]) => token.start >= start && token.end <= end,
-    );
-    return inMacro
-      ? `ref(${JSON.stringify(target)})`
-      : stringifySandboxValue(resolveReference(target));
-  });
-}
-
-function findMacroRanges(source: string): Array<[number, number]> {
-  const ranges: Array<[number, number]> = [];
-  for (const match of source.matchAll(/(\{\{[\s\S]*?\}\}|\[\[[\s\S]*?\]\])/g)) {
-    if (match.index == null) continue;
-    ranges.push([match.index, match.index + match[0].length]);
-  }
-  return ranges;
-}
 
 function messagesToMarkdown(messages: ModelMessage[]) {
   return messages.map((message) => {

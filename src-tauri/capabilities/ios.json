@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "ios",
+  "description": "iOS-only runtime permissions",
+  "windows": ["main", "pulsarai-*"],
+  "platforms": ["iOS"],
+  "permissions": [
+    "stt:default"
+  ]
+}

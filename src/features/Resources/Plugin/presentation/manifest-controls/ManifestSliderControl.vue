@@ -20,7 +20,7 @@ const emit = defineEmits<{ "update:modelValue": [value: number] }>();
       :max="props.max"
       :step="props.step"
       :disabled="disabled"
-      @update:model-value="$emit('update:modelValue', Number($event?.[0] ?? props.min))"
+      @update:model-value="emit('update:modelValue', Number($event?.[0] ?? props.min))"
     />
     <span class="w-12 text-right font-mono text-xs text-muted-foreground">
       {{ typeof modelValue === "number" ? modelValue : props.min }}

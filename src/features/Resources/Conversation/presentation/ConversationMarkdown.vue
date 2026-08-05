@@ -4,17 +4,12 @@ import { replaceAll } from "@milkdown/kit/utils";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/vue";
 import { defineComponent, h, ref, watch } from "vue";
 import { conversationCrepeFeatureConfigs, conversationCrepeFeatures } from "./conversation-crepe";
-import { pluginReferenceHighlightFeature } from "@/features/Resources/Plugin/presentation/plugin-reference-milkdown";
 import { yamlFrontmatterFeature } from "@/features/Resources/InteractiveDoc/presentation/frontmatter-milkdown";
 
 const props = withDefaults(
-  defineProps<{
-    modelValue: string;
-    enableReferenceSyntax?: boolean;
-  }>(),
+  defineProps<{ modelValue: string }>(),
   {
     modelValue: "",
-    enableReferenceSyntax: false,
   },
 );
 
@@ -24,10 +19,6 @@ const MarkdownInner = defineComponent({
     modelValue: {
       type: String,
       default: "",
-    },
-    enableReferenceSyntax: {
-      type: Boolean,
-      default: false,
     },
   },
   setup(innerProps) {
@@ -41,9 +32,6 @@ const MarkdownInner = defineComponent({
         featureConfigs: conversationCrepeFeatureConfigs,
       });
       editor.addFeature(yamlFrontmatterFeature);
-      if (innerProps.enableReferenceSyntax) {
-        editor.addFeature(pluginReferenceHighlightFeature);
-      }
       editor.on((listener) => {
         listener.markdownUpdated((_ctx, nextMarkdown, previousMarkdown) => {
           if (applyingExternalValue || nextMarkdown === previousMarkdown) {
@@ -93,10 +81,7 @@ const MarkdownInner = defineComponent({
 <template>
   <MilkdownProvider>
     <div class="conversation-markdown">
-      <MarkdownInner
-        :model-value="props.modelValue"
-        :enable-reference-syntax="props.enableReferenceSyntax"
-      />
+      <MarkdownInner :model-value="props.modelValue" />
     </div>
   </MilkdownProvider>
 </template>

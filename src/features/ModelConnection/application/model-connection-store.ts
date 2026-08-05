@@ -233,6 +233,7 @@ export const useModelConnectionStore = defineStore("modelConnection", {
         baseUrl: input.baseUrl?.trim() || "",
         apiKeyName: `${id}_API_KEY`,
         enabled: false,
+        runtime: "remote",
         models: [],
       };
 
@@ -300,6 +301,27 @@ export const useModelConnectionStore = defineStore("modelConnection", {
       }
 
       Object.assign(model, patch);
+      await persistProvider(provider);
+    },
+    async setModelsEnabledByType(providerId: string, apiType: ModelApiType, enabled: boolean) {
+      const provider = this.providers.find((item) => item.id === providerId);
+      if (!provider) {
+        return;
+      }
+
+      const models = provider.models.filter((model) => model.apiType === apiType);
+      if (models.length === 0) {
+        return;
+      }
+
+      if (enabled) {
+        provider.enabled = true;
+        models[0].enabled = true;
+      } else {
+        for (const model of models) {
+          model.enabled = false;
+        }
+      }
       await persistProvider(provider);
     },
   },

@@ -1,0 +1,4 @@
+Fira Code is distributed under the SIL Open Font License 1.1.
+
+Copyright belongs to The Fira Code Project Authors.
+Project and license: https://github.com/tonsky/FiraCode

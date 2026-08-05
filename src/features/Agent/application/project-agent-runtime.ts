@@ -1,10 +1,4 @@
 import { contextDocumentFormatPrompt } from "@/features/Resources/InteractiveDoc/domain/interactive-document-format";
-import {
-  createCapabilityPrompt,
-} from "@/features/Capabilities/domain/capability";
-import {
-  pluginCapabilitiesDefinition,
-} from "@/features/Resources/Plugin/domain/plugin-capability";
 import type {
   Conversation,
   ConversationRendererId,
@@ -35,7 +29,6 @@ interface ProjectCreateInput {
   icon?: string;
   shortDescription?: string;
   priority?: number;
-  dataReferences?: Array<{ alias: string; dataId: string }>;
   contextConfig?: { compressionThreshold: number };
 }
 
@@ -50,7 +43,6 @@ interface ProjectWriteInput {
   enabledGlobalPluginIds?: string[];
   content?: unknown;
   priority?: number;
-  dataReferences?: Array<{ alias: string; dataId: string }>;
   contextConfig?: { compressionThreshold: number };
 }
 
@@ -74,9 +66,6 @@ interface ProjectAgentApi {
 
 export async function createProjectAgentRuntime(
   hostConversationId: string,
-  options: {
-    pluginSubCapIds?: string[];
-  } = {},
 ): Promise<ProjectAgentRuntime> {
   const [
     { useConversationStore },
@@ -117,7 +106,8 @@ export async function createProjectAgentRuntime(
 
   function projectPlugins() {
     const project = selectedProject();
-    return plugins.plugins.filter((plugin) => plugin.id === project.pluginId);
+    const availablePlugins = (plugins as unknown as { plugins: Plugin[] }).plugins;
+    return availablePlugins.filter((plugin) => plugin.id === project.pluginId);
   }
 
   const api: ProjectAgentApi = {
@@ -254,7 +244,6 @@ export async function createProjectAgentRuntime(
           description: project.description,
           icon: project.icon,
           categoryId: project.categoryId ?? null,
-          capabilities: project.capabilities,
           pluginId: project.pluginId,
           mainPluginId: project.mainPluginId,
           enabledGlobalPluginIds: [...project.enabledGlobalPluginIds],
@@ -314,7 +303,6 @@ export async function createProjectAgentRuntime(
               name,
               content: input.content ?? "",
               priority: input.priority,
-              dataReferences: input.dataReferences,
               contextConfig: input.contextConfig,
             });
         if (!created) {
@@ -376,9 +364,6 @@ export async function createProjectAgentRuntime(
           ...(typeof input.icon === "string" ? { icon: input.icon } : {}),
           ...(typeof input.priority === "number"
             ? { priority: input.priority }
-            : {}),
-          ...(Array.isArray(input.dataReferences)
-            ? { dataReferences: input.dataReferences }
             : {}),
           ...(input.contextConfig ? { contextConfig: input.contextConfig } : {}),
           ...("content" in input ? { content: input.content } : {}),
@@ -472,10 +457,6 @@ export async function createProjectAgentRuntime(
     ? `当前项目是 ${selection.projectName}（${selection.projectId}）。`
     : "当前未指定项目。先根据用户意图选择项目，必要时调用 project.listProjects() 和 project.select(projectId)。";
   const apiDocumentation = projectApiDocumentation();
-  const pluginApiDocumentation = createCapabilityPrompt(
-    pluginCapabilitiesDefinition,
-    options.pluginSubCapIds ?? [],
-  );
   const resourceLabel = host.binding
     ? [
         "This is a side-task conversation bound to the current project resource.",
@@ -497,10 +478,10 @@ export async function createProjectAgentRuntime(
     "Prefer small, internally consistent edits. Keep existing ids stable, create UUIDs for new structured resources, and read back important writes.",
     "Do not modify global or built-in plugins. The project API is scoped to the selected project's own conversations and local plugins.",
     "Use the single CodeAct tool for project operations. Submit one JavaScript function with an explicit return.",
+    "Call readDocs('plugin') when Plugin Feature API details are needed instead of relying on a copied API inventory.",
     "If the request is ambiguous in a way that changes the system design, call await api.askUser(...) inside CodeAct before writing.",
     "Explain the resulting structure and mention the paths changed in the final response.",
     apiDocumentation,
-    pluginApiDocumentation,
     contextDocumentFormatPrompt,
   ].filter(Boolean).join("\n\n");
 
@@ -510,7 +491,6 @@ export async function createProjectAgentRuntime(
       PROJECT: api,
       PROJECT_AGENT_PROMPT: prompt,
       PROJECT_API_DOCUMENTATION: apiDocumentation,
-      PLUGIN_API_DOCUMENTATION: pluginApiDocumentation,
       PROJECT_RESOURCE_PATH: host.binding?.resourcePath ?? "",
       CONTEXT_DOCUMENT_FORMAT: contextDocumentFormatPrompt,
     },
@@ -560,7 +540,6 @@ function nodeEntry(node: PluginTreeNode) {
     ...(node.kind === "file"
       ? {
           priority: node.priority,
-          dataReferences: clonePlain(node.dataReferences),
           ...(node.contextConfig
             ? { contextConfig: clonePlain(node.contextConfig) }
             : {}),
@@ -605,9 +584,9 @@ function projectApiDocumentation() {
     "`project.read(path)` reads `/project.json`, `/conversations/<id>.json`, `/plugins/<pluginId>`, or a plugin node.",
     "`await project.create('/conversations', { title, rendererId })` creates a project conversation without leaving this Agent conversation.",
     "Each project already owns exactly one `/plugins/<pluginId>` resource tree; creating or deleting another local plugin is forbidden.",
-    "`await project.create('/plugins/<pluginId>/<folder>', { kind: 'file' | 'folder', name, content, priority?, dataReferences?, contextConfig? })` creates a node; file priority defaults to 100.",
+    "`await project.create('/plugins/<pluginId>/<folder>', { kind: 'file' | 'folder', name, content, priority?, contextConfig? })` creates a node; file priority defaults to 100.",
     "`await project.mkdir('/plugins/<pluginId>/<folder>', name)` creates a folder.",
-    "`await project.write(path, patch)` updates project metadata, conversation metadata, or plugin node content/priority/dataReferences/contextConfig.",
+    "`await project.write(path, patch)` updates project metadata, conversation metadata, or plugin node content/priority/contextConfig.",
     "`await project.move(fromPath, targetFolderPath, beforeName?)` moves a node inside one plugin.",
     "`await project.remove(path)` removes a project conversation or a non-reserved plugin node.",
     "`await project.remove('/project.json')` deletes the selected project together with its conversation and unique resource plugin.",

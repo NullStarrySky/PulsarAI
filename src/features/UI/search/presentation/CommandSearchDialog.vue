@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Box, Command, MessageSquare, Package, Search } from "lucide-vue-next";
+import { Box, Command, FileText, Folder, MessageSquare, Package, Plug, Search } from "lucide-vue-next";
 import { type Component, computed, nextTick, ref, watch } from "vue";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -8,6 +8,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCommandStore } from "@/features/Hotkey/application/command-store";
 import { useHotkeyStore } from "@/features/Hotkey/application/hotkey-store";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
+import type { PluginSearchHit } from "@/features/Resources/Plugin/application/plugin-persistence";
+import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 
 type SearchResult = {
@@ -22,9 +24,13 @@ type SearchResult = {
 const commandStore = useCommandStore();
 const hotkeyStore = useHotkeyStore();
 const conversation = useConversationStore();
+const pluginStore = usePluginStore();
 const layout = useLayoutStore();
 const inputRoot = ref<HTMLElement | null>(null);
 const activeIndex = ref(0);
+const pluginNodeHits = ref<PluginSearchHit[]>([]);
+let pluginSearchTimer: number | undefined;
+let pluginSearchSequence = 0;
 
 const query = computed({
   get: () => commandStore.paletteQuery,
@@ -105,10 +111,60 @@ const conversationResults = computed<SearchResult[]>(() => {
     }));
 });
 
+const pluginResults = computed<SearchResult[]>(() => {
+  if (isTagSearch.value) return [];
+  const search = normalizedQuery.value;
+  return pluginStore.sortedPlugins
+    .filter((plugin) => matchesItem(
+      [plugin.name, plugin.shortDescription, plugin.id],
+      search,
+      false,
+    ))
+    .map((plugin) => ({
+      id: `plugin:${plugin.id}`,
+      title: plugin.name,
+      description: plugin.shortDescription || (plugin.packageId ? "角色包插件" : "全局插件"),
+      icon: Plug,
+      run: () => {
+        pluginStore.openPlugin(plugin.id);
+        layout.openResourceTab({
+          resourceType: "plugin",
+          resourceId: plugin.id,
+          title: plugin.name,
+          resourceParams: { nodeId: plugin.root.id },
+        });
+        commandStore.closePalette();
+      },
+    }));
+});
+
+const pluginResourceResults = computed<SearchResult[]>(() =>
+  pluginNodeHits.value.map((hit) => ({
+    id: `plugin-resource:${hit.pluginId}:${hit.nodeId}`,
+    title: hit.name || hit.path,
+    description: [hit.pluginName, hit.path, hit.excerpt]
+      .filter(Boolean)
+      .join(" · "),
+    icon: hit.kind === "folder" ? Folder : FileText,
+    run: () => {
+      pluginStore.openPlugin(hit.pluginId);
+      layout.openResourceTab({
+        resourceType: "plugin",
+        resourceId: hit.pluginId,
+        title: hit.pluginName,
+        resourceParams: { nodeId: hit.nodeId },
+      });
+      commandStore.closePalette();
+    },
+  })),
+);
+
 const sections = computed(() => [
   { name: "命令", items: commandResults.value },
   { name: "角色包", items: packageResults.value },
-  { name: "资源", items: conversationResults.value },
+  { name: "对话", items: conversationResults.value },
+  { name: "插件", items: pluginResults.value },
+  { name: "插件资源", items: pluginResourceResults.value },
 ].filter((section) => section.items.length > 0));
 
 const flatResults = computed(() => sections.value.flatMap((section) => section.items));
@@ -119,11 +175,35 @@ watch(
     if (!open) {
       return;
     }
-    await conversation.initialize();
+    await Promise.all([conversation.initialize(), pluginStore.initialize()]);
     activeIndex.value = 0;
     await nextTick();
     inputRoot.value?.querySelector("input")?.focus();
   },
+);
+
+watch(
+  [() => commandStore.paletteOpen, normalizedQuery, isTagSearch],
+  ([open, search, tagOnly]) => {
+    if (pluginSearchTimer !== undefined) window.clearTimeout(pluginSearchTimer);
+    const sequence = ++pluginSearchSequence;
+    if (!open || !search || tagOnly) {
+      pluginNodeHits.value = [];
+      return;
+    }
+    pluginSearchTimer = window.setTimeout(async () => {
+      try {
+        const hits = await pluginStore.searchPluginNodes(search, 40);
+        if (sequence === pluginSearchSequence) pluginNodeHits.value = hits;
+      } catch (error) {
+        if (sequence === pluginSearchSequence) {
+          pluginNodeHits.value = [];
+          console.warn("搜索插件资源失败", error);
+        }
+      }
+    }, 120);
+  },
+  { immediate: true },
 );
 
 watch(query, () => {
@@ -178,7 +258,7 @@ function isActive(id: string) {
           <Input
             v-model="query"
             class="border-0 bg-transparent pl-7 text-base shadow-none focus-visible:ring-0"
-            placeholder="搜索命令、角色包或资源"
+            placeholder="搜索命令、对话、插件路径或内容"
             @keydown.down.prevent="moveActive(1)"
             @keydown.up.prevent="moveActive(-1)"
             @keydown.enter.prevent="runActive"

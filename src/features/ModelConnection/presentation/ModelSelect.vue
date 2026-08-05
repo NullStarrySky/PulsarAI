@@ -10,12 +10,14 @@ import {
 import { useModelConnectionStore } from "../application/model-connection-store";
 import ModelPicker from "./ModelPicker.vue";
 import ProviderAvatar from "./ProviderAvatar.vue";
+import type { ModelApiType } from "../domain/model-provider";
 
 const props = withDefaults(
   defineProps<{
     modelValue: string;
     buttonClass?: string;
     iconOnly?: boolean;
+    apiType?: ModelApiType;
   }>(),
   {
     buttonClass: "",
@@ -60,7 +62,7 @@ function updateModel(value: string) {
       </Button>
     </PopoverTrigger>
     <PopoverContent align="start" side="bottom" class="w-[min(400px,calc(100vw-32px))] p-0">
-      <ModelPicker :model-value="modelValue" @update:model-value="updateModel" />
+      <ModelPicker :model-value="modelValue" :api-type="apiType" @update:model-value="updateModel" />
     </PopoverContent>
   </Popover>
 </template>

@@ -136,6 +136,14 @@ function clonePlain<T>(value: T): T {
   }
 }
 
+function pluginItems(store: ReturnType<typeof usePluginStore>) {
+  return (store as unknown as { plugins: Plugin[] }).plugins;
+}
+
+function setBackupResources(target: unknown, snapshot: BackupResourceSnapshot | null) {
+  (target as { backupResources: BackupResourceSnapshot | null }).backupResources = snapshot;
+}
+
 function valuesEqual(a: unknown, b: unknown) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
@@ -403,7 +411,7 @@ function syncableSnapshot(
   const containers = conversation.containers.filter((item) =>
     conversationIds.has(item.conversationid),
   );
-  const plugins = plugin.plugins.filter(
+  const plugins = pluginItems(plugin).filter(
     (item) => !item.builtIn && (item.packageId === null || packageIds.has(item.packageId)),
   );
   const currentMetadata = readSyncMetadata().entities;
@@ -499,7 +507,7 @@ async function persistMergedSnapshot(
         await remove(containerTable, id);
       } else if (
         table === pluginTable
-        && pluginStore.plugins.some((item) => item.id === id && !item.builtIn)
+        && pluginItems(pluginStore).some((item) => item.id === id && !item.builtIn)
       ) {
         await pluginStore.deletePlugin(id);
       }
@@ -628,7 +636,7 @@ async function persistMergedSnapshot(
       ) {
         continue;
       }
-      const local = pluginStore.plugins.find((item) => item.id === remotePlugin.id);
+      const local = pluginItems(pluginStore).find((item) => item.id === remotePlugin.id);
       const key = syncEntityKey(pluginTable, remotePlugin.id);
       const relation = entityRelation(
         local,
@@ -637,7 +645,7 @@ async function persistMergedSnapshot(
         remote.metadata[key],
       );
       if (!local) {
-        pluginStore.plugins.push(clonePlain(remotePlugin));
+        pluginItems(pluginStore).push(clonePlain(remotePlugin));
         await pluginStore.persistPlugin(remotePlugin);
         copied += 1;
       } else if (relation === "remote-newer") {
@@ -699,8 +707,9 @@ export const useBackupStore = defineStore("backup", {
       if (!state.backupResources) {
         return [];
       }
+      const snapshot = state.backupResources as unknown as BackupResourceSnapshot;
       const resources: RestorableResource[] = [];
-      for (const item of state.backupResources.packages) {
+      for (const item of snapshot.packages) {
         resources.push({
           key: `package:${item.id}`,
           id: item.id,
@@ -709,7 +718,7 @@ export const useBackupStore = defineStore("backup", {
           packageId: item.id,
         });
       }
-      for (const item of state.backupResources.conversations) {
+      for (const item of snapshot.conversations) {
         resources.push({
           key: `conversation:${item.id}`,
           id: item.id,
@@ -718,7 +727,7 @@ export const useBackupStore = defineStore("backup", {
           packageId: item.packageId,
         });
       }
-      for (const item of state.backupResources.plugins.filter((plugin) => !plugin.builtIn)) {
+      for (const item of snapshot.plugins.filter((plugin) => !plugin.builtIn)) {
         resources.push({
           key: `plugin:${item.id}`,
           id: item.id,
@@ -808,7 +817,7 @@ export const useBackupStore = defineStore("backup", {
         containers = conversation.containers
           .filter((item) => conversationIds.has(item.conversationid))
           .map(clonePlain);
-        plugins = pluginStore.plugins
+        plugins = pluginItems(pluginStore)
           .filter((item) => !item.builtIn && item.packageId === id)
           .map(clonePlain);
       } else if (type === "conversation") {
@@ -824,7 +833,7 @@ export const useBackupStore = defineStore("backup", {
           .filter((item) => item.conversationid === id)
           .map(clonePlain);
       } else {
-        const root = pluginStore.plugins.find((item) => item.id === id && !item.builtIn);
+        const root = pluginItems(pluginStore).find((item) => item.id === id && !item.builtIn);
         if (!root) throw new Error("插件不存在或不可导出");
         name = root.name;
         const parent = root.packageId
@@ -866,7 +875,7 @@ export const useBackupStore = defineStore("backup", {
 
       const conversation = useConversationStore();
       await conversation.initialize();
-      this.backupResources = payload.snapshot;
+      setBackupResources(this, payload.snapshot);
       this.selectedResourceKeys = [`${payload.rootType}:${payload.rootId}`];
       const root = this.restorableResources.find(
         (item) => item.key === `${payload.rootType}:${payload.rootId}`,
@@ -914,14 +923,15 @@ export const useBackupStore = defineStore("backup", {
       this.loadingResources = true;
       try {
         this.status = "";
-        this.backupResources = await invoke<BackupResourceSnapshot>("backup_read_resources", {
+        const snapshot = await invoke<BackupResourceSnapshot>("backup_read_resources", {
           directory: String(this.local.directory || ""),
           backupId: String(this.local.selectedBackup),
         });
+        setBackupResources(this, snapshot);
         this.selectedResourceKeys = [];
         return true;
       } catch (error) {
-        this.backupResources = null;
+        setBackupResources(this, null);
         this.status = `无法读取历史备份：${String(error)}`;
         return false;
       } finally {
@@ -941,7 +951,7 @@ export const useBackupStore = defineStore("backup", {
       mode: ResourceImportMode = "copy",
       resourceArchivePath = "",
     ) {
-      const source = this.backupResources;
+      const source = this.backupResources as unknown as BackupResourceSnapshot | null;
       if (!source || this.selectedResourceKeys.length === 0) {
         this.status = "请选择要恢复的资源";
         return false;
@@ -986,7 +996,7 @@ export const useBackupStore = defineStore("backup", {
       const pluginIdMap = new Map(
         pluginsToRestore.map((item) => [
           item.id,
-          pluginStore.plugins.some((current) => current.id === item.id)
+          pluginItems(pluginStore).some((current) => current.id === item.id)
             ? crypto.randomUUID()
             : item.id,
         ]),
@@ -1066,7 +1076,6 @@ export const useBackupStore = defineStore("backup", {
               )
             : sourceConversation.title,
           reasoningEffort: sourceConversation.reasoningEffort ?? "none",
-          featureApiEnabled: sourceConversation.featureApiEnabled ?? true,
           rootContainerId: null,
           lastContainerId: null,
           updatedAt: new Date().toISOString(),
@@ -1155,12 +1164,12 @@ export const useBackupStore = defineStore("backup", {
           name: collision
             ? uniqueRestoredName(
                 sourcePlugin.name,
-                pluginStore.plugins.map((value) => value.name),
+                pluginItems(pluginStore).map((value) => value.name),
               )
             : sourcePlugin.name,
           builtIn: false,
         };
-        pluginStore.plugins.push(item);
+        pluginItems(pluginStore).push(item);
         await pluginStore.persistPlugin(item);
         const parent = packageId
           ? conversation.packages.find((value) => value.id === packageId)
@@ -1190,7 +1199,7 @@ export const useBackupStore = defineStore("backup", {
       return true;
     },
     async updateSelectedResources(resourceArchivePath = "") {
-      const source = this.backupResources;
+      const source = this.backupResources as unknown as BackupResourceSnapshot | null;
       if (!source || this.selectedResourceKeys.length === 0) {
         this.status = "请选择要更新的资源";
         return false;
@@ -1254,7 +1263,6 @@ export const useBackupStore = defineStore("backup", {
           const item = {
             ...clonePlain(incoming),
             reasoningEffort: incoming.reasoningEffort ?? ("none" as const),
-            featureApiEnabled: incoming.featureApiEnabled ?? true,
           };
           conversation.conversations.push(item);
           await conversation.persistConversation(item);
@@ -1327,11 +1335,11 @@ export const useBackupStore = defineStore("backup", {
           this.status = `无法更新“${incoming.name}”：当前不存在它所属的角色包`;
           return false;
         }
-        const local = pluginStore.plugins.find((item) => item.id === incoming.id);
+        const local = pluginItems(pluginStore).find((item) => item.id === incoming.id);
         let current: Plugin;
         if (!local) {
           const item = { ...clonePlain(incoming), builtIn: false };
-          pluginStore.plugins.push(item);
+          pluginItems(pluginStore).push(item);
           await pluginStore.persistPlugin(item);
           current = item;
           added += 1;
@@ -1377,7 +1385,7 @@ export const useBackupStore = defineStore("backup", {
         backupId: String(this.local.selectedBackup),
       });
       this.local.selectedBackup = "";
-      this.backupResources = null;
+      setBackupResources(this, null);
       this.persist();
       await this.refreshBackups();
     },

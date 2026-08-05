@@ -9,6 +9,7 @@ import {
   findPluginNodeByPath,
   pluginConventions,
   pluginFileType,
+  type Plugin,
 } from "@/features/Resources/Plugin/domain/plugin-types";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { runConversationGeneration } from "./conversation-generation";
@@ -117,6 +118,10 @@ function createDefaultPackage(): CharacterPackage {
   };
 }
 
+function pluginItems(store: ReturnType<typeof usePluginStore>) {
+  return (store as unknown as { plugins: Plugin[] }).plugins;
+}
+
 function comparePackages(a: CharacterPackage, b: CharacterPackage) {
   return (a.order ?? Number.POSITIVE_INFINITY) - (b.order ?? Number.POSITIVE_INFINITY)
     || a.name.localeCompare(b.name, "zh-Hans")
@@ -205,31 +210,31 @@ export const useConversationStore = defineStore("conversation", {
       }
     },
     async loadInitialData() {
-      const [categories, packages, conversations, containers] = await Promise.all([
-        selectAll<PackageCategory>(categoryTable),
-        selectAll<CharacterPackage>(packageTable),
-        selectAll<Conversation>(conversationTable),
-        selectAll<ChatMessageContainer>(containerTable),
-      ]);
-
-      this.categories = categories.map((item) => item.value);
+      const packages = await selectAll<CharacterPackage>(packageTable);
       this.packages = packages.map((item) => item.value).sort(comparePackages);
       this.packages = this.packages.map((item) => ({
         ...item,
         pluginId: item.pluginId ?? "",
         mainPluginId: item.mainPluginId || builtinCorePluginId,
         enabledGlobalPluginIds: item.enabledGlobalPluginIds ?? [],
-        capabilities: item.capabilities
-          ? structuredClone(item.capabilities)
-          : undefined,
         syncEnabled: item.syncEnabled ?? true,
       }));
+
+      if (this.packages.length === 0) {
+        const basePackage = createDefaultPackage();
+        this.packages.push(basePackage);
+        await this.persistPackage(basePackage);
+      }
+
+      const categories = await selectAll<PackageCategory>(categoryTable);
+      this.categories = categories.map((item) => item.value);
+      const conversations = await selectAll<Conversation>(conversationTable);
       this.conversations = conversations.map((item) => ({
         ...item.value,
         rendererId: item.value.rendererId ?? "chat",
         reasoningEffort: item.value.reasoningEffort ?? "none",
-        featureApiEnabled: item.value.featureApiEnabled ?? true,
       }));
+      const containers = await selectAll<ChatMessageContainer>(containerTable);
       this.containers = containers.map((item) => ({
         ...item.value,
         content: item.value.content.map((message) => ({
@@ -238,22 +243,25 @@ export const useConversationStore = defineStore("conversation", {
         })),
       }));
 
-      if (this.packages.length === 0) {
-        const basePackage = createDefaultPackage();
-        this.packages.push(basePackage);
-        await this.persistPackage(basePackage);
-      }
+      this.packages.sort(comparePackages);
+      this.loaded = true;
+      await this.openPackage(this.packages[0].id);
+      void this.reconcilePackagePlugins().catch((error) => {
+        console.error("Unable to reconcile package plugins", error);
+      });
+    },
+    async reconcilePackagePlugins() {
       const pluginStore = usePluginStore();
       await pluginStore.initialize();
       for (const item of this.packages) {
-        const owned = pluginStore.plugins.filter(
+        const owned = pluginItems(pluginStore).filter(
           (plugin) => plugin.packageId === item.id,
         );
         if (owned.length > 1) {
           throw new Error(`角色包 ${item.name} 包含多个本地插件，请先整理数据。`);
         }
         const localPlugin = owned[0] ?? await pluginStore.createPlugin(item.id);
-        const configuredMain = pluginStore.plugins.find(
+        const configuredMain = pluginItems(pluginStore).find(
           (plugin) => plugin.id === item.mainPluginId,
         );
         const nextMainPluginId = configuredMain
@@ -261,10 +269,10 @@ export const useConversationStore = defineStore("conversation", {
           ? configuredMain.id
           : builtinCorePluginId;
         const enabledGlobalPluginIds = [...new Set(item.enabledGlobalPluginIds)]
-          .filter((pluginId) => pluginStore.plugins.some(
+          .filter((pluginId) => pluginItems(pluginStore).some(
             (plugin) => plugin.id === pluginId && plugin.packageId === null,
           ));
-        const nextMain = pluginStore.plugins.find(
+        const nextMain = pluginItems(pluginStore).find(
           (plugin) => plugin.id === nextMainPluginId,
         );
         if (nextMain?.packageId === null) enabledGlobalPluginIds.push(nextMain.id);
@@ -280,10 +288,6 @@ export const useConversationStore = defineStore("conversation", {
           await this.persistPackage(item);
         }
       }
-      this.packages.sort(comparePackages);
-
-      this.loaded = true;
-      await this.openPackage(this.packages[0].id);
     },
     async persistPackage(item: CharacterPackage) {
       await upsert(packageTable, item.id, item);
@@ -301,7 +305,7 @@ export const useConversationStore = defineStore("conversation", {
       await this.initialize();
       const pluginStore = usePluginStore();
       await pluginStore.initialize();
-      for (const plugin of [...pluginStore.plugins]) {
+      for (const plugin of [...pluginItems(pluginStore)]) {
         if (plugin.packageId !== null && !plugin.builtIn) {
           await pluginStore.deletePlugin(plugin.id);
         }
@@ -408,7 +412,7 @@ export const useConversationStore = defineStore("conversation", {
       }
       return item;
     },
-    async updatePackage(packageId: string, patch: Partial<Pick<CharacterPackage, "name" | "description" | "icon" | "categoryId" | "syncEnabled" | "capabilities" | "mainPluginId" | "enabledGlobalPluginIds">>) {
+    async updatePackage(packageId: string, patch: Partial<Pick<CharacterPackage, "name" | "description" | "icon" | "categoryId" | "syncEnabled" | "mainPluginId" | "enabledGlobalPluginIds">>) {
       const item = this.packages.find((packageItem) => packageItem.id === packageId);
       if (!item) {
         return;
@@ -418,7 +422,7 @@ export const useConversationStore = defineStore("conversation", {
         const pluginStore = usePluginStore();
         await pluginStore.initialize();
         if (patch.mainPluginId) {
-          const mainPlugin = pluginStore.plugins.find(
+          const mainPlugin = pluginItems(pluginStore).find(
             (plugin) => plugin.id === patch.mainPluginId,
           );
           if (
@@ -448,12 +452,12 @@ export const useConversationStore = defineStore("conversation", {
         }
         if (patch.enabledGlobalPluginIds) {
           patch.enabledGlobalPluginIds = [...new Set(patch.enabledGlobalPluginIds)]
-            .filter((pluginId) => pluginStore.plugins.some(
+            .filter((pluginId) => pluginItems(pluginStore).some(
               (plugin) => plugin.id === pluginId && plugin.packageId === null,
             ));
         }
         const nextMainPluginId = patch.mainPluginId ?? item.mainPluginId;
-        const nextMain = pluginStore.plugins.find(
+        const nextMain = pluginItems(pluginStore).find(
           (plugin) => plugin.id === nextMainPluginId,
         );
         if (nextMain?.packageId === null) {
@@ -486,7 +490,7 @@ export const useConversationStore = defineStore("conversation", {
 
       const pluginStore = usePluginStore();
       await pluginStore.initialize();
-      const localPlugin = pluginStore.plugins.find(
+      const localPlugin = pluginItems(pluginStore).find(
         (plugin) => plugin.packageId === packageId,
       );
       if (localPlugin) await pluginStore.deletePlugin(localPlugin.id);
@@ -502,19 +506,6 @@ export const useConversationStore = defineStore("conversation", {
       if (!item) {
         return;
       }
-
-      const pluginStore = usePluginStore();
-      await pluginStore.initialize();
-      const enabledGlobalPluginIds = [...new Set(item.enabledGlobalPluginIds)]
-        .filter((pluginId) => pluginStore.plugins.some(
-          (plugin) => plugin.id === pluginId && plugin.packageId === null,
-        ));
-      const mainPlugin = pluginStore.plugins.find(
-        (plugin) => plugin.id === item.mainPluginId,
-      );
-      if (mainPlugin?.packageId === null) enabledGlobalPluginIds.push(mainPlugin.id);
-      item.enabledGlobalPluginIds = [...new Set(enabledGlobalPluginIds)];
-      await this.persistPackage(item);
       this.activePackageId = packageId;
       const newest = item.conversations
         .map((link) => this.conversations.find((conversation) => conversation.id === link.id))
@@ -535,7 +526,6 @@ export const useConversationStore = defineStore("conversation", {
         binding?: ConversationResourceBinding;
         kind?: ConversationKind;
         reasoningEffort?: ConversationReasoningEffort;
-        featureApiEnabled?: boolean;
         rendererId?: ConversationRendererId;
         title?: string;
       } = {},
@@ -558,10 +548,6 @@ export const useConversationStore = defineStore("conversation", {
           input.reasoningEffort
           ?? template?.reasoningEffort
           ?? "none",
-        featureApiEnabled:
-          input.featureApiEnabled
-          ?? template?.featureApiEnabled
-          ?? true,
         rootContainerId: null,
         lastContainerId: null,
         createdAt: now(),
@@ -750,7 +736,6 @@ export const useConversationStore = defineStore("conversation", {
           | "binding"
           | "rendererId"
           | "reasoningEffort"
-          | "featureApiEnabled"
         >
       >,
     ) {
@@ -790,12 +775,6 @@ export const useConversationStore = defineStore("conversation", {
       reasoningEffort: ConversationReasoningEffort,
     ) {
       await this.updateConversation(conversationId, { reasoningEffort });
-    },
-    async setConversationFeatureApiEnabled(
-      conversationId: string,
-      featureApiEnabled: boolean,
-    ) {
-      await this.updateConversation(conversationId, { featureApiEnabled });
     },
     async deleteConversation(
       conversationId: string,
@@ -1266,7 +1245,7 @@ export const useConversationStore = defineStore("conversation", {
           mainPluginId,
         );
         if (conversation.kind === "test" && conversation.binding?.pluginId) {
-          const targetPlugin = pluginStore.plugins.find(
+          const targetPlugin = pluginItems(pluginStore).find(
             (item) => item.id === conversation.binding?.pluginId,
           );
           if (
@@ -1311,15 +1290,12 @@ export const useConversationStore = defineStore("conversation", {
           prompt: promptMessage?.content ?? "",
           resourceContext: buildConversationResourceContext(
             conversation,
-            pluginStore.plugins,
+            pluginItems(pluginStore),
             this.packages,
             this.conversations,
             this.containers,
           ),
           beforeGenerationMessage,
-          capabilityGrants: this.packages.find(
-            (item) => item.id === conversation.packageId,
-          )?.capabilities,
           onStep: async (step) => {
             message.meta.steps.push(step);
             await mutate?.(message, container);

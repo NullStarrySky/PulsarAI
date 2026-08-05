@@ -9,7 +9,7 @@ export const capabilities: CapabilityDefinition = {
   title: "代码执行",
   description: "执行局部 JavaScript 辅助逻辑。Feature 操作仍受各自权限对象限制。",
   documentation: {
-    overview: "执行短小 JavaScript 表达式或语句，用于数据转换、条件判断和组合已授权 Feature API。它是应用级权限边界，不是操作系统安全沙箱。",
+    overview: "执行短小 JavaScript 表达式或语句，用于数据转换、条件判断和组合运行时可用的 Feature API。它是应用级权限边界，不是操作系统安全沙箱。",
     notes: [
       "values 中的键会作为本次代码执行的局部变量，并优先于普通全局对象。",
       "浏览器高风险全局对象由独立 globals 权限控制。",

@@ -24,6 +24,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
+import type { Plugin } from "@/features/Resources/Plugin/domain/plugin-types";
 import SettingGroup from "@/features/Setting/presentation/SettingGroup.vue";
 import SettingItem from "@/features/Setting/presentation/SettingItem.vue";
 import SettingPage from "@/features/Setting/presentation/SettingPage.vue";
@@ -40,6 +41,7 @@ import BackupResourceRestoreDialog from "./BackupResourceRestoreDialog.vue";
 const backup = useBackupStore();
 const conversation = useConversationStore();
 const plugin = usePluginStore();
+const pluginItems = () => (plugin as unknown as { plugins: Plugin[] }).plugins;
 const restoreDialogOpen = ref(false);
 const selectedExportResource = ref("");
 const resourceImportMode = ref<ResourceImportMode>("copy");
@@ -71,7 +73,7 @@ const exportResourceOptions = computed(() => [
     value: `conversation:${item.id}`,
     label: `会话 · ${item.title}`,
   })),
-  ...plugin.plugins
+  ...pluginItems()
     .filter((item) => !item.builtIn)
     .map((item) => ({
       value: `plugin:${item.id}`,

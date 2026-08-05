@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Pulsar AI app icon</title>
+  <desc id="desc">A monochrome pulsar with a circular core, two magnetic-field orbits, bipolar beams pointing upper-left and lower-right, and an AI sparkle at the center.</desc>
+
+  <defs>
+    <radialGradient id="background" cx="50%" cy="42%" r="72%">
+      <stop offset="0" stop-color="#16181D"/>
+      <stop offset="1" stop-color="#050608"/>
+    </radialGradient>
+    <linearGradient id="northBeam" x1="428" y1="428" x2="150" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".92"/>
+      <stop offset=".54" stop-color="#D8D8DA" stop-opacity=".48"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity=".07"/>
+    </linearGradient>
+    <linearGradient id="southBeam" x1="596" y1="596" x2="874" y2="874" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".92"/>
+      <stop offset=".54" stop-color="#D8D8DA" stop-opacity=".48"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity=".07"/>
+    </linearGradient>
+    <linearGradient id="orbitSilver" x1="266" y1="690" x2="780" y2="332" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#43464D"/>
+      <stop offset=".34" stop-color="#F8F8F9"/>
+      <stop offset=".58" stop-color="#BFC1C5"/>
+      <stop offset="1" stop-color="#383B42"/>
+    </linearGradient>
+    <linearGradient id="orbitDots" x1="316" y1="312" x2="714" y2="744" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".14"/>
+      <stop offset=".48" stop-color="#FFFFFF" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity=".12"/>
+    </linearGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="7" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- App-icon field -->
+  <rect x="48" y="48" width="928" height="928" rx="220" fill="url(#background)"/>
+
+  <!-- Bipolar emission cones: upper-left and lower-right -->
+  <path d="M433 433L176 292C115 259 99 183 141 130C184 76 268 90 300 154L433 433Z" fill="url(#northBeam)"/>
+  <path d="M591 591L848 732C909 765 925 841 883 894C840 948 756 934 724 870L591 591Z" fill="url(#southBeam)"/>
+
+  <!-- Fine pulse axes and terminal pulses -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" opacity=".42">
+    <path d="M407 407L211 211" stroke-dasharray="10 16"/>
+    <path d="M617 617L813 813" stroke-dasharray="10 16"/>
+  </g>
+  <g fill="#FFFFFF">
+    <circle cx="211" cy="211" r="12" opacity=".72"/>
+    <circle cx="813" cy="813" r="12" opacity=".72"/>
+  </g>
+
+  <!-- Two magnetic-field orbits -->
+  <ellipse cx="512" cy="512" rx="315" ry="164" transform="rotate(-39 512 512)" fill="none" stroke="url(#orbitSilver)" stroke-width="24"/>
+  <ellipse cx="512" cy="512" rx="255" ry="177" transform="rotate(51 512 512)" fill="none" stroke="url(#orbitDots)" stroke-width="18" stroke-linecap="round" stroke-dasharray="1 32"/>
+
+  <!-- Circular pulsar body -->
+  <circle cx="512" cy="512" r="156" fill="#090A0D" stroke="#FFFFFF" stroke-width="28" filter="url(#softGlow)"/>
+  <circle cx="512" cy="512" r="126" fill="#090A0D" stroke="#FFFFFF" stroke-opacity=".11" stroke-width="3"/>
+
+  <!-- Four-way AI spark: machine intelligence + stellar core -->
+  <path d="M512 408C526 466 554 494 612 512C554 530 526 558 512 616C498 558 470 530 412 512C470 494 498 466 512 408Z" fill="#FFFFFF"/>
+  <circle cx="512" cy="512" r="8" fill="#090A0D" opacity=".24"/>
+</svg>

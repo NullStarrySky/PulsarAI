@@ -2,7 +2,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
@@ -58,8 +58,39 @@ struct ConfigRecord {
 #[derive(Debug, Deserialize, Serialize)]
 struct DatabaseRecord {
     #[serde(rename(deserialize = "resource_key", serialize = "id"))]
-    id: String,
+    id: Option<String>,
     value: serde_json::Value,
+}
+
+#[derive(Debug)]
+struct PluginNodeRecord {
+    resource_key: String,
+    plugin_id: String,
+    path: String,
+    value: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PluginSearchHit {
+    plugin_id: String,
+    plugin_name: String,
+    node_id: String,
+    path: String,
+    name: String,
+    kind: String,
+    excerpt: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PluginSearchRow {
+    plugin_id: String,
+    plugin_name: String,
+    node_id: String,
+    path: String,
+    name: String,
+    kind: String,
+    content: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -704,15 +735,275 @@ async fn open_database(path: &Path) -> Result<Surreal<Db>, String> {
     Ok(db)
 }
 
+async fn ensure_plugin_search_schema(db: &Surreal<Db>) -> Result<(), String> {
+    db.query(
+        "BEGIN TRANSACTION; \
+         DELETE resource_plugins \
+         WHERE resource_key = NONE OR value.id = NONE OR value.rootId = NONE; \
+         DELETE resource_plugin_nodes \
+         WHERE resource_key = NONE OR plugin_id = NONE OR path = NONE \
+            OR name = NONE OR kind = NONE OR value = NONE; \
+         DELETE resource_plugins \
+         WHERE value.rootId NOT IN (SELECT VALUE resource_key FROM resource_plugin_nodes); \
+         DELETE resource_plugin_nodes \
+         WHERE plugin_id NOT IN (SELECT VALUE resource_key FROM resource_plugins); \
+         COMMIT TRANSACTION;",
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    db.query(
+        "DEFINE ANALYZER IF NOT EXISTS plugin_search_analyzer \
+         TOKENIZERS class, punct FILTERS lowercase, ascii; \
+         DEFINE INDEX IF NOT EXISTS plugin_node_search ON TABLE resource_plugin_nodes \
+         FIELDS search_text SEARCH ANALYZER plugin_search_analyzer BM25;",
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+fn plugin_node_content_text(node: &serde_json::Value) -> String {
+    match node.get("content") {
+        Some(serde_json::Value::String(value)) => value.clone(),
+        Some(serde_json::Value::Null) | None => String::new(),
+        Some(value) => serde_json::to_string(value).unwrap_or_default(),
+    }
+}
+
+fn collect_plugin_node_records(
+    plugin_id: &str,
+    plugin_name: &str,
+    node: &serde_json::Value,
+    parent_id: Option<&str>,
+    parent_path: &str,
+    output: &mut Vec<serde_json::Value>,
+) -> Result<(), String> {
+    let object = node
+        .as_object()
+        .ok_or_else(|| "插件树节点必须是对象".to_string())?;
+    let node_id = object
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "插件树节点缺少稳定 ID".to_string())?;
+    let name = object
+        .get("name")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    let kind = object
+        .get("kind")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("file");
+    let path = if parent_id.is_none() {
+        "/".to_string()
+    } else if parent_path.is_empty() || parent_path == "/" {
+        name.to_string()
+    } else {
+        format!("{parent_path}/{name}")
+    };
+    let content_text = plugin_node_content_text(node);
+    let search_text = format!("{path}\n{name}\n{content_text}");
+    let mut stored_node = node.clone();
+    if let Some(stored_object) = stored_node.as_object_mut() {
+        stored_object.remove("children");
+    }
+    output.push(serde_json::json!({
+        "resource_key": node_id,
+        "plugin_id": plugin_id,
+        "plugin_name": plugin_name,
+        "parent_id": parent_id,
+        "path": path,
+        "name": name,
+        "kind": kind,
+        "search_text": search_text,
+        "value": stored_node,
+    }));
+    if let Some(children) = object.get("children").and_then(serde_json::Value::as_array) {
+        for child in children {
+            collect_plugin_node_records(
+                plugin_id,
+                plugin_name,
+                child,
+                Some(node_id),
+                &path,
+                output,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn assemble_plugin_node(
+    node_id: &str,
+    nodes: &HashMap<String, PluginNodeRecord>,
+    children: &HashMap<String, Vec<String>>,
+    visiting: &mut HashSet<String>,
+) -> Result<serde_json::Value, String> {
+    if !visiting.insert(node_id.to_string()) {
+        return Err(format!("插件树包含循环引用：{node_id}"));
+    }
+    let record = nodes
+        .get(node_id)
+        .ok_or_else(|| format!("插件树缺少节点：{node_id}"))?;
+    let mut node = record.value.clone();
+    if node.get("kind").and_then(serde_json::Value::as_str) == Some("folder") {
+        let mut child_ids = children.get(node_id).cloned().unwrap_or_default();
+        child_ids.sort_by(|left, right| {
+            let left_node = nodes.get(left).map(|item| &item.value);
+            let right_node = nodes.get(right).map(|item| &item.value);
+            let left_order = left_node
+                .and_then(|item| item.get("order"))
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or_default();
+            let right_order = right_node
+                .and_then(|item| item.get("order"))
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or_default();
+            left_order
+                .cmp(&right_order)
+                .then_with(|| {
+                    left_node
+                        .and_then(|item| item.get("name"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .cmp(
+                            right_node
+                                .and_then(|item| item.get("name"))
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or_default(),
+                        )
+                })
+                .then_with(|| left.cmp(right))
+        });
+        let assembled = child_ids
+            .iter()
+            .map(|child_id| assemble_plugin_node(child_id, nodes, children, visiting))
+            .collect::<Result<Vec<_>, _>>()?;
+        let object = node
+            .as_object_mut()
+            .ok_or_else(|| format!("插件节点不是对象：{node_id}"))?;
+        object.insert("children".to_string(), serde_json::Value::Array(assembled));
+        object
+            .entry("collapsed".to_string())
+            .or_insert(serde_json::Value::Bool(false));
+    }
+    visiting.remove(node_id);
+    Ok(node)
+}
+
+async fn select_plugin_values(db: &Surreal<Db>) -> Result<Vec<serde_json::Value>, String> {
+    let metadata = select_database_values(db, "resource_plugins").await?;
+    let mut result = db
+        .query(
+            "SELECT resource_key, plugin_id, path, value \
+             FROM resource_plugin_nodes ORDER BY plugin_id, resource_key",
+        )
+        .await
+        .map_err(|error| error.to_string())?;
+    let node_values: Vec<serde_json::Value> = result
+        .take(0)
+        .map_err(|error| format!("读取插件节点失败：{error}"))?;
+    let node_records = node_values
+        .into_iter()
+        .map(|value| {
+            let object = value
+                .as_object()
+                .ok_or_else(|| "插件节点记录不是对象".to_string())?;
+            let resource_key = object
+                .get("resource_key")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| "插件节点记录缺少 resource_key".to_string())?;
+            let plugin_id = object
+                .get("plugin_id")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| format!("插件节点 {resource_key} 缺少 plugin_id"))?;
+            let path = object
+                .get("path")
+                .and_then(serde_json::Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| format!("插件节点 {resource_key} 缺少 path"))?;
+            let node = object
+                .get("value")
+                .cloned()
+                .ok_or_else(|| format!("插件节点 {resource_key} 缺少 value"))?;
+            Ok(PluginNodeRecord {
+                resource_key: resource_key.to_string(),
+                plugin_id: plugin_id.to_string(),
+                path: path.to_string(),
+                value: node,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let mut plugins = Vec::with_capacity(metadata.len());
+    for mut plugin in metadata {
+        let plugin_id = plugin
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let root_id = plugin
+            .get("rootId")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| format!("插件 {plugin_id} 缺少根节点 ID"))?;
+        let nodes = node_records
+            .iter()
+            .filter(|record| record.plugin_id == plugin_id)
+            .map(|record| {
+                (
+                    record.resource_key.clone(),
+                    PluginNodeRecord {
+                        resource_key: record.resource_key.clone(),
+                        plugin_id: record.plugin_id.clone(),
+                        path: record.path.clone(),
+                        value: record.value.clone(),
+                    },
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        let mut ids_by_path = HashMap::new();
+        for record in nodes.values() {
+            if ids_by_path
+                .insert(record.path.clone(), record.resource_key.clone())
+                .is_some()
+            {
+                return Err(format!("插件 {plugin_id} 包含重复路径：{}", record.path));
+            }
+        }
+        let mut children: HashMap<String, Vec<String>> = HashMap::new();
+        for record in nodes.values().filter(|record| record.path != "/") {
+            let parent_path = record
+                .path
+                .rsplit_once('/')
+                .map(|(path, _)| path)
+                .filter(|path| !path.is_empty())
+                .unwrap_or("/");
+            let parent_id = ids_by_path.get(parent_path).ok_or_else(|| {
+                format!("插件 {plugin_id} 的节点 {} 缺少父路径 {parent_path}", record.path)
+            })?;
+            children
+                .entry(parent_id.clone())
+                .or_default()
+                .push(record.resource_key.clone());
+        }
+        let root = assemble_plugin_node(root_id, &nodes, &children, &mut HashSet::new())?;
+        if let Some(object) = plugin.as_object_mut() {
+            object.remove("rootId");
+            object.insert("root".to_string(), root);
+        }
+        plugins.push(plugin);
+    }
+    Ok(plugins)
+}
+
 async fn select_database_values(
     db: &Surreal<Db>,
     table: &str,
 ) -> Result<Vec<serde_json::Value>, String> {
     let table = normalize_table_name(table)?;
-    let sql = format!("SELECT resource_key, value FROM {table} ORDER BY resource_key");
+    let sql = format!("SELECT VALUE value FROM {table} ORDER BY resource_key");
     let mut result = db.query(sql).await.map_err(|error| error.to_string())?;
-    let rows: Vec<DatabaseRecord> = result.take(0).map_err(|error| error.to_string())?;
-    Ok(rows.into_iter().map(|record| record.value).collect())
+    result.take(0).map_err(|error| error.to_string())
 }
 
 fn http_response(stream: &mut TcpStream, status: &str, body: &[u8]) -> Result<(), String> {
@@ -878,7 +1169,9 @@ async fn app_db<'a>(app: &AppHandle, state: &'a AppState) -> Result<&'a Surreal<
             let data_dir = app_data_dir(app)?;
             fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
             let db_path = data_dir.join("surrealdb");
-            open_database(&db_path).await
+            let db = open_database(&db_path).await?;
+            ensure_plugin_search_schema(&db).await?;
+            Ok(db)
         })
         .await
 }
@@ -1071,6 +1364,162 @@ async fn database_delete(
 }
 
 #[tauri::command]
+async fn database_reset_character_data(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let db = app_db(&app, &state).await?;
+    db.query(
+        "BEGIN TRANSACTION; \
+         DELETE resource_conversation_memory_segments; \
+         DELETE resource_message_containers; \
+         DELETE resource_conversations; \
+         DELETE resource_package_categories; \
+         DELETE resource_packages; \
+         DELETE resource_plugin_nodes; \
+         DELETE resource_plugins; \
+         COMMIT TRANSACTION;",
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+
+    let resources = app_data_dir(&app)?.join("resources");
+    if resources.exists() {
+        fs::remove_dir_all(&resources).map_err(|error| error.to_string())?;
+    }
+    fs::create_dir_all(&resources).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn database_load_plugins(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let db = app_db(&app, &state).await?;
+    select_plugin_values(db).await
+}
+
+#[tauri::command]
+async fn database_save_plugin(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    plugin: serde_json::Value,
+) -> Result<(), String> {
+    let plugin_object = plugin
+        .as_object()
+        .ok_or_else(|| "插件记录必须是对象".to_string())?;
+    let plugin_id = plugin_object
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "插件记录缺少 ID".to_string())?;
+    let plugin_name = plugin_object
+        .get("name")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default();
+    let root = plugin_object
+        .get("root")
+        .ok_or_else(|| format!("插件 {plugin_id} 缺少根节点"))?;
+    let root_id = root
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| format!("插件 {plugin_id} 的根节点缺少 ID"))?;
+
+    let mut metadata = plugin.clone();
+    if let Some(object) = metadata.as_object_mut() {
+        object.remove("root");
+        object.insert("rootId".to_string(), serde_json::json!(root_id));
+    }
+    let mut nodes = Vec::new();
+    collect_plugin_node_records(plugin_id, plugin_name, root, None, "", &mut nodes)?;
+
+    let db = app_db(&app, &state).await?;
+    db.query(
+        "BEGIN TRANSACTION; \
+         DELETE resource_plugin_nodes WHERE plugin_id = $plugin_id; \
+         DELETE resource_plugins WHERE resource_key = $plugin_id; \
+         CREATE resource_plugins CONTENT { resource_key: $plugin_id, value: $metadata }; \
+         FOR $node IN $nodes { CREATE resource_plugin_nodes CONTENT $node; }; \
+         COMMIT TRANSACTION;",
+    )
+    .bind(("plugin_id", plugin_id.to_string()))
+    .bind(("metadata", metadata))
+    .bind(("nodes", nodes))
+    .await
+    .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn database_delete_plugin(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    plugin_id: String,
+) -> Result<(), String> {
+    let db = app_db(&app, &state).await?;
+    db.query(
+        "BEGIN TRANSACTION; \
+         DELETE resource_plugin_nodes WHERE plugin_id = $plugin_id; \
+         DELETE resource_plugins WHERE resource_key = $plugin_id; \
+         COMMIT TRANSACTION;",
+    )
+    .bind(("plugin_id", plugin_id))
+    .await
+    .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn database_search_plugin_nodes(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<PluginSearchHit>, String> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Ok(Vec::new());
+    }
+    let db = app_db(&app, &state).await?;
+    let mut result = db
+        .query(
+            "SELECT plugin_id, plugin_name, resource_key AS node_id, path, name, kind, value.content AS content \
+             FROM resource_plugin_nodes \
+             WHERE search_text @0@ $query \
+                OR string::lowercase(search_text) CONTAINS string::lowercase($query) \
+             ORDER BY plugin_name, path \
+             LIMIT $limit",
+        )
+        .bind(("query", query.to_string()))
+        .bind(("limit", i64::from(limit.unwrap_or(40).clamp(1, 100))))
+        .await
+        .map_err(|error| error.to_string())?;
+    let rows: Vec<PluginSearchRow> = result.take(0).map_err(|error| error.to_string())?;
+    Ok(rows
+        .into_iter()
+        .map(|row| PluginSearchHit {
+            plugin_id: row.plugin_id,
+            plugin_name: row.plugin_name,
+            node_id: row.node_id,
+            path: row.path,
+            name: row.name,
+            kind: row.kind,
+            excerpt: match row.content {
+                Some(serde_json::Value::String(value)) => value.chars().take(180).collect(),
+                Some(serde_json::Value::Null) | None => String::new(),
+                Some(value) => serde_json::to_string(&value)
+                    .unwrap_or_default()
+                    .chars()
+                    .take(180)
+                    .collect(),
+            },
+        })
+        .collect())
+}
+
+#[tauri::command]
 async fn resource_save_image(
     app: AppHandle,
     bytes: Vec<u8>,
@@ -1235,7 +1684,7 @@ async fn backup_read_resources(
         packages: select_database_values(&db, "resource_packages").await?,
         conversations: select_database_values(&db, "resource_conversations").await?,
         containers: select_database_values(&db, "resource_message_containers").await?,
-        plugins: select_database_values(&db, "resource_plugins").await?,
+        plugins: select_plugin_values(&db).await?,
     };
     drop(db);
     if let Some(path) = materialized {
@@ -1523,7 +1972,8 @@ fn app_exit(app: AppHandle) {
 fn setup_system_tray(app: &mut tauri::App) -> tauri::Result<()> {
     let quit = MenuItemBuilder::with_id("quit", "退出 Pulsar").build(app)?;
     let menu = MenuBuilder::new(app).item(&quit).build()?;
-    let mut tray = TrayIconBuilder::new()
+    TrayIconBuilder::new()
+        .icon(tauri::include_image!("./icons/32x32.png"))
         .tooltip("Pulsar")
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -1545,11 +1995,8 @@ fn setup_system_tray(app: &mut tauri::App) -> tauri::Result<()> {
                     let _ = window.set_focus();
                 }
             }
-        });
-    if let Some(icon) = app.default_window_icon() {
-        tray = tray.icon(icon.clone());
-    }
-    tray.build(app)?;
+        })
+        .build(app)?;
     Ok(())
 }
 
@@ -1565,9 +2012,14 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_upload::init())
+        .plugin(tauri_plugin_websocket::init())
+        .plugin(tauri_plugin_tts::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notifications::init());
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let builder = builder.plugin(tauri_plugin_stt::init());
 
     #[cfg(target_os = "android")]
     let builder = builder
@@ -1593,6 +2045,11 @@ pub fn run() {
             database_select_one,
             database_upsert,
             database_delete,
+            database_reset_character_data,
+            database_load_plugins,
+            database_save_plugin,
+            database_delete_plugin,
+            database_search_plugin_nodes,
             resource_save_image,
             resource_delete_file,
             backup_list,

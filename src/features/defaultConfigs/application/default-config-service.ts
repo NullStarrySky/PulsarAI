@@ -46,15 +46,18 @@ export function setImageModel(model: string) {
   return setDefaultConfig(defaultConfigKeys.imageModel, model);
 }
 
-export function getDefaultCapabilities() {
-  return getDefaultConfig(
-    defaultConfigKeys.defaultCapabilities,
-    fallbackDefaultConfigs.defaultCapabilities,
-  );
+export function getSpeechModel() {
+  return getDefaultConfig(defaultConfigKeys.speechModel, fallbackDefaultConfigs.speechModel);
 }
 
-export function setDefaultCapabilities(
-  capabilities: typeof fallbackDefaultConfigs.defaultCapabilities,
-) {
-  return setDefaultConfig(defaultConfigKeys.defaultCapabilities, capabilities);
+export function setSpeechModel(model: string) {
+  return setDefaultConfig(defaultConfigKeys.speechModel, model);
+}
+
+export function getTranscriptionModel() {
+  return getDefaultConfig(defaultConfigKeys.transcriptionModel, fallbackDefaultConfigs.transcriptionModel);
+}
+
+export function setTranscriptionModel(model: string) {
+  return setDefaultConfig(defaultConfigKeys.transcriptionModel, model);
 }

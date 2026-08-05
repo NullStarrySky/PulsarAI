@@ -5,9 +5,11 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useModelConnectionStore } from "../application/model-connection-store";
 import ProviderAvatar from "./ProviderAvatar.vue";
+import { supportsFeatureService, type ModelApiType } from "../domain/model-provider";
 
 const props = defineProps<{
   modelValue: string;
+  apiType?: ModelApiType;
 }>();
 
 const emit = defineEmits<{
@@ -17,7 +19,14 @@ const emit = defineEmits<{
 const store = useModelConnectionStore();
 const keyword = ref("");
 
-const enabledProviders = computed(() => store.providers.filter((provider) => provider.enabled));
+const enabledProviders = computed(() =>
+  store.providers.filter(
+    (provider) =>
+      provider.enabled &&
+      (!props.apiType || provider.models.some((model) => model.enabled && model.apiType === props.apiType)) &&
+      (!props.apiType || !["image", "asr", "tts"].includes(props.apiType) || supportsFeatureService(provider)),
+  ),
+);
 const activeProvider = computed(
   () => enabledProviders.value.find((provider) => provider.id === store.activeProviderId) ?? enabledProviders.value[0],
 );
@@ -30,7 +39,7 @@ const models = computed(() => {
   }
 
   return provider.models.filter((model) => {
-    const matchesType = model.enabled && model.apiType === "chat";
+    const matchesType = model.enabled && model.apiType === (props.apiType ?? "chat");
     const matchesQuery = !query || [model.id, model.name].some((value) => value.toLowerCase().includes(query));
     return matchesType && matchesQuery;
   });
@@ -90,7 +99,7 @@ onMounted(async () => {
           <ProviderAvatar :name="model.name" :src="model.iconUrl || activeProvider?.iconUrl" />
         </button>
         <p v-if="models.length === 0" class="px-2 py-8 text-center text-sm text-muted-foreground">
-          没有可用的对话模型
+          没有可用的{{ props.apiType ?? "chat" }}模型
         </p>
       </div>
       </section>

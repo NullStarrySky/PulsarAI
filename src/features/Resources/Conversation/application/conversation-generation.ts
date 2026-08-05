@@ -29,8 +29,6 @@ import {
   createPluginCustomToolFunction,
 } from "@/features/Resources/Plugin/application/plugin-custom-tools";
 import {
-  findPluginNodeByPath,
-  pluginConventions,
   type Plugin,
 } from "@/features/Resources/Plugin/domain/plugin-types";
 import {
@@ -38,12 +36,7 @@ import {
   collectPluginRegexRules,
 } from "@/features/Resources/Plugin/domain/plugin-regex";
 import { createPluginSelfApi } from "@/features/Resources/Plugin/capabilities";
-import {
-  buildCapabilityRuntime,
-  mergeCapabilityGrants,
-} from "@/features/Capabilities/application/capability-registry";
-import type { CapabilityGrants } from "@/features/Capabilities/domain/capability";
-import { getDefaultCapabilities } from "@/features/defaultConfigs/application/default-config-service";
+import { buildCapabilityRuntime } from "@/features/Capabilities/application/capability-registry";
 import {
   executeSandboxCodeAsync,
   resolveSandboxMessages,
@@ -96,7 +89,6 @@ export interface RunConversationGenerationInput {
   prompt: string;
   resourceContext?: string;
   beforeGenerationMessage?: ChatMessage;
-  capabilityGrants?: CapabilityGrants;
   onStep?: (step: LocalStep | ToolCallResult) => void | Promise<void>;
 }
 
@@ -160,23 +152,9 @@ function currentComponentRequester() {
 export async function runConversationGeneration(
   input: RunConversationGenerationInput,
 ): Promise<RunConversationGenerationResult> {
-  const capabilityRuntime: ReturnType<typeof buildCapabilityRuntime> =
-    input.conversation.featureApiEnabled
-    ? buildCapabilityRuntime(
-        mergeCapabilityGrants(
-          await getDefaultCapabilities(),
-          input.capabilityGrants,
-        ),
-      )
-      : {
-          environment: {},
-          prompt: "",
-          grants: {},
-        };
+  const capabilityRuntime = buildCapabilityRuntime();
   const projectAgentRuntime = isProjectAgentConversation(input.conversation)
-    ? await createProjectAgentRuntime(input.conversationId, {
-        pluginSubCapIds: capabilityRuntime.grants.plugin ?? [],
-      })
+    ? await createProjectAgentRuntime(input.conversationId)
     : null;
   const pluginEnvironment = await buildPluginGenerationEnvironment(
     input.plugins,
@@ -407,6 +385,12 @@ export async function runConversationGeneration(
         : {};
     const currentContainerResolver = () =>
       createPluginReferenceResolver(pluginEnvironment.enabledPlugins);
+    const scopedSelfApi = createPluginSelfApi(pluginId, ["read"]);
+    const safeScopedSelfApi = Object.fromEntries(
+      Object.entries(scopedSelfApi).filter(([name]) =>
+        ["getSelf", "getManifest", "getConfig", "read"].includes(name)
+      ),
+    );
     return {
       ...inheritedPluginApi,
       listContainers: () => currentContainerResolver().listContainers(),
@@ -420,25 +404,7 @@ export async function runConversationGeneration(
         containerId: string,
         resourceIds?: string[],
       ) => currentContainerResolver().readContainer(containerId, resourceIds),
-      resolveConfig: (reference: string) => {
-        const plugin = pluginEnvironment.enabledPlugins.find(
-          (item) => item.id === pluginId,
-        );
-        const manifest = plugin
-          ? findPluginNodeByPath(plugin.root, pluginConventions.manifest)
-          : null;
-        if (manifest?.kind !== "file") {
-          throw new Error("当前插件缺少 manifest.json。");
-        }
-        return currentContainerResolver().resolveFromResource(
-          manifest.id,
-          reference.trim().replace(/^<@|>$/g, ""),
-        );
-      },
-      ...createPluginSelfApi(
-        pluginId,
-        capabilityRuntime.grants.plugin ?? [],
-      ),
+      ...safeScopedSelfApi,
     };
   };
 
@@ -449,7 +415,7 @@ export async function runConversationGeneration(
   ): Promise<unknown> => {
     if (!pluginEnvironment.resolver.isResourceValue(resource)) {
       throw new Error(
-        "api.runProcess() 只接受通过当前脚本显式 <@...> 引用的资源",
+        "api.runProcess() 只接受通过当前脚本 imports.resource(...) 导入的资源",
       );
     }
     if (resource.type !== "javascript") {

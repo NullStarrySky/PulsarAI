@@ -153,7 +153,6 @@ export function buildConversationResourceContext(
               description: resourcePackage.description,
               icon: resourcePackage.icon,
               categoryId: resourcePackage.categoryId ?? null,
-              capabilities: resourcePackage.capabilities,
               pluginId: resourcePackage.pluginId,
               mainPluginId: resourcePackage.mainPluginId,
               enabledGlobalPluginIds: resourcePackage.enabledGlobalPluginIds,

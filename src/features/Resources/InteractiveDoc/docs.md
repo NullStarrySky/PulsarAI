@@ -20,7 +20,7 @@ Few-shot assistant output.
 :::
 ```
 
-The parser ignores Pulsar markers inside normal backtick or tilde code fences. Malformed, nested, orphaned, or unclosed role fences produce structured diagnostics. Markdown still supports Sandbox `{{...}}`, role-preserving `[[...]]`, and explicit Plugin `<@...>` references.
+The parser ignores Pulsar markers inside normal backtick or tilde code fences. Malformed, nested, orphaned, or unclosed role fences produce structured diagnostics. Markdown still supports Sandbox `{{...}}`, role-preserving `[[...]]`, and the source-scoped `imports` API inside macros.
 
 The root context entry is the exact Plugin path `context.md`. Its compression-memory threshold is resource metadata, not Markdown content.
 
@@ -48,11 +48,16 @@ A `.data` file is JSON that defines reusable state rather than storing a Convers
 
 Runtime values remain replayable Conversation state bound to concrete message versions. `.data` files are never rewritten when values change and no data instance is shared across Conversations.
 
-## Resource metadata references
+## Data imports
 
-Every Plugin file has `dataReferences: Array<{ alias, dataId }>` metadata. The stable Data ID is persisted; path, source Plugin, isolation, and current value are resolved when queried. Moving a `.data` file therefore does not change its state identity.
+Import Data by literal relative path or stable ID:
 
-Markdown content does not contain Data imports. During compilation, the referencing resource receives its aliases as `data.<alias>` and `DATA.<alias>` inside Sandbox expressions. One resource may reference multiple definitions, and one definition may be referenced by multiple resources.
+```md
+{{ imports.resource("./state.data").hp }}
+{{ imports.resourceById("stable-data-id").inventory }}
+```
+
+The returned value is the hydrated wrapper facade, not raw JSON text. Static discovery prepares the definition before replay; runtime resolution derives its state identity from the Data ID, isolation, and importing resource/conversation. Moving a path-imported Data file requires updating that literal, while ID imports remain stable.
 
 ## Data container API
 
@@ -80,6 +85,6 @@ It cannot use Feature or Plugin APIs, files, network, current time, randomness, 
 
 ## Compilation and editing
 
-`domain/interactive-document.ts` parses role-aware Markdown, links explicit references through the Plugin resolver, binds metadata-provided Data aliases, evaluates Sandbox expressions, and returns role-preserving model messages plus diagnostics.
+`domain/interactive-document.ts` parses role-aware Markdown, evaluates Sandbox expressions with the source-scoped `imports` facade, and returns role-preserving model messages plus import dependencies and diagnostics.
 
 Ordinary `.md` files use the Milkdown editing surface directly. They do not expose a redundant raw-source/preview switch. Raw-source switching is reserved for Vue files and convention JSON files that have a structured renderer, such as root `regex.json`.

@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { markLocalDatabaseChange } from "./sync-metadata";
 
 export interface DatabaseRecord<T> {
-  id: string;
+  id: string | null;
   value: T;
 }
 
@@ -23,4 +23,8 @@ export async function remove(table: string, id: string) {
   const previous = await selectOne(table, id);
   await invoke<void>("database_delete", { table, id });
   markLocalDatabaseChange(table, id, true, previous);
+}
+
+export async function resetCharacterData() {
+  await invoke<void>("database_reset_character_data");
 }

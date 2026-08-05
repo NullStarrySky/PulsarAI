@@ -1,4 +1,5 @@
 export type ModelApiType = "chat" | "image" | "video" | "embedding" | "asr" | "tts";
+export type ModelProviderRuntime = "remote" | "local-heavy";
 
 export interface ModelDefinition {
   id: string;
@@ -19,7 +20,13 @@ export interface ModelProviderDefinition {
   apiKeyName: string;
   enabled: boolean;
   builtIn?: boolean;
+  /** Heavy local runtimes are persisted for future support but hidden from media-service Features. */
+  runtime?: ModelProviderRuntime;
   models: ModelDefinition[];
+}
+
+export function supportsFeatureService(provider: ModelProviderDefinition) {
+  return provider.runtime !== "local-heavy";
 }
 
 export interface NewModelProviderInput {

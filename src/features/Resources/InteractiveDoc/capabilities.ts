@@ -11,9 +11,9 @@ export const capabilities: CapabilityDefinition = {
   title: "上下文文档",
   description: "把带 Pulsar 角色围栏的 Markdown 编译为角色消息。",
   documentation: {
-    overview: "解析普通 Markdown、:::pulsar role=... 角色围栏与显式资源引用，生成可加入上下文的角色消息。数据引用来自资源元数据，不写入 Markdown。",
+    overview: "解析普通 Markdown、:::pulsar role=... 角色围栏与同构 imports 调用，生成可加入上下文的角色消息。依赖由字面量调用静态发现，不维护资源引用元数据。",
     notes: [
-      "编译过程不会隐式扫描资源；.data 绑定由 Plugin resolver 从资源 dataReferences 元数据提供。",
+      "编译过程静态扫描 imports.resource(...) 与 imports.resourceById(...) 字面量；导入 .data 时由 Plugin resolver 在运行时完成水合。",
       "返回 errors 时调用方应先展示或处理诊断，再决定是否使用部分编译结果。",
     ],
     types: [
@@ -57,7 +57,7 @@ export const capabilities: CapabilityDefinition = {
     compile: [{
       name: "compile",
       signature: "compile(source: string): ContextDocumentCompileResult",
-      description: "解析角色围栏 Markdown 与显式引用并返回编译结果。",
+      description: "解析角色围栏 Markdown 与 imports 调用并返回编译结果。",
       example: "contextDocument.compile(source)",
     }],
   },

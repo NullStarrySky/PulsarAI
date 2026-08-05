@@ -11,28 +11,11 @@ interface ProxyFetchResponse {
   body: number[];
 }
 
-async function readRequestBody(init?: RequestInit) {
-  if (!init?.body) {
+async function readRequestBody(request: Request) {
+  if (request.method === "GET" || request.method === "HEAD" || request.body === null) {
     return undefined;
   }
-
-  if (typeof init.body === "string") {
-    return [...new TextEncoder().encode(init.body)];
-  }
-
-  if (init.body instanceof Uint8Array) {
-    return [...init.body];
-  }
-
-  if (init.body instanceof ArrayBuffer) {
-    return [...new Uint8Array(init.body)];
-  }
-
-  if (init.body instanceof FormData) {
-    throw new Error("modelProxyFetch does not support FormData bodies yet.");
-  }
-
-  return [...new TextEncoder().encode(String(init.body))];
+  return [...new Uint8Array(await request.clone().arrayBuffer())];
 }
 
 export const modelProxyFetch: typeof fetch = async (input, init) => {
@@ -40,7 +23,7 @@ export const modelProxyFetch: typeof fetch = async (input, init) => {
   const headers: ProxyHeader[] = [];
   request.headers.forEach((value, name) => headers.push({ name, value }));
 
-  const body = init?.body ? await readRequestBody(init) : await readRequestBody({ body: await request.clone().text() });
+  const body = await readRequestBody(request);
   const response = await invoke<ProxyFetchResponse>("model_proxy_fetch", {
     request: {
       url: request.url,

@@ -50,7 +50,7 @@ export const capabilities: CapabilityDefinition = {
   },
 };
 
-type DefaultConfigKey = Exclude<keyof typeof defaultConfigKeys, "defaultCapabilities">;
+type DefaultConfigKey = keyof typeof defaultConfigKeys;
 
 export const builder = createCapabilityBuilder(capabilities, (granted) => ({
   ...(granted.has("read") ? {

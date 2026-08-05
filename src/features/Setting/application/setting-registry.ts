@@ -1,5 +1,5 @@
 import type { Component } from "vue";
-import { BarChart3, BellRing, Brain, CreditCard, History, Info, Keyboard, Languages, Palette, Settings, SlidersHorizontal, Star } from "lucide-vue-next";
+import { BarChart3, BellRing, Brain, CreditCard, History, ImageIcon, Info, Keyboard, Languages, Mic, Palette, Settings, SlidersHorizontal, Star, Volume2 } from "lucide-vue-next";
 import GeneralSettingsPage from "../presentation/pages/GeneralSettingsPage.vue";
 import SubscriptionSettingsPage from "../presentation/pages/SubscriptionSettingsPage.vue";
 import ModelProviderSettingsPage from "@/features/ModelConnection/presentation/ModelProviderSettingsPage.vue";
@@ -12,6 +12,9 @@ import StatisticSettingsPage from "@/features/Statistic/presentation/StatisticSe
 import TranslateSettingsPage from "@/features/Translate/presentation/TranslateSettingsPage.vue";
 import RuntimeSettingsPage from "@/features/Misc/presentation/RuntimeSettingsPage.vue";
 import ConversationFavoriteSettingsPage from "@/features/Resources/Conversation/presentation/ConversationFavoriteSettingsPage.vue";
+import TtsSettingsPage from "@/features/TTS/presentation/TtsSettingsPage.vue";
+import SttSettingsPage from "@/features/STT/presentation/SttSettingsPage.vue";
+import ImageGenerationSettingsPage from "@/features/ImageGeneration/presentation/ImageGenerationSettingsPage.vue";
 
 export interface SettingPageMeta {
   id: string;
@@ -62,7 +65,7 @@ export function ensureDefaultSettingPages() {
   registerSettingGroup({ id: "conversation", title: "会话" });
   registerSettingGroup({ id: "account", title: "账户" });
   registerSettingGroup({ id: "appearance", title: "外观" });
-  registerSettingGroup({ id: "provider", title: "模型" });
+  registerSettingGroup({ id: "provider", title: "提供商" });
   registerSettingGroup({ id: "tools", title: "工具" });
   registerSettingGroup({ id: "data", title: "数据" });
   registerSettingGroup({ id: "about", title: "关于" });
@@ -155,6 +158,36 @@ export function ensureDefaultSettingPages() {
       group: "provider",
     },
     component: ModelProviderSettingsPage,
+  });
+
+  registerSettingPage({
+    meta: {
+      id: "provider.tts",
+      icon: Volume2,
+      title: "文本转语音",
+      group: "provider",
+    },
+    component: TtsSettingsPage,
+  });
+
+  registerSettingPage({
+    meta: {
+      id: "provider.stt",
+      icon: Mic,
+      title: "语音转文字",
+      group: "provider",
+    },
+    component: SttSettingsPage,
+  });
+
+  registerSettingPage({
+    meta: {
+      id: "provider.image-generation",
+      icon: ImageIcon,
+      title: "图片生成",
+      group: "provider",
+    },
+    component: ImageGenerationSettingsPage,
   });
 
   registerSettingPage({

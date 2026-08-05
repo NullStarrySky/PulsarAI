@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import SettingForm from "@/features/Setting/presentation/SettingForm.vue";
 import SettingFormField from "@/features/Setting/presentation/SettingFormField.vue";
 import SettingPage from "@/features/Setting/presentation/SettingPage.vue";
+import AppIcon from "@/features/UI/presentation/AppIcon.vue";
 import {
   detectEnvironmentTools,
   type EnvironmentToolStatus,
@@ -51,6 +52,19 @@ async function refreshEnvironment() {
 
 <template>
   <SettingPage title="关于 Pulsar" description="应用信息、技术栈和版本记录。">
+    <section
+      class="flex items-center gap-5 rounded-xl border bg-card p-5 shadow-sm mobile:flex-col mobile:items-start mobile:p-4"
+    >
+      <AppIcon class="size-20 mobile:size-16" />
+      <div class="min-w-0">
+        <h3 class="text-xl font-semibold tracking-tight">PulsarAI</h3>
+        <p class="mt-1 text-sm leading-6 text-muted-foreground">
+          一个开放、可扩展的本地 AI 工作空间。
+        </p>
+        <Badge class="mt-3" variant="secondary">v{{ version }}</Badge>
+      </div>
+    </section>
+
     <SettingForm>
       <SettingFormField title="版本" :description="updateStatus || `当前版本 ${version}`">
         <Button size="sm" variant="outline" @click="checkForUpdates">检查更新</Button>

@@ -17,13 +17,12 @@ For package-bound `task` conversations, Conversation calls `createProjectAgentRu
 
 The task then enters the same selected Plugin workflow as ordinary conversations. Project operations are performed through the single sandboxed `codeAct` tool.
 
-`createProjectAgentRuntime` adds three synchronized documentation blocks to the project prompt:
+`createProjectAgentRuntime` adds two project-specific documentation blocks to the project prompt:
 
 - Project filesystem API operations for `/project.json`, `/conversations`, and `/plugins`;
-- authorized Plugin Feature API documentation generated from the shared Plugin capability definition;
 - the context-document format prompt.
 
-This keeps the model-facing Plugin API inventory aligned with `Plugin/domain/plugin-capability.ts`, its capability builder, and VitePress instead of maintaining another handwritten signature list.
+Plugin Feature API details are retrieved through the shared `readDocs("plugin")` runtime function instead of copying that inventory into every Project Agent prompt.
 
 ## Side tasks
 

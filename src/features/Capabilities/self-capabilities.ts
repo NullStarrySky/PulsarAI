@@ -5,13 +5,13 @@ import {
 
 export const capabilities: CapabilityDefinition = {
   id: "capabilitySystem",
-  title: "权限与 API 文档",
-  description: "查询当前权限系统公开的 Feature、子权限与 API 元数据。",
+  title: "Feature API 文档",
+  description: "查询当前 Feature API 注册表公开的 Feature 与函数元数据。",
   documentation: {
-    overview: "提供权限注册表自身的只读元数据，便于工具检查 Feature id、权限标识与函数说明。读取元数据不会授予被查询 Feature 的执行权限。",
+    overview: "提供注册表自身的只读元数据；普通公开 API 始终可用，少数特殊操作由运行时策略封锁。",
     notes: [
-      "list 和 get 返回的对象与设置、模型提示词和文档生成器使用同一份定义。",
-      "all 是配置时的便捷授权，运行时会展开为该 Feature 的全部显式子权限。",
+      "list、get、readDocs 与人类文档使用同一份定义。",
+      "被策略封锁的函数不会出现在普通生成运行时中。",
     ],
     types: [
       {
@@ -45,7 +45,7 @@ export const capabilities: CapabilityDefinition = {
       },
       {
         name: "CapabilityDefinition",
-        description: "一个 Feature 的完整权限、文档与 API 元数据。",
+        description: "一个 Feature 的完整文档与 API 元数据。",
         definition: `interface CapabilityDefinition {
   id: string;
   title: string;
@@ -55,29 +55,24 @@ export const capabilities: CapabilityDefinition = {
   api: Record<string, CapabilityApiDoc[]>;
 }`,
       },
-      {
-        name: "CapabilityGrants",
-        description: "按 Feature id 保存的子权限授权表。",
-        definition: `type CapabilityGrants = Record<string, string[]>;`,
-      },
     ],
   },
   subCaps: {
-    all: "全部权限元数据权限",
-    read: "读取权限与 API 文档",
+    all: "全部文档元数据",
+    read: "读取 API 文档",
   },
   api: {
     read: [
       {
         name: "list",
         signature: "list(): Promise<CapabilityDefinition[]>",
-        description: "列出全部 Feature 的权限和 API 元数据。",
+        description: "列出全部 Feature 的文档和 API 元数据。",
         example: "await capabilitySystem.list()",
       },
       {
         name: "get",
         signature: "get(featureId: string): Promise<CapabilityDefinition | null>",
-        description: "按 Feature id 查询权限和 API 元数据。",
+        description: "按 Feature id 查询文档和 API 元数据。",
         example: "await capabilitySystem.get('conversation')",
       },
     ],

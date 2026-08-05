@@ -36,7 +36,7 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Misc platform helpers: `src/features/Misc/`
 - Notification delivery and built-in notification center: `src/features/Notification/`
 - Subwindow: `src/features/SubWindow/`
-- Feature API capabilities and permission assembly: `src/features/Capabilities/`
+- Feature API registry, on-demand documentation, and exceptional-method policy: `src/features/Capabilities/`
 - Scheduled tasks: `src/features/UI/schedule/`
 
 ## Core Types
@@ -60,12 +60,12 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - `ComponentResource`: `src/features/Resources/Component/domain/component-resource.ts`
 - role-aware Markdown parsing, Data bindings, and `ContextDataValue`: `src/features/Resources/InteractiveDoc/domain/interactive-document.ts`
 - `Plugin`, `PluginFolder`, `PluginFile`: `src/features/Resources/Plugin/domain/plugin-types.ts`
-- `PluginContainerDeclaration`, `PluginContainerMembership`, `PluginReferenceToken`: `src/features/Resources/Plugin/domain/plugin-reference.ts`
-- `CapabilityDefinition`, `CapabilityGrants`, `CapabilityBuilder`: `src/features/Capabilities/domain/capability.ts`
+- `PluginContainerDeclaration`, `PluginContainerMembership`, `PluginImports`: `src/features/Resources/Plugin/domain/plugin-reference.ts`, `src/features/Resources/Plugin/domain/plugin-import.ts`
+- `CapabilityDefinition`, `CapabilityBuilder`, `CapabilityRuntime`: `src/features/Capabilities/domain/capability.ts`
 
 ## External Interfaces
 
-The VitePress site lives under `docs/`. Each owning feature's `capabilities.ts` is the source of truth for external API permissions, runtime methods, model prompts, and the VitePress API reference.
+The VitePress site lives under `docs/`. Each owning feature's `capabilities.ts` is the source of truth for public runtime methods, `readDocs()` results, exceptional-method status, and the VitePress API reference.
 
 - AI SDK wrapper export: `src/features/ModelConnection/application/ai.ts`
 - Model hydration map and wrapped AI SDK calls: `src/features/ModelConnection/application/model-ai.ts`
@@ -184,7 +184,7 @@ The VitePress site lives under `docs/`. Each owning feature's `capabilities.ts` 
 - Plugin order and per-plugin `main` flags do not participate in behavior. Action, custom-tool, and container namespace collisions fail explicitly; container, Regex, and tool resources use their own priority followed by stable IDs and paths for deterministic ties.
 - Every plugin owns a plain nested file tree. Files have no enable switch and derive their content type from their suffix.
 - Root `info.md` is the plugin documentation and opens by default. Root `manifest.json` is the single `PluginManifestGroupContent[]` configuration file; values use `group.id/content.id` paths and may render through built-in shadcn wrappers or template-only plugin components. Root `containers.json`, role-aware root `context.md`, `instruction/default.md`, `agentprocess/index.js`, `Override.vue`, `components/`, `action/`, and `background/` are exact lookup conventions rather than resource containers.
-- Root `containers.json` declares scoped containers as JSON; member resources persist membership as file metadata. `<@container-name>` resolves an unambiguous visible container; `<@local:...>`, `<@path:...>`, `<@id:...>`, and `<@container:root|plugin|global/name>` provide explicit local, resource, and scoped access.
+- Root `containers.json` declares scoped containers as JSON; member resources persist membership as file metadata. Markdown macros and Plugin JavaScript use the same source-scoped `imports.resource(path)`, `imports.resourceById(id)`, `imports.container(scope, name)`, `imports.config.local(...)`, and `imports.config.global(...)` API. Literal calls form the static dependency graph; runtime resolution supplies the actual value and hydrates `.data` imports as wrapper facades.
 - Referenced containers remain pure lazy namespaces with `get`, `use`, and `list`; generic `ctx.containers` list/read operations retain IDs and paths. Selection, transformation, templates, and Skill execution remain in explicit `.js`, `.md`, and Agent resources rather than `containers.json`.
 - Numeric depth container K is derived from file `contextPlacement.depth`, not a normal container declaration or membership. Generation rejects duplicate file names within one K, anchors every non-negative K against the same pre-insertion message list, inserts K=0 at the bottom, orders contents by normal resource priority, and applies Regex only after these role-preserving blocks are present.
 - Markdown uses Milkdown as the default WYSIWYG editing surface with plugin macro/reference support. Leading YAML frontmatter round-trips through a hidden shared node instead of rendering as document content; plugin Markdown can switch to raw source to edit it. Vue files provide template-only preview, structured convention JSON can switch to raw source, `.data`, JavaScript, and ordinary JSON use code-oriented editing, and media files use image/video URL content with a direct preview.

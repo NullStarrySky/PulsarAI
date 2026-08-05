@@ -10,6 +10,7 @@ import {
   SquareMinus,
   FilePlus2,
   Rows3,
+  Trash2,
   X,
 } from "lucide-vue-next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -19,6 +20,7 @@ import {
   createConversationAction,
   editLastMessageAction,
   regenerateLastMessageAction,
+  resetCharacterDataAction,
 } from "@/features/Resources/Conversation/actions";
 import { useLayoutStore } from "./application/layout-store";
 
@@ -135,6 +137,15 @@ function createCoreCommands(): CommandDefinition[] {
       defaultHotkey: "Ctrl+Shift+G",
       icon: RefreshCw,
       run: regenerateLastMessageAction,
+    },
+    {
+      id: "conversation.reset-character-data",
+      title: "清空全部角色数据",
+      description: "清空角色包、对话、插件和本地资源，然后恢复初始角色包",
+      category: "对话",
+      defaultHotkey: "Ctrl+Shift+R",
+      icon: Trash2,
+      run: resetCharacterDataAction,
     },
     {
       id: "conversation.copy-last-message",

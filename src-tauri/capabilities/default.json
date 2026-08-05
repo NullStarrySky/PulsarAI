@@ -122,6 +122,8 @@
     "fs:allow-video-read-recursive",
     "fs:allow-video-write-recursive",
     "upload:default",
+    "websocket:default",
+    "tts:default",
     "shell:default",
     {
       "identifier": "shell:allow-execute",

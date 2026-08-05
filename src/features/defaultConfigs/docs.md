@@ -1,5 +1,3 @@
 # Default Configs
 
-`defaultConfigs` persists the global default Feature API grants alongside model defaults. The settings page renders the shared `CapabilityGrantEditor`; character packages without their own `capabilities` field inherit this map.
-
-Default grants favor read-only and local helper APIs. Database writes/deletes, backup creation, UI mutation, child windows and conversation sending require explicit authorization.
+`defaultConfigs` persists the application's default chat, fast, embedding, image, speech, and transcription model references. Feature API availability is owned centrally by `Capabilities`; it is no longer stored as a default setting or character-package override.

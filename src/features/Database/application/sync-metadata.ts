@@ -49,6 +49,10 @@ export function writeSyncMetadata(snapshot: SyncMetadataSnapshot) {
   localStorage.setItem(metadataKey, JSON.stringify(snapshot));
 }
 
+export function clearResourceSyncMetadata() {
+  localStorage.removeItem(metadataKey);
+}
+
 export function markLocalDatabaseChange(
   table: string,
   id: string,

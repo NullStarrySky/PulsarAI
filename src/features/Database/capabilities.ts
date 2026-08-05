@@ -33,7 +33,7 @@ export const capabilities: CapabilityDefinition = {
     read: [
       {
         name: "selectAll",
-        signature: "selectAll<T>(table: string): Promise<Array<{ id: string; value: T }>>",
+        signature: "selectAll<T>(table: string): Promise<Array<{ id: string | null; value: T }>>",
         description: "读取一个表中的全部记录。",
       },
       {

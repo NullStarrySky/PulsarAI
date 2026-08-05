@@ -12,6 +12,7 @@ export const builtinModelProviders: ModelProviderDefinition[] = [
     apiKeyName: "openai_API_KEY",
     enabled: true,
     builtIn: true,
+    runtime: "remote",
     models: [
       {
         id: "gpt-4o",
@@ -34,6 +35,12 @@ export const builtinModelProviders: ModelProviderDefinition[] = [
         enabled: true,
       },
       {
+        id: "gpt-image-2",
+        name: "GPT Image 2",
+        apiType: "image",
+        enabled: false,
+      },
+      {
         id: "gpt-4o-mini-tts",
         name: "GPT-4o mini TTS",
         apiType: "tts",
@@ -48,6 +55,21 @@ export const builtinModelProviders: ModelProviderDefinition[] = [
     ],
   },
   {
+    id: "huggingface",
+    name: "Hugging Face",
+    description: "Inference Providers 多模型平台；仅显式登记可生成图片的模型。",
+    baseUrl: "https://router.huggingface.co",
+    apiKeyName: "huggingface_API_KEY",
+    enabled: false,
+    builtIn: true,
+    runtime: "remote",
+    models: [
+      { id: "black-forest-labs/FLUX.1-dev", name: "FLUX.1 dev", apiType: "image", enabled: true },
+      { id: "black-forest-labs/FLUX.1-schnell", name: "FLUX.1 schnell", apiType: "image", enabled: true },
+      { id: "stabilityai/stable-diffusion-xl-base-1.0", name: "Stable Diffusion XL Base 1.0", apiType: "image", enabled: true },
+    ],
+  },
+  {
     id: "deepseek",
     name: "DeepSeek",
     description: "DeepSeek 官方接口，适合对话和推理模型。",
@@ -57,6 +79,7 @@ export const builtinModelProviders: ModelProviderDefinition[] = [
     apiKeyName: "deepseek_API_KEY",
     enabled: false,
     builtIn: true,
+    runtime: "remote",
     models: [
       {
         id: "deepseek-v4-flash",

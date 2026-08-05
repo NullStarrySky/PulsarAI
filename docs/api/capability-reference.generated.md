@@ -1,5 +1,5 @@
 ---
-capabilityOutline: [{"id":"feature-capabilitySystem","label":"权限与 API 文档","children":[{"id":"feature-capabilitySystem-notes","label":"使用说明"},{"id":"feature-capabilitySystem-types","label":"类型"},{"id":"feature-capabilitySystem-api","label":"API 定义"}]},{"id":"feature-about","label":"关于与环境检查","children":[{"id":"feature-about-notes","label":"使用说明"},{"id":"feature-about-types","label":"类型"},{"id":"feature-about-api","label":"API 定义"}]},{"id":"feature-agent","label":"Agent","children":[{"id":"feature-agent-notes","label":"使用说明"},{"id":"feature-agent-types","label":"类型"},{"id":"feature-agent-api","label":"API 定义"}]},{"id":"feature-backup","label":"版本管理","children":[{"id":"feature-backup-notes","label":"使用说明"},{"id":"feature-backup-types","label":"类型"},{"id":"feature-backup-api","label":"API 定义"}]},{"id":"feature-database","label":"数据库","children":[{"id":"feature-database-notes","label":"使用说明"},{"id":"feature-database-types","label":"类型"},{"id":"feature-database-api","label":"API 定义"}]},{"id":"feature-defaultConfigs","label":"默认配置","children":[{"id":"feature-defaultConfigs-notes","label":"使用说明"},{"id":"feature-defaultConfigs-types","label":"类型"},{"id":"feature-defaultConfigs-api","label":"API 定义"}]},{"id":"feature-hotkey","label":"命令与快捷键","children":[{"id":"feature-hotkey-notes","label":"使用说明"},{"id":"feature-hotkey-types","label":"类型"},{"id":"feature-hotkey-api","label":"API 定义"}]},{"id":"feature-misc","label":"运行环境","children":[{"id":"feature-misc-notes","label":"使用说明"},{"id":"feature-misc-types","label":"类型"},{"id":"feature-misc-api","label":"API 定义"}]},{"id":"feature-modelConnection","label":"模型连接","children":[{"id":"feature-modelConnection-notes","label":"使用说明"},{"id":"feature-modelConnection-types","label":"类型"},{"id":"feature-modelConnection-api","label":"API 定义"}]},{"id":"feature-notification","label":"通知","children":[{"id":"feature-notification-notes","label":"使用说明"},{"id":"feature-notification-types","label":"类型"},{"id":"feature-notification-api","label":"API 定义"}]},{"id":"feature-resources","label":"通用资源文件","children":[{"id":"feature-resources-notes","label":"使用说明"},{"id":"feature-resources-types","label":"类型"},{"id":"feature-resources-api","label":"API 定义"}]},{"id":"feature-component","label":"组件资源","children":[{"id":"feature-component-notes","label":"使用说明"},{"id":"feature-component-types","label":"类型"},{"id":"feature-component-api","label":"API 定义"}]},{"id":"feature-contextDocument","label":"上下文文档","children":[{"id":"feature-contextDocument-notes","label":"使用说明"},{"id":"feature-contextDocument-types","label":"类型"},{"id":"feature-contextDocument-api","label":"API 定义"}]},{"id":"feature-preset","label":"预设流程","children":[{"id":"feature-preset-notes","label":"使用说明"},{"id":"feature-preset-types","label":"类型"},{"id":"feature-preset-api","label":"API 定义"}]},{"id":"feature-sandbox","label":"代码执行","children":[{"id":"feature-sandbox-notes","label":"使用说明"},{"id":"feature-sandbox-types","label":"类型"},{"id":"feature-sandbox-api","label":"API 定义"}]},{"id":"feature-globals","label":"全局对象","children":[{"id":"feature-globals-notes","label":"使用说明"},{"id":"feature-globals-types","label":"类型"},{"id":"feature-globals-api","label":"API 定义"}]},{"id":"feature-setting","label":"设置目录","children":[{"id":"feature-setting-notes","label":"使用说明"},{"id":"feature-setting-types","label":"类型"},{"id":"feature-setting-api","label":"API 定义"}]},{"id":"feature-statistic","label":"统计","children":[{"id":"feature-statistic-notes","label":"使用说明"},{"id":"feature-statistic-types","label":"类型"},{"id":"feature-statistic-api","label":"API 定义"}]},{"id":"feature-subWindow","label":"子窗口","children":[{"id":"feature-subWindow-notes","label":"使用说明"},{"id":"feature-subWindow-types","label":"类型"},{"id":"feature-subWindow-api","label":"API 定义"}]},{"id":"feature-translate","label":"翻译","children":[{"id":"feature-translate-notes","label":"使用说明"},{"id":"feature-translate-types","label":"类型"},{"id":"feature-translate-api","label":"API 定义"}]},{"id":"feature-ui","label":"界面","children":[{"id":"feature-ui-notes","label":"使用说明"},{"id":"feature-ui-types","label":"类型"},{"id":"feature-ui-api","label":"API 定义"}]}]
+capabilityOutline: [{"id":"feature-capabilitySystem","label":"Feature API 文档","children":[{"id":"feature-capabilitySystem-notes","label":"使用说明"},{"id":"feature-capabilitySystem-types","label":"类型"},{"id":"feature-capabilitySystem-api","label":"API 定义"}]},{"id":"feature-about","label":"关于与环境检查","children":[{"id":"feature-about-notes","label":"使用说明"},{"id":"feature-about-types","label":"类型"},{"id":"feature-about-api","label":"API 定义"}]},{"id":"feature-agent","label":"Agent","children":[{"id":"feature-agent-notes","label":"使用说明"},{"id":"feature-agent-types","label":"类型"},{"id":"feature-agent-api","label":"API 定义"}]},{"id":"feature-backup","label":"版本管理","children":[{"id":"feature-backup-notes","label":"使用说明"},{"id":"feature-backup-types","label":"类型"},{"id":"feature-backup-api","label":"API 定义"}]},{"id":"feature-database","label":"数据库","children":[{"id":"feature-database-notes","label":"使用说明"},{"id":"feature-database-types","label":"类型"},{"id":"feature-database-api","label":"API 定义"}]},{"id":"feature-defaultConfigs","label":"默认配置","children":[{"id":"feature-defaultConfigs-notes","label":"使用说明"},{"id":"feature-defaultConfigs-types","label":"类型"},{"id":"feature-defaultConfigs-api","label":"API 定义"}]},{"id":"feature-hotkey","label":"命令与快捷键","children":[{"id":"feature-hotkey-notes","label":"使用说明"},{"id":"feature-hotkey-types","label":"类型"},{"id":"feature-hotkey-api","label":"API 定义"}]},{"id":"feature-misc","label":"运行环境","children":[{"id":"feature-misc-notes","label":"使用说明"},{"id":"feature-misc-types","label":"类型"},{"id":"feature-misc-api","label":"API 定义"}]},{"id":"feature-modelConnection","label":"模型连接","children":[{"id":"feature-modelConnection-notes","label":"使用说明"},{"id":"feature-modelConnection-types","label":"类型"},{"id":"feature-modelConnection-api","label":"API 定义"}]},{"id":"feature-notification","label":"通知","children":[{"id":"feature-notification-notes","label":"使用说明"},{"id":"feature-notification-types","label":"类型"},{"id":"feature-notification-api","label":"API 定义"}]},{"id":"feature-resources","label":"通用资源文件","children":[{"id":"feature-resources-notes","label":"使用说明"},{"id":"feature-resources-types","label":"类型"},{"id":"feature-resources-api","label":"API 定义"}]},{"id":"feature-component","label":"组件资源","children":[{"id":"feature-component-notes","label":"使用说明"},{"id":"feature-component-types","label":"类型"},{"id":"feature-component-api","label":"API 定义"}]},{"id":"feature-contextDocument","label":"上下文文档","children":[{"id":"feature-contextDocument-notes","label":"使用说明"},{"id":"feature-contextDocument-types","label":"类型"},{"id":"feature-contextDocument-api","label":"API 定义"}]},{"id":"feature-preset","label":"预设流程","children":[{"id":"feature-preset-notes","label":"使用说明"},{"id":"feature-preset-types","label":"类型"},{"id":"feature-preset-api","label":"API 定义"}]},{"id":"feature-sandbox","label":"代码执行","children":[{"id":"feature-sandbox-notes","label":"使用说明"},{"id":"feature-sandbox-types","label":"类型"},{"id":"feature-sandbox-api","label":"API 定义"}]},{"id":"feature-globals","label":"全局对象","children":[{"id":"feature-globals-notes","label":"使用说明"},{"id":"feature-globals-types","label":"类型"},{"id":"feature-globals-api","label":"API 定义"}]},{"id":"feature-setting","label":"设置目录","children":[{"id":"feature-setting-notes","label":"使用说明"},{"id":"feature-setting-types","label":"类型"},{"id":"feature-setting-api","label":"API 定义"}]},{"id":"feature-statistic","label":"统计","children":[{"id":"feature-statistic-notes","label":"使用说明"},{"id":"feature-statistic-types","label":"类型"},{"id":"feature-statistic-api","label":"API 定义"}]},{"id":"feature-subWindow","label":"子窗口","children":[{"id":"feature-subWindow-notes","label":"使用说明"},{"id":"feature-subWindow-types","label":"类型"},{"id":"feature-subWindow-api","label":"API 定义"}]},{"id":"feature-translate","label":"翻译","children":[{"id":"feature-translate-notes","label":"使用说明"},{"id":"feature-translate-types","label":"类型"},{"id":"feature-translate-api","label":"API 定义"}]},{"id":"feature-ui","label":"界面","children":[{"id":"feature-ui-notes","label":"使用说明"},{"id":"feature-ui-types","label":"类型"},{"id":"feature-ui-api","label":"API 定义"}]}]
 editLink: false
 ---
 
@@ -8,19 +8,19 @@ editLink: false
 本文档由各 Feature 的 capabilities 定义自动生成，说明可用场景、关键类型、权限边界与公开 API。
 
 <a id="feature-capabilitySystem"></a>
-## 权限与 API 文档
+## Feature API 文档
 
 API 对象：`environment.capabilitySystem`
 
-查询当前权限系统公开的 Feature、子权限与 API 元数据。
+查询当前 Feature API 注册表公开的 Feature 与函数元数据。
 
-提供权限注册表自身的只读元数据，便于工具检查 Feature id、权限标识与函数说明。读取元数据不会授予被查询 Feature 的执行权限。
+提供注册表自身的只读元数据；普通公开 API 始终可用，少数特殊操作由运行时策略封锁。
 
 <a id="feature-capabilitySystem-notes"></a>
 ### 使用说明
 
-- list 和 get 返回的对象与设置、模型提示词和文档生成器使用同一份定义。
-- all 是配置时的便捷授权，运行时会展开为该 Feature 的全部显式子权限。
+- list、get、readDocs 与人类文档使用同一份定义。
+- 被策略封锁的函数不会出现在普通生成运行时中。
 
 <a id="feature-capabilitySystem-types"></a>
 ### 类型
@@ -65,7 +65,7 @@ interface CapabilityHumanDocumentation {
 
 #### CapabilityDefinition
 
-一个 Feature 的完整权限、文档与 API 元数据。
+一个 Feature 的完整文档与 API 元数据。
 
 ```ts
 interface CapabilityDefinition {
@@ -78,14 +78,6 @@ interface CapabilityDefinition {
 }
 ```
 
-#### CapabilityGrants
-
-按 Feature id 保存的子权限授权表。
-
-```ts
-type CapabilityGrants = Record<string, string[]>;
-```
-
 <a id="feature-capabilitySystem-api"></a>
 ### API 定义
 
@@ -93,16 +85,16 @@ type CapabilityGrants = Record<string, string[]>;
 
 | 权限标识 | 说明 |
 | --- | --- |
-| `all` | 全部权限元数据权限 |
-| `read` | 读取权限与 API 文档 |
+| `all` | 全部文档元数据 |
+| `read` | 读取 API 文档 |
 
-#### 读取权限与 API 文档
+#### 读取 API 文档
 
 权限标识：`read`
 
 ##### `capabilitySystem.list(): Promise<CapabilityDefinition[]>`
 
-列出全部 Feature 的权限和 API 元数据。
+列出全部 Feature 的文档和 API 元数据。
 
 **示例：**
 
@@ -112,7 +104,7 @@ await capabilitySystem.list()
 
 ##### `capabilitySystem.get(featureId: string): Promise<CapabilityDefinition | null>`
 
-按 Feature id 查询权限和 API 元数据。
+按 Feature id 查询文档和 API 元数据。
 
 **示例：**
 
@@ -377,7 +369,7 @@ interface DatabaseRecord<T> {
 
 权限标识：`read`
 
-##### `database.selectAll<T>(table: string): Promise<Array<{ id: string; value: T }>>`
+##### `database.selectAll<T>(table: string): Promise<Array<{ id: string | null; value: T }>>`
 
 读取一个表中的全部记录。
 
@@ -928,12 +920,12 @@ API 对象：`environment.contextDocument`
 
 把带 Pulsar 角色围栏的 Markdown 编译为角色消息。
 
-解析普通 Markdown、:::pulsar role=... 角色围栏与显式资源引用，生成可加入上下文的角色消息。数据引用来自资源元数据，不写入 Markdown。
+解析普通 Markdown、:::pulsar role=... 角色围栏与同构 imports 调用，生成可加入上下文的角色消息。依赖由字面量调用静态发现，不维护资源引用元数据。
 
 <a id="feature-contextDocument-notes"></a>
 ### 使用说明
 
-- 编译过程不会隐式扫描资源；.data 绑定由 Plugin resolver 从资源 dataReferences 元数据提供。
+- 编译过程静态扫描 imports.resource(...) 与 imports.resourceById(...) 字面量；导入 .data 时由 Plugin resolver 在运行时完成水合。
 - 返回 errors 时调用方应先展示或处理诊断，再决定是否使用部分编译结果。
 
 <a id="feature-contextDocument-types"></a>
@@ -994,7 +986,7 @@ interface ContextDocumentCompileError {
 
 ##### `contextDocument.compile(source: string): ContextDocumentCompileResult`
 
-解析角色围栏 Markdown 与显式引用并返回编译结果。
+解析角色围栏 Markdown 与 imports 调用并返回编译结果。
 
 **示例：**
 
@@ -1059,7 +1051,7 @@ API 对象：`environment.sandbox`
 
 执行局部 JavaScript 辅助逻辑。Feature 操作仍受各自权限对象限制。
 
-执行短小 JavaScript 表达式或语句，用于数据转换、条件判断和组合已授权 Feature API。它是应用级权限边界，不是操作系统安全沙箱。
+执行短小 JavaScript 表达式或语句，用于数据转换、条件判断和组合运行时可用的 Feature API。它是应用级权限边界，不是操作系统安全沙箱。
 
 <a id="feature-sandbox-notes"></a>
 ### 使用说明

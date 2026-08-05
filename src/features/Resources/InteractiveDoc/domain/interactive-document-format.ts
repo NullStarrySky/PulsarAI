@@ -12,9 +12,9 @@ export const contextDocumentFormatPrompt = [
   ":::",
   "```",
   "角色只能是 system、user 或 assistant。普通 Markdown 代码围栏中的标记不会被解析。",
-  "可复用状态存放在独立 `.data` 文件中；资源通过自己的 `dataReferences` 元数据绑定 `{ alias, dataId }`，不要在 Markdown 或 `.data` 内容中记录引用路径。",
+  "可复用状态存放在独立 `.data` 文件中；通过 `imports.resource(path)` 或 `imports.resourceById(id)` 导入时返回水合后的只读 JS facade。",
   "`.data` 自己声明 `isolation: 'resource' | 'conversation'`，引用方不能覆盖隔离级别。",
   "绑定后的值通过 `data.<alias>`（以及大写别名 `DATA.<alias>`）用于 `{{ }}` 与 `[[ ]]` 表达式。",
-  "外部文档和容器继续通过 `<@path:...>`、`<@id:...>`、`<@container:...>` 或可见容器短名显式引用。",
+  "外部文档、容器与配置统一通过宏内的 `imports` 函数访问，依赖参数必须使用字符串字面量。",
   "最终上下文从 `context.md` 开始沿显式引用图编译；未被引用的文件不会自动进入上下文。",
 ].join("\n");

@@ -3,6 +3,7 @@ import {
   embedMany as baseEmbedMany,
   generateImage as baseGenerateImage,
   generateObject as baseGenerateObject,
+  generateSpeech as baseGenerateSpeech,
   generateText as baseGenerateText,
   streamObject as baseStreamObject,
   streamText as baseStreamText,
@@ -10,19 +11,21 @@ import {
   type EmbeddingModel,
   type ImageModel,
   type LanguageModel,
+  type SpeechModel,
   type TranscriptionModel,
 } from "ai";
 import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createOpenAI } from "@ai-sdk/openai";
 import { modelProxyFetch } from "../infrastructure/model-proxy-fetch";
+import { HuggingFaceImageModel } from "../infrastructure/huggingface-image-model";
 
-export type HydratableModel = string | LanguageModel | ImageModel | EmbeddingModel | TranscriptionModel;
-export type ModelKind = "chat" | "image" | "embedding" | "asr";
+export type HydratableModel = string | LanguageModel | ImageModel | EmbeddingModel | TranscriptionModel | SpeechModel;
+export type ModelKind = "chat" | "image" | "embedding" | "asr" | "tts";
 
 interface ProviderHydrationConfig {
   baseURL: string;
   apiKeyName: string;
-  kindMap: Partial<Record<ModelKind, "default" | "chat" | "image" | "embedding" | "transcription">>;
+  kindMap: Partial<Record<ModelKind, "default" | "chat" | "image" | "embedding" | "transcription" | "speech">>;
 }
 
 type ProviderBuilder = (config: ProviderHydrationConfig) => Record<string, (modelId: string) => unknown>;
@@ -36,6 +39,7 @@ const providerConfigs: Record<string, ProviderHydrationConfig> = {
       image: "image",
       embedding: "embedding",
       asr: "transcription",
+      tts: "speech",
     },
   },
   deepseek: {
@@ -61,6 +65,7 @@ const providerBuilders: Record<string, ProviderBuilder> = {
       image: (modelId: string) => provider.image(modelId),
       embedding: (modelId: string) => provider.embedding(modelId),
       transcription: (modelId: string) => provider.transcription(modelId),
+      speech: (modelId: string) => provider.speech(modelId),
     };
   },
   deepseek: (config) => {
@@ -75,6 +80,9 @@ const providerBuilders: Record<string, ProviderBuilder> = {
       chat: (modelId: string) => provider.chat(modelId),
     };
   },
+  huggingface: (config) => ({
+    image: (modelId: string) => new HuggingFaceImageModel(modelId, config.apiKeyName, config.baseURL),
+  }),
 };
 
 export function registerProviderHydration(
@@ -87,6 +95,11 @@ export function registerProviderHydration(
 }
 
 export function registerOpenAICompatibleProvider(providerId: string, baseURL: string, apiKeyName: string) {
+  if (providerId === "huggingface") {
+    providerConfigs[providerId] = { baseURL, apiKeyName, kindMap: { image: "image" } };
+    providerBuilders[providerId] = providerBuilders.huggingface;
+    return;
+  }
   providerConfigs[providerId] = {
     baseURL,
     apiKeyName,
@@ -95,6 +108,7 @@ export function registerOpenAICompatibleProvider(providerId: string, baseURL: st
       image: "image",
       embedding: "embedding",
       asr: "transcription",
+      tts: "speech",
     },
   };
   providerBuilders[providerId] = providerBuilders.openai;
@@ -180,6 +194,13 @@ export function transcribe(options: WithModel<Parameters<typeof baseTranscribe>[
   return baseTranscribe({
     ...options,
     model: hydrateModel(options.model, "asr") as TranscriptionModel,
+  });
+}
+
+export function generateSpeech(options: WithModel<Parameters<typeof baseGenerateSpeech>[0]>) {
+  return baseGenerateSpeech({
+    ...options,
+    model: hydrateModel(options.model, "tts") as SpeechModel,
   });
 }
 

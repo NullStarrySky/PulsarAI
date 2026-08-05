@@ -2,15 +2,17 @@ import { defineStore } from "pinia";
 import { fallbackDefaultConfigs } from "../domain/default-config";
 import {
   getDefaultChatModel,
-  getDefaultCapabilities,
   getEmbeddingModel,
   getFastModel,
   getImageModel,
+  getSpeechModel,
+  getTranscriptionModel,
   setDefaultChatModel,
-  setDefaultCapabilities,
   setEmbeddingModel,
   setFastModel,
   setImageModel,
+  setSpeechModel,
+  setTranscriptionModel,
 } from "./default-config-service";
 
 export const useDefaultConfigStore = defineStore("defaultConfigs", {
@@ -19,28 +21,33 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
     fastModel: fallbackDefaultConfigs.fastModel,
     embeddingModel: fallbackDefaultConfigs.embeddingModel,
     imageModel: fallbackDefaultConfigs.imageModel,
-    defaultCapabilities: structuredClone(fallbackDefaultConfigs.defaultCapabilities),
+    speechModel: fallbackDefaultConfigs.speechModel,
+    transcriptionModel: fallbackDefaultConfigs.transcriptionModel,
     loaded: false,
   }),
   actions: {
     async load() {
-      const [defaultChatModel, fastModel, embeddingModel, imageModel, defaultCapabilities] = await Promise.all([
+      const [defaultChatModel, fastModel, embeddingModel, imageModel, speechModel, transcriptionModel] = await Promise.all([
         getDefaultChatModel(),
         getFastModel(),
         getEmbeddingModel(),
         getImageModel(),
-        getDefaultCapabilities(),
+        getSpeechModel(),
+        getTranscriptionModel(),
       ]);
       this.defaultChatModel = migrateModelRef(defaultChatModel);
       this.fastModel = migrateModelRef(fastModel || defaultChatModel);
       this.embeddingModel = migrateModelRef(embeddingModel);
       this.imageModel = migrateModelRef(imageModel);
-      this.defaultCapabilities = structuredClone(defaultCapabilities);
+      this.speechModel = migrateModelRef(speechModel);
+      this.transcriptionModel = migrateModelRef(transcriptionModel);
       await Promise.all([
         this.defaultChatModel !== defaultChatModel ? setDefaultChatModel(this.defaultChatModel) : Promise.resolve(),
         this.fastModel !== fastModel ? setFastModel(this.fastModel) : Promise.resolve(),
         this.embeddingModel !== embeddingModel ? setEmbeddingModel(this.embeddingModel) : Promise.resolve(),
         this.imageModel !== imageModel ? setImageModel(this.imageModel) : Promise.resolve(),
+        this.speechModel !== speechModel ? setSpeechModel(this.speechModel) : Promise.resolve(),
+        this.transcriptionModel !== transcriptionModel ? setTranscriptionModel(this.transcriptionModel) : Promise.resolve(),
       ]);
       this.loaded = true;
     },
@@ -60,9 +67,13 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
       this.imageModel = model;
       await setImageModel(model);
     },
-    async setDefaultCapabilities(capabilities: typeof fallbackDefaultConfigs.defaultCapabilities) {
-      this.defaultCapabilities = structuredClone(capabilities);
-      await setDefaultCapabilities(this.defaultCapabilities);
+    async setSpeechModel(model: string) {
+      this.speechModel = model;
+      await setSpeechModel(model);
+    },
+    async setTranscriptionModel(model: string) {
+      this.transcriptionModel = model;
+      await setTranscriptionModel(model);
     },
   },
 });

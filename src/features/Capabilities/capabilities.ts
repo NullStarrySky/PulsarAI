@@ -2,8 +2,7 @@ export {
   buildCapabilityRuntime,
   capabilityModules,
   capabilityDefinitions,
-  fallbackCapabilityGrants,
-  mergeCapabilityGrants,
+  createCapabilityDocsReader,
 } from "./application/capability-registry";
 export {
   capabilities,
@@ -13,7 +12,6 @@ export type {
   CapabilityApiDoc,
   CapabilityBuilder,
   CapabilityDefinition,
-  CapabilityGrants,
   CapabilityModule,
   CapabilityRuntime,
 } from "./domain/capability";

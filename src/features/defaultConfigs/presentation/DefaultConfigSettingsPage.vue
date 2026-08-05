@@ -16,7 +16,6 @@ import SettingPage from "@/features/Setting/presentation/SettingPage.vue";
 import ModelSelect from "@/features/ModelConnection/presentation/ModelSelect.vue";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
 import type { Plugin } from "@/features/Resources/Plugin/domain/plugin-types";
-import CapabilityGrantEditor from "@/features/Capabilities/presentation/CapabilityGrantEditor.vue";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { useDefaultConfigStore } from "../application/default-config-store";
 
@@ -95,6 +94,7 @@ async function deleteGlobalPlugin(plugin: Plugin) {
       <SettingItem title="向量化模型" description="用于检索和语义索引。">
         <ModelSelect
           :model-value="defaults.embeddingModel"
+          api-type="embedding"
           button-class="w-full justify-between sm:w-80"
           @update:model-value="defaults.setEmbeddingModel"
         />
@@ -102,22 +102,27 @@ async function deleteGlobalPlugin(plugin: Plugin) {
       <SettingItem title="图片生成模型" description="用于文生图或图像编辑。">
         <ModelSelect
           :model-value="defaults.imageModel"
+          api-type="image"
           button-class="w-full justify-between sm:w-80"
           @update:model-value="defaults.setImageModel"
         />
       </SettingItem>
-    </SettingGroup>
-
-    <SettingGroup
-      title="默认权限"
-      description="新角色包以及未设置自定义权限的角色包会继承这里的 Feature API 权限。"
-    >
-      <div class="p-4">
-        <CapabilityGrantEditor
-          :model-value="defaults.defaultCapabilities"
-          @update:model-value="defaults.setDefaultCapabilities($event)"
+      <SettingItem title="语音生成模型" description="用于文本转语音；可选择模型提供商或 Edge TTS 专用服务。">
+        <ModelSelect
+          :model-value="defaults.speechModel"
+          api-type="tts"
+          button-class="w-full justify-between sm:w-80"
+          @update:model-value="defaults.setSpeechModel"
         />
-      </div>
+      </SettingItem>
+      <SettingItem title="语音转写模型" description="用于将音频转换为文字。">
+        <ModelSelect
+          :model-value="defaults.transcriptionModel"
+          api-type="asr"
+          button-class="w-full justify-between sm:w-80"
+          @update:model-value="defaults.setTranscriptionModel"
+        />
+      </SettingItem>
     </SettingGroup>
 
     <SettingGroup

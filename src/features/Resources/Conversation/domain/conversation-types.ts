@@ -27,7 +27,6 @@ export interface CharacterPackage {
   mainPluginId: string;
   /** Package-local activation set for optional global plugins. Ordering is not semantic. */
   enabledGlobalPluginIds: string[];
-  capabilities?: CapabilityGrants;
   syncEnabled?: boolean;
 }
 
@@ -59,7 +58,6 @@ export interface Conversation {
   isTemplate?: boolean;
   rendererId?: ConversationRendererId;
   reasoningEffort: ConversationReasoningEffort;
-  featureApiEnabled: boolean;
   rootContainerId: string | null;
   lastContainerId: string | null;
   createdAt: string;
@@ -176,4 +174,3 @@ export type ChatMessageContainer = {
 };
 
 export type MessageDraftClosure = (message: ChatMessage, container: ChatMessageContainer) => void | Promise<void>;
-import type { CapabilityGrants } from "@/features/Capabilities/domain/capability";

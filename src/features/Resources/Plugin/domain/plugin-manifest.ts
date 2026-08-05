@@ -38,6 +38,10 @@ export interface PluginManifestReference {
   contentId: string;
 }
 
+function cloneJsonValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 export function parsePluginManifest(value: unknown): {
   manifest: PluginManifest;
   diagnostics: PluginManifestDiagnostic[];
@@ -97,7 +101,7 @@ export function parsePluginManifest(value: unknown): {
       contentIds.add(id);
       const component = normalizedText(rawContent.component) || "Input";
       const props = isRecord(rawContent.props) && isJsonValue(rawContent.props)
-        ? structuredClone(rawContent.props) as Record<string, PluginManifestValue>
+        ? cloneJsonValue(rawContent.props) as Record<string, PluginManifestValue>
         : undefined;
       if (rawContent.props !== undefined && !props) {
         diagnostics.push({ path: `${contentPath}.props`, message: "props 必须是 JSON 对象。" });
@@ -115,7 +119,7 @@ export function parsePluginManifest(value: unknown): {
           : {}),
         component,
         ...(props ? { props } : {}),
-        value: structuredClone(manifestValue),
+        value: cloneJsonValue(manifestValue),
       } satisfies PluginManifestContent];
     });
     return [{
@@ -133,7 +137,7 @@ export function parsePluginManifest(value: unknown): {
 }
 
 export function parsePluginManifestReference(rawReference: string): PluginManifestReference {
-  const reference = unwrapPluginReference(rawReference);
+  const reference = rawReference.trim();
   const local = /^config:local\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)$/.exec(reference);
   if (local) {
     return {
@@ -165,7 +169,7 @@ export function manifestValueAt(
     .find((item) => item.group.id === groupId)
     ?.content.find((item) => item.id === contentId);
   if (!content) throw new Error(`Manifest 配置不存在：${groupId}/${contentId}`);
-  return structuredClone(content.value);
+  return cloneJsonValue(content.value);
 }
 
 export function setManifestValue(
@@ -179,7 +183,7 @@ export function setManifestValue(
     .find((item) => item.group.id === groupId)
     ?.content.find((item) => item.id === contentId);
   if (!content) throw new Error(`Manifest 配置不存在：${groupId}/${contentId}`);
-  content.value = structuredClone(value);
+  content.value = cloneJsonValue(value);
   return manifest;
 }
 
@@ -192,13 +196,6 @@ export function isJsonValue(value: unknown): value is PluginManifestValue {
   if (typeof value === "number") return Number.isFinite(value);
   if (Array.isArray(value)) return value.every(isJsonValue);
   return isRecord(value) && Object.values(value).every(isJsonValue);
-}
-
-function unwrapPluginReference(value: string) {
-  const trimmed = value.trim();
-  return trimmed.startsWith("<@") && trimmed.endsWith(">")
-    ? trimmed.slice(2, -1).trim()
-    : trimmed;
 }
 
 function normalizedId(value: unknown) {
