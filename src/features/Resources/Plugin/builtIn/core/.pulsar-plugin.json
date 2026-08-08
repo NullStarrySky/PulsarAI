@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "plugin": {
+    "id": "builtin-core-plugin",
+    "packageId": null,
+    "name": "内置插件",
+    "icon": "",
+    "shortDescription": "PulsarAI 默认生成流程与资源",
+    "enabled": true,
+    "builtIn": true
+  },
+  "ignore": [".pulsar-plugin.json", "**/.gitkeep"],
+  "nodes": {
+    "/": { "id": "builtin-root", "icon": "", "treeOrder": 0 },
+    "AGENTS.md": { "id": "builtin-agents", "icon": "", "treeOrder": 1, "order": 100 },
+    "manifest.json": { "id": "builtin-manifest", "icon": "", "treeOrder": 2, "order": 100 },
+    "containers.json": { "id": "builtin-containers", "icon": "", "treeOrder": 3, "order": 100 },
+    "default.chat.json": { "id": "builtin-default-chat", "icon": "", "treeOrder": 4, "order": 100 },
+    "prompt.md": { "id": "builtin-prompt", "icon": "", "treeOrder": 5, "order": 100 },
+    "generate.js": { "id": "builtin-generate", "icon": "", "treeOrder": 6, "order": 100 },
+    "regex.json": { "id": "builtin-regex", "icon": "", "treeOrder": 7, "order": 100, "insertion": { "target": "REGEX" } },
+    "components": { "id": "builtin-components", "icon": "", "treeOrder": 8 },
+    "background": { "id": "builtin-background", "icon": "", "treeOrder": 9 },
+    "background/classroom.png": { "id": "builtin-background-classroom", "icon": "", "treeOrder": 0, "order": 100, "insertion": { "target": "background" } },
+    "tools": { "id": "builtin-tools", "icon": "", "treeOrder": 10 },
+    "action": { "id": "builtin-action", "icon": "", "treeOrder": 11 },
+    "temp": { "id": "builtin-temp", "icon": "", "treeOrder": 12 }
+  }
+}

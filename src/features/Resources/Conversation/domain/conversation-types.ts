@@ -1,11 +1,11 @@
 export type Role = "assistant" | "user" | "system";
 export type ChatMessageType = "message" | "error";
-export type ConversationReasoningEffort =
-  | "none"
-  | "low"
-  | "medium"
-  | "high"
-  | "xhigh";
+
+export function formatChatMessageError(content: unknown) {
+  const message = content instanceof Error ? content.message : String(content ?? "生成失败");
+  const normalized = message.trim() || "生成失败";
+  return normalized.startsWith("[ERROR]") ? normalized : `[ERROR] ${normalized}`;
+}
 
 export interface CharacterPackageConversationLink {
   id: string;
@@ -20,10 +20,11 @@ export interface CharacterPackage {
   description?: string;
   categoryId?: string | null;
   order: number;
+  pinned?: boolean;
   conversations: CharacterPackageConversationLink[];
   /** The package-owned resource plugin. Exactly one plugin may own this package. */
   pluginId: string;
-  /** The enabled plugin that owns both context.md and the selected generation process. */
+  /** The enabled plugin whose manifest owns the selected generatePath. */
   mainPluginId: string;
   /** Package-local activation set for optional global plugins. Ordering is not semantic. */
   enabledGlobalPluginIds: string[];
@@ -38,7 +39,7 @@ export interface PackageCategory {
 
 export type ConversationRendererId = "chat" | "novel";
 
-export type ConversationKind = "chat" | "task" | "test";
+export type ConversationKind = "chat" | "test";
 
 export interface ConversationResourceBinding {
   packageId?: string;
@@ -55,9 +56,9 @@ export interface Conversation {
   kind: ConversationKind;
   binding?: ConversationResourceBinding;
   title: string;
+  pinned?: boolean;
   isTemplate?: boolean;
   rendererId?: ConversationRendererId;
-  reasoningEffort: ConversationReasoningEffort;
   rootContainerId: string | null;
   lastContainerId: string | null;
   createdAt: string;

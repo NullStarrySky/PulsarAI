@@ -1,6 +1,21 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
+
+html.native-window-dragging *,
+html.native-window-dragging *::before,
+html.native-window-dragging *::after {
+  animation-play-state: paused !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  transition: none !important;
+}
+
+html.native-window-dragging #app {
+  contain: paint;
+  transform: translateZ(0);
+  will-change: transform;
+}
 
 @font-face {
   font-family: "Fira Code";
@@ -14,6 +29,7 @@
 @custom-variant mobile (&:where(.mobile-layout, .mobile-layout *));
 
 @theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -61,7 +77,7 @@
   --border: oklch(0.9 0 0);
   --input: oklch(0.9 0 0);
   --ring: oklch(0.7 0 0);
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .dark {
@@ -126,9 +142,13 @@
 }
 
 .milkdown {
-  --crepe-color-background: var(--background);
+  background-color: transparent !important;
+  --crepe-color-background: transparent !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  overflow-x: hidden !important;
   --crepe-color-on-background: var(--foreground);
-  --crepe-color-surface: var(--card);
+  --crepe-color-surface: transparent !important;
   --crepe-color-surface-low: var(--muted);
   --crepe-color-on-surface: var(--foreground);
   --crepe-color-on-surface-variant: var(--muted-foreground);
@@ -143,8 +163,8 @@
   --crepe-color-hover: var(--accent);
   --crepe-color-selected: color-mix(in srgb, var(--primary), transparent 82%);
   --crepe-color-inline-area: var(--muted);
-  --crepe-font-title: var(--font-sans, Inter, ui-sans-serif, system-ui, sans-serif);
-  --crepe-font-default: var(--font-sans, Inter, ui-sans-serif, system-ui, sans-serif);
+  --crepe-font-title: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  --crepe-font-default: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   --crepe-font-code: var(--font-code);
   color: var(--foreground);
 }
@@ -296,6 +316,36 @@
   border-color: color-mix(in srgb, var(--border), var(--foreground) 18%);
 }
 
+.milkdown .milkdown-toolbar {
+  /* Restored default styling; removed flex-wrap and auto height to prevent infinite layout loops */
+}
+
+.milkdown .editor,
+.milkdown .crepe-editor {
+  max-width: 100% !important;
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+.milkdown .ProseMirror {
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.dark .milkdown-toolbar button {
+  color: var(--foreground) !important;
+}
+
+.dark .milkdown-toolbar button svg {
+  stroke: var(--foreground) !important;
+  opacity: 0.9 !important;
+}
+
+.dark .milkdown-toolbar button:hover svg {
+  opacity: 1 !important;
+}
+
 .milkdown .milkdown-table-handle {
   color: color-mix(in srgb, var(--foreground), transparent 18%);
   background: color-mix(in srgb, var(--card), var(--foreground) 6%);
@@ -308,12 +358,13 @@
 }
 
 .dark .milkdown {
-  --crepe-color-background: var(--background);
+  background-color: transparent !important;
+  --crepe-color-background: transparent !important;
   --crepe-color-on-background: var(--foreground);
-  --crepe-color-surface: var(--card);
+  --crepe-color-surface: transparent !important;
   --crepe-color-surface-low: var(--muted);
   --crepe-color-on-surface: var(--foreground);
-  --crepe-color-on-surface-variant: var(--muted-foreground);
+  --crepe-color-on-surface-variant: color-mix(in srgb, var(--foreground) 85%, transparent);
   --crepe-color-outline: var(--border);
   --crepe-color-primary: var(--primary);
   --crepe-color-secondary: var(--secondary);

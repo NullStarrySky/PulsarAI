@@ -12,9 +12,11 @@ const props = withDefaults(defineProps<{
   content: string;
   interactivePreviewEnabled?: boolean;
   replaceWithPreview?: boolean;
+  compact?: boolean;
 }>(), {
   interactivePreviewEnabled: false,
   replaceWithPreview: false,
+  compact: false,
 });
 
 const showSource = ref(false);
@@ -58,6 +60,7 @@ watch(
     <ConversationMarkdown
       v-if="showSource"
       :model-value="props.content"
+      :compact="props.compact"
     />
 
     <template v-else-if="props.replaceWithPreview">
@@ -78,6 +81,7 @@ watch(
         <ConversationMarkdown
           v-if="segment.type === 'markdown' && segment.content"
           :model-value="segment.content"
+          :compact="props.compact"
         />
         <iframe
           v-else-if="segment.type === 'interactive-code'"
@@ -96,5 +100,6 @@ watch(
   <ConversationMarkdown
     v-else
     :model-value="props.content"
+    :compact="props.compact"
   />
 </template>

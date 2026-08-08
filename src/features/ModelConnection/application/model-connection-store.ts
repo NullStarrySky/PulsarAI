@@ -58,6 +58,8 @@ function migratePersistedModels(provider: ModelProviderDefinition) {
     );
 }
 
+let initializationPromise: Promise<void> | null = null;
+
 export const modelTypeLabels: Record<ModelApiType, string> = {
   chat: "对话",
   image: "图片",
@@ -141,31 +143,46 @@ export const useModelConnectionStore = defineStore("modelConnection", {
         return;
       }
 
-      const builtinProviders = cloneProviders();
-      const persistedProviders = await loadPersistedProviders();
-      const merged = new Map<string, ModelProviderDefinition>();
+      initializationPromise ??= (async () => {
+        const builtinProviders = cloneProviders();
+        const persistedProviders = await loadPersistedProviders();
+        const merged = new Map<string, ModelProviderDefinition>();
 
-      for (const provider of builtinProviders) {
-        merged.set(provider.id, provider);
-      }
-      for (const provider of persistedProviders) {
-        merged.set(provider.id, mergeProvider(merged.get(provider.id), provider));
-      }
+        for (const provider of builtinProviders) {
+          merged.set(provider.id, provider);
+        }
+        for (const provider of persistedProviders) {
+          merged.set(provider.id, mergeProvider(merged.get(provider.id), provider));
+        }
 
-      this.providers = [...merged.values()];
-      await Promise.all(
-        persistedProviders
-          .map((provider) => this.providers.find((item) => item.id === provider.id))
-          .filter((provider): provider is ModelProviderDefinition => Boolean(provider))
-          .map((provider) => persistProvider(provider)),
-      );
-      if (!this.providers.some((provider) => provider.id === this.activeProviderId)) {
-        this.activeProviderId = this.providers[0]?.id ?? "";
+        this.providers = [...merged.values()];
+
+        const persistedIds = new Set(persistedProviders.map((provider) => provider.id));
+        if (persistedIds.size < persistedProviders.length) {
+          console.warn(
+            `[ModelConnection] compacting ${persistedProviders.length} provider rows into ${persistedIds.size} unique records`,
+          );
+          for (const provider of this.providers) {
+            if (persistedIds.has(provider.id)) {
+              await persistProvider(provider);
+            }
+          }
+        }
+
+        if (!this.providers.some((provider) => provider.id === this.activeProviderId)) {
+          this.activeProviderId = this.providers[0]?.id ?? "";
+        }
+        for (const provider of this.providers) {
+          registerOpenAICompatibleProvider(provider.id, provider.baseUrl, provider.apiKeyName);
+        }
+        this.loaded = true;
+      })();
+
+      try {
+        await initializationPromise;
+      } finally {
+        initializationPromise = null;
       }
-      for (const provider of this.providers) {
-        registerOpenAICompatibleProvider(provider.id, provider.baseUrl, provider.apiKeyName);
-      }
-      this.loaded = true;
     },
     activateProvider(providerId: string) {
       if (this.providers.some((provider) => provider.id === providerId)) {

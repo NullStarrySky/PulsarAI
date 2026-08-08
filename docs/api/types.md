@@ -4,13 +4,9 @@
 
 <<< ../../src/features/Capabilities/domain/capability.ts
 
-默认权限同样直接引用应用使用的定义：
-
-<<< ../../src/features/Capabilities/domain/default-grants.ts
-
 ## Sandbox 位置
 
-若 `conversation.read` 和 `misc.readPlatform` 已授权，运行时会同时提供：
+公开 Feature API 默认注入 Sandbox，并同时提供两个等价入口：
 
 ```ts
 environment.conversation
@@ -20,4 +16,4 @@ environment.capabilities.conversation
 environment.capabilities.misc
 ```
 
-未授权的 Feature 或方法不会出现在对象中。调用前应以当前上下文中生成的 API 文档为准。
+只有被明确归类为破坏性、具有外部副作用、付费或可执行任意代码的方法会被阻止。被阻止的方法不会出现在运行时对象中；可通过 `readDocs()` 查询 Feature 目录、完整定义以及每个方法的当前可用状态。

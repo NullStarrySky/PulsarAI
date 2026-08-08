@@ -1,7 +1,5 @@
 import type { ModelMessage } from "ai";
 import { createAgentResourceProvider } from "@/features/Agent/application/default-agent";
-import { createProjectAgentRuntime } from "@/features/Agent/application/project-agent-runtime";
-import { isProjectAgentConversation } from "@/features/Agent/domain/project-agent";
 import {
   createAgentExtensionApi,
 } from "@/features/Agent/application/agent-extension-registry";
@@ -20,10 +18,9 @@ import {
   type PluginReferenceResolver,
 } from "@/features/Resources/Plugin/application/plugin-reference-resolver";
 import {
-  collectContextDataDefinitions,
   createDataDescriptionContainer,
   type ContextDataDefinition,
-} from "@/features/Resources/InteractiveDoc/domain/interactive-document";
+} from "@/features/Resources/Plugin/domain/plugin-chat";
 import {
   collectPluginCustomTools,
   createPluginCustomToolFunction,
@@ -31,25 +28,26 @@ import {
 import {
   type Plugin,
 } from "@/features/Resources/Plugin/domain/plugin-types";
-import {
-  applyPluginRegexToMessages,
-  collectPluginRegexRules,
-} from "@/features/Resources/Plugin/domain/plugin-regex";
 import { createPluginSelfApi } from "@/features/Resources/Plugin/capabilities";
+import { pluginFixedSettingValue } from "@/features/Resources/Plugin/domain/plugin-runtime";
+import {
+  getDefaultChatModel,
+  getDefaultReasoningEffort,
+} from "@/features/defaultConfigs/application/default-config-service";
+import type { ReasoningEffort } from "@/features/defaultConfigs/domain/default-config";
 import { buildCapabilityRuntime } from "@/features/Capabilities/application/capability-registry";
 import {
   executeSandboxCodeAsync,
-  resolveSandboxMessages,
   type SandboxEnvironment,
 } from "@/features/Sandbox/domain/sandbox";
 import type {
   ChatMessage,
   ChatMessageContainer,
   Conversation,
-  ConversationReasoningEffort,
   LocalStep,
   ToolCallResult,
 } from "@/features/Resources/Conversation/domain/conversation-types";
+import { formatChatMessageError } from "@/features/Resources/Conversation/domain/conversation-types";
 import {
   appendConversationVariableUpdate,
   createConversationDataApi,
@@ -76,7 +74,6 @@ export interface RunConversationGenerationInput {
   mainPluginId: string;
   conversationId: string;
   conversation: Conversation;
-  reasoningEffort: ConversationReasoningEffort;
   activePath: ChatMessageContainer[];
   chat: ModelMessage[];
   emptyContainer: ChatMessageContainer;
@@ -89,18 +86,68 @@ export interface RunConversationGenerationInput {
   prompt: string;
   resourceContext?: string;
   beforeGenerationMessage?: ChatMessage;
-  onStep?: (step: LocalStep | ToolCallResult) => void | Promise<void>;
+  onReplyChange?: () => void | Promise<void>;
 }
 
 export interface RunConversationGenerationResult {
-  text: string;
-  modelName: string;
   messages: ModelMessage[];
   diagnostics: PluginGenerationDiagnostic[];
   processPluginId?: string;
 }
 
 const componentRequesters: GenerationComponentRequester[] = [];
+
+function cloneSerializable<T>(value: T): T {
+  try {
+    return structuredClone(value);
+  } catch {
+    return JSON.parse(JSON.stringify(value)) as T;
+  }
+}
+
+function summarizePluginConsoleValue(value: unknown): unknown {
+  if (
+    value === null
+    || value === undefined
+    || typeof value === "string"
+    || typeof value === "number"
+    || typeof value === "boolean"
+    || typeof value === "bigint"
+  ) {
+    return value;
+  }
+  if (value instanceof Error) {
+    return { name: value.name, message: value.message, stack: value.stack };
+  }
+  if (Array.isArray(value)) {
+    return { type: "Array", length: value.length };
+  }
+  if (typeof value === "function") {
+    return `[Function ${value.name || "anonymous"}]`;
+  }
+  try {
+    return {
+      type: Object.prototype.toString.call(value).slice(8, -1),
+      keys: Object.keys(value as object).slice(0, 80),
+    };
+  } catch {
+    return "[Uninspectable value]";
+  }
+}
+
+function createPluginConsole() {
+  const write = (
+    method: "debug" | "error" | "info" | "log" | "warn",
+    values: unknown[],
+  ) => console[method](...values.map(summarizePluginConsoleValue));
+  return Object.freeze({
+    debug: (...values: unknown[]) => write("debug", values),
+    error: (...values: unknown[]) => write("error", values),
+    info: (...values: unknown[]) => write("info", values),
+    log: (...values: unknown[]) => write("log", values),
+    warn: (...values: unknown[]) => write("warn", values),
+  });
+}
 
 export function registerGenerationComponentRequester(
   requester: GenerationComponentRequester,
@@ -127,24 +174,6 @@ function createContextContainerApi(resolver: PluginReferenceResolver) {
   };
 }
 
-function insertContextDepthBlocks(
-  messages: ModelMessage[],
-  blocks: Array<{ depth: number; messages: ModelMessage[] }>,
-) {
-  if (!blocks.length) return messages;
-  const buckets = new Map<number, ModelMessage[]>();
-  for (const block of blocks) {
-    const index = Math.max(0, messages.length - block.depth);
-    buckets.set(index, [...(buckets.get(index) ?? []), ...block.messages]);
-  }
-  const result: ModelMessage[] = [];
-  for (let index = 0; index <= messages.length; index += 1) {
-    result.push(...(buckets.get(index) ?? []));
-    if (index < messages.length) result.push(messages[index]!);
-  }
-  return result;
-}
-
 function currentComponentRequester() {
   return componentRequesters[componentRequesters.length - 1] ?? null;
 }
@@ -152,10 +181,29 @@ function currentComponentRequester() {
 export async function runConversationGeneration(
   input: RunConversationGenerationInput,
 ): Promise<RunConversationGenerationResult> {
+  const mainPlugin = input.plugins.find((plugin) => plugin.id === input.mainPluginId);
+  if (!mainPlugin) throw new Error(`主要插件不存在：${input.mainPluginId}`);
+  const [defaultModel, defaultReasoningEffort] = await Promise.all([
+    getDefaultChatModel(),
+    getDefaultReasoningEffort(),
+  ]);
+  const configuredModel = pluginFixedSettingValue(mainPlugin, "model");
+  const configuredReasoningEffort = pluginFixedSettingValue(
+    mainPlugin,
+    "reasoningEffort",
+  );
+  const modelName = typeof configuredModel === "string" && configuredModel.trim()
+    ? configuredModel.trim()
+    : defaultModel;
+  const reasoningEffort = isReasoningEffort(configuredReasoningEffort)
+    ? configuredReasoningEffort
+    : defaultReasoningEffort;
+  const initialGenerateInfo = input.emptyMessage.meta.generateInfo ??= {
+    modelName,
+    startTime: new Date().toISOString(),
+  };
+  initialGenerateInfo.modelName = modelName;
   const capabilityRuntime = buildCapabilityRuntime();
-  const projectAgentRuntime = isProjectAgentConversation(input.conversation)
-    ? await createProjectAgentRuntime(input.conversationId)
-    : null;
   const pluginEnvironment = await buildPluginGenerationEnvironment(
     input.plugins,
     {
@@ -170,20 +218,72 @@ export async function runConversationGeneration(
       prompt: input.prompt,
       baseEnvironment: {
         ...capabilityRuntime.environment,
-        ...(projectAgentRuntime?.environment ?? {}),
-        reasoningEffort: input.reasoningEffort,
+        reasoningEffort,
       },
     },
   );
 
   const finalEnvironment: SandboxEnvironment = pluginEnvironment.environment;
+  finalEnvironment.console = createPluginConsole();
   const skillApi = createAgentExtensionApi("skill");
   const mcpApi = createAgentExtensionApi("mcp");
+  let replyActive = true;
+  let replyQueue = Promise.resolve();
+  let replyAppendCount = 0;
+  const updateReply = (update: () => void) => {
+    if (!replyActive) throw new Error("本次生成已经结束，不能继续修改助手消息。");
+    replyQueue = replyQueue.then(async () => {
+      update();
+      await input.onReplyChange?.();
+    });
+    return replyQueue;
+  };
+  const reply = Object.freeze({
+    read: () => ({
+      container: cloneSerializable(input.emptyContainer),
+      message: cloneSerializable(input.emptyMessage),
+    }),
+    setContent: (content: string) => {
+      const nextContent = String(content);
+      console.debug("[PulsarAI generation] reply.setContent", {
+        previousLength: input.emptyMessage.content.length,
+        nextLength: nextContent.length,
+      });
+      return updateReply(() => {
+        input.emptyMessage.content = nextContent;
+      });
+    },
+    appendContent: (delta: string) => {
+      replyAppendCount += 1;
+      return updateReply(() => {
+        input.emptyMessage.content += String(delta);
+      });
+    },
+    addPart: (part: NonNullable<ChatMessage["parts"]>[number]) => updateReply(() => {
+      input.emptyMessage.parts ??= [];
+      input.emptyMessage.parts.push(cloneSerializable(part));
+    }),
+    addStep: (step: LocalStep | ToolCallResult) => updateReply(() => {
+      input.emptyMessage.meta.steps.push(cloneSerializable(step));
+    }),
+    setModelName: (nextModelName: string) => updateReply(() => {
+      const value = String(nextModelName).trim();
+      if (!value) throw new Error("生成模型名称不能为空。");
+      const generateInfo = input.emptyMessage.meta.generateInfo ??= {
+        modelName: value,
+        startTime: new Date().toISOString(),
+      };
+      generateInfo.modelName = value;
+    }),
+    fail: (content: string) => updateReply(() => {
+      input.emptyMessage.type = "error";
+      input.emptyMessage.content = formatChatMessageError(content);
+    }),
+  });
   Object.assign(finalEnvironment, {
-    emptyContainer: input.emptyContainer,
-    emptyMessage: input.emptyMessage,
-    message: input.emptyMessage,
-    messageMeta: input.emptyMessage.meta,
+    emptyContainer: Object.freeze(cloneSerializable(input.emptyContainer)),
+    emptyMessage: Object.freeze(cloneSerializable(input.emptyMessage)),
+    reply,
     ...(input.beforeGenerationMessage
       ? { beforeGenerationMessage: input.beforeGenerationMessage }
       : {}),
@@ -208,27 +308,8 @@ export async function runConversationGeneration(
     throw new Error(`插件组合冲突：${customToolConflict.message}`);
   }
 
-  let dataDefinitions: ContextDataDefinition[] = [];
-  const compressionThreshold = Math.max(
-    0,
-    pluginEnvironment.contextResource?.contextConfig?.compressionThreshold ?? 0,
-  );
-  if (pluginEnvironment.contextResource) {
-    try {
-      dataDefinitions = collectContextDataDefinitions(
-        pluginEnvironment.contextResource.content,
-        pluginEnvironment.resolver.listDataBindings(),
-      );
-    } catch (error) {
-      pluginEnvironment.diagnostics.push({
-        pluginId: pluginEnvironment.contextResource.pluginId,
-        resourceId: pluginEnvironment.contextResource.id,
-        message: `无法读取 .data 定义：${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      });
-    }
-  }
+  const dataDefinitions: ContextDataDefinition[] =
+    pluginEnvironment.resolver.listDataBindings();
 
   let variableEvaluation: ConversationVariableEvaluation =
     await evaluateConversationVariables(dataDefinitions, input.activePath);
@@ -243,81 +324,12 @@ export async function runConversationGeneration(
   });
   finalEnvironment.DATA = finalEnvironment.data;
 
-  const memoryContext = await prepareConversationMemoryContext({
-    conversationId: input.conversationId,
-    activePath: input.activePath,
-    compressionThreshold,
-  });
-  finalEnvironment.chat = memoryContext.messages;
-  finalEnvironment.CHAT = memoryContext.messages;
-  if (pluginEnvironment.contextResource) {
-    pluginEnvironment.diagnostics.push(...memoryContext.diagnostics.map(
-      (message) => ({
-        pluginId: pluginEnvironment.contextResource!.pluginId,
-        resourceId: pluginEnvironment.contextResource!.id,
-        message,
-      }),
-    ));
-  }
-
-  const compiledContext = pluginEnvironment.contextResource
-    ? pluginEnvironment.resolver.compileContextDocument(
-        pluginEnvironment.contextResource.id,
-        { dataOverrides: variableEvaluation.state },
-      )
-    : null;
-  const resolvedContextMessages = compiledContext?.messages.length
-    ? compiledContext.messages
-    : resolveSandboxMessages(
-        [{ role: "system", content: "[[chat]]" }],
-        [finalEnvironment],
-      );
-  const contextMessages: ModelMessage[] = capabilityRuntime.prompt
-    ? [
-        { role: "system", content: capabilityRuntime.prompt },
-        ...resolvedContextMessages,
-      ]
-    : resolvedContextMessages;
-  if (customToolContainer.prompt) {
-    contextMessages.splice(capabilityRuntime.prompt ? 1 : 0, 0, {
-      role: "system",
-      content: customToolContainer.prompt,
-    });
-  }
+  const bootstrapMessages: ModelMessage[] = [];
+  if (capabilityRuntime.prompt) bootstrapMessages.push({ role: "system", content: capabilityRuntime.prompt });
+  if (customToolContainer.prompt) bootstrapMessages.push({ role: "system", content: customToolContainer.prompt });
   const dataDescriptionContainer = createDataDescriptionContainer(dataDefinitions);
-  if (dataDescriptionContainer) {
-    contextMessages.splice(capabilityRuntime.prompt ? 1 : 0, 0, {
-      role: "system",
-      content: dataDescriptionContainer,
-    });
-  }
-  if (input.resourceContext) {
-    contextMessages.unshift({ role: "system", content: input.resourceContext });
-  }
-  if (input.beforeGenerationMessage?.content.trim()) {
-    contextMessages.splice(capabilityRuntime.prompt ? 1 : 0, 0, {
-      role: "system",
-      content: [
-        "以下是同一回复页上一次已完成的生成结果。",
-        "本次重新生成应利用它降低不必要的措辞、结构和内容重复：",
-        input.beforeGenerationMessage.content,
-      ].join("\n\n"),
-    });
-  }
-  const depthContextMessages = insertContextDepthBlocks(
-    contextMessages,
-    pluginEnvironment.resolver.compileDepthContainerMessages(),
-  );
-  const regexContainer = collectPluginRegexRules(pluginEnvironment.enabledPlugins);
-  const regexResult = applyPluginRegexToMessages(
-    depthContextMessages,
-    regexContainer.value,
-  );
-  pluginEnvironment.diagnostics.push(
-    ...regexContainer.diagnostics,
-    ...regexResult.diagnostics,
-  );
-  const processedContextMessages = regexResult.value;
+  if (dataDescriptionContainer) bootstrapMessages.push({ role: "system", content: dataDescriptionContainer });
+  if (input.resourceContext) bootstrapMessages.push({ role: "system", content: input.resourceContext });
 
   const requestUser = async (input: AskUserInput) => {
     const { question, options } = askUserInputSchema.parse(input);
@@ -333,8 +345,9 @@ export async function runConversationGeneration(
   };
   const agentResources = createAgentResourceProvider({
     environment: finalEnvironment,
-    reasoningEffort: input.reasoningEffort,
-    onStep: input.onStep,
+    modelName,
+    reasoningEffort,
+    onStep: reply.addStep,
     variableUpdate: dataDefinitions.some((item) => item.enableUpdater)
       ? {
           execute: async (source) => {
@@ -386,11 +399,6 @@ export async function runConversationGeneration(
     const currentContainerResolver = () =>
       createPluginReferenceResolver(pluginEnvironment.enabledPlugins);
     const scopedSelfApi = createPluginSelfApi(pluginId, ["read"]);
-    const safeScopedSelfApi = Object.fromEntries(
-      Object.entries(scopedSelfApi).filter(([name]) =>
-        ["getSelf", "getManifest", "getConfig", "read"].includes(name)
-      ),
-    );
     return {
       ...inheritedPluginApi,
       listContainers: () => currentContainerResolver().listContainers(),
@@ -404,7 +412,7 @@ export async function runConversationGeneration(
         containerId: string,
         resourceIds?: string[],
       ) => currentContainerResolver().readContainer(containerId, resourceIds),
-      ...safeScopedSelfApi,
+      ...scopedSelfApi,
     };
   };
 
@@ -520,8 +528,27 @@ export async function runConversationGeneration(
     pluginEnvironment.resolver,
   );
   Object.assign(finalEnvironment, {
-    contextTemplate: compiledContext?.markdown ?? "[[chat]]",
-    contextMessages: processedContextMessages,
+    bootstrapMessages,
+    compileChat: (
+      resource: GenerationResourceValue,
+      environment: SandboxEnvironment = {},
+    ) => {
+      if (!pluginEnvironment.resolver.isResourceValue(resource)) {
+        throw new Error("compileChat 只接受 imports.resource(...) 返回的资源。");
+      }
+      return pluginEnvironment.resolver.compileChatContext(resource.id, {
+        dataOverrides: variableEvaluation.state,
+        environment: { ...finalEnvironment, ...environment },
+      }).messages;
+    },
+    memory: Object.freeze({
+      prepare: (options: { compressionThreshold: number }) =>
+        prepareConversationMemoryContext({
+          conversationId: input.conversationId,
+          activePath: input.activePath,
+          compressionThreshold: options.compressionThreshold,
+        }),
+    }),
     api,
     agent: codeActAgentApi,
     AGENT: codeActAgentApi,
@@ -570,57 +597,39 @@ export async function runConversationGeneration(
     pluginEnvironment.actionProcessResource ?? pluginEnvironment.processResource;
   const processPluginId = pluginEnvironment.actionProcessResource?.pluginId
     ?? pluginEnvironment.processPlugin?.id;
-  const processResult = processResource
-    ? await runProcess(processResource)
-    : (() => {
-        throw new Error("没有可执行的 agentprocess/index.js；请启用内置流程或提供自定义流程。");
-      })();
-  const normalized = normalizeGenerationResult(processResult, input.emptyMessage);
-
-  if (!normalized) {
-    throw new Error("流程没有返回文本结果。");
+  try {
+    if (!processResource) throw new Error("主要插件没有可执行的 generatePath。");
+    console.log("[PulsarAI generation] process start", {
+      pluginId: processPluginId,
+      resourceId: processResource.id,
+      path: processResource.path,
+    });
+    await runProcess(processResource);
+    await replyQueue;
+    console.log("[PulsarAI generation] process complete", {
+      type: input.emptyMessage.type,
+      contentLength: input.emptyMessage.content.length,
+      appendCount: replyAppendCount,
+      partCount: input.emptyMessage.parts?.length ?? 0,
+      stepCount: input.emptyMessage.meta.steps.length,
+    });
+  } finally {
+    replyActive = false;
   }
-
   fillEnvironmentMetadata(input.emptyMessage, pluginEnvironment);
   return {
-    ...normalized,
-    messages: processedContextMessages,
+    messages: input.chat,
     diagnostics: pluginEnvironment.diagnostics,
     processPluginId,
   };
 }
 
-function normalizeGenerationResult(
-  value: unknown,
-  message: ChatMessage,
-): { text: string; modelName: string } | null {
-  if (typeof value === "string") {
-    return {
-      text: value,
-      modelName: "plugin-workflow",
-    };
-  }
-
-  if (value && typeof value === "object" && "text" in value) {
-    const result = value as { text?: unknown; modelName?: unknown };
-    if (typeof result.text === "string") {
-      return {
-        text: result.text,
-        modelName:
-          typeof result.modelName === "string"
-            ? result.modelName
-            : "plugin-workflow",
-      };
-    }
-  }
-
-  if (message.content) {
-    return {
-      text: message.content,
-      modelName: "plugin-workflow",
-    };
-  }
-  return null;
+function isReasoningEffort(value: unknown): value is ReasoningEffort {
+  return value === "none"
+    || value === "low"
+    || value === "medium"
+    || value === "high"
+    || value === "xhigh";
 }
 
 function fillEnvironmentMetadata(

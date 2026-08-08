@@ -9,15 +9,8 @@ export interface FontDefinition {
 export const builtInFonts: FontDefinition[] = [
   {
     id: "inter",
-    name: "Inter",
-    sans: 'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    serif: 'Georgia, Cambria, "Times New Roman", Times, serif',
-    mono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
-  },
-  {
-    id: "system",
     name: "System UI",
-    sans: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     serif: 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif',
     mono: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
   },

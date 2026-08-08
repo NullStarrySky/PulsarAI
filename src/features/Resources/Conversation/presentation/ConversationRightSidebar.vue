@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { BookOpen, Check, FileCheck2, FlaskConical, ListTodo, MessageSquare, MoreHorizontal, Plus, Search, Trash2, Wrench } from "lucide-vue-next";
+import { BookOpen, Check, FileCheck2, FlaskConical, MessageSquare, MoreHorizontal, Plus, Search, Trash2, Wrench } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -30,11 +30,10 @@ import type { ConversationRendererId } from "@/features/Resources/Conversation/d
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import InlineEditInput from "@/features/UI/presentation/InlineEditInput.vue";
 import PluginRightSidebarPanel from "@/features/Resources/Plugin/presentation/PluginRightSidebarPanel.vue";
-import ConversationTaskPanel from "./ConversationTaskPanel.vue";
 
 const layout = useLayoutStore();
 const conversation = useConversationStore();
-const tab = ref<"conversation" | "task" | "plugin">("conversation");
+const tab = ref<"conversation" | "plugin">("conversation");
 const editingConversationId = ref("");
 const editingConversationTitle = ref("");
 
@@ -116,162 +115,150 @@ async function setRenderer(conversationId: string, rendererId: ConversationRende
 </script>
 
 <template>
-  <aside class="flex h-full min-w-0 flex-col overflow-hidden border-l bg-background">
-    <div class="min-w-0 border-b p-2">
-      <div class="grid grid-cols-3 rounded-md bg-muted p-1">
-        <Button
-          :variant="tab === 'conversation' ? 'secondary' : 'ghost'"
-          class="h-8 gap-1 px-1 text-xs"
-          @click="tab = 'conversation'"
-        >
-          <MessageSquare data-icon="inline-start" />
-          对话
-        </Button>
-        <Button
-          :variant="tab === 'task' ? 'secondary' : 'ghost'"
-          class="h-8 gap-1 px-1 text-xs"
-          @click="tab = 'task'"
-        >
-          <ListTodo data-icon="inline-start" />
-          任务
-        </Button>
-        <Button
-          :variant="tab === 'plugin' ? 'secondary' : 'ghost'"
-          class="h-8 gap-1 px-1 text-xs"
-          @click="tab = 'plugin'"
-        >
-          <Wrench data-icon="inline-start" />
-          插件
-        </Button>
-      </div>
+  <aside class="flex h-full min-w-0 flex-col overflow-hidden border-l bg-background p-2 gap-2">
+    <div class="grid grid-cols-2 rounded-md bg-muted p-1">
+      <Button
+        :variant="tab === 'conversation' ? 'secondary' : 'ghost'"
+        class="h-8 gap-1 px-1 text-xs"
+        @click="tab = 'conversation'"
+      >
+        <MessageSquare data-icon="inline-start" />
+        对话
+      </Button>
+      <Button
+        :variant="tab === 'plugin' ? 'secondary' : 'ghost'"
+        class="h-8 gap-1 px-1 text-xs"
+        @click="tab = 'plugin'"
+      >
+        <Wrench data-icon="inline-start" />
+        插件
+      </Button>
     </div>
 
     <template v-if="tab === 'conversation'">
-      <div class="flex min-w-0 items-center gap-2 border-b p-2">
+      <div class="flex min-w-0 items-center gap-2">
         <div class="relative min-w-0 flex-1">
           <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input v-model="conversation.conversationSearch" class="h-8 pl-8" placeholder="搜索对话" />
+          <Input v-model="conversation.conversationSearch" class="h-9 pl-8" placeholder="搜索对话" />
         </div>
-        <Button size="icon" variant="ghost" class="size-8" title="新建对话" @click="createConversation">
+        <Button size="icon" variant="ghost" class="size-9 shrink-0" title="新建对话" @click="createConversation">
           <Plus class="size-4" />
         </Button>
       </div>
 
-      <ScrollArea class="min-h-0 flex-1">
-        <div class="min-w-0 p-2">
-        <ContextMenu
-          v-for="item in conversation.activePackageConversations"
-          :key="item.id"
-        >
-          <ContextMenuTrigger as-child>
-            <div
-              role="button"
-              :class="
-                cn(
-                  'group relative grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md px-3 py-2 text-left transition-colors hover:bg-accent',
-                  item.id === conversation.activeConversationId && 'bg-accent text-accent-foreground',
-                )
-              "
-              @click="openConversation(item.id)"
-            >
-              <InlineEditInput
-                v-if="editingConversationId === item.id"
-                v-model="editingConversationTitle"
-                placeholder="对话名称"
-                @click.stop
-                @confirm="confirmRenameConversation"
-                @cancel="editingConversationId = ''"
-              />
-              <span v-else class="flex min-w-0 items-center gap-2">
-                <span class="min-w-0 truncate text-sm font-medium">{{ item.title }}</span>
-                <span
-                  v-if="item.kind !== 'chat'"
-                  class="inline-flex h-5 shrink-0 items-center gap-1 rounded bg-muted px-1.5 text-[11px] font-medium text-muted-foreground"
-                >
-                  <ListTodo v-if="item.kind === 'task'" class="size-3" />
-                  <FlaskConical v-else class="size-3" />
-                  {{ item.kind === "task" ? "任务" : "测试" }}
+      <ScrollArea class="min-h-0 flex-1 -mr-2 pr-2">
+        <div class="min-w-0 space-y-1">
+          <ContextMenu
+            v-for="item in conversation.activePackageConversations"
+            :key="item.id"
+          >
+            <ContextMenuTrigger as-child>
+              <div
+                role="button"
+                :class="
+                  cn(
+                    'group relative grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md px-3 py-2 text-left transition-colors hover:bg-accent',
+                    item.id === conversation.activeConversationId && 'bg-accent text-accent-foreground',
+                  )
+                "
+                @click="openConversation(item.id)"
+              >
+                <InlineEditInput
+                  v-if="editingConversationId === item.id"
+                  v-model="editingConversationTitle"
+                  placeholder="对话名称"
+                  @click.stop
+                  @confirm="confirmRenameConversation"
+                  @cancel="editingConversationId = ''"
+                />
+                <span v-else class="flex min-w-0 items-center gap-2">
+                  <span class="min-w-0 truncate text-sm font-medium">{{ item.title }}</span>
+                  <span
+                    v-if="item.kind !== 'chat'"
+                    class="inline-flex h-5 shrink-0 items-center gap-1 rounded bg-muted px-1.5 text-[11px] font-medium text-muted-foreground"
+                  >
+                    <FlaskConical class="size-3" />
+                    测试
+                  </span>
+                  <span
+                    v-if="item.isTemplate"
+                    class="inline-flex h-5 shrink-0 items-center gap-1 rounded bg-muted px-1.5 text-[11px] font-medium text-muted-foreground"
+                  >
+                    <FileCheck2 class="size-3" />
+                    模板
+                  </span>
                 </span>
-                <span
-                  v-if="item.isTemplate"
-                  class="inline-flex h-5 shrink-0 items-center gap-1 rounded bg-muted px-1.5 text-[11px] font-medium text-muted-foreground"
-                >
-                  <FileCheck2 class="size-3" />
-                  模板
-                </span>
-              </span>
 
-              <DropdownMenu v-if="editingConversationId !== item.id">
-                <DropdownMenuTrigger as-child>
-                  <Button size="icon" variant="ghost" class="size-7 opacity-70" title="对话菜单" @click.stop>
-                    <MoreHorizontal class="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" class="w-40">
-                  <DropdownMenuItem @click="startRenameConversation(item.id)">重命名</DropdownMenuItem>
-                  <DropdownMenuItem @click="toggleConversationTemplate(item.id)">
-                    <FileCheck2 class="mr-2 size-4" />
-                    {{ item.isTemplate ? "取消模板" : "设为模板" }}
-                  </DropdownMenuItem>
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>
-                      <BookOpen class="mr-2 size-4" />
-                      渲染器
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent class="w-40">
-                      <DropdownMenuItem @click="setRenderer(item.id, 'chat')">
-                        标准对话
-                        <Check v-if="(item.rendererId ?? 'chat') === 'chat'" class="ml-auto size-4" />
-                      </DropdownMenuItem>
-                      <DropdownMenuItem @click="setRenderer(item.id, 'novel')">
-                        小说阅读器
-                        <Check v-if="item.rendererId === 'novel'" class="ml-auto size-4" />
-                      </DropdownMenuItem>
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem class="text-destructive focus:text-destructive" @click="deleteConversation(item.id)">
-                    <Trash2 class="mr-2 size-4" />
-                    删除
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </ContextMenuTrigger>
-          <ContextMenuContent class="w-40">
-            <ContextMenuItem @click="startRenameConversation(item.id)">重命名</ContextMenuItem>
-            <ContextMenuItem @click="toggleConversationTemplate(item.id)">
-              <FileCheck2 class="mr-2 size-4" />
-              {{ item.isTemplate ? "取消模板" : "设为模板" }}
-            </ContextMenuItem>
-            <ContextMenuSub>
-              <ContextMenuSubTrigger>
-                <BookOpen class="mr-2 size-4" />
-                渲染器
-              </ContextMenuSubTrigger>
-              <ContextMenuSubContent class="w-40">
-                <ContextMenuItem @click="setRenderer(item.id, 'chat')">
-                  标准对话
-                  <Check v-if="(item.rendererId ?? 'chat') === 'chat'" class="ml-auto size-4" />
-                </ContextMenuItem>
-                <ContextMenuItem @click="setRenderer(item.id, 'novel')">
-                  小说阅读器
-                  <Check v-if="item.rendererId === 'novel'" class="ml-auto size-4" />
-                </ContextMenuItem>
-              </ContextMenuSubContent>
-            </ContextMenuSub>
-            <ContextMenuSeparator />
-            <ContextMenuItem variant="destructive" @click="deleteConversation(item.id)">
-              <Trash2 class="mr-2 size-4" />
-              删除
-            </ContextMenuItem>
-          </ContextMenuContent>
-        </ContextMenu>
+                <DropdownMenu v-if="editingConversationId !== item.id">
+                  <DropdownMenuTrigger as-child>
+                    <Button size="icon" variant="ghost" class="size-7 opacity-70" title="对话菜单" @click.stop>
+                      <MoreHorizontal class="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" class="w-40">
+                    <DropdownMenuItem @click="startRenameConversation(item.id)">重命名</DropdownMenuItem>
+                    <DropdownMenuItem @click="toggleConversationTemplate(item.id)">
+                      <FileCheck2 class="mr-2 size-4" />
+                      {{ item.isTemplate ? "取消模板" : "设为模板" }}
+                    </DropdownMenuItem>
+                    <DropdownMenuSub>
+                      <DropdownMenuSubTrigger>
+                        <BookOpen class="mr-2 size-4" />
+                        渲染器
+                      </DropdownMenuSubTrigger>
+                      <DropdownMenuSubContent class="w-40">
+                        <DropdownMenuItem @click="setRenderer(item.id, 'chat')">
+                          标准对话
+                          <Check v-if="(item.rendererId ?? 'chat') === 'chat'" class="ml-auto size-4" />
+                        </DropdownMenuItem>
+                        <DropdownMenuItem @click="setRenderer(item.id, 'novel')">
+                          小说阅读器
+                          <Check v-if="item.rendererId === 'novel'" class="ml-auto size-4" />
+                        </DropdownMenuItem>
+                      </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem class="text-destructive focus:text-destructive" @click="deleteConversation(item.id)">
+                      <Trash2 class="mr-2 size-4" />
+                      删除
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent class="w-40">
+              <ContextMenuItem @click="startRenameConversation(item.id)">重命名</ContextMenuItem>
+              <ContextMenuItem @click="toggleConversationTemplate(item.id)">
+                <FileCheck2 class="mr-2 size-4" />
+                {{ item.isTemplate ? "取消模板" : "设为模板" }}
+              </ContextMenuItem>
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>
+                  <BookOpen class="mr-2 size-4" />
+                  渲染器
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent class="w-40">
+                  <ContextMenuItem @click="setRenderer(item.id, 'chat')">
+                    标准对话
+                    <Check v-if="(item.rendererId ?? 'chat') === 'chat'" class="ml-auto size-4" />
+                  </ContextMenuItem>
+                  <ContextMenuItem @click="setRenderer(item.id, 'novel')">
+                    小说阅读器
+                    <Check v-if="item.rendererId === 'novel'" class="ml-auto size-4" />
+                  </ContextMenuItem>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+              <ContextMenuSeparator />
+              <ContextMenuItem variant="destructive" @click="deleteConversation(item.id)">
+                <Trash2 class="mr-2 size-4" />
+                删除
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
         </div>
       </ScrollArea>
     </template>
 
-    <ConversationTaskPanel v-else-if="tab === 'task'" />
     <PluginRightSidebarPanel v-else />
   </aside>
 </template>

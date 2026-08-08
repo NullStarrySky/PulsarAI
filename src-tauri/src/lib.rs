@@ -732,34 +732,13 @@ async fn open_database(path: &Path) -> Result<Surreal<Db>, String> {
         .use_db("app")
         .await
         .map_err(|error| error.to_string())?;
+    db.query(
+        "REMOVE INDEX IF EXISTS plugin_node_search ON TABLE resource_plugin_nodes; \
+         REMOVE ANALYZER IF EXISTS plugin_search_analyzer;",
+    )
+    .await
+    .map_err(|error| error.to_string())?;
     Ok(db)
-}
-
-async fn ensure_plugin_search_schema(db: &Surreal<Db>) -> Result<(), String> {
-    db.query(
-        "BEGIN TRANSACTION; \
-         DELETE resource_plugins \
-         WHERE resource_key = NONE OR value.id = NONE OR value.rootId = NONE; \
-         DELETE resource_plugin_nodes \
-         WHERE resource_key = NONE OR plugin_id = NONE OR path = NONE \
-            OR name = NONE OR kind = NONE OR value = NONE; \
-         DELETE resource_plugins \
-         WHERE value.rootId NOT IN (SELECT VALUE resource_key FROM resource_plugin_nodes); \
-         DELETE resource_plugin_nodes \
-         WHERE plugin_id NOT IN (SELECT VALUE resource_key FROM resource_plugins); \
-         COMMIT TRANSACTION;",
-    )
-    .await
-    .map_err(|error| error.to_string())?;
-    db.query(
-        "DEFINE ANALYZER IF NOT EXISTS plugin_search_analyzer \
-         TOKENIZERS class, punct FILTERS lowercase, ascii; \
-         DEFINE INDEX IF NOT EXISTS plugin_node_search ON TABLE resource_plugin_nodes \
-         FIELDS search_text SEARCH ANALYZER plugin_search_analyzer BM25;",
-    )
-    .await
-    .map_err(|error| error.to_string())?;
-    Ok(())
 }
 
 fn plugin_node_content_text(node: &serde_json::Value) -> String {
@@ -852,11 +831,11 @@ fn assemble_plugin_node(
             let left_node = nodes.get(left).map(|item| &item.value);
             let right_node = nodes.get(right).map(|item| &item.value);
             let left_order = left_node
-                .and_then(|item| item.get("order"))
+                .and_then(|item| item.get("treeOrder"))
                 .and_then(serde_json::Value::as_i64)
                 .unwrap_or_default();
             let right_order = right_node
-                .and_then(|item| item.get("order"))
+                .and_then(|item| item.get("treeOrder"))
                 .and_then(serde_json::Value::as_i64)
                 .unwrap_or_default();
             left_order
@@ -1001,9 +980,10 @@ async fn select_database_values(
     table: &str,
 ) -> Result<Vec<serde_json::Value>, String> {
     let table = normalize_table_name(table)?;
-    let sql = format!("SELECT VALUE value FROM {table} ORDER BY resource_key");
+    let sql = format!("SELECT resource_key, value FROM {table} ORDER BY resource_key");
     let mut result = db.query(sql).await.map_err(|error| error.to_string())?;
-    result.take(0).map_err(|error| error.to_string())
+    let rows: Vec<DatabaseRecord> = result.take(0).map_err(|error| error.to_string())?;
+    Ok(rows.into_iter().map(|record| record.value).collect())
 }
 
 fn http_response(stream: &mut TcpStream, status: &str, body: &[u8]) -> Result<(), String> {
@@ -1170,7 +1150,6 @@ async fn app_db<'a>(app: &AppHandle, state: &'a AppState) -> Result<&'a Surreal<
             fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
             let db_path = data_dir.join("surrealdb");
             let db = open_database(&db_path).await?;
-            ensure_plugin_search_schema(&db).await?;
             Ok(db)
         })
         .await
@@ -1337,8 +1316,14 @@ async fn database_upsert(
 ) -> Result<(), String> {
     let db = app_db(&app, &state).await?;
     let table = normalize_table_name(&table)?;
-    let sql = format!("DELETE {table} WHERE resource_key = $id; CREATE {table} CONTENT {{ resource_key: $id, value: $value }};");
+    let sql = format!(
+        "BEGIN TRANSACTION; \
+         DELETE {table} WHERE resource_key = $id; \
+         UPSERT type::record($table_name, $id) CONTENT {{ resource_key: $id, value: $value }}; \
+         COMMIT TRANSACTION;"
+    );
     db.query(sql)
+        .bind(("table_name", table))
         .bind(("id", id))
         .bind(("value", value))
         .await
@@ -1487,8 +1472,7 @@ async fn database_search_plugin_nodes(
         .query(
             "SELECT plugin_id, plugin_name, resource_key AS node_id, path, name, kind, value.content AS content \
              FROM resource_plugin_nodes \
-             WHERE search_text @0@ $query \
-                OR string::lowercase(search_text) CONTAINS string::lowercase($query) \
+             WHERE string::lowercase(search_text) CONTAINS string::lowercase($query) \
              ORDER BY plugin_name, path \
              LIMIT $limit",
         )

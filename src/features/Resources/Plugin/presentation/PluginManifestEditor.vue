@@ -14,6 +14,8 @@ import type { Plugin } from "@/features/Resources/Plugin/domain/plugin-types";
 import ManifestCheckboxControl from "./manifest-controls/ManifestCheckboxControl.vue";
 import ManifestInputControl from "./manifest-controls/ManifestInputControl.vue";
 import ManifestMediaSelectControl from "./manifest-controls/ManifestMediaSelectControl.vue";
+import ManifestModelSelectControl from "./manifest-controls/ManifestModelSelectControl.vue";
+import ManifestReasoningEffortControl from "./manifest-controls/ManifestReasoningEffortControl.vue";
 import ManifestSelectControl from "./manifest-controls/ManifestSelectControl.vue";
 import ManifestSliderControl from "./manifest-controls/ManifestSliderControl.vue";
 import ManifestSwitchControl from "./manifest-controls/ManifestSwitchControl.vue";
@@ -31,6 +33,8 @@ const builtins: Record<string, Component> = {
   checkbox: ManifestCheckboxControl,
   input: ManifestInputControl,
   mediaselect: ManifestMediaSelectControl,
+  modelselect: ManifestModelSelectControl,
+  reasoningeffortselect: ManifestReasoningEffortControl,
   select: ManifestSelectControl,
   slider: ManifestSliderControl,
   switch: ManifestSwitchControl,

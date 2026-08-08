@@ -312,7 +312,7 @@ function mergePluginResource(
       ...clonePlain(remote),
       id: crypto.randomUUID(),
       name: uniqueRestoredName(remote.name, names),
-      order: Math.max(local.order ?? 0, remote.order ?? 0) + 1,
+      treeOrder: Math.max(local.treeOrder ?? 0, remote.treeOrder ?? 0) + 1,
     },
   ];
 }
@@ -337,7 +337,7 @@ function mergePluginFolder(local: PluginFolder, remote: PluginFolder): PluginFol
           && valuesEqualWithoutKeys(
             child as unknown as Record<string, unknown>,
             remoteChild as unknown as Record<string, unknown>,
-            ["id", "name", "order"],
+            ["id", "name", "treeOrder"],
           ),
       );
       if (alreadyPreserved) {
@@ -357,7 +357,7 @@ function mergePluginFolder(local: PluginFolder, remote: PluginFolder): PluginFol
         && valuesEqualWithoutKeys(
           child as unknown as Record<string, unknown>,
           remoteChild as unknown as Record<string, unknown>,
-          ["id", "name", "order"],
+          ["id", "name", "treeOrder"],
         ),
     );
     if (alreadyPreserved) {
@@ -370,7 +370,7 @@ function mergePluginFolder(local: PluginFolder, remote: PluginFolder): PluginFol
         remoteChild.name,
         children.map((child) => child.name),
       ),
-      order: Math.max(localChild.order ?? 0, remoteChild.order ?? 0) + 1,
+      treeOrder: Math.max(localChild.treeOrder ?? 0, remoteChild.treeOrder ?? 0) + 1,
     };
     children.push(duplicate);
   }
@@ -1075,7 +1075,6 @@ export const useBackupStore = defineStore("backup", {
                 conversation.conversations.map((value) => value.title),
               )
             : sourceConversation.title,
-          reasoningEffort: sourceConversation.reasoningEffort ?? "none",
           rootContainerId: null,
           lastContainerId: null,
           updatedAt: new Date().toISOString(),
@@ -1262,7 +1261,6 @@ export const useBackupStore = defineStore("backup", {
         if (!local) {
           const item = {
             ...clonePlain(incoming),
-            reasoningEffort: incoming.reasoningEffort ?? ("none" as const),
           };
           conversation.conversations.push(item);
           await conversation.persistConversation(item);

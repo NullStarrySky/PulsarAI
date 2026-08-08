@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { MoreHorizontal, Plus, Trash2, Upload } from "lucide-vue-next";
+import { MoreHorizontal, Plus, RotateCcw, Trash2, Upload } from "lucide-vue-next";
 import { push } from "notivue";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +10,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import SettingGroup from "@/features/Setting/presentation/SettingGroup.vue";
 import SettingItem from "@/features/Setting/presentation/SettingItem.vue";
@@ -91,6 +98,11 @@ async function deleteGlobalPlugin(plugin: Plugin) {
   }
 }
 
+async function restoreBuiltInPlugin(plugin: Plugin) {
+  const restored = await pluginStore.restoreBuiltInPlugin(plugin.id);
+  if (restored) push.success(`已还原 ${restored.name}`);
+}
+
 </script>
 
 <template>
@@ -102,6 +114,21 @@ async function deleteGlobalPlugin(plugin: Plugin) {
           button-class="w-full justify-between sm:w-80"
           @update:model-value="defaults.setDefaultChatModel"
         />
+      </SettingItem>
+      <SettingItem title="默认推理强度" description="主要插件未覆盖时使用。">
+        <Select
+          :model-value="defaults.reasoningEffort"
+          @update:model-value="defaults.setReasoningEffort($event as never)"
+        >
+          <SelectTrigger class="w-full sm:w-80"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">关闭</SelectItem>
+            <SelectItem value="low">低</SelectItem>
+            <SelectItem value="medium">中</SelectItem>
+            <SelectItem value="high">高</SelectItem>
+            <SelectItem value="xhigh">超高</SelectItem>
+          </SelectContent>
+        </Select>
       </SettingItem>
       <SettingItem title="快速模型" description="用于低延迟、低成本任务。">
         <ModelSelect
@@ -172,11 +199,11 @@ async function deleteGlobalPlugin(plugin: Plugin) {
       title="全局插件"
       description="管理全局插件的安装级可用状态；每个角色包再按稳定 ID 独立选择主要插件和启用集合。"
     >
-      <div class="flex items-center justify-end gap-1 px-4 py-2">
+      <template #actions>
         <Button
           size="icon"
           variant="ghost"
-          class="size-8"
+          class="size-7 rounded-md hover:bg-muted"
           title="导入全局插件"
           @click="importInput?.click()"
         >
@@ -185,18 +212,18 @@ async function deleteGlobalPlugin(plugin: Plugin) {
         <Button
           size="icon"
           variant="ghost"
-          class="size-8"
+          class="size-7 rounded-md hover:bg-muted"
           title="新建全局插件"
           @click="createGlobalPlugin"
         >
           <Plus class="size-4" />
         </Button>
-      </div>
+      </template>
 
       <div
         v-for="plugin in globalPlugins"
         :key="plugin.id"
-        class="group flex min-h-14 items-center gap-3 px-4 py-2.5"
+        class="group flex min-h-12 items-center gap-3 px-4 py-2"
       >
         <img
           v-if="plugin.icon"
@@ -242,8 +269,12 @@ async function deleteGlobalPlugin(plugin: Plugin) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" class="w-36">
+            <DropdownMenuItem v-if="plugin.builtIn" @click="restoreBuiltInPlugin(plugin)">
+              <RotateCcw class="mr-2 size-4" />
+              还原默认内容
+            </DropdownMenuItem>
             <DropdownMenuItem
-              :disabled="plugin.builtIn"
+              v-else
               class="text-destructive focus:text-destructive"
               @click="deleteGlobalPlugin(plugin)"
             >
@@ -252,6 +283,12 @@ async function deleteGlobalPlugin(plugin: Plugin) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
+      <div v-if="pluginStore.loadError" class="px-4 py-3 text-sm text-destructive">
+        本地插件数据读取失败；内置插件仍可使用。{{ pluginStore.loadError }}
+      </div>
+      <div v-else-if="!globalPlugins.length" class="px-4 py-6 text-center text-sm text-muted-foreground">
+        暂无全局插件。
       </div>
     </SettingGroup>
 

@@ -186,8 +186,8 @@ async function uploadIcon(event: Event) {
 </script>
 
 <template>
-  <aside class="flex h-full min-w-0 flex-col overflow-hidden border-r bg-background">
-    <div class="flex min-w-0 items-center gap-3 border-b px-3 py-3">
+  <aside class="flex h-full min-w-0 flex-col overflow-hidden border-r bg-background p-2 gap-2">
+    <div class="flex min-w-0 items-center gap-3 px-2 py-2">
       <AppIcon class="size-9" />
       <div class="min-w-0">
         <div class="truncate text-sm font-semibold tracking-tight">PulsarAI</div>
@@ -195,38 +195,35 @@ async function uploadIcon(event: Event) {
       </div>
     </div>
 
-    <div class="min-w-0 border-b p-2">
-      <nav class="grid gap-1">
-        <Button
-          class="h-9 justify-start gap-2"
-          variant="secondary"
+    <nav class="grid gap-1">
+      <Button
+        class="h-9 justify-start gap-2"
+        variant="secondary"
+      >
+        <LayoutGrid class="size-4" />
+        角色包
+      </Button>
+      <Button class="relative h-9 justify-start gap-2" variant="ghost" @click="openBuiltinPage('notifications', '通知')">
+        <Bell class="size-4" />
+        通知
+        <span
+          v-if="notifications.unreadCount"
+          class="ml-auto min-w-5 rounded-full bg-primary px-1.5 text-center text-[10px] leading-5 text-primary-foreground"
         >
-          <LayoutGrid class="size-4" />
-          角色包
-        </Button>
-        <Button class="relative h-9 justify-start gap-2" variant="ghost" @click="openBuiltinPage('notifications', '通知')">
-          <Bell class="size-4" />
-          通知
-          <span
-            v-if="notifications.unreadCount"
-            class="ml-auto min-w-5 rounded-full bg-primary px-1.5 text-center text-[10px] leading-5 text-primary-foreground"
-          >
-            {{ notifications.unreadCount > 99 ? "99+" : notifications.unreadCount }}
-          </span>
-        </Button>
-        <Button class="h-9 justify-start gap-2" variant="ghost" @click="commandStore.openPalette()">
-          <Search class="size-4" />
-          搜索
-        </Button>
-        <Button class="h-9 justify-start gap-2" variant="ghost" @click="openBuiltinPage('schedule', '定时任务')">
-          <Clock class="size-4" />
-          定时任务
-        </Button>
-      </nav>
-    </div>
+          {{ notifications.unreadCount > 99 ? "99+" : notifications.unreadCount }}
+        </span>
+      </Button>
+      <Button class="h-9 justify-start gap-2" variant="ghost" @click="commandStore.openPalette()">
+        <Search class="size-4" />
+        搜索
+      </Button>
+      <Button class="h-9 justify-start gap-2" variant="ghost" @click="openBuiltinPage('schedule', '定时任务')">
+        <Clock class="size-4" />
+        定时任务
+      </Button>
+    </nav>
 
-    <ScrollArea class="min-h-0 flex-1">
-      <div class="min-w-0 p-2">
+    <ScrollArea class="min-h-0 flex-1 -mr-2 pr-2">
       <div class="mb-2 flex items-center justify-between px-1">
         <span class="text-xs font-medium text-muted-foreground">角色包</span>
         <Button
@@ -242,25 +239,28 @@ async function uploadIcon(event: Event) {
       </div>
       <section v-for="section in categorySections" :key="section.id" class="group/category mb-2">
         <div
-          class="relative flex h-8 cursor-pointer items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent/60"
-          @click="toggleCategory(section.id)"
+          class="flex h-8 cursor-pointer items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent/60"
         >
-          <InlineEditInput
-            v-if="editing?.kind === 'category-name' && editing.id === section.id"
-            v-model="editingValue"
-            placeholder="分类名称"
-            @click.stop
-            @confirm="confirmEdit"
-            @cancel="editing = null"
-          />
-          <ChevronRight v-if="isCategoryCollapsed(section.id)" class="size-3.5 shrink-0" />
-          <ChevronDown v-else class="size-3.5 shrink-0" />
-          <span class="min-w-0 flex-1 truncate">{{ section.name }}</span>
+          <button type="button" class="flex flex-1 items-center gap-1 min-w-0" @click="toggleCategory(section.id)">
+            <ChevronRight v-if="isCategoryCollapsed(section.id)" class="size-3.5 shrink-0" />
+            <ChevronDown v-else class="size-3.5 shrink-0" />
+            <InlineEditInput
+              v-if="editing?.kind === 'category-name' && editing.id === section.id"
+              v-model="editingValue"
+              placeholder="分类名称"
+              class="text-foreground"
+              @click.stop
+              @confirm="confirmEdit"
+              @cancel="editing = null"
+            />
+            <span v-else class="min-w-0 flex-1 truncate">{{ section.name }}</span>
+          </button>
+
           <Button
             v-if="!(editing?.kind === 'category-name' && editing.id === section.id)"
             size="icon"
             variant="ghost"
-            class="mobile-touch-actions size-7 opacity-0 transition-opacity group-hover/category:opacity-100"
+            class="mobile-touch-actions size-7"
             title="新建角色包"
             @click.stop="createPackage(section.virtual ? null : section.id)"
           >
@@ -272,7 +272,7 @@ async function uploadIcon(event: Event) {
               <Button
                 size="icon"
                 variant="ghost"
-                class="mobile-touch-actions size-7 opacity-0 transition-opacity group-hover/category:opacity-100"
+                class="mobile-touch-actions size-7"
                 title="分类菜单"
                 @click.stop
               >
@@ -403,10 +403,9 @@ async function uploadIcon(event: Event) {
           </div>
         </div>
       </section>
-      </div>
     </ScrollArea>
 
-    <div class="min-w-0 border-t p-2">
+    <div class="min-w-0">
       <Button class="w-full justify-start text-muted-foreground" variant="ghost" @click="layout.openSettings">
         <Settings data-icon="inline-start" />
         设置

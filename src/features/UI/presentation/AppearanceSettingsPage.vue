@@ -1,21 +1,33 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Import, Monitor, Moon, Sun, Type } from "lucide-vue-next";
+import { FileCode2, Import, Monitor, Moon, Sun, Type } from "lucide-vue-next";
+import { push } from "notivue";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import SettingForm from "@/features/Setting/presentation/SettingForm.vue";
 import SettingFormField from "@/features/Setting/presentation/SettingFormField.vue";
 import SettingPage from "@/features/Setting/presentation/SettingPage.vue";
 import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
-import ComposerToolbarLayoutEditor from "@/features/UI/presentation/ComposerToolbarLayoutEditor.vue";
 import { isAndroidPlatform } from "@/features/Misc/domain/platform";
 
 const appearance = useAppearanceStore();
 const themeFileInput = ref<HTMLInputElement | null>(null);
+const themeImportOpen = ref(false);
+const themeCss = ref("");
+const themeFileName = ref("");
 const fontName = ref("");
 const fontFamily = ref("");
 const showMobileNavigationBar = isAndroidPlatform();
@@ -39,13 +51,31 @@ const themeModeOptions = [
   { id: "system", label: "系统", icon: Monitor },
 ] as const;
 
-async function importTheme(event: Event) {
+function openThemeImport() {
+  themeCss.value = "";
+  themeFileName.value = "";
+  themeImportOpen.value = true;
+}
+
+async function readThemeCss(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0];
   if (!file) {
     return;
   }
-  await appearance.importThemeFile(file);
+  themeCss.value = await file.text();
+  themeFileName.value = file.name;
   (event.target as HTMLInputElement).value = "";
+}
+
+function importTheme() {
+  if (!themeCss.value.trim()) return;
+  try {
+    const theme = appearance.importThemeCss(themeCss.value);
+    push.success(`已导入主题：${theme.name}`);
+    themeImportOpen.value = false;
+  } catch (error) {
+    push.error(error instanceof Error ? error.message : "主题导入失败");
+  }
 }
 
 function importFont() {
@@ -76,10 +106,9 @@ function importFont() {
               </SelectGroup>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon" title="导入主题" @click="themeFileInput?.click()">
+          <Button variant="outline" size="icon" title="导入主题" @click="openThemeImport">
             <Import class="size-4" />
           </Button>
-          <input ref="themeFileInput" type="file" accept=".css,text/css" class="hidden" @change="importTheme" />
         </div>
       </SettingFormField>
 
@@ -150,16 +179,6 @@ function importFont() {
       </SettingFormField>
 
       <SettingFormField
-        title="会话输入框工具栏"
-        description="拖拽调整左右顺序，或拖入“未使用”隐藏。预览区域不能输入，点击也不会触发工具。"
-      >
-        <ComposerToolbarLayoutEditor
-          :model-value="appearance.composerToolbar"
-          @update:model-value="appearance.setComposerToolbar"
-        />
-      </SettingFormField>
-
-      <SettingFormField
         title="交互式代码预览"
         description="将消息中包含 HTML 或脚本的代码块放入隔离页面运行。最新消息会优先显示预览，仍可随时切回源码。"
       >
@@ -185,5 +204,48 @@ function importFont() {
         </Select>
       </SettingFormField>
     </SettingForm>
+
+    <Dialog v-model:open="themeImportOpen">
+      <DialogContent class="flex h-[min(52rem,88vh)] max-h-[88vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl mobile:h-[100dvh] mobile:max-h-none mobile:w-screen mobile:rounded-none mobile:border-0">
+        <DialogHeader class="shrink-0 border-b px-5 pb-4 pt-5 mobile:pr-14">
+          <DialogTitle>导入 CSS 主题</DialogTitle>
+          <DialogDescription>
+            读取 CSS 文件或直接粘贴内容。确认前可以检查和修改源码。
+          </DialogDescription>
+        </DialogHeader>
+
+        <ScrollArea class="min-h-0 flex-1">
+          <div class="grid gap-3 px-5 py-4">
+            <div class="flex min-w-0 items-center gap-2">
+              <Button variant="outline" @click="themeFileInput?.click()">
+                <FileCode2 class="size-4" />
+                读取 CSS 文件
+              </Button>
+              <span class="min-w-0 truncate text-xs leading-5 text-muted-foreground">
+                {{ themeFileName || "也可以直接在下方粘贴 CSS" }}
+              </span>
+              <input
+                ref="themeFileInput"
+                type="file"
+                accept=".css,text/css"
+                class="hidden"
+                @change="readThemeCss"
+              />
+            </div>
+            <Textarea
+              v-model="themeCss"
+              class="min-h-[32rem] resize-y font-mono text-xs leading-5 mobile:min-h-[65dvh]"
+              placeholder="粘贴主题 CSS，或点击上方按钮读取文件……"
+              spellcheck="false"
+            />
+          </div>
+        </ScrollArea>
+
+        <DialogFooter class="shrink-0 border-t bg-background px-5 py-4">
+          <Button variant="outline" @click="themeImportOpen = false">取消</Button>
+          <Button :disabled="!themeCss.trim()" @click="importTheme">导入并应用</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </SettingPage>
 </template>

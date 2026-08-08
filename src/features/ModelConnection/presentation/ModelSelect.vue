@@ -55,7 +55,12 @@ function updateModel(value: string) {
 <template>
   <Popover v-model:open="open">
     <PopoverTrigger as-child>
-      <Button :class="buttonClass" :variant="iconOnly ? 'ghost' : 'outline'" :title="label">
+      <Button
+        :class="buttonClass"
+        :variant="iconOnly ? 'ghost' : 'outline'"
+        :title="iconOnly ? `选择模型：${label || '未设置'}` : label"
+        aria-label="选择模型"
+      >
         <ProviderAvatar v-if="iconOnly" :name="selectedProvider?.name || label" :src="selectedProvider?.iconUrl" />
         <span v-else class="min-w-0 truncate">{{ label }}</span>
         <ChevronDown v-if="!iconOnly" class="size-4 shrink-0 opacity-70" />

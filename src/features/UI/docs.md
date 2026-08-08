@@ -6,11 +6,21 @@
 
 `layout-store.ts` exposes `setTabStatus` and `setResourceTabStatus`. The top bar renders loading, success, warning and error states; Conversation uses the loading state during generation.
 
+`presentation/ShellTopBar.vue` remains the native window chrome above feature-owned headers. It renders workspace tabs and desktop minimize/maximize/close controls; the focused conversation surface owns the settings entry in its own transparent draggable header. Both titlebars filter interactive descendants and call Tauri `startDragging()` only for a primary-button press on background space, avoiding overlapping native drag regions around buttons and popovers. Window handles are created only inside Tauri so the same shell remains testable in the pure Vite preview. The current focused conversation shell opens one non-closable conversation tab and keeps the existing tab store contract available for later workspace restoration.
+
+常驻 Shell 顶栏、Composer 和资产卡使用不透明主题背景，不使用 `backdrop-filter`。原生窗口拖拽期间，根节点临时暂停动画和 transition、关闭滤镜与阴影，并把 `#app` 约束为单一 paint containment；拖拽结束后立即恢复。该状态只影响窗口移动时的合成成本，不改变窗口内部的滚动和编辑交互。
+
+`presentation/AppShell.vue` mounts the database-backed conversation stage, Settings dialog, and shared command-search dialog. The stage header routes Search to the command palette and renders the database-backed Schedule page in a bounded dialog; it does not maintain separate mock search or schedule datasets.
+
 Composer tool placement is owned by `domain/composer-toolbar.ts` and the appearance store. The normalized layout has `left`, `right`, and `unused` arrays, contains every known tool exactly once, and provides default placement for newly introduced tools.
 
 The appearance store also persists arbitrary user CSS separately from imported
 themes. It installs the value in `#pulsarai-custom-css` after theme styles so
 ordinary selectors can be overridden without creating or selecting a theme.
+The Appearance page imports themes through a modal CSS reader: a user may load
+a `.css` file or paste and edit CSS before confirming the import. Composer
+toolbar placement remains normalized store state but is not editable from the
+settings page.
 
 ## Global search
 
@@ -18,7 +28,7 @@ ordinary selectors can be overridden without creating or selecting a theme.
 
 Shell sidebar widths are desktop-resizable, clamped to a shared minimum, and persisted by the layout store. The General settings page can optionally persist and restore the main window's open workspace tabs; subwindows never overwrite that snapshot. Application-owned scrolling regions use the shared shadcn-vue `ScrollArea` by default, whose wrapper mounts visible vertical and horizontal `ScrollBar` components so sidebars, settings, trees, and long panels share one scrollbar treatment; specialized editors and virtualizers keep ownership of their own viewport.
 
-The conversation right sidebar hosts Conversation, Task, and Plugin tabs. The Plugin feature supplies the third tab's contents, including the package-local folder tree and activation control. The conversation left sidebar remains package navigation and generic application entry points only.
+The focused conversation layout is conceptually split into flexible left and right regions around one `724px` middle column. The message scroller and composer stay inside that middle column; the asset card floats in the right region without changing the middle column or taking ownership of its scrollbar. Below 768px the middle region becomes full width and floating panels use the shared mobile fallback.
 
 ## Window lifecycle
 

@@ -1,9 +1,13 @@
+import { pluginFileType } from "./plugin-types";
+
 export type PluginContainerScope = "local" | "global";
 
 export interface PluginContainerDeclaration {
-  name: string;
+  id: string;
+  title: string;
   scope: PluginContainerScope;
-  description?: string;
+  description: string;
+  contentSuffixes: string[];
 }
 
 export interface PluginContainerDefinitions {
@@ -26,9 +30,9 @@ function parseContainerDeclarations(
       diagnostics.push({ path, message: "容器声明必须是对象。" });
       return;
     }
-    const name = normalizedText(rawContainer.name);
-    if (!name) {
-      diagnostics.push({ path: `${path}.name`, message: "容器名称不能为空。" });
+    const id = normalizedText(rawContainer.id);
+    if (!id) {
+      diagnostics.push({ path: `${path}.id`, message: "容器 ID 不能为空。" });
       return;
     }
     const scope = rawContainer.scope;
@@ -42,11 +46,21 @@ function parseContainerDeclarations(
     ) {
       diagnostics.push({ path: `${path}.description`, message: "description 必须是字符串。" });
     }
+    const title = normalizedText(rawContainer.title);
+    if (!title) diagnostics.push({ path: `${path}.title`, message: "title 不能为空。" });
     const description = normalizedText(rawContainer.description);
+    const contentSuffixes = Array.isArray(rawContainer.contentSuffixes)
+      ? rawContainer.contentSuffixes.filter((item): item is string => typeof item === "string").map((item) => item.trim().toLowerCase()).filter(Boolean)
+      : [];
+    if (!Array.isArray(rawContainer.contentSuffixes)) {
+      diagnostics.push({ path: `${path}.contentSuffixes`, message: "contentSuffixes 必须是字符串数组。" });
+    }
     containers.push({
-      name,
+      id,
+      title: title || id,
       scope,
-      ...(description ? { description } : {}),
+      description,
+      contentSuffixes,
     });
   });
   return containers;
@@ -104,6 +118,20 @@ export function parseContainerReferenceTarget(target: string): {
     scope: match[1] as PluginContainerScope | "auto",
     name: match[2]!.trim(),
   };
+}
+
+export function pluginFileMatchesContainerSuffix(
+  name: string,
+  suffixes: string[],
+) {
+  const normalized = name.trim().toLowerCase();
+  const media = pluginFileType(name) === "media";
+  return suffixes.some((suffix) => {
+    const expected = suffix.trim().toLowerCase().replace(/^\./, "");
+    return expected === "*"
+      || (expected === "media" && media)
+      || normalized.endsWith(`.${expected}`);
+  });
 }
 
 function normalizedText(value: unknown) {

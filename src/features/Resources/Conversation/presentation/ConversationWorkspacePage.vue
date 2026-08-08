@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onActivated, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onActivated, onDeactivated, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useVirtualizer } from "@tanstack/vue-virtual";
 import { push } from "notivue";
 import {
-  Bot,
   Check,
   ChevronDown,
   ChevronLeft,
@@ -22,14 +21,12 @@ import {
   Star,
   StarOff,
   Trash2,
-  UserRound,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import {
   Message,
-  MessageAvatar,
   MessageContent,
   MessageFooter,
 } from "@/components/ui/message";
@@ -61,6 +58,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/application/default-config-store";
 import { useTranslateStore } from "@/features/Translate/application/translate-store";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
@@ -79,7 +77,6 @@ import {
   applyPluginRegexToText,
   collectPluginRegexRules,
 } from "@/features/Resources/Plugin/domain/plugin-regex";
-import PluginConversationOverride from "@/features/Resources/Plugin/presentation/PluginConversationOverride.vue";
 import ConversationComposerEditor from "@/features/Resources/Conversation/presentation/ConversationComposerEditor.vue";
 import ConversationActionPicker from "@/features/Resources/Conversation/presentation/ConversationActionPicker.vue";
 import ConversationMessageContent from "@/features/Resources/Conversation/presentation/ConversationMessageContent.vue";
@@ -92,6 +89,8 @@ import ConversationComposerToolbarTools from "@/features/Resources/Conversation/
 import ConversationBranchMapDialog from "@/features/Resources/Conversation/presentation/ConversationBranchMapDialog.vue";
 import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
 import type { ComposerToolId } from "@/features/UI/domain/composer-toolbar";
+import { storeToRefs } from "pinia";
+import { useResponsiveStore } from "@/features/Misc/application/responsive-store";
 
 const props = defineProps<{
   packageId?: string;
@@ -103,6 +102,8 @@ const defaults = useDefaultConfigStore();
 const translate = useTranslateStore();
 const pluginStore = usePluginStore();
 const appearance = useAppearanceStore();
+const responsive = useResponsiveStore();
+const { isMobileLayout } = storeToRefs(responsive);
 const input = ref("");
 const attachmentInput = ref<HTMLInputElement | null>(null);
 const pendingAttachments = ref<FilePart[]>([]);
@@ -118,6 +119,7 @@ const editing = reactive({
   messageId: "",
   content: "",
 });
+const expandedStepMessageIds = reactive(new Set<string>());
 const pointerStartX = ref<number | null>(null);
 const handledNavigationRequestId = ref(0);
 const promptOptimizationToolIds = computed<ComposerToolId[]>(() =>
@@ -130,6 +132,10 @@ const activePath = computed(() =>
 const latestMessageContainerId = computed(
   () => activePath.value[activePath.value.length - 1]?.id ?? "",
 );
+const activeSelectedMessageGenerating = computed(() => {
+  const container = conversation.activeContainer;
+  return container ? isSelectedMessageGenerating(container) : false;
+});
 const messageVirtualizer = useVirtualizer(
   computed(() => ({
     count: activePath.value.length,
@@ -138,7 +144,7 @@ const messageVirtualizer = useVirtualizer(
     getItemKey: (index: number) =>
       activePath.value[index]?.id ?? index,
     gap: 16,
-    overscan: 6,
+    overscan: 2,
     paddingStart: 24,
     paddingEnd: 128,
   })),
@@ -230,8 +236,41 @@ function openResourceConversation() {
   }
 }
 
+watch(
+  () => props.resourceId,
+  () => {
+    if (editing.containerId) {
+      void saveEdit();
+    }
+  },
+);
+
+onDeactivated(() => {
+  if (editing.containerId) {
+    void saveEdit();
+  }
+});
+
+onBeforeUnmount(() => {
+  if (editing.containerId) {
+    void saveEdit();
+  }
+});
+
 function messageOf(container: ChatMessageContainer) {
   return conversation.currentMessage(container);
+}
+
+function isEditingMessage(container: ChatMessageContainer) {
+  return editing.containerId === container.id
+    && editing.messageId === messageOf(container)?.id;
+}
+
+function isSelectedMessageGenerating(container: ChatMessageContainer) {
+  const generateInfo = messageOf(container)?.meta.generateInfo;
+  return conversation.isConversationGenerating(container.conversationid)
+    && generateInfo !== undefined
+    && generateInfo.timeUsed === undefined;
 }
 
 function componentParts(message?: ChatMessage | null): ComponentPart[] {
@@ -276,22 +315,102 @@ function stepTitle(step: MessageStep) {
   return step.name;
 }
 
-function stepBody(step: MessageStep) {
-  if ("type" in step && step.type === "tool-result") {
-    return stringifyStepValue(step.output);
+function onStepsToggle(container: ChatMessageContainer, event: Event) {
+  const messageId = messageOf(container)?.id;
+  if (!messageId) return;
+  if ((event.currentTarget as HTMLDetailsElement).open) {
+    expandedStepMessageIds.add(messageId);
+  } else {
+    expandedStepMessageIds.delete(messageId);
   }
-  return step.message || "";
+}
+
+function stepToolName(step: MessageStep) {
+  return "type" in step && step.type === "tool-result" ? step.toolName : null;
+}
+
+function stepBody(step: MessageStep) {
+  const value = "type" in step && step.type === "tool-result"
+    ? step.output
+    : step.message || "";
+  return stringifyStepValue(value);
 }
 
 function stringifyStepValue(value: unknown) {
+  if (value && typeof value === "object" && "output" in value) {
+    value = (value as { output?: unknown }).output;
+  }
+  const normalized = parseEmbeddedJson(value);
+  return typeof normalized === "string"
+    ? normalized
+    : JSON.stringify(normalized, null, 2) ?? String(normalized ?? "");
+}
+
+function parseEmbeddedJson(value: unknown, depth = 0): unknown {
+  if (depth >= 6) return value;
   if (typeof value === "string") {
+    const source = value.trim();
+    if (
+      (source.startsWith("{") && source.endsWith("}"))
+      || (source.startsWith("[") && source.endsWith("]"))
+    ) {
+      try {
+        return parseEmbeddedJson(JSON.parse(source), depth + 1);
+      } catch {
+        return value;
+      }
+    }
     return value;
   }
-  if (value && typeof value === "object" && "output" in value) {
-    const output = (value as { output?: unknown }).output;
-    return typeof output === "string" ? output : JSON.stringify(output, null, 2);
+  if (Array.isArray(value)) {
+    return value.map((item) => parseEmbeddedJson(item, depth + 1));
   }
-  return JSON.stringify(value, null, 2);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [
+        key,
+        parseEmbeddedJson(item, depth + 1),
+      ]),
+    );
+  }
+  return value;
+}
+
+type StepCodeTokenKind = "key" | "string" | "number" | "literal" | "plain";
+
+function stepCodeTokens(step: MessageStep) {
+  const source = stepBody(step);
+  if (source.length > 20_000) {
+    return [{ text: source, kind: "plain" as const }];
+  }
+  const tokens: Array<{ text: string; kind: StepCodeTokenKind }> = [];
+  const pattern = /"(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|\b(?:true|false|null)\b/g;
+  let offset = 0;
+  for (const match of source.matchAll(pattern)) {
+    const index = match.index ?? 0;
+    if (index > offset) {
+      tokens.push({ text: source.slice(offset, index), kind: "plain" });
+    }
+    const text = match[0];
+    const rest = source.slice(index + text.length);
+    const kind: StepCodeTokenKind = text.startsWith('"')
+      ? /^\s*:/.test(rest) ? "key" : "string"
+      : /^(true|false|null)$/.test(text) ? "literal" : "number";
+    tokens.push({ text, kind });
+    offset = index + text.length;
+  }
+  if (offset < source.length) {
+    tokens.push({ text: source.slice(offset), kind: "plain" });
+  }
+  return tokens;
+}
+
+function stepTokenClass(kind: StepCodeTokenKind) {
+  if (kind === "key") return "text-primary";
+  if (kind === "string") return "text-emerald-600 dark:text-emerald-400";
+  if (kind === "number") return "text-amber-600 dark:text-amber-400";
+  if (kind === "literal") return "text-violet-600 dark:text-violet-400";
+  return "text-foreground/75";
 }
 
 function startEdit(container: ChatMessageContainer) {
@@ -358,6 +477,7 @@ async function translateMessage(container: ChatMessageContainer) {
 }
 
 async function send() {
+  if (!input.value.trim()) return;
   const resolved = resolveComposerAction(input.value);
   if (resolved.promptContent !== undefined) {
     input.value = resolved.promptContent;
@@ -500,6 +620,9 @@ async function removeMessageAttachment(
 }
 
 async function switchSiblingMessage(container: ChatMessageContainer, direction: -1 | 1) {
+  if (editing.containerId) {
+    await saveEdit();
+  }
   const active = container.activeMessage ?? 0;
   const nextIndex = active + direction;
 
@@ -511,7 +634,15 @@ async function switchSiblingMessage(container: ChatMessageContainer, direction: 
   await conversation.switchMessage(container.id, Math.max(0, nextIndex));
 }
 
+async function switchSpecificMessage(containerId: string, index: number) {
+  if (editing.containerId) {
+    await saveEdit();
+  }
+  await conversation.switchMessage(containerId, index);
+}
+
 function onPointerDown(event: PointerEvent) {
+  if (!isMobileLayout.value) return;
   pointerStartX.value = event.clientX;
 }
 
@@ -522,6 +653,7 @@ function measureVirtualMessage(element: unknown) {
 }
 
 async function onPointerUp(event: PointerEvent, container: ChatMessageContainer) {
+  if (!isMobileLayout.value) return;
   if (pointerStartX.value === null) {
     return;
   }
@@ -580,7 +712,7 @@ async function handleMessageNavigationRequest() {
 
 <template>
   <div
-    class="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+    class="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
   >
     <video
       v-if="conversationBackground?.type === 'video'"
@@ -599,11 +731,6 @@ async function handleMessageNavigationRequest() {
       class="pointer-events-none absolute inset-0 h-full w-full object-cover"
     />
 
-    <PluginConversationOverride
-      :package-id="conversation.activePackageId"
-      :enabled-global-plugin-ids="conversation.activePackage?.enabledGlobalPluginIds"
-      :main-plugin-id="conversation.activePackage?.mainPluginId"
-    >
     <MessageScrollerProvider
       v-if="conversation.activeConversation?.rendererId !== 'novel'"
       auto-scroll
@@ -632,7 +759,7 @@ async function handleMessageNavigationRequest() {
               :key="String(virtualRow.key)"
               :ref="measureVirtualMessage"
               :data-index="virtualRow.index"
-              class="absolute left-0 top-0 w-full px-5 mobile:px-3"
+              class="group/message absolute left-0 top-0 w-full px-5 py-4 mobile:px-3"
               :style="{ transform: `translateY(${virtualRow.start}px)` }"
             >
               <MessageScrollerItem
@@ -642,32 +769,81 @@ async function handleMessageNavigationRequest() {
               >
               <Message
                 :align="container.role === 'user' ? 'end' : 'start'"
+                class="flex flex-col gap-2 items-start data-[align=end]:items-end w-full"
                 @pointerdown="onPointerDown"
                 @pointerup="onPointerUp($event, container)"
               >
-                <MessageAvatar class="size-9 rounded-md border bg-card mobile:size-8">
-                  <UserRound v-if="container.role === 'user'" class="size-4" />
-                  <CircleAlert
-                    v-else-if="messageOf(container)?.type === 'error'"
-                    class="size-4 text-destructive"
-                  />
-                  <Bot v-else class="size-4" />
-                </MessageAvatar>
+                <MessageContent
+                  class="w-full flex flex-col"
+                  :class="[
+                    container.role === 'user'
+                      ? 'max-w-[85%] items-end mobile:max-w-full'
+                      : 'max-w-full items-stretch'
+                  ]"
+                >
+                  <!-- Collapsible accordion for steps (outside bubble, on top of it) -->
+                  <details
+                    v-if="!isEditingMessage(container) && visibleSteps(container).length"
+                    class="group/details mb-2.5 w-full max-w-xl overflow-hidden rounded-lg border border-border/60 bg-transparent text-xs text-muted-foreground"
+                    @toggle="onStepsToggle(container, $event)"
+                  >
+                    <summary class="flex cursor-pointer list-none select-none items-center gap-2 px-3 py-2 font-medium text-foreground/80 outline-none">
+                       <ChevronDown class="size-3.5 transition-transform duration-200 group-open/details:rotate-180" />
+                      <span class="font-medium">过程步骤 ({{ visibleSteps(container).length }})</span>
+                    </summary>
+                    <div
+                      v-if="expandedStepMessageIds.has(messageOf(container)?.id ?? '')"
+                      class="divide-y divide-border/40 border-t border-border/50 bg-transparent"
+                    >
+                      <div
+                        v-for="(step, index) in visibleSteps(container)"
+                        :key="index"
+                        class="grid gap-1.5 px-3 py-2.5"
+                      >
+                        <div class="flex items-center gap-1.5 font-semibold text-foreground/90">
+                          <span class="inline-block size-1.5 rounded-full bg-primary/75"></span>
+                          <span v-if="stepToolName(step)">
+                            调用工具：<code class="rounded bg-primary/10 px-1 py-0.5 font-mono text-[11px] font-semibold text-primary">{{ stepToolName(step) }}</code>
+                          </span>
+                          <span v-else>{{ stepTitle(step) }}</span>
+                        </div>
+                        <ScrollArea
+                          v-if="stepBody(step)"
+                          class="max-h-56 rounded-md border border-border/50 bg-muted/25"
+                        >
+                          <pre class="min-w-0 whitespace-pre-wrap break-words p-3 font-mono text-[11px] leading-[1.55] [overflow-wrap:anywhere]"><code><span
+                            v-for="(token, tokenIndex) in stepCodeTokens(step)"
+                            :key="tokenIndex"
+                            :class="stepTokenClass(token.kind)"
+                          >{{ token.text }}</span></code></pre>
+                        </ScrollArea>
+                      </div>
+                    </div>
+                  </details>
 
-                <MessageContent class="max-w-[78%] mobile:max-w-[calc(100%_-_2.5rem)]">
                   <Bubble
                     :align="container.role === 'user' ? 'end' : 'start'"
                     :variant="
                       messageOf(container)?.type === 'error'
-                        ? 'destructive'
+                        ? 'ghost'
                         : container.role === 'user'
                           ? 'tinted'
                           : 'outline'
                     "
-                    class="max-w-full"
+                    :class="[
+                      isEditingMessage(container) ? 'w-full max-w-2xl' : 'max-w-full',
+                      messageOf(container)?.type === 'error'
+                        ? 'w-full max-w-2xl rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 text-destructive shadow-none dark:bg-destructive/15'
+                        : (container.role !== 'user' && 'border-0 bg-transparent shadow-none p-0')
+                    ]"
                   >
                     <BubbleContent
-                      class="w-full"
+                      :class="[
+                        isEditingMessage(container) ? 'w-full p-3' : 'p-3',
+                        messageOf(container)?.type === 'error'
+                          ? '!w-full !rounded-none !bg-transparent !p-0 !text-destructive'
+                          : (container.role !== 'user' && 'p-0 py-1.5 px-2')
+                      ]"
                       :role="messageOf(container)?.type === 'error' ? 'alert' : undefined"
                     >
                       <Marker
@@ -675,211 +851,212 @@ async function handleMessageNavigationRequest() {
                         class="mb-2 text-destructive"
                       >
                         <MarkerIcon>
-                          <CircleAlert />
+                          <CircleAlert class="size-4" />
                         </MarkerIcon>
                         <MarkerContent>运行错误</MarkerContent>
                       </Marker>
-              <MessageActionBadge
-                v-if="actionPart(messageOf(container))"
-                :action="actionPart(messageOf(container))!"
-              />
-              <details
-                v-if="editing.containerId !== container.id && visibleSteps(container).length"
-                class="mb-2 overflow-hidden rounded-md border bg-muted/35 text-xs text-muted-foreground"
-              >
-                <summary class="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-1.5 font-medium text-foreground">
-                  <ChevronDown class="size-3.5" />
-                  过程 {{ visibleSteps(container).length }}
-                </summary>
-                <div class="divide-y">
-                  <div
-                    v-for="(step, index) in visibleSteps(container)"
-                    :key="index"
-                    class="grid gap-1 px-2.5 py-2"
-                  >
-                    <div class="font-medium text-foreground">{{ stepTitle(step) }}</div>
-                    <pre
-                      v-if="stepBody(step)"
-                      class="max-h-36 overflow-auto whitespace-pre-wrap rounded bg-background/70 p-2 font-mono text-[11px] leading-4"
-                    >{{ stepBody(step) }}</pre>
-                  </div>
-                </div>
-              </details>
 
-              <MessageAttachmentStrip
-                v-if="fileParts(messageOf(container)).length"
-                :attachments="fileParts(messageOf(container))"
-                :removable="container.role === 'user'"
-                class="mb-2"
-                @remove="removeMessageAttachment(container, $event)"
-              />
-              <ConversationComposerEditor
-                v-if="editing.containerId === container.id"
-                v-model="editing.content"
-                placeholder="编辑消息..."
-                @submit="saveEdit"
-              />
-              <ConversationMessageContent
-                v-else
-                :content="renderMessageContent(container, virtualRow.index) || (conversation.activeConversationGenerating && container.id === conversation.activeContainerId ? '生成中...' : '')"
-                :interactive-preview-enabled="appearance.interactiveCodePreview"
-                :replace-with-preview="container.id === latestMessageContainerId"
-              />
-              <template
-                v-for="(part, partIndex) in componentParts(messageOf(container))"
-                :key="`${messageOf(container)?.id}:${part.componentId}:${partIndex}`"
-              >
-                <component
-                  :is="getGenerationComponent(part.componentId)"
-                  v-if="getGenerationComponent(part.componentId)"
-                  v-bind="part.props"
-                  class="mt-3"
-                />
-              </template>
+                      <MessageActionBadge
+                        v-if="actionPart(messageOf(container))"
+                        :action="actionPart(messageOf(container))!"
+                        class="mt-2"
+                      />
+
+                      <MessageAttachmentStrip
+                        v-if="fileParts(messageOf(container)).length"
+                        :attachments="fileParts(messageOf(container))"
+                        :removable="container.role === 'user'"
+                        class="mt-2"
+                        @remove="removeMessageAttachment(container, $event)"
+                      />
+
+                      <ConversationComposerEditor
+                        v-if="isEditingMessage(container)"
+                        v-model="editing.content"
+                        placeholder="编辑消息..."
+                        class="max-w-2xl w-full message-inline-editor"
+                        @submit="saveEdit"
+                      />
+
+                      <ConversationMessageContent
+                        v-else
+                        :content="renderMessageContent(container, virtualRow.index) || (isSelectedMessageGenerating(container) ? '生成中...' : '')"
+                        :compact="messageOf(container)?.type === 'error'"
+                        :interactive-preview-enabled="appearance.interactiveCodePreview"
+                        :replace-with-preview="container.id === latestMessageContainerId"
+                      />
+
+                      <template
+                        v-for="(part, partIndex) in componentParts(messageOf(container))"
+                        :key="`${messageOf(container)?.id}:${part.componentId}:${partIndex}`"
+                      >
+                        <component
+                          :is="getGenerationComponent(part.componentId)"
+                          v-if="getGenerationComponent(part.componentId)"
+                          v-bind="part.props"
+                          class="mt-3"
+                        />
+                      </template>
                     </BubbleContent>
                   </Bubble>
 
-                  <MessageFooter>
-              <div class="flex max-w-full items-center gap-0.5 overflow-x-auto rounded-md bg-background/80 p-0.5 [scrollbar-width:none]">
-                <Button size="icon" variant="ghost" class="size-7" @click="switchSiblingMessage(container, -1)">
-                  <ChevronLeft class="size-4" />
-                </Button>
+                  <MessageFooter class="mt-1 w-full flex" :class="container.role === 'user' ? 'justify-end' : 'justify-start'">
+                    <div class="flex max-w-full items-center gap-1 overflow-x-auto rounded-full bg-transparent px-2 py-0.5 [scrollbar-width:none] transition-all opacity-0 group-hover/message:opacity-100 mobile:opacity-100 duration-200">
+                      <Button size="icon" variant="ghost" class="size-7 rounded-full hover:bg-muted/80" @click="switchSiblingMessage(container, -1)">
+                        <ChevronLeft class="size-4" />
+                      </Button>
 
-                <Popover>
-                  <PopoverTrigger as-child>
-                    <Button variant="ghost" class="h-7 px-2 text-xs">
-                      {{ messageIndexLabel(container) }}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent class="w-56 p-2">
-                    <div class="mb-2 flex gap-1">
-                      <Button size="sm" variant="outline" class="h-8 flex-1" @click="conversation.addMessage(container.id)">
-                        <Plus class="size-3.5" />
-                        新消息
+                      <Popover>
+                        <PopoverTrigger as-child>
+                          <Button variant="ghost" class="h-7 px-2 rounded-full text-xs font-semibold hover:bg-muted/80">
+                            {{ messageIndexLabel(container) }}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent class="w-56 p-2 rounded-xl">
+                          <div class="mb-2 flex gap-1">
+                            <Button size="sm" variant="outline" class="h-8 flex-1 rounded-lg" @click="conversation.addMessage(container.id)">
+                              <Plus class="size-3.5" />
+                              新消息
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="outline"
+                              class="size-8 rounded-lg"
+                              title="删除当前版本"
+                              :disabled="container.content.length <= 1"
+                              @click="conversation.deleteActiveMessage(container.id)"
+                            >
+                              <Trash2 class="size-3.5" />
+                            </Button>
+                          </div>
+                          <div class="grid grid-cols-6 gap-1">
+                            <Button
+                              v-for="(_, index) in container.content"
+                              :key="index"
+                              size="icon"
+                              :variant="container.activeMessage === index ? 'default' : 'ghost'"
+                              class="size-8 rounded-lg"
+                              @click="switchSpecificMessage(container.id, index)"
+                            >
+                              {{ index + 1 }}
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+
+                      <Button size="icon" variant="ghost" class="size-7 rounded-full hover:bg-muted/80" @click="switchSiblingMessage(container, 1)">
+                        <ChevronRight class="size-4" />
                       </Button>
-                      <Button size="icon" variant="outline" class="size-8" @click="conversation.deleteActiveMessage(container.id)">
-                        <Trash2 class="size-3.5" />
-                      </Button>
-                    </div>
-                    <div class="grid grid-cols-6 gap-1">
+
                       <Button
-                        v-for="(_, index) in container.content"
-                        :key="index"
+                        v-if="isEditingMessage(container)"
                         size="icon"
-                        :variant="container.activeMessage === index ? 'default' : 'ghost'"
-                        class="size-8"
-                        @click="conversation.switchMessage(container.id, index)"
+                        variant="ghost"
+                        class="size-7 rounded-full hover:bg-muted/80"
+                        @click="saveEdit"
                       >
-                        {{ index + 1 }}
+                        <Check class="size-3.5" />
                       </Button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-
-                <Button size="icon" variant="ghost" class="size-7" @click="switchSiblingMessage(container, 1)">
-                  <ChevronRight class="size-4" />
-                </Button>
-
-                <Button
-                  v-if="editing.containerId === container.id"
-                  size="icon"
-                  variant="ghost"
-                  class="size-7"
-                  @click="saveEdit"
-                >
-                  <Check class="size-3.5" />
-                </Button>
-                <Button v-else size="icon" variant="ghost" class="size-7" @click="startEdit(container)">
-                  <Pencil class="size-3.5" />
-                </Button>
-                <Button
-                  v-if="container.role === 'user'"
-                  size="icon"
-                  variant="ghost"
-                  class="size-7"
-                  title="附加文件"
-                  @click="requestAttachments(container)"
-                >
-                  <Paperclip class="size-3.5" />
-                </Button>
-                <Button size="icon" variant="ghost" class="size-7" @click="copyMessage(container)">
-                  <Copy class="size-3.5" />
-                </Button>
-                <Button v-if="container.role !== 'user'" size="icon" variant="ghost" class="size-7" @click="conversation.regenerate(container.id)">
-                  <RefreshCw class="size-3.5" />
-                </Button>
-
-                <Popover v-if="container.role !== 'user'">
-                  <PopoverTrigger as-child>
-                    <Button size="icon" variant="ghost" class="relative size-7">
-                      <GitBranch class="size-3.5" />
-                      <span
-                        v-if="conversation.branchIdsFor(container.id).length > 1"
-                        class="absolute -right-1 -top-1 rounded-full bg-primary px-1 text-[10px] leading-4 text-primary-foreground"
-                      >
-                        {{ conversation.branchIdsFor(container.id).length }}
-                      </span>
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent class="w-56 p-2">
-                    <div class="mb-2 flex gap-1">
-                      <Button size="sm" variant="outline" class="h-8 flex-1" @click="conversation.createBranch(container.id)">
-                        <Plus class="size-3.5" />
-                        新分支
+                      <Button v-else size="icon" variant="ghost" class="size-7 rounded-full hover:bg-muted/80" @click="startEdit(container)">
+                        <Pencil class="size-3.5" />
                       </Button>
-                      <Button size="icon" variant="outline" class="size-8" @click="conversation.deleteContainer(container.id)">
-                        <Trash2 class="size-3.5" />
-                      </Button>
-                    </div>
-                    <div class="grid grid-cols-5 gap-1">
                       <Button
-                        v-for="(branchId, index) in conversation.branchIdsFor(container.id)"
-                        :key="branchId"
+                        v-if="container.role === 'user'"
                         size="icon"
-                        :variant="conversation.activeBranchIdFor(container.id) === branchId ? 'default' : 'ghost'"
-                        class="size-8"
-                        @click="conversation.switchBranch(container.id, branchId)"
+                        variant="ghost"
+                        class="size-7 rounded-full hover:bg-muted/80"
+                        title="附加文件"
+                        @click="requestAttachments(container)"
                       >
-                        {{ index + 1 }}
+                        <Paperclip class="size-3.5" />
                       </Button>
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                      <Button size="icon" variant="ghost" class="size-7 rounded-full hover:bg-muted/80" @click="copyMessage(container)">
+                        <Copy class="size-3.5" />
+                      </Button>
+                      <Button v-if="container.role !== 'user'" size="icon" variant="ghost" class="size-7 rounded-full hover:bg-muted/80" @click="conversation.regenerate(container.id)">
+                        <RefreshCw class="size-3.5" />
+                      </Button>
 
-                <DropdownMenu>
-                  <DropdownMenuTrigger as-child>
-                    <Button size="icon" variant="ghost" class="size-7">
-                      <MoreHorizontal class="size-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" class="w-40">
-                    <DropdownMenuGroup>
-                    <DropdownMenuItem
-                      @click="toggleMessageFavorite(container)"
-                    >
-                      <StarOff
-                        v-if="messageOf(container)?.favorite"
-                        data-icon="inline-start"
-                      />
-                      <Star v-else data-icon="inline-start" />
-                      {{ messageOf(container)?.favorite ? "取消收藏" : "收藏消息" }}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      v-if="container.role !== 'user'"
-                      :disabled="!messageOf(container)?.meta.translation && (translate.translating || !messageOf(container)?.content.trim())"
-                      @click="translateMessage(container)"
-                    >
-                      <RotateCcw
-                        v-if="messageOf(container)?.meta.translation"
-                        data-icon="inline-start"
-                      />
-                      <Languages v-else data-icon="inline-start" />
-                      {{ messageOf(container)?.meta.translation ? "还原原文" : "翻译输出" }}
-                    </DropdownMenuItem>
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+                      <Popover v-if="container.role !== 'user'">
+                        <PopoverTrigger as-child>
+                          <Button size="icon" variant="ghost" class="relative size-7 rounded-full hover:bg-muted/80">
+                            <GitBranch class="size-3.5" />
+                            <span
+                              v-if="conversation.branchIdsFor(container.id).length > 1"
+                              class="absolute -right-1 -top-1 rounded-full bg-primary px-1 text-[10px] leading-4 text-primary-foreground"
+                            >
+                              {{ conversation.branchIdsFor(container.id).length }}
+                            </span>
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent class="w-56 p-2 rounded-xl">
+                          <div class="mb-2 flex gap-1">
+                            <Button size="sm" variant="outline" class="h-8 flex-1 rounded-lg" @click="conversation.createBranch(container.id)">
+                              <Plus class="size-3.5" />
+                              新分支
+                            </Button>
+                            <Button size="icon" variant="outline" class="size-8 rounded-lg" @click="conversation.deleteContainer(container.id)">
+                              <Trash2 class="size-3.5" />
+                            </Button>
+                          </div>
+                          <div class="grid grid-cols-5 gap-1">
+                            <Button
+                              v-for="(branchId, index) in conversation.branchIdsFor(container.id)"
+                              :key="branchId"
+                              size="icon"
+                              :variant="conversation.activeBranchIdFor(container.id) === branchId ? 'default' : 'ghost'"
+                              class="size-8 rounded-lg"
+                              @click="conversation.switchBranch(container.id, branchId)"
+                            >
+                              {{ index + 1 }}
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger as-child>
+                          <Button size="icon" variant="ghost" class="size-7 rounded-full hover:bg-muted/80">
+                            <MoreHorizontal class="size-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="w-40 rounded-xl">
+                          <DropdownMenuGroup>
+                          <DropdownMenuItem
+                            class="rounded-lg"
+                            @click="toggleMessageFavorite(container)"
+                          >
+                            <StarOff
+                              v-if="messageOf(container)?.favorite"
+                              data-icon="inline-start"
+                            />
+                            <Star v-else data-icon="inline-start" />
+                            {{ messageOf(container)?.favorite ? "取消收藏" : "收藏消息" }}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            v-if="container.role !== 'user'"
+                            class="rounded-lg"
+                            :disabled="!messageOf(container)?.meta.translation && (translate.translating || !messageOf(container)?.content.trim())"
+                            @click="translateMessage(container)"
+                          >
+                            <RotateCcw
+                              v-if="messageOf(container)?.meta.translation"
+                              data-icon="inline-start"
+                            />
+                            <Languages v-else data-icon="inline-start" />
+                            {{ messageOf(container)?.meta.translation ? "还原原文" : "翻译输出" }}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            class="rounded-lg text-destructive focus:text-destructive"
+                            @click="conversation.deleteContainer(container.id)"
+                          >
+                            <Trash2 data-icon="inline-start" />
+                            删除消息
+                          </DropdownMenuItem>
+                          </DropdownMenuGroup>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </MessageFooter>
                 </MessageContent>
               </Message>
@@ -895,14 +1072,13 @@ async function handleMessageNavigationRequest() {
       v-else
       :conversation-id="conversation.activeConversation?.id ?? ''"
       :containers="renderedNovelPath"
-      :generating="conversation.activeConversationGenerating"
+      :generating="activeSelectedMessageGenerating"
       :active-container-id="conversation.activeContainerId"
       :focus-container-id="branchMapTargetId"
     />
-    </PluginConversationOverride>
 
-    <footer class="mobile-safe-bottom pointer-events-none relative px-4 pb-4 mobile:px-2 mobile:pb-2">
-      <div class="pointer-events-auto relative mx-auto max-w-3xl rounded-lg border bg-card/95 p-2 shadow-lg shadow-background/20 backdrop-blur mobile:rounded-xl">
+    <footer class="mobile-safe-bottom pointer-events-none relative p-3">
+      <div class="pointer-events-auto relative mx-auto w-full min-w-0 max-w-3xl rounded-2xl border border-border/75 bg-card/85 p-3 shadow-xl shadow-foreground/[0.02] backdrop-blur-lg mobile:rounded-2xl transition-all duration-300 hover:border-border/95 focus-within:border-primary/45 focus-within:shadow-primary/[0.015]">
         <ConversationActionPicker
           v-model="input"
           v-model:selected-action="selectedAction"
@@ -912,12 +1088,12 @@ async function handleMessageNavigationRequest() {
           v-if="pendingAttachments.length"
           :attachments="pendingAttachments"
           removable
-          class="mb-1"
+          class="mb-2.5"
           @remove="pendingAttachments.splice($event, 1)"
         />
         <ConversationComposerEditor v-model="input" @submit="send" />
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex min-w-0 items-center gap-1">
+        <div class="mt-2 flex min-w-0 flex-wrap items-center gap-2 border-t border-border/40 pt-2">
+          <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
             <ConversationComposerToolbarTools
               v-model:prompt="input"
               :tool-ids="appearance.composerToolbar.left"
@@ -927,7 +1103,7 @@ async function handleMessageNavigationRequest() {
               @fullscreen="fullscreenInputOpen = true"
             />
           </div>
-          <div class="flex shrink-0 items-center gap-1">
+          <div class="ml-auto flex shrink-0 items-center gap-1.5">
             <ConversationComposerToolbarTools
               v-model:prompt="input"
               :tool-ids="appearance.composerToolbar.right"
@@ -938,9 +1114,9 @@ async function handleMessageNavigationRequest() {
             />
             <Button
               size="icon"
-              class="size-8 mobile:size-10"
+              class="size-8 rounded-lg shadow-sm"
               title="发送"
-              :disabled="(!input.trim() && pendingAttachments.length === 0 && !selectedAction) || conversation.activeConversationGenerating"
+              :disabled="!input.trim() || conversation.activeConversationGenerating"
               @click="send"
             >
               <Send class="size-4" />
@@ -1000,7 +1176,7 @@ async function handleMessageNavigationRequest() {
           </div>
           <Button variant="outline" @click="fullscreenInputOpen = false">取消</Button>
           <Button
-            :disabled="(!input.trim() && pendingAttachments.length === 0 && !selectedAction) || conversation.activeConversationGenerating"
+            :disabled="!input.trim() || conversation.activeConversationGenerating"
             @click="fullscreenInputOpen = false; send()"
           >
             <Send data-icon="inline-start" />

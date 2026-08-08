@@ -73,8 +73,8 @@ onBeforeUnmount(() => {
       props.class,
     )"
     @scroll="syncAfterScroll()"
-    @wheel="userScrollIntent()"
-    @touchmove="userScrollIntent()"
+    @wheel.passive="userScrollIntent()"
+    @touchmove.passive="userScrollIntent()"
     @keydown="onKeyDown"
   >
     <slot />

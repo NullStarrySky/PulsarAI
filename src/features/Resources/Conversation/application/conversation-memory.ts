@@ -14,7 +14,7 @@ import {
   createContextDataFacade,
   type ContextDataValue,
   type ContextDataDefinition,
-} from "@/features/Resources/InteractiveDoc/domain/interactive-document";
+} from "@/features/Resources/Plugin/domain/plugin-chat";
 import {
   executeCodeAct,
   maskCodeActLiteralsAndComments,

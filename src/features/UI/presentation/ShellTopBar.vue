@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { storeToRefs } from "pinia";
 import {
@@ -28,24 +29,25 @@ import { useResponsiveStore } from "@/features/Misc/application/responsive-store
 import { popOutWorkspaceTab } from "@/features/SubWindow/application/sub-window-service";
 import { cn } from "@/lib/utils";
 import { useLayoutStore } from "../application/layout-store";
+import { startWindowDragFromBackground } from "../application/window-drag";
 
 const layout = useLayoutStore();
 const responsive = useResponsiveStore();
 const { activeTabId, leftSidebarOpen, rightSidebarOpen, shellMode, tabs } = storeToRefs(layout);
 const { isMobileLayout } = storeToRefs(responsive);
 const compactTabs = computed(() => tabs.value.length > 8);
-const appWindow = getCurrentWindow();
+const appWindow = isTauri() ? getCurrentWindow() : null;
 
 async function minimizeWindow() {
-  await appWindow.minimize();
+  await appWindow?.minimize();
 }
 
 async function toggleMaximize() {
-  await appWindow.toggleMaximize();
+  await appWindow?.toggleMaximize();
 }
 
 async function closeWindow() {
-  await appWindow.close();
+  await appWindow?.close();
 }
 
 function closeWithMiddleButton(event: MouseEvent, tabId: string) {
@@ -80,7 +82,8 @@ function toggleRightSidebar() {
 
 <template>
   <header
-    class="flex h-10 shrink-0 select-none items-center gap-1.5 border-b bg-background px-2 mobile:h-12 mobile:gap-1 mobile:px-1"
+    class="flex h-10 shrink-0 select-none items-center gap-1 border-b border-border/75 bg-background px-1.5 mobile:h-12 mobile:px-1"
+    @mousedown="startWindowDragFromBackground"
   >
     <Button
       v-if="shellMode !== 'simplified'"
@@ -103,7 +106,7 @@ function toggleRightSidebar() {
           <div
             :class="
               cn(
-                'group flex h-7 min-w-7 max-w-36 items-center gap-1 rounded-md px-2 text-sm transition-colors mobile:h-9 mobile:max-w-28 mobile:shrink-0',
+                'group flex h-7 min-w-7 max-w-40 items-center gap-1 rounded-md px-2 text-[13px] transition-colors mobile:h-9 mobile:max-w-28 mobile:shrink-0',
                 activeTabId === tab.id
                   ? 'bg-muted text-foreground shadow-[inset_0_0_0_1px_var(--border)]'
                   : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground',
@@ -163,7 +166,6 @@ function toggleRightSidebar() {
 
     <div
       class="min-w-6 flex-1 self-stretch mobile:hidden"
-      data-tauri-drag-region
     />
 
     <div class="relative z-10 flex items-center gap-0.5">
@@ -171,13 +173,13 @@ function toggleRightSidebar() {
         <PanelRight v-if="rightSidebarOpen" />
         <ChevronsLeft v-else />
       </Button>
-      <Button v-if="!isMobileLayout" variant="ghost" size="icon-sm" title="最小化" @click="minimizeWindow">
+      <Button v-if="!isMobileLayout" variant="ghost" size="icon-sm" title="最小化" aria-label="最小化窗口" @click="minimizeWindow">
         <Minus />
       </Button>
-      <Button v-if="!isMobileLayout" variant="ghost" size="icon-sm" title="全屏" @click="toggleMaximize">
+      <Button v-if="!isMobileLayout" variant="ghost" size="icon-sm" title="最大化或还原" aria-label="最大化或还原窗口" @click="toggleMaximize">
         <Maximize2 />
       </Button>
-      <Button v-if="!isMobileLayout" variant="ghost" size="icon-sm" title="关闭" @click="closeWindow">
+      <Button v-if="!isMobileLayout" variant="ghost" size="icon-sm" class="hover:bg-destructive hover:text-destructive-foreground" title="关闭" aria-label="关闭窗口" @click="closeWindow">
         <X />
       </Button>
     </div>

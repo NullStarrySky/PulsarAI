@@ -1,0 +1,33 @@
+[
+  {
+    "group": { "id": "runtime", "title": "运行" },
+    "content": [
+      {
+        "id": "generatePath",
+        "title": "生成流程",
+        "description": "用于验证流程执行，不注册任何容器。",
+        "component": "Input",
+        "value": "generate.js"
+      }
+    ]
+  },
+  {
+    "group": { "id": "generation", "title": "生成" },
+    "content": [
+      {
+        "id": "model",
+        "title": "模型",
+        "description": "留空时继承全局默认聊天模型。",
+        "component": "ModelSelect",
+        "value": null
+      },
+      {
+        "id": "reasoningEffort",
+        "title": "推理强度",
+        "description": "留空时继承全局推理强度。",
+        "component": "ReasoningEffortSelect",
+        "value": null
+      }
+    ]
+  }
+]

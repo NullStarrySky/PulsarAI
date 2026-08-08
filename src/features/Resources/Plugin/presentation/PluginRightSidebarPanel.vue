@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ChevronDown, ChevronRight, File, Folder, MoreHorizontal, Plus, Search, Star, Trash2 } from "lucide-vue-next";
+import { Folder, MoreHorizontal, Plus, RotateCcw, Search, Star, Trash2 } from "lucide-vue-next";
 import { push } from "notivue";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,13 +15,8 @@ import { Switch } from "@/components/ui/switch";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { useConversationStore } from "@/features/Resources/Conversation/application/conversation-store";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
-import {
-  findPluginNodeByPath,
-  pluginConventions,
-  pluginFileType,
-  sortPluginTreeNodes,
-  type Plugin,
-} from "@/features/Resources/Plugin/domain/plugin-types";
+import { findPluginNodeByPath, type Plugin } from "@/features/Resources/Plugin/domain/plugin-types";
+import { pluginGenerateFile } from "@/features/Resources/Plugin/domain/plugin-runtime";
 import InlineEditInput from "@/features/UI/presentation/InlineEditInput.vue";
 
 const layout = useLayoutStore();
@@ -31,18 +26,15 @@ const pluginItems = () => (pluginStore as unknown as { plugins: Plugin[] }).plug
 const globalPluginItems = () => (pluginStore as unknown as { globalPlugins: Plugin[] }).globalPlugins;
 const editingPluginId = ref("");
 const editingPluginName = ref("");
-const localTreeOpen = ref(true);
+const creatingLocalPlugin = ref(false);
 
 onMounted(() => {
   void Promise.all([conversation.initialize(), pluginStore.initialize()]);
 });
 const keyword = computed(() => pluginStore.search.trim().toLocaleLowerCase());
 const localPlugin = computed(() => pluginItems().find(
-  (plugin) => plugin.id === conversation.activePackage?.pluginId,
+  (plugin) => plugin.packageId === conversation.activePackage?.id,
 ) ?? null);
-const localRootChildren = computed(() => localPlugin.value
-  ? sortPluginTreeNodes(localPlugin.value.root.children)
-  : []);
 const globalPlugins = computed(() => globalPluginItems().filter((plugin) =>
   !keyword.value
   || plugin.name.toLocaleLowerCase().includes(keyword.value)
@@ -50,9 +42,16 @@ const globalPlugins = computed(() => globalPluginItems().filter((plugin) =>
 ));
 
 
-function openPlugin(plugin: Plugin, nodeId = plugin.root.id) {
+function openPlugin(plugin: Plugin, nodeId?: string) {
   const activePackage = conversation.activePackage;
   pluginStore.openPlugin(plugin.id);
+
+  let targetNodeId = nodeId;
+  if (!targetNodeId) {
+    const infoNode = findPluginNodeByPath(plugin.root, "info.md");
+    targetNodeId = infoNode ? infoNode.id : plugin.root.id;
+  }
+
   layout.openResourceTab({
     resourceType: "plugin",
     resourceId: plugin.id,
@@ -60,7 +59,7 @@ function openPlugin(plugin: Plugin, nodeId = plugin.root.id) {
     title: plugin.packageId === activePackage?.id
       ? `${activePackage.name}资源`
       : plugin.name,
-    resourceParams: { nodeId },
+    resourceParams: { nodeId: targetNodeId },
   });
 }
 
@@ -80,25 +79,34 @@ async function createGlobalPlugin() {
   openPlugin(plugin);
 }
 
+async function createLocalPlugin() {
+  const active = conversation.activePackage;
+  if (!active || creatingLocalPlugin.value) return;
+  creatingLocalPlugin.value = true;
+  try {
+    const plugin = await conversation.ensurePackagePlugin(active.id);
+    openPlugin(plugin);
+  } catch (error) {
+    push.error(error instanceof Error ? error.message : "角色插件创建失败");
+  } finally {
+    creatingLocalPlugin.value = false;
+  }
+}
+
+async function restoreBuiltInPlugin(plugin: Plugin) {
+  const restored = await pluginStore.restoreBuiltInPlugin(plugin.id);
+  if (restored) push.success(`已还原 ${restored.name}`);
+}
+
 function hasGenerationProcess(plugin: Plugin) {
-  const context = findPluginNodeByPath(plugin.root, pluginConventions.context);
-  const process = findPluginNodeByPath(plugin.root, [
-    pluginConventions.agentProcessFolder,
-    pluginConventions.agentProcessEntry,
-  ]);
-  return context?.kind === "file"
-    && pluginFileType(context.name) === "markdown"
-    && process?.kind === "file"
-    && pluginFileType(process.name) === "javascript"
-    && typeof process.content === "string"
-    && Boolean(process.content.trim());
+  return Boolean(pluginGenerateFile(plugin));
 }
 
 async function setMainPlugin(plugin: Plugin) {
   const active = conversation.activePackage;
   if (!active) return;
   if (!hasGenerationProcess(plugin)) {
-    push.error(`插件 ${plugin.name} 没有有效的 context.md 与 agentprocess/index.js。`);
+    push.error(`插件 ${plugin.name} 没有有效的 runtime/generatePath。`);
     return;
   }
   try {
@@ -164,44 +172,48 @@ async function confirmRenamePlugin() {
         <input
           v-model="pluginStore.search"
           class="h-8 w-full rounded-md bg-transparent pl-8 pr-2 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:bg-muted/45"
-          placeholder="搜索全局插件"
+          placeholder="搜索插件"
         />
       </div>
-      <Button size="icon" variant="ghost" class="size-8" title="新建全局插件" @click="createGlobalPlugin">
-        <Plus class="size-4" />
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger as-child>
+          <Button size="icon" variant="ghost" class="size-8" title="新建插件">
+            <Plus class="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" class="w-44">
+          <DropdownMenuItem
+            :disabled="!conversation.activePackage || Boolean(localPlugin)"
+            @click="createLocalPlugin"
+          >
+            创建角色插件
+          </DropdownMenuItem>
+          <DropdownMenuItem @click="createGlobalPlugin">创建全局插件</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
 
     <ScrollArea class="min-h-0 flex-1">
       <div class="px-2 pb-3">
+      <div v-if="pluginStore.loadError" class="mt-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        本地插件数据读取失败；内置插件仍可使用。{{ pluginStore.loadError }}
+      </div>
       <section class="pt-3">
         <div class="px-2.5 pb-1.5 text-[11px] font-medium text-muted-foreground">本地插件</div>
         <div
           v-if="localPlugin"
-          class="overflow-hidden rounded-lg border bg-card/40"
+          class="group flex min-h-12 cursor-pointer items-center gap-2.5 rounded-lg border bg-card/40 px-2.5 py-2 transition-colors hover:bg-accent/55"
+          @click="openPlugin(localPlugin)"
         >
-          <div class="group flex min-h-11 items-center gap-2 px-2.5">
-            <button
-              type="button"
-              class="flex min-w-0 flex-1 items-center gap-2 text-left"
-              @click="localTreeOpen = !localTreeOpen"
-            >
-              <ChevronDown v-if="localTreeOpen" class="size-3.5 shrink-0 text-muted-foreground" />
-              <ChevronRight v-else class="size-3.5 shrink-0 text-muted-foreground" />
-              <Folder class="size-4 shrink-0 text-muted-foreground" />
-              <span class="min-w-0 flex-1">
-                <span class="flex min-w-0 items-center gap-1.5">
-                  <span class="truncate text-sm font-medium">{{ conversation.activePackage?.name }}资源</span>
-                  <span v-if="conversation.activePackage?.mainPluginId === localPlugin.id" class="shrink-0 text-[10px] font-medium text-primary">主要</span>
-                </span>
-                <span class="block truncate text-[11px] text-muted-foreground">默认本地插件结构</span>
-              </span>
-            </button>
-            <Switch
-              size="sm"
-              :model-value="localPlugin.enabled || conversation.activePackage?.mainPluginId === localPlugin.id"
-              @update:model-value="toggleLocalPlugin(Boolean($event))"
-            />
+          <Folder class="size-8 shrink-0 text-muted-foreground bg-muted/40 p-1.5 rounded-md" />
+          <div class="min-w-0 flex-1">
+            <div class="flex min-w-0 items-baseline gap-1.5">
+              <span class="truncate text-sm font-medium">{{ conversation.activePackage?.name }}资源</span>
+              <span v-if="conversation.activePackage?.mainPluginId === localPlugin.id" class="shrink-0 text-[10px] font-medium text-primary">主要</span>
+            </div>
+            <p class="truncate text-xs text-muted-foreground">角色本地插件目录</p>
+          </div>
+          <div class="flex items-center gap-1.5" @click.stop>
             <Button
               v-if="conversation.activePackage?.mainPluginId !== localPlugin.id && hasGenerationProcess(localPlugin)"
               size="icon"
@@ -212,31 +224,24 @@ async function confirmRenamePlugin() {
             >
               <Star class="size-4" />
             </Button>
-          </div>
-
-          <div v-if="localTreeOpen" class="border-t px-2 py-1.5">
-            <button
-              v-for="node in localRootChildren"
-              :key="node.id"
-              type="button"
-              class="flex h-8 w-full items-center gap-2 rounded-md pl-5 pr-2 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-              @click="openPlugin(localPlugin, node.id)"
-            >
-              <Folder v-if="node.kind === 'folder'" class="size-3.5 shrink-0" />
-              <File v-else class="size-3.5 shrink-0" />
-              <span class="truncate">{{ node.name }}</span>
-            </button>
-            <button
-              type="button"
-              class="mt-1 flex h-8 w-full items-center rounded-md px-2 text-left text-xs font-medium text-primary transition-colors hover:bg-accent"
-              @click="openPlugin(localPlugin)"
-            >
-              打开完整文件树
-            </button>
+            <Switch
+              size="sm"
+              :model-value="localPlugin.enabled || conversation.activePackage?.mainPluginId === localPlugin.id"
+              @update:model-value="toggleLocalPlugin(Boolean($event))"
+            />
           </div>
         </div>
-        <div v-else class="rounded-lg border border-dashed px-3 py-4 text-xs text-muted-foreground">
-          请先选择角色包；本地插件会按默认结构自动创建。
+        <div v-else class="flex flex-col items-start gap-2 rounded-lg border border-dashed px-3 py-4 text-xs text-muted-foreground">
+          <span>{{ conversation.activePackage ? "当前角色包还没有角色插件。" : "请先选择角色包。" }}</span>
+          <Button
+            v-if="conversation.activePackage"
+            size="sm"
+            variant="outline"
+            :disabled="creatingLocalPlugin"
+            @click="createLocalPlugin"
+          >
+            创建角色插件
+          </Button>
         </div>
       </section>
 
@@ -267,9 +272,19 @@ async function confirmRenamePlugin() {
             <p v-if="plugin.shortDescription" class="truncate text-xs text-muted-foreground">{{ plugin.shortDescription }}</p>
           </div>
           <div class="flex items-center gap-1" @click.stop>
+            <Button
+              v-if="conversation.activePackage?.mainPluginId !== plugin.id && hasGenerationProcess(plugin)"
+              size="icon"
+              variant="ghost"
+              class="size-7"
+              title="设为主要插件"
+              @click="setMainPlugin(plugin)"
+            >
+              <Star class="size-4" />
+            </Button>
             <Switch
               size="sm"
-              :disabled="!plugin.enabled && conversation.activePackage?.mainPluginId !== plugin.id"
+              :disabled="conversation.activePackage?.mainPluginId === plugin.id || (!plugin.enabled && !conversation.activePackage?.enabledGlobalPluginIds.includes(plugin.id))"
               :model-value="conversation.activePackage?.enabledGlobalPluginIds.includes(plugin.id) || conversation.activePackage?.mainPluginId === plugin.id"
               @update:model-value="toggleGlobalPlugin(plugin, Boolean($event))"
             />
@@ -285,6 +300,10 @@ async function confirmRenamePlugin() {
                   设为主要插件
                 </DropdownMenuItem>
                 <DropdownMenuItem @click="startRenamePlugin(plugin)">重命名</DropdownMenuItem>
+                <DropdownMenuItem v-if="plugin.builtIn" @click="restoreBuiltInPlugin(plugin)">
+                  <RotateCcw class="mr-2 size-4" />
+                  还原默认内容
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   :disabled="plugin.builtIn || conversation.activePackage?.mainPluginId === plugin.id"

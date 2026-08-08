@@ -2,6 +2,7 @@ export type PluginImportCall =
   | { kind: "resource"; value: string }
   | { kind: "resourceById"; value: string }
   | { kind: "container"; scope: "local" | "global"; name: string }
+  | { kind: "containers"; scope: "local" | "global"; pattern: string }
   | { kind: "configLocal"; groupId: string; contentId: string }
   | { kind: "configGlobal"; pluginId: string; groupId: string; contentId: string };
 
@@ -9,6 +10,7 @@ export interface PluginImports {
   resource(path: string): unknown;
   resourceById(resourceId: string): unknown;
   container(scope: "local" | "global", name: string): unknown;
+  containers(scope: "local" | "global", pattern: string): unknown[];
   config: {
     local(groupId: string, contentId: string): unknown;
     global(pluginId: string, groupId: string, contentId: string): unknown;
@@ -28,7 +30,7 @@ const resourcePattern = new RegExp(
   "g",
 );
 const containerPattern = new RegExp(
-  String.raw`\bimports\s*\.\s*container\s*\(\s*${stringLiteral}\s*,\s*${stringLiteral}\s*\)`,
+  String.raw`\bimports\s*\.\s*(container|containers)\s*\(\s*${stringLiteral}\s*,\s*${stringLiteral}\s*\)`,
   "g",
 );
 const localConfigPattern = new RegExp(
@@ -49,13 +51,15 @@ export function findPluginImportCalls(source: string): PluginImportCall[] {
     });
   }
   for (const match of source.matchAll(containerPattern)) {
-    const scope = decodeLiteral(match[1] ?? "");
+    const scope = decodeLiteral(match[2] ?? "");
     if (scope === "local" || scope === "global") {
       calls.push({
-        kind: "container",
+        kind: match[1] as "container" | "containers",
         scope,
-        name: decodeLiteral(match[2] ?? ""),
-      });
+        ...(match[1] === "container"
+          ? { name: decodeLiteral(match[3] ?? "") }
+          : { pattern: decodeLiteral(match[3] ?? "") }),
+      } as PluginImportCall);
     }
   }
   for (const match of source.matchAll(localConfigPattern)) {

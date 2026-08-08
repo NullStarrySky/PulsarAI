@@ -4,18 +4,20 @@ import { push } from "notivue";
 import {
   Check,
   ChevronDown,
-  ListTodo,
-  MessageSquare,
+  Code2,
+  Languages,
+  Lightbulb,
   Paperclip,
   Plus,
   Search,
   Send,
+  Shuffle,
+  Sparkles,
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Dialog,
   DialogContent,
@@ -38,9 +40,12 @@ import { fileToMessagePart } from "@/features/Resources/Conversation/application
 import type { FilePart } from "@/features/Resources/Conversation/domain/conversation-types";
 import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
 import type { ComposerToolId } from "@/features/UI/domain/composer-toolbar";
+import type { WorkspaceTab } from "@/features/UI/application/layout-store";
 
 const props = defineProps<{
   packageId?: string;
+  resourceId?: string;
+  tab?: WorkspaceTab;
 }>();
 const conversation = useConversationStore();
 const layout = useLayoutStore();
@@ -57,7 +62,6 @@ const whiteboardOpen = ref(false);
 const selectedPackageId = ref("");
 const createPackageMode = ref(false);
 const newPackageName = ref("");
-const conversationKind = ref<"chat" | "task">("chat");
 const projectPopoverOpen = ref(false);
 const projectSearch = ref("");
 const starting = ref(false);
@@ -117,6 +121,7 @@ function syncSelectedPackage(packageId?: string) {
 }
 
 async function selectPackage(packageId: string) {
+  if (!packageId) return;
   await conversation.openPackage(packageId);
   layout.openResourceTab({
     resourceType: "builtin",
@@ -138,7 +143,7 @@ function chooseNewPackage() {
 
 async function startConversation() {
   const prompt = input.value.trim();
-  if ((!prompt && pendingAttachments.value.length === 0) || starting.value) return;
+  if (!prompt || starting.value) return;
   starting.value = true;
   try {
     await conversation.initialize();
@@ -151,12 +156,10 @@ async function startConversation() {
     }
     if (!targetPackage) {
       push.warning("请先选择角色包，或新建一个角色包。");
+      starting.value = false; // reset flag
       return;
     }
-    const baseTitle =
-      conversationKind.value === "task"
-        ? `任务 · ${targetPackage.name}`
-        : targetPackage.name;
+    const baseTitle = targetPackage.name;
     const title = conversation.uniqueConversationTitle(
       targetPackage.id,
       baseTitle,
@@ -165,17 +168,7 @@ async function startConversation() {
       targetPackage.id,
       {
         title,
-        kind: conversationKind.value,
-        binding:
-          conversationKind.value === "task"
-            ? {
-                packageId: targetPackage.id,
-                resourceType: "project",
-                resourceId: targetPackage.id,
-                resourcePath: "/project.json",
-                resourceTitle: targetPackage.name,
-              }
-            : undefined,
+        kind: "chat",
       },
     );
     layout.closeTabsByResource("builtin", "conversation-new");
@@ -237,52 +230,120 @@ function createGreeting() {
           : ["晚上好，今天想聊点什么？", "辛苦一天了，想聊聊什么？", "晚上好，有什么想一起梳理的？"];
   return greetings[Math.floor(Math.random() * greetings.length)] ?? greetings[0]!;
 }
+
+const suggestionCards = [
+  {
+    title: "创意写作",
+    description: "构思故事、撰写诗歌，或者润色小说情节。",
+    prompt: "为我构思一个关于时间旅行的短篇小说大纲",
+    icon: Sparkles
+  },
+  {
+    title: "代码助手",
+    description: "分析算法、重构代码，或者解释复杂的设计模式。",
+    prompt: "帮我用 TypeScript 写一个高效的 LRU 缓存，并添加详细注释",
+    icon: Code2
+  },
+  {
+    title: "翻译与精修",
+    description: "流畅、地道地进行多语言互译或文案润色。",
+    prompt: "帮我将以下段落翻译成地道的英文，并给出词汇替换建议：\n",
+    icon: Languages
+  },
+  {
+    title: "头脑风暴",
+    description: "寻找创意灵感、探讨学习计划，或生成商业方案。",
+    prompt: "我正在规划一个独立的 LLM 开发者工具，帮我进行功能和商业模式头脑风暴",
+    icon: Lightbulb
+  }
+];
+
+function applySuggestion(prompt: string) {
+  input.value = prompt;
+  void startConversation();
+}
+
+function selectRandomPackage() {
+  if (packages.value.length === 0) return;
+  const index = Math.floor(Math.random() * packages.value.length);
+  const randomPackage = packages.value[index];
+  if (randomPackage) {
+    void selectPackage(randomPackage.id);
+  }
+}
 </script>
 
 <template>
   <ScrollArea class="min-h-0 flex-1 bg-background [&_[data-slot=scroll-area-viewport]>div]:min-h-full">
-    <div class="mx-auto flex min-h-full w-full max-w-[800px] flex-col justify-center px-6 py-12 mobile:px-3 mobile:py-6">
-      <h1 class="mb-8 text-center text-2xl font-semibold tracking-tight mobile:mb-5 mobile:text-xl">
-        {{ greeting }}
-      </h1>
+    <div class="mx-auto flex min-h-full w-full max-w-[800px] flex-col justify-between px-6 py-12 mobile:px-3 mobile:py-6 animate-in fade-in duration-300">
 
-      <section class="overflow-hidden rounded-lg border bg-card shadow-sm">
-        <div class="flex min-h-11 items-center justify-between gap-2 border-b px-3">
+      <!-- Top / Center section -->
+      <div class="flex flex-col items-center justify-center flex-1 mb-8 pt-12">
+        <h1 class="mb-12 text-center text-3xl font-semibold tracking-tight mobile:mb-8 mobile:text-2xl text-foreground/90">
+          {{ greeting }}
+        </h1>
+
+        <!-- Predefined suggestion cards grid -->
+        <div class="grid grid-cols-2 gap-3 w-full mobile:grid-cols-1">
+          <button
+            v-for="card in suggestionCards"
+            :key="card.title"
+            type="button"
+            class="flex flex-col text-left p-4 rounded-xl border border-border/50 bg-card hover:bg-accent/40 hover:border-primary/20 transition-all duration-300 group shadow-sm hover:shadow-md"
+            @click="applySuggestion(card.prompt)"
+          >
+            <div class="flex items-center gap-2 mb-1.5">
+              <div class="p-1.5 rounded-lg bg-primary/10 text-primary group-hover:scale-105 transition-transform">
+                <component :is="card.icon" class="size-4" />
+              </div>
+              <span class="text-xs font-semibold text-foreground/80">{{ card.title }}</span>
+            </div>
+            <p class="text-[10px] text-muted-foreground leading-relaxed">{{ card.description }}</p>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bottom section (composer input box) -->
+      <section class="min-w-0 overflow-hidden rounded-xl border bg-card shadow-lg shadow-foreground/[0.015] border-border/60">
+        <div class="flex min-h-11 items-center gap-2 px-3 border-b bg-muted/5">
+          <!-- Narrow character selector (max width w-48) -->
           <Popover v-model:open="projectPopoverOpen">
             <PopoverTrigger as-child>
               <Button
-                variant="ghost"
-                class="h-8 min-w-0 max-w-[70%] justify-start gap-2 px-2 font-normal"
+                variant="outline"
+                class="h-7 w-48 justify-between gap-1.5 px-2.5 font-normal text-xs rounded-lg hover:bg-muted/80 shrink-0"
               >
-                <ResourceAvatar
-                  v-if="selectedPackage"
-                  :name="selectedPackage.name"
-                  :icon="selectedPackage.icon"
-                  class="size-5"
-                />
-                <span class="min-w-0 truncate">
-                  {{ createPackageMode ? newPackageName || "新角色包" : selectedPackage?.name ?? "选择角色包" }}
-                </span>
-                <ChevronDown class="shrink-0 text-muted-foreground" />
+                <div class="flex items-center gap-1.5 min-w-0">
+                  <ResourceAvatar
+                    v-if="selectedPackage"
+                    :name="selectedPackage.name"
+                    :icon="selectedPackage.icon"
+                    class="size-4.5"
+                  />
+                  <span class="min-w-0 truncate">
+                    {{ createPackageMode ? newPackageName || "新角色包" : selectedPackage?.name ?? "选择角色包" }}
+                  </span>
+                </div>
+                <ChevronDown class="size-3 shrink-0 text-muted-foreground" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="start" class="w-[min(22rem,calc(100vw-2rem))] p-2">
+            <PopoverContent align="start" class="w-[min(22rem,calc(100vw-2rem))] p-2 rounded-xl border shadow-md">
               <div class="relative mb-2">
-                <Search class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input v-model="projectSearch" class="h-8 pl-8" placeholder="搜索角色包" />
+                <Search class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground size-3.5" />
+                <Input v-model="projectSearch" class="h-8 pl-8 text-xs rounded-lg" placeholder="搜索角色包" />
               </div>
               <ScrollArea class="h-64">
                 <div class="pr-2">
                   <button
                     type="button"
-                    class="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm transition-colors hover:bg-accent"
+                    class="flex h-9 w-full items-center gap-2 rounded-md px-2 text-left text-xs transition-colors hover:bg-accent"
                     @click="chooseNewPackage"
                   >
                     <span class="flex size-6 items-center justify-center rounded bg-muted">
-                      <Plus class="text-muted-foreground" />
+                      <Plus class="size-3.5 text-muted-foreground" />
                     </span>
                     <span class="min-w-0 flex-1 truncate">新建角色包并开始</span>
-                    <Check v-if="createPackageMode" />
+                    <Check v-if="createPackageMode" class="size-3.5" />
                   </button>
                   <button
                     v-for="project in filteredProjects"
@@ -291,14 +352,14 @@ function createGreeting() {
                     class="flex min-h-10 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent"
                     @click="selectPackage(project.id)"
                   >
-                    <ResourceAvatar :name="project.name" :icon="project.icon" class="size-6" />
+                    <ResourceAvatar :name="project.name" :icon="project.icon" class="size-5.5" />
                     <span class="min-w-0 flex-1">
-                      <span class="block truncate text-sm">{{ project.name }}</span>
-                      <span v-if="project.description" class="block truncate text-xs text-muted-foreground">
+                      <span class="block truncate text-xs">{{ project.name }}</span>
+                      <span v-if="project.description" class="block truncate text-[10px] text-muted-foreground">
                         {{ project.description }}
                       </span>
                     </span>
-                    <Check v-if="selectedPackageId === project.id" class="shrink-0" />
+                    <Check v-if="selectedPackageId === project.id" class="shrink-0 size-3.5" />
                   </button>
                   <p v-if="filteredProjects.length === 0" class="px-2 py-6 text-center text-xs text-muted-foreground">
                     没有匹配的角色包
@@ -308,38 +369,33 @@ function createGreeting() {
             </PopoverContent>
           </Popover>
 
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            size="sm"
-            :model-value="conversationKind"
-            aria-label="会话类型"
-            @update:model-value="$event && (conversationKind = $event as 'chat' | 'task')"
+          <!-- "Random" select button -->
+          <Button
+            variant="ghost"
+            size="icon"
+            class="size-7 rounded-lg text-muted-foreground hover:text-foreground shrink-0"
+            title="随机选择角色包"
+            @click="selectRandomPackage"
           >
-            <ToggleGroupItem value="chat" aria-label="聊天" title="聊天">
-              <MessageSquare />
-            </ToggleGroupItem>
-            <ToggleGroupItem value="task" aria-label="任务" title="任务">
-              <ListTodo />
-            </ToggleGroupItem>
-          </ToggleGroup>
+            <Shuffle class="size-3.5" />
+          </Button>
         </div>
 
-        <div v-if="createPackageMode" class="border-b px-3 py-2">
-          <Input v-model="newPackageName" class="h-8" placeholder="新角色包名称" />
+        <div v-if="createPackageMode" class="border-b px-3 py-2 bg-muted/5">
+          <Input v-model="newPackageName" class="h-8 text-xs rounded-lg" placeholder="新角色包名称" />
         </div>
 
-        <div class="px-3 pb-2 pt-3">
+        <div class="min-w-0 px-3 pb-2 pt-3">
           <MessageAttachmentStrip
-            v-if="pendingAttachments.length"
-            :attachments="pendingAttachments"
-            removable
-            class="mb-1"
-            @remove="pendingAttachments.splice($event, 1)"
+             v-if="pendingAttachments.length"
+             :attachments="pendingAttachments"
+             removable
+             class="mb-1"
+             @remove="pendingAttachments.splice($event, 1)"
           />
           <ConversationComposerEditor v-model="input" :enable-ai="false" placeholder="输入消息..." @submit="startConversation" />
-          <div class="flex items-center justify-between gap-2">
-            <div class="flex min-w-0 items-center gap-1">
+          <div class="flex min-w-0 flex-wrap items-center gap-2 mt-2">
+            <div class="flex min-w-0 flex-1 flex-wrap items-center gap-1">
               <ConversationComposerToolbarTools
                 v-model:prompt="input"
                 :tool-ids="appearance.composerToolbar.left"
@@ -348,7 +404,7 @@ function createGreeting() {
                 @fullscreen="fullscreenInputOpen = true"
               />
             </div>
-            <div class="flex shrink-0 items-center gap-1">
+            <div class="ml-auto flex shrink-0 items-center gap-1">
               <ConversationComposerToolbarTools
                 v-model:prompt="input"
                 :tool-ids="appearance.composerToolbar.right"
@@ -358,12 +414,12 @@ function createGreeting() {
               />
               <Button
                 size="icon"
-                class="size-8 mobile:size-10"
+                class="size-8 rounded-lg shadow-sm hover:shadow-md"
                 title="发送"
-                :disabled="(!input.trim() && pendingAttachments.length === 0) || starting"
+                :disabled="!input.trim() || starting"
                 @click="startConversation"
               >
-                <Send />
+                <Send class="size-3.5" />
               </Button>
             </div>
           </div>
@@ -403,7 +459,7 @@ function createGreeting() {
         </div>
         <Button variant="outline" @click="fullscreenInputOpen = false">取消</Button>
         <Button
-          :disabled="(!input.trim() && pendingAttachments.length === 0) || starting"
+          :disabled="!input.trim() || starting"
           @click="fullscreenInputOpen = false; startConversation()"
         >
           <Send data-icon="inline-start" />

@@ -1,5 +1,8 @@
+export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
+
 export interface DefaultConfigs {
   defaultChatModel: string;
+  reasoningEffort: ReasoningEffort;
   fastModel: string;
   embeddingModel: string;
   imageModel: string;
@@ -11,6 +14,7 @@ export interface DefaultConfigs {
 
 export const defaultConfigKeys = {
   defaultChatModel: "defaultChatModel",
+  reasoningEffort: "reasoningEffort",
   fastModel: "fastModel",
   embeddingModel: "embeddingModel",
   imageModel: "imageModel",
@@ -22,6 +26,7 @@ export const defaultConfigKeys = {
 
 export const fallbackDefaultConfigs: DefaultConfigs = {
   defaultChatModel: "openai/gpt-4o-mini",
+  reasoningEffort: "none",
   fastModel: "openai/gpt-4o-mini",
   embeddingModel: "",
   imageModel: "",

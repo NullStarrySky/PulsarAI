@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watchEffect } from "vue";
 import { storeToRefs } from "pinia";
-import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-vue-next";
+import { PanelLeftClose, PanelLeftOpen, Search, X } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
+  DialogClose,
+  DialogDescription,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useResponsiveStore } from "@/features/Misc/application/responsive-store";
@@ -66,9 +69,14 @@ function pagesInGroup(groupId: string) {
 <template>
   <Dialog :open="settingsOpen" @update:open="layout.setSettingsOpen">
     <DialogContent
+      :show-close-button="false"
       class="flex h-[min(820px,90vh)] w-[min(1320px,calc(100vw-32px))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none mobile:h-[100dvh] mobile:w-screen mobile:rounded-none mobile:border-0"
       @open-auto-focus.prevent
     >
+      <div class="sr-only">
+        <DialogTitle>设置</DialogTitle>
+        <DialogDescription>管理 Pulsar 的应用设置。</DialogDescription>
+      </div>
       <div
         :class="
           cn(
@@ -148,6 +156,16 @@ function pagesInGroup(groupId: string) {
           >
             <PanelLeftOpen class="size-4" />
           </Button>
+          <DialogClose as-child>
+            <Button
+              variant="ghost"
+              class="absolute right-6 top-6 z-20 size-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 mobile:right-4 mobile:top-4"
+              size="icon"
+              title="关闭设置"
+            >
+              <X class="size-4" />
+            </Button>
+          </DialogClose>
           <component :is="activePage?.component" v-if="activePage" />
         </main>
       </div>

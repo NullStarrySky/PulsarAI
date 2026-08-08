@@ -10,9 +10,7 @@ import * as notification from "@/features/Notification/capabilities";
 import * as resources from "@/features/Resources/capabilities";
 import * as component from "@/features/Resources/Component/capabilities";
 import * as conversation from "@/features/Resources/Conversation/capabilities";
-import * as contextDocument from "@/features/Resources/InteractiveDoc/capabilities";
 import * as plugin from "@/features/Resources/Plugin/capabilities";
-import * as preset from "@/features/Resources/Preset/capabilities";
 import * as sandbox from "@/features/Sandbox/capabilities";
 import * as globals from "@/features/Sandbox/global-capabilities";
 import * as setting from "@/features/Setting/capabilities";
@@ -55,7 +53,6 @@ const blockedCapabilityMethods: Record<string, Set<string>> = {
     "move",
     "remove",
   ]),
-  preset: new Set(["execute"]),
   resources: new Set(["deleteFile"]),
   sandbox: new Set(["execute"]),
 };
@@ -81,9 +78,7 @@ export const capabilityModules: CapabilityModule[] = [
   resources,
   component,
   conversation,
-  contextDocument,
   plugin,
-  preset,
   sandbox,
   globals,
   setting,

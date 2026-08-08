@@ -142,12 +142,20 @@ export const useLayoutStore = defineStore("layout", {
       if (!isMainWindow) return;
       if (!this.keepTabsOnExit) {
         persistTabSession([], "", false);
-        return;
+      } else {
+        const session = readTabSession();
+        if (session && session.tabs.length > 0) {
+          this.tabs = session.tabs;
+          this.activeTabId = session.activeTabId;
+        }
       }
-      const session = readTabSession();
-      if (session) {
-        this.tabs = session.tabs;
-        this.activeTabId = session.activeTabId;
+
+      if (this.tabs.length === 0) {
+        this.openResourceTab({
+          resourceType: "builtin",
+          resourceId: "conversation-new",
+          title: "新建对话",
+        });
       }
     },
     setKeepTabsOnExit(enabled: boolean) {
@@ -204,20 +212,28 @@ export const useLayoutStore = defineStore("layout", {
     },
     openTab(tab: WorkspaceTab) {
       const existing = this.tabs.find((item) => item.id === tab.id);
+      let changed = false;
 
       if (existing) {
         const resourceParams =
           tab.resourceParams === undefined
             ? existing.resourceParams
             : tab.resourceParams;
-        Object.assign(existing, tab);
-        existing.resourceParams = resourceParams;
+        changed = Object.entries(tab).some(
+          ([key, value]) => existing[key as keyof WorkspaceTab] !== value,
+        ) || existing.resourceParams !== resourceParams;
+        if (changed) {
+          Object.assign(existing, tab);
+          existing.resourceParams = resourceParams;
+        }
       } else {
         this.tabs.push({ closable: true, ...tab });
+        changed = true;
       }
 
-      this.activeTabId = tab.id;
-      this.persistTabSession();
+      const activationChanged = this.activeTabId !== tab.id;
+      if (activationChanged) this.activeTabId = tab.id;
+      if (changed || activationChanged) this.persistTabSession();
     },
     openResourceTab(input: { resourceType: string; resourceId: string; title: string; packageId?: string; resourceParams?: Record<string, unknown> }) {
       this.openTab({
@@ -275,6 +291,15 @@ export const useLayoutStore = defineStore("layout", {
       if (this.activeTabId === tabId) {
         this.activeTabId = this.tabs[Math.max(0, index - 1)]?.id ?? "";
       }
+
+      if (this.tabs.length === 0) {
+        this.openResourceTab({
+          resourceType: "builtin",
+          resourceId: "conversation-new",
+          title: "新建对话",
+        });
+      }
+
       this.persistTabSession();
     },
     closeTabsByResource(resourceType: string, resourceId: string) {

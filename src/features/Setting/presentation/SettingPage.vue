@@ -9,10 +9,10 @@ defineProps<{
 
 <template>
   <ScrollArea class="h-full">
-    <section class="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-6 p-6 mobile:gap-5 mobile:px-4 mobile:pb-5 mobile:pt-16">
+    <section class="mx-auto flex min-h-full w-full max-w-5xl flex-col gap-5 p-5 mobile:gap-4 mobile:px-4 mobile:pb-4 mobile:pt-14">
       <header class="flex flex-col gap-1">
-        <h2 class="text-2xl font-semibold mobile:text-xl">{{ title }}</h2>
-        <p v-if="description" class="text-sm text-muted-foreground">{{ description }}</p>
+        <h2 class="text-xl font-semibold leading-7 tracking-tight mobile:text-lg mobile:leading-6">{{ title }}</h2>
+        <p v-if="description" class="max-w-3xl text-sm leading-5 text-muted-foreground">{{ description }}</p>
       </header>
       <slot />
     </section>

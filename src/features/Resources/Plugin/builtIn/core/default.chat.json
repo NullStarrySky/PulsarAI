@@ -1,0 +1,12 @@
+{
+  "message": [
+    {
+      "role": "system",
+      "content": "{{ imports.resource(\"./prompt.md\") }}"
+    },
+    {
+      "role": "system",
+      "content": "[[ chat ]]"
+    }
+  ]
+}

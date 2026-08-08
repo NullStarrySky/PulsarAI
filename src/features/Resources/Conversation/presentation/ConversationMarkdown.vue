@@ -1,15 +1,25 @@
 <script setup lang="ts">
-import { Crepe } from "@milkdown/crepe";
+import { Crepe, CrepeFeature } from "@milkdown/crepe";
 import { replaceAll } from "@milkdown/kit/utils";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/vue";
 import { defineComponent, h, ref, watch } from "vue";
-import { conversationCrepeFeatureConfigs, conversationCrepeFeatures } from "./conversation-crepe";
-import { yamlFrontmatterFeature } from "@/features/Resources/InteractiveDoc/presentation/frontmatter-milkdown";
+import { editorViewOptionsCtx } from "@milkdown/core";
+import { conversationCrepeFeatures } from "./conversation-crepe";
+
+const readOnlyCrepeFeatures = {
+  ...conversationCrepeFeatures,
+  [CrepeFeature.AI]: false,
+  [CrepeFeature.Cursor]: false,
+  [CrepeFeature.LinkTooltip]: false,
+  [CrepeFeature.Placeholder]: false,
+  [CrepeFeature.Toolbar]: false,
+};
 
 const props = withDefaults(
-  defineProps<{ modelValue: string }>(),
+  defineProps<{ modelValue: string; compact?: boolean }>(),
   {
     modelValue: "",
+    compact: false,
   },
 );
 
@@ -24,14 +34,18 @@ const MarkdownInner = defineComponent({
   setup(innerProps) {
     const currentMarkdown = ref(innerProps.modelValue);
     let applyingExternalValue = false;
+    let pendingExternalValue = false;
     const { loading, get } = useEditor((root) => {
       const editor = new Crepe({
         root,
         defaultValue: innerProps.modelValue,
-        features: conversationCrepeFeatures,
-        featureConfigs: conversationCrepeFeatureConfigs,
+        features: readOnlyCrepeFeatures,
       });
-      editor.addFeature(yamlFrontmatterFeature);
+      editor.editor.config((ctx: any) => {
+        ctx.set(editorViewOptionsCtx, {
+          editable: () => false,
+        });
+      });
       editor.on((listener) => {
         listener.markdownUpdated((_ctx, nextMarkdown, previousMarkdown) => {
           if (applyingExternalValue || nextMarkdown === previousMarkdown) {
@@ -46,6 +60,7 @@ const MarkdownInner = defineComponent({
     function replaceMarkdown(markdown: string) {
       const editor = get();
       if (!editor || loading.value) {
+        pendingExternalValue = true;
         return;
       }
       applyingExternalValue = true;
@@ -53,6 +68,7 @@ const MarkdownInner = defineComponent({
         editor.action(replaceAll(markdown, true));
       } finally {
         applyingExternalValue = false;
+        pendingExternalValue = false;
       }
     }
 
@@ -68,7 +84,7 @@ const MarkdownInner = defineComponent({
     );
 
     watch(loading, (isLoading) => {
-      if (!isLoading) {
+      if (!isLoading && pendingExternalValue) {
         replaceMarkdown(currentMarkdown.value);
       }
     });
@@ -80,7 +96,10 @@ const MarkdownInner = defineComponent({
 
 <template>
   <MilkdownProvider>
-    <div class="conversation-markdown">
+    <div
+      class="conversation-markdown"
+      :class="{ 'conversation-markdown--compact': props.compact }"
+    >
       <MarkdownInner :model-value="props.modelValue" />
     </div>
   </MilkdownProvider>
@@ -105,7 +124,11 @@ const MarkdownInner = defineComponent({
   font-size: 0.93rem;
   line-height: 1.55;
   overflow-wrap: anywhere;
-  pointer-events: none;
+  padding: 0.15rem 0.5rem !important;
+}
+
+.conversation-markdown--compact .ProseMirror {
+  padding: 0 !important;
 }
 
 .conversation-markdown .ProseMirror > * {

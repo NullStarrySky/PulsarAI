@@ -1,5 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
-import { defaultConfigKeys, fallbackDefaultConfigs } from "../domain/default-config";
+import {
+  defaultConfigKeys,
+  fallbackDefaultConfigs,
+  type ReasoningEffort,
+} from "../domain/default-config";
 
 export async function getDefaultConfig<T>(key: string, fallback: T): Promise<T> {
   const value = await invoke<T | null>("config_get", { key });
@@ -20,6 +24,17 @@ export function getDefaultChatModel() {
 
 export function setDefaultChatModel(model: string) {
   return setDefaultConfig(defaultConfigKeys.defaultChatModel, model);
+}
+
+export function getDefaultReasoningEffort() {
+  return getDefaultConfig<ReasoningEffort>(
+    defaultConfigKeys.reasoningEffort,
+    fallbackDefaultConfigs.reasoningEffort,
+  );
+}
+
+export function setDefaultReasoningEffort(reasoningEffort: ReasoningEffort) {
+  return setDefaultConfig(defaultConfigKeys.reasoningEffort, reasoningEffort);
 }
 
 export function getFastModel() {

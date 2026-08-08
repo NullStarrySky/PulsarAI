@@ -4,7 +4,6 @@ import { replaceAll } from "@milkdown/kit/utils";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/vue";
 import { computed, defineComponent, h, ref, watch } from "vue";
 import { conversationCrepeFeatureConfigs, conversationCrepeFeatures } from "./conversation-crepe";
-import { yamlFrontmatterFeature } from "@/features/Resources/InteractiveDoc/presentation/frontmatter-milkdown";
 import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
 
 const props = withDefaults(
@@ -14,6 +13,7 @@ const props = withDefaults(
     enableBlockEdit?: boolean;
     enableAi?: boolean;
     enableTopBar?: boolean;
+    compact?: boolean;
   }>(),
   {
     modelValue: "",
@@ -21,6 +21,7 @@ const props = withDefaults(
     enableBlockEdit: false,
     enableAi: true,
     enableTopBar: false,
+    compact: false,
   },
 );
 
@@ -79,6 +80,7 @@ const ComposerInner = defineComponent({
       [CrepeFeature.TopBar]: innerProps.enableTopBar,
     }));
     let applyingExternalValue = false;
+    let pendingExternalValue = false;
     const { loading, get } = useEditor((root) => {
       const editor = new Crepe({
         root,
@@ -92,7 +94,6 @@ const ComposerInner = defineComponent({
           },
         },
       });
-      editor.addFeature(yamlFrontmatterFeature);
       editor.on((listener) => {
         listener.markdownUpdated((_ctx, nextMarkdown, previousMarkdown) => {
           if (applyingExternalValue || nextMarkdown === previousMarkdown) {
@@ -108,6 +109,7 @@ const ComposerInner = defineComponent({
     function replaceMarkdown(markdown: string) {
       const editor = get();
       if (!editor || loading.value) {
+        pendingExternalValue = true;
         return;
       }
       applyingExternalValue = true;
@@ -115,6 +117,7 @@ const ComposerInner = defineComponent({
         editor.action(replaceAll(markdown, true));
       } finally {
         applyingExternalValue = false;
+        pendingExternalValue = false;
       }
     }
 
@@ -130,7 +133,7 @@ const ComposerInner = defineComponent({
     );
 
     watch(loading, (isLoading) => {
-      if (!isLoading) {
+      if (!isLoading && pendingExternalValue) {
         replaceMarkdown(currentMarkdown.value);
       }
     });
@@ -143,8 +146,11 @@ const ComposerInner = defineComponent({
 <template>
   <MilkdownProvider>
     <div
-      class="conversation-composer-editor min-h-12 mobile:min-h-14"
-      :class="{ 'conversation-composer-editor--block-edit': props.enableBlockEdit }"
+      class="conversation-composer-editor min-h-10 min-w-0 w-full mobile:min-h-12"
+      :class="{
+        'conversation-composer-editor--block-edit': props.enableBlockEdit,
+        'conversation-composer-editor--compact': props.compact,
+      }"
       @keydown="handleKeydown"
     >
       <ComposerInner
@@ -161,8 +167,10 @@ const ComposerInner = defineComponent({
 
 <style>
 .conversation-composer-editor :where(.milkdown, .editor, .ProseMirror) {
-  min-height: 3rem !important;
-  max-height: 12rem;
+  min-height: 5.5rem !important; /* Made it taller to avoid blocking text selection popups */
+  min-width: 0 !important;
+  width: 100%;
+  max-height: 16rem;
   max-width: 100%;
   border: 0 !important;
   background: transparent !important;
@@ -185,20 +193,42 @@ const ComposerInner = defineComponent({
 
 .conversation-composer-editor .ProseMirror {
   overflow-y: auto !important;
-  padding: 0.45rem 0.25rem !important;
+  padding: 0.4rem 0.35rem 2rem 0.35rem !important; /* Added 2rem bottom padding for selection toolbar */
   font-size: 0.92rem;
   line-height: 1.55;
 }
 
 .mobile-layout .conversation-composer-editor .ProseMirror {
-  min-height: 3.5rem !important;
-  max-height: 9rem;
-  padding: 0.65rem 0.35rem !important;
+  min-height: 6rem !important;
+  max-height: 12rem;
+  padding: 0.5rem 0.45rem 2rem 0.45rem !important;
   font-size: 1rem;
 }
 
 .conversation-composer-editor .ProseMirror > * {
   margin-top: 0.25rem;
   margin-bottom: 0.25rem;
+}
+
+.message-inline-editor :where(.milkdown, .editor, .ProseMirror) {
+  max-height: none !important;
+}
+
+.conversation-composer-editor--compact,
+.conversation-composer-editor--compact :where(.milkdown, .editor, .ProseMirror) {
+  min-height: 2.75rem !important;
+}
+
+.conversation-composer-editor--compact .ProseMirror {
+  max-height: 10rem !important;
+  padding: 0.35rem 0.25rem !important;
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+}
+
+.mobile-layout .conversation-composer-editor--compact .ProseMirror {
+  min-height: 2.75rem !important;
+  padding: 0.4rem 0.25rem !important;
+  font-size: 1rem;
 }
 </style>

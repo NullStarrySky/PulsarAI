@@ -139,29 +139,6 @@ export function buildConversationResourceContext(
           ),
         );
       }
-    } else if (
-      binding.resourceType === "project"
-      || binding.resourcePath === "/project.json"
-    ) {
-      if (resourcePackage) {
-        sections.push(
-          "## Current project resource",
-          JSON.stringify(
-            {
-              id: resourcePackage.id,
-              name: resourcePackage.name,
-              description: resourcePackage.description,
-              icon: resourcePackage.icon,
-              categoryId: resourcePackage.categoryId ?? null,
-              pluginId: resourcePackage.pluginId,
-              mainPluginId: resourcePackage.mainPluginId,
-              enabledGlobalPluginIds: resourcePackage.enabledGlobalPluginIds,
-            },
-            null,
-            2,
-          ),
-        );
-      }
     }
     sections.push("## Conversation system documentation", conversationGuide);
   }

@@ -25,7 +25,7 @@ export interface PluginCustomToolDefinition {
   functionPath: string;
   promptId: string;
   promptPath: string;
-  priority: number;
+  order: number;
   prompt: string;
   functionFile: PluginFile;
 }
@@ -90,7 +90,7 @@ export function collectPluginCustomTools(
           functionPath: `/${pluginNodePath(plugin.root, functionFile.id).join("/")}`,
           promptId: promptFile.id,
           promptPath: `/${pluginNodePath(plugin.root, promptFile.id).join("/")}`,
-          priority: functionFile.priority ?? 100,
+          order: functionFile.order,
           prompt: resolver.renderResource(promptFile.id),
           functionFile,
           treeIndex,
@@ -109,7 +109,7 @@ export function collectPluginCustomTools(
 
   candidates.sort(
     (a, b) =>
-      b.priority - a.priority
+      b.order - a.order
       || a.pluginId.localeCompare(b.pluginId)
       || a.treeIndex - b.treeIndex
       || a.functionId.localeCompare(b.functionId),
@@ -137,7 +137,7 @@ export function collectPluginCustomTools(
       functionPath: candidate.functionPath,
       promptId: candidate.promptId,
       promptPath: candidate.promptPath,
-      priority: candidate.priority,
+      order: candidate.order,
       prompt: candidate.prompt,
       functionFile: candidate.functionFile,
     }];

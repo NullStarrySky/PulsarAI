@@ -97,9 +97,15 @@ export const useAppearanceStore = defineStore("appearance", () => {
   }
 
   async function importThemeFile(file: File) {
-    const theme = normalizeImportedTheme(await file.text());
+    return importThemeCss(await file.text());
+  }
+
+  function importThemeCss(css: string) {
+    if (!css.trim()) throw new Error("主题 CSS 不能为空。");
+    const theme = normalizeImportedTheme(css);
     customThemes.value = [...customThemes.value.filter((item) => item.id !== theme.id), theme];
     themeId.value = theme.id;
+    return theme;
   }
 
   function importFont(name: string, family: string) {
@@ -149,6 +155,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
     themes,
     uiScale,
     importFont,
+    importThemeCss,
     importThemeFile,
     initialize,
     setComposerToolbar,

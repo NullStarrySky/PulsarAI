@@ -1,7 +1,8 @@
 import { defineStore } from "pinia";
-import { fallbackDefaultConfigs } from "../domain/default-config";
+import { fallbackDefaultConfigs, type ReasoningEffort } from "../domain/default-config";
 import {
   getDefaultChatModel,
+  getDefaultReasoningEffort,
   getEmbeddingModel,
   getFastModel,
   getImageModel,
@@ -10,6 +11,7 @@ import {
   getSpeechModel,
   getTranscriptionModel,
   setDefaultChatModel,
+  setDefaultReasoningEffort,
   setEmbeddingModel,
   setFastModel,
   setImageModel,
@@ -22,6 +24,7 @@ import {
 export const useDefaultConfigStore = defineStore("defaultConfigs", {
   state: () => ({
     defaultChatModel: fallbackDefaultConfigs.defaultChatModel,
+    reasoningEffort: fallbackDefaultConfigs.reasoningEffort,
     fastModel: fallbackDefaultConfigs.fastModel,
     embeddingModel: fallbackDefaultConfigs.embeddingModel,
     imageModel: fallbackDefaultConfigs.imageModel,
@@ -33,8 +36,9 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
   }),
   actions: {
     async load() {
-      const [defaultChatModel, fastModel, embeddingModel, imageModel, speechModel, transcriptionModel, promptOptimizationModel, promptOptimizationPrompt] = await Promise.all([
+      const [defaultChatModel, reasoningEffort, fastModel, embeddingModel, imageModel, speechModel, transcriptionModel, promptOptimizationModel, promptOptimizationPrompt] = await Promise.all([
         getDefaultChatModel(),
+        getDefaultReasoningEffort(),
         getFastModel(),
         getEmbeddingModel(),
         getImageModel(),
@@ -44,6 +48,7 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
         getPromptOptimizationPrompt(),
       ]);
       this.defaultChatModel = migrateModelRef(defaultChatModel);
+      this.reasoningEffort = reasoningEffort;
       this.fastModel = migrateModelRef(fastModel || defaultChatModel);
       this.embeddingModel = migrateModelRef(embeddingModel);
       this.imageModel = migrateModelRef(imageModel);
@@ -65,6 +70,10 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
     async setDefaultChatModel(model: string) {
       this.defaultChatModel = model;
       await setDefaultChatModel(model);
+    },
+    async setReasoningEffort(reasoningEffort: ReasoningEffort) {
+      this.reasoningEffort = reasoningEffort;
+      await setDefaultReasoningEffort(reasoningEffort);
     },
     async setFastModel(model: string) {
       this.fastModel = model;

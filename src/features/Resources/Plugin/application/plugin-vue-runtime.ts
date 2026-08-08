@@ -47,24 +47,6 @@ export function compilePluginVueFile(
   }
 }
 
-export function resolvePluginConversationOverride(
-  plugins: Plugin[],
-): PluginVueRuntimeResult {
-  const diagnostics: string[] = [];
-  for (const plugin of plugins.filter((item) => item.enabled)) {
-    const override = findPluginNodeByPath(
-      plugin.root,
-      pluginConventions.override,
-    );
-    if (override?.kind !== "file") continue;
-    if (isPassthroughOverride(override.content)) continue;
-    const result = compilePluginVueFile(plugin, override);
-    diagnostics.push(...result.diagnostics.map((item) => `${plugin.name}：${item}`));
-    if (result.component) return { component: result.component, diagnostics };
-  }
-  return { component: null, diagnostics };
-}
-
 export function resolvePluginComponentByName(
   plugin: Plugin,
   name: string,
@@ -84,13 +66,6 @@ export function resolvePluginComponentByName(
   return file
     ? compilePluginVueFile(plugin, file)
     : { component: null, diagnostics: [`插件组件不存在：${name}`] };
-}
-
-function isPassthroughOverride(content: unknown) {
-  if (typeof content !== "string") return false;
-  return content
-    .replace(/\s+/g, "")
-    .toLocaleLowerCase() === "<template><slot/></template>";
 }
 
 function compilePluginComponentRegistry(

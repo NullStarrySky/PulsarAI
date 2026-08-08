@@ -5,12 +5,8 @@ import {
   builtinCorePluginId,
   usePluginStore,
 } from "@/features/Resources/Plugin/application/plugin-store";
-import {
-  findPluginNodeByPath,
-  pluginConventions,
-  pluginFileType,
-  type Plugin,
-} from "@/features/Resources/Plugin/domain/plugin-types";
+import type { Plugin } from "@/features/Resources/Plugin/domain/plugin-types";
+import { pluginGenerateFile } from "@/features/Resources/Plugin/domain/plugin-runtime";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { runConversationGeneration } from "./conversation-generation";
 import { buildConversationResourceContext } from "./conversation-resource-context";
@@ -23,7 +19,6 @@ import type {
   ChatMessageContainer,
   ChatMessageType,
   ConversationKind,
-  ConversationReasoningEffort,
   ConversationRendererId,
   ConversationResourceBinding,
   FilePart,
@@ -32,6 +27,7 @@ import type {
   PackageCategory,
   Role,
 } from "../domain/conversation-types";
+import { formatChatMessageError } from "../domain/conversation-types";
 
 const categoryTable = "resource_package_categories";
 const packageTable = "resource_packages";
@@ -53,7 +49,7 @@ function createMessage(content = "", type: ChatMessageType = "message"): ChatMes
   return {
     id: crypto.randomUUID(),
     type,
-    content,
+    content: type === "error" ? formatChatMessageError(content) : content,
     meta: {
       steps: [],
     },
@@ -102,28 +98,13 @@ function createContainer(input: {
   };
 }
 
-function createDefaultPackage(): CharacterPackage {
-  return {
-    id: crypto.randomUUID(),
-    name: "默认角色包",
-    icon: "",
-    description: "用于普通对话的默认会话容器。",
-    categoryId: null,
-    order: 0,
-    conversations: [],
-    pluginId: "",
-    mainPluginId: builtinCorePluginId,
-    enabledGlobalPluginIds: [],
-    syncEnabled: true,
-  };
-}
-
 function pluginItems(store: ReturnType<typeof usePluginStore>) {
   return (store as unknown as { plugins: Plugin[] }).plugins;
 }
 
 function comparePackages(a: CharacterPackage, b: CharacterPackage) {
-  return (a.order ?? Number.POSITIVE_INFINITY) - (b.order ?? Number.POSITIVE_INFINITY)
+  return Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))
+    || (a.order ?? Number.POSITIVE_INFINITY) - (b.order ?? Number.POSITIVE_INFINITY)
     || a.name.localeCompare(b.name, "zh-Hans")
     || a.id.localeCompare(b.id);
 }
@@ -146,7 +127,7 @@ export const useConversationStore = defineStore("conversation", {
   }),
   getters: {
     activePackage: (state) =>
-      state.packages.find((item) => item.id === state.activePackageId) ?? state.packages[0],
+      state.packages.find((item) => item.id === state.activePackageId),
     activeConversation: (state) =>
       state.conversations.find((item) => item.id === state.activeConversationId),
     activeContainer: (state) =>
@@ -168,7 +149,10 @@ export const useConversationStore = defineStore("conversation", {
           const keyword = state.conversationSearch.trim().toLowerCase();
           return !keyword || item.title.toLowerCase().includes(keyword);
         })
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+        .sort((a, b) =>
+          Number(Boolean(b.pinned)) - Number(Boolean(a.pinned))
+          || b.updatedAt.localeCompare(a.updatedAt),
+        );
     },
     activePath(state): ChatMessageContainer[] {
       const active = state.containers.find((item) => item.id === state.activeContainerId);
@@ -210,32 +194,24 @@ export const useConversationStore = defineStore("conversation", {
       }
     },
     async loadInitialData() {
-      const packages = await selectAll<CharacterPackage>(packageTable);
-      this.packages = packages.map((item) => item.value).sort(comparePackages);
-      this.packages = this.packages.map((item) => ({
-        ...item,
-        pluginId: item.pluginId ?? "",
-        mainPluginId: item.mainPluginId || builtinCorePluginId,
-        enabledGlobalPluginIds: item.enabledGlobalPluginIds ?? [],
-        syncEnabled: item.syncEnabled ?? true,
-      }));
-
-      if (this.packages.length === 0) {
-        const basePackage = createDefaultPackage();
-        this.packages.push(basePackage);
-        await this.persistPackage(basePackage);
-      }
-
-      const categories = await selectAll<PackageCategory>(categoryTable);
-      this.categories = categories.map((item) => item.value);
-      const conversations = await selectAll<Conversation>(conversationTable);
-      this.conversations = conversations.map((item) => ({
+      const [packages, categories, conversations, containers] = await Promise.all([
+        selectAll<CharacterPackage>(packageTable),
+        selectAll<PackageCategory>(categoryTable),
+        selectAll<Conversation>(conversationTable),
+        selectAll<ChatMessageContainer>(containerTable),
+      ]);
+      const nextPackages = packages.map(({ value }) => ({
+        ...value,
+        pluginId: value.pluginId ?? "",
+        mainPluginId: value.mainPluginId || builtinCorePluginId,
+        enabledGlobalPluginIds: value.enabledGlobalPluginIds ?? [],
+        syncEnabled: value.syncEnabled ?? true,
+      })).sort(comparePackages);
+      const nextConversations = conversations.map((item) => ({
         ...item.value,
         rendererId: item.value.rendererId ?? "chat",
-        reasoningEffort: item.value.reasoningEffort ?? "none",
       }));
-      const containers = await selectAll<ChatMessageContainer>(containerTable);
-      this.containers = containers.map((item) => ({
+      const nextContainers = containers.map((item) => ({
         ...item.value,
         content: item.value.content.map((message) => ({
           ...message,
@@ -243,51 +219,37 @@ export const useConversationStore = defineStore("conversation", {
         })),
       }));
 
-      this.packages.sort(comparePackages);
+      this.packages = nextPackages;
+      this.categories = categories.map((item) => item.value);
+      this.conversations = nextConversations;
+      this.containers = nextContainers;
+      if (!nextPackages.some((item) => item.id === this.activePackageId)) {
+        this.activePackageId = "";
+        this.activeConversationId = "";
+        this.activeContainerId = "";
+      }
       this.loaded = true;
-      await this.openPackage(this.packages[0].id);
-      void this.reconcilePackagePlugins().catch((error) => {
-        console.error("Unable to reconcile package plugins", error);
-      });
     },
-    async reconcilePackagePlugins() {
+    async ensurePackagePlugin(packageId: string) {
+      const item = this.packages.find((packageItem) => packageItem.id === packageId);
+      if (!item) throw new Error("角色包不存在。");
       const pluginStore = usePluginStore();
       await pluginStore.initialize();
-      for (const item of this.packages) {
-        const owned = pluginItems(pluginStore).filter(
-          (plugin) => plugin.packageId === item.id,
-        );
-        if (owned.length > 1) {
-          throw new Error(`角色包 ${item.name} 包含多个本地插件，请先整理数据。`);
-        }
-        const localPlugin = owned[0] ?? await pluginStore.createPlugin(item.id);
-        const configuredMain = pluginItems(pluginStore).find(
-          (plugin) => plugin.id === item.mainPluginId,
-        );
-        const nextMainPluginId = configuredMain
-          && (configuredMain.packageId === null || configuredMain.id === localPlugin.id)
-          ? configuredMain.id
-          : builtinCorePluginId;
-        const enabledGlobalPluginIds = [...new Set(item.enabledGlobalPluginIds)]
-          .filter((pluginId) => pluginItems(pluginStore).some(
-            (plugin) => plugin.id === pluginId && plugin.packageId === null,
-          ));
-        const nextMain = pluginItems(pluginStore).find(
-          (plugin) => plugin.id === nextMainPluginId,
-        );
-        if (nextMain?.packageId === null) enabledGlobalPluginIds.push(nextMain.id);
-        const normalizedGlobalPluginIds = [...new Set(enabledGlobalPluginIds)];
-        if (
-          item.pluginId !== localPlugin.id
-          || item.mainPluginId !== nextMainPluginId
-          || JSON.stringify(item.enabledGlobalPluginIds) !== JSON.stringify(normalizedGlobalPluginIds)
-        ) {
-          item.pluginId = localPlugin.id;
-          item.mainPluginId = nextMainPluginId;
-          item.enabledGlobalPluginIds = normalizedGlobalPluginIds;
-          await this.persistPackage(item);
-        }
+      if (pluginStore.loadError) {
+        throw new Error(`插件数据读取失败：${pluginStore.loadError}`);
       }
+      const owned = pluginItems(pluginStore).filter(
+        (plugin) => plugin.packageId === item.id,
+      );
+      if (owned.length > 1) {
+        throw new Error(`角色包 ${item.name} 包含多个本地插件，请先整理数据。`);
+      }
+      const localPlugin = owned[0] ?? await pluginStore.createPlugin(item.id);
+      if (item.pluginId !== localPlugin.id) {
+        item.pluginId = localPlugin.id;
+        await this.persistPackage(item);
+      }
+      return localPlugin;
     },
     async persistPackage(item: CharacterPackage) {
       await upsert(packageTable, item.id, item);
@@ -327,13 +289,6 @@ export const useConversationStore = defineStore("conversation", {
       this.activePackageId = "";
       this.activeConversationId = "";
       this.activeContainerId = "";
-      const basePackage = createDefaultPackage();
-      this.packages.push(basePackage);
-      await this.persistPackage(basePackage);
-      const localPlugin = await pluginStore.createPlugin(basePackage.id);
-      basePackage.pluginId = localPlugin.id;
-      await this.persistPackage(basePackage);
-      await this.openPackage(basePackage.id);
     },
     async createCategory(name = "新分类") {
       const item: PackageCategory = {
@@ -394,6 +349,7 @@ export const useConversationStore = defineStore("conversation", {
         description: input?.description?.trim(),
         categoryId: input?.categoryId ?? null,
         order: Math.max(-1, ...this.packages.map((packageItem) => packageItem.order ?? -1)) + 1,
+        pinned: false,
         conversations: [],
         pluginId: "",
         mainPluginId: builtinCorePluginId,
@@ -412,7 +368,7 @@ export const useConversationStore = defineStore("conversation", {
       }
       return item;
     },
-    async updatePackage(packageId: string, patch: Partial<Pick<CharacterPackage, "name" | "description" | "icon" | "categoryId" | "syncEnabled" | "mainPluginId" | "enabledGlobalPluginIds">>) {
+    async updatePackage(packageId: string, patch: Partial<Pick<CharacterPackage, "name" | "description" | "icon" | "categoryId" | "pinned" | "syncEnabled" | "mainPluginId" | "enabledGlobalPluginIds">>) {
       const item = this.packages.find((packageItem) => packageItem.id === packageId);
       if (!item) {
         return;
@@ -431,23 +387,8 @@ export const useConversationStore = defineStore("conversation", {
           ) {
             throw new Error("主要插件必须是当前角色资源插件或全局插件。");
           }
-          const context = findPluginNodeByPath(
-            mainPlugin.root,
-            pluginConventions.context,
-          );
-          const process = findPluginNodeByPath(mainPlugin.root, [
-            pluginConventions.agentProcessFolder,
-            pluginConventions.agentProcessEntry,
-          ]);
-          if (
-            context?.kind !== "file"
-            || pluginFileType(context.name) !== "markdown"
-            || process?.kind !== "file"
-            || pluginFileType(process.name) !== "javascript"
-            || typeof process.content !== "string"
-            || !process.content.trim()
-          ) {
-            throw new Error("主要插件必须包含有效的 context.md 和 agentprocess/index.js。");
+          if (!pluginGenerateFile(mainPlugin)) {
+            throw new Error("主要插件必须配置存在且有效的 runtime/generatePath。");
           }
         }
         if (patch.enabledGlobalPluginIds) {
@@ -525,7 +466,6 @@ export const useConversationStore = defineStore("conversation", {
         activate?: boolean;
         binding?: ConversationResourceBinding;
         kind?: ConversationKind;
-        reasoningEffort?: ConversationReasoningEffort;
         rendererId?: ConversationRendererId;
         title?: string;
       } = {},
@@ -542,12 +482,9 @@ export const useConversationStore = defineStore("conversation", {
         kind: input.kind ?? "chat",
         binding: input.binding ? clonePlain(input.binding) : undefined,
         title: input.title?.trim() || template?.title || "新对话",
+        pinned: false,
         isTemplate: false,
         rendererId: input.rendererId ?? template?.rendererId ?? "chat",
-        reasoningEffort:
-          input.reasoningEffort
-          ?? template?.reasoningEffort
-          ?? "none",
         rootContainerId: null,
         lastContainerId: null,
         createdAt: now(),
@@ -731,11 +668,11 @@ export const useConversationStore = defineStore("conversation", {
         Pick<
           Conversation,
           | "title"
+          | "pinned"
           | "isTemplate"
           | "kind"
           | "binding"
           | "rendererId"
-          | "reasoningEffort"
         >
       >,
     ) {
@@ -769,12 +706,6 @@ export const useConversationStore = defineStore("conversation", {
       rendererId: ConversationRendererId,
     ) {
       await this.updateConversation(conversationId, { rendererId });
-    },
-    async setConversationReasoningEffort(
-      conversationId: string,
-      reasoningEffort: ConversationReasoningEffort,
-    ) {
-      await this.updateConversation(conversationId, { reasoningEffort });
     },
     async deleteConversation(
       conversationId: string,
@@ -962,7 +893,11 @@ export const useConversationStore = defineStore("conversation", {
     },
     async deleteActiveMessage(containerId: string) {
       const container = this.containers.find((item) => item.id === containerId);
-      if (!container || container.activeMessage === null) {
+      if (
+        !container
+        || container.activeMessage === null
+        || container.content.length <= 1
+      ) {
         return;
       }
 
@@ -1116,7 +1051,7 @@ export const useConversationStore = defineStore("conversation", {
     ) {
       const trimmed = content.trim();
       if (
-        (!trimmed && attachments.length === 0 && !action)
+        !trimmed
         || this.generatingConversationIds.includes(this.activeConversationId)
       ) {
         return;
@@ -1146,7 +1081,7 @@ export const useConversationStore = defineStore("conversation", {
     ) {
       const trimmed = content.trim();
       if (
-        (!trimmed && attachments.length === 0 && !action)
+        !trimmed
         || this.generatingConversationIds.includes(conversationId)
       ) {
         return;
@@ -1269,13 +1204,12 @@ export const useConversationStore = defineStore("conversation", {
         const actionPart = promptMessage?.parts?.find(
           (part): part is ActionPart => part.type === "action",
         );
-        const result = await runConversationGeneration({
+        await runConversationGeneration({
           plugins: enabledPlugins,
           packageId: conversation.packageId,
           mainPluginId,
           conversationId: container.conversationid,
           conversation,
-          reasoningEffort: conversation.reasoningEffort,
           activePath: generationPath,
           chat: this.modelMessagesBefore(container),
           emptyContainer: container,
@@ -1296,27 +1230,27 @@ export const useConversationStore = defineStore("conversation", {
             this.containers,
           ),
           beforeGenerationMessage,
-          onStep: async (step) => {
-            message.meta.steps.push(step);
+          onReplyChange: async () => {
             await mutate?.(message, container);
             await this.persistContainer(container);
           },
         });
-        message.type = "message";
-        message.meta.generateInfo.modelName = result.modelName;
-        message.content = result.text;
-        void import("@/features/Statistic/application/statistic-store").then(({ useStatisticStore }) =>
-          useStatisticStore().recordEvent("message.assistant"),
-        );
-        void import("@/features/Misc/application/reply-completion-notifier").then(({ notifyReplyCompleted }) =>
-          notifyReplyCompleted({
-            title: "Pulsar",
-            body: result.text.slice(0, 120) || "回复已完成。",
-          }),
-        );
+        if (message.type !== "error") {
+          message.type = "message";
+          void import("@/features/Statistic/application/statistic-store").then(({ useStatisticStore }) =>
+            useStatisticStore().recordEvent("message.assistant"),
+          );
+          void import("@/features/Misc/application/reply-completion-notifier").then(({ notifyReplyCompleted }) =>
+            notifyReplyCompleted({
+              title: "Pulsar",
+              body: message.content.slice(0, 120) || "回复已完成。",
+            }),
+          );
+        }
       } catch (error) {
+        console.error("[PulsarAI generation] failed", error);
         message.type = "error";
-        message.content = error instanceof Error ? error.message : "生成失败";
+        message.content = formatChatMessageError(error);
       } finally {
         message.meta.generateInfo.timeUsed = Date.now() - start;
         await mutate?.(message, container);

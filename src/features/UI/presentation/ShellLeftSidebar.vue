@@ -51,14 +51,15 @@ onBeforeUnmount(() => stopResize?.());
     data-mobile-sidebar
   >
     <component :is="sidebarComponent" v-if="sidebarComponent" />
-    <button
+    <div
       v-if="!isMobileLayout && layout.leftSidebarOpen"
-      type="button"
-      class="absolute inset-y-0 right-0 w-1 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-border focus-visible:bg-ring focus-visible:outline-none"
+      class="absolute inset-y-0 right-0 w-1.5 cursor-col-resize touch-none group"
       role="separator"
       aria-label="调整左侧栏宽度"
       aria-orientation="vertical"
       @pointerdown="startResize"
-    />
+    >
+      <div class="h-full w-px bg-transparent transition-colors group-hover:bg-border group-focus-visible:bg-ring" />
+    </div>
   </div>
 </template>

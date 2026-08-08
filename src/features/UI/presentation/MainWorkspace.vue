@@ -15,7 +15,7 @@ const activeComponent = computed(() =>
 </script>
 
 <template>
-  <main class="flex min-h-0 flex-1 flex-col bg-background">
+  <main class="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
     <component :is="emptyComponent" v-if="!activeTab && emptyComponent" />
 
     <section

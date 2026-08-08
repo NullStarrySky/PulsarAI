@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "plugin": {
+    "id": "builtin-blank-plugin",
+    "packageId": null,
+    "name": "空白流程",
+    "icon": "",
+    "shortDescription": "仅包含生成入口的测试插件",
+    "enabled": true,
+    "builtIn": true
+  },
+  "ignore": [".pulsar-plugin.json"],
+  "nodes": {
+    "/": { "id": "builtin-blank-root", "icon": "", "treeOrder": 0 },
+    "manifest.json": { "id": "builtin-blank-manifest", "icon": "", "treeOrder": 0, "order": 100 },
+    "generate.js": { "id": "builtin-blank-generate", "icon": "", "treeOrder": 1, "order": 100 }
+  }
+}

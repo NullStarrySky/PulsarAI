@@ -9,12 +9,12 @@ import {
 } from "ai";
 import { z } from "zod";
 import { getDefaultChatModel } from "@/features/defaultConfigs/application/default-config-service";
+import type { ReasoningEffort } from "@/features/defaultConfigs/domain/default-config";
 import { hydrateModel } from "@/features/ModelConnection/application/model-ai";
 import type { SandboxEnvironment } from "@/features/Sandbox/domain/sandbox";
 import type {
   ChatMessage,
   ChatMessageContainer,
-  ConversationReasoningEffort,
   LocalStep,
   ToolCallResult,
 } from "@/features/Resources/Conversation/domain/conversation-types";
@@ -22,7 +22,8 @@ import { executeCodeAct } from "./code-act";
 
 export interface CreateDefaultAgentResourcesInput {
   environment?: SandboxEnvironment;
-  reasoningEffort?: ConversationReasoningEffort;
+  modelName?: string;
+  reasoningEffort?: ReasoningEffort;
   onStep?: (step: LocalStep | ToolCallResult) => void | Promise<void>;
   variableUpdate?: {
     execute: (source: string) => Promise<unknown>;
@@ -32,7 +33,7 @@ export interface CreateDefaultAgentResourcesInput {
 export interface DefaultAgentResources {
   model: LanguageModel;
   modelName: string;
-  reasoning: ConversationReasoningEffort;
+  reasoning: ReasoningEffort;
   instructions: string;
   tools: ToolSet;
   stopWhen: ReturnType<typeof isStepCount>;
@@ -85,7 +86,11 @@ function createCodeActTool(
         if (input.intent === "variable-update") {
           output = variableUpdate
             ? await variableUpdate.execute(input.code)
-            : { ok: false, error: "当前上下文没有可更新的 .data 实例。" };
+            : {
+                ok: true,
+                value: null,
+                skipped: "当前上下文没有可更新的 .data 实例。",
+              };
           const succeeded = Boolean(
             output && typeof output === "object" && "ok" in output
             && (output as { ok?: unknown }).ok === true,
@@ -128,7 +133,7 @@ function createCodeActTool(
 export async function createDefaultAgentResources(
   input: CreateDefaultAgentResourcesInput,
 ): Promise<DefaultAgentResources> {
-  const modelName = await getDefaultChatModel();
+  const modelName = input.modelName || await getDefaultChatModel();
   const reasoning = input.reasoningEffort ?? "none";
   await input.onStep?.({
     name: "agent:start",

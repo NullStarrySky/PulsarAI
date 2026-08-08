@@ -31,9 +31,9 @@ export const capabilities: CapabilityDefinition = {
     ],
     create: [{
       name: "create",
-      signature: "create(input?: { packageId?: string; kind?: 'chat' | 'task' | 'test'; binding?: ConversationResourceBinding }): Promise<ConversationSummary>",
-      description: "在指定角色包或当前角色包中新建并打开普通、任务或测试对话；任务与测试对话可显式绑定资源。",
-      example: "await conversation.create({ kind: 'task', binding: { packageId, resourceType: 'project', resourceId: packageId, resourcePath: '/project.json', resourceTitle: '项目' } })",
+      signature: "create(input?: { packageId?: string; kind?: 'chat' | 'test'; binding?: ConversationResourceBinding }): Promise<ConversationSummary>",
+      description: "在指定角色包或当前角色包中新建并打开普通或测试对话；测试对话可显式绑定资源。",
+      example: "await conversation.create({ kind: 'test', binding: { packageId, pluginId, resourceType: 'plugin', resourceId: pluginId, resourcePath: '/', resourceTitle: '插件测试' } })",
     }],
     send: [
       {
@@ -82,7 +82,7 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
   ...(granted.has("create") ? {
     create: async (input?: {
       packageId?: string;
-      kind?: "chat" | "task" | "test";
+      kind?: "chat" | "test";
       binding?: {
         packageId?: string;
         resourceType: string;

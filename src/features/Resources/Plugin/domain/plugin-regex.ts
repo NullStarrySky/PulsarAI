@@ -25,7 +25,7 @@ export interface ResolvedPluginRegexRule {
   pluginName: string;
   resourceId: string;
   path: string;
-  priority: number;
+  order: number;
   ruleIndex: number;
   rule: PluginRegexRule;
 }
@@ -123,7 +123,7 @@ export function collectPluginRegexRules(plugins: Plugin[]): PluginRegexResult<Re
 
   resources.sort(
     (a, b) =>
-      (b.file.priority ?? 100) - (a.file.priority ?? 100)
+      b.file.order - a.file.order
       || a.plugin.id.localeCompare(b.plugin.id)
       || a.file.id.localeCompare(b.file.id),
   );
@@ -169,7 +169,7 @@ export function collectPluginRegexRules(plugins: Plugin[]): PluginRegexResult<Re
         pluginName: plugin.name,
         resourceId: file.id,
         path,
-        priority: file.priority ?? 100,
+        order: file.order,
         ruleIndex,
         rule,
       }];

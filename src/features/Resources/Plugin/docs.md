@@ -1,149 +1,54 @@
-# Plugin Files
+# Plugin
 
-`src/features/Resources/Plugin` owns plugin storage, package activation, the file workspace, container declarations, and explicit cross-resource resolution.
+`插件系统.md` 是插件架构的唯一事实来源。本文件只记录源码落点。
 
-The Plugin capability inventory is defined in `domain/plugin-capability.ts` and re-exported by `capabilities.ts`. This lets the normal Capability runtime, VitePress, and the project-Agent prompt consume the same API signatures without importing Plugin stores into the Agent prompt module.
+## 数据与文件
 
-Each character package owns exactly one package-local resource plugin and explicitly selects one local or global main Plugin. The main Plugin owns both root context and the generation process; the remaining global Plugins contribute resources and extensions through an unordered activation set. `packageId: null` marks a global Plugin, while `builtIn` marks an editable system snapshot. Package-local descriptive metadata remains persisted for the shared schema but is hidden in the normal UI; global metadata remains visible.
+- `resource_plugins` 保存插件元信息，`resource_plugin_nodes` 保存稳定文件节点；路径不是身份。
+- 文件节点使用 `treeOrder` 排列文件树，使用 `order` 排列容器内容。
+- 每个文件最多有一个 `insertion: { target: string; condition?: string }`。条件列表保存为一个同步 JavaScript 布尔表达式，执行时可使用当前资源的 `imports` 以及 `include`、`exclude`、`probability`。
+- `containers.json` 声明 `{ id, title, scope, description, contentSuffixes }`。容器只是注册表，不自动参与生成。
+- `contentSuffixes` 支持复合后缀、`*` 和 `media`；空数组不接受资源。
+- 容器成员的完整路径是 `<pluginId>/<插件内路径>`；插件 ID 是可编辑的顶层路径段，同名文件不会跨插件冲突。
 
-Plugin test chats are not plugin-tree files. Conversation owns them as `kind: "test"` records with a resource binding and `pluginId`; the right-sidebar Task panel creates and manages them. A local plugin uses its owning package as the execution package, while a global plugin requires the user to choose an existing package. The bound plugin is included for that test run even when it is otherwise disabled, and deleting the plugin removes its associated test conversations.
+## 运行
 
-## File model
+- `manifest.json` 的 `runtime/generatePath` 指向唯一生成入口。缺少入口的插件不能设为主要插件；路径存在但不是有效 `.js` 文件时直接报错。
+- `generation/model` 与 `generation/reasoningEffort` 是固定配置键；留空时继承全局默认值，不写入 Conversation。
+- `appearance/background` 保存 `{ pluginId, path }`；留空或引用无效时回退到内置核心插件的同名固定配置。
+- manifest 的 `ModelSelect` 配置组件保存 `providerId/modelId`，支持用 `props.apiType` 限制模型类型；会话工具栏可直接选择具有有效生成入口的主要插件。
+- Conversation 创建空助手消息后，把原始消息、回复闭包、压缩记忆闭包、`imports`、Agent 与 Feature API 交给该入口。入口返回值不会写入消息；正文、内容部件、过程和模型标识必须通过 `reply` 写入。内置 Agent 使用 AI SDK 7 的 `runner.stream()` 与 `result.stream`，过程回调实时写入步骤，所有 step 的 `text-delta.text` 按到达顺序逐段追加正文；每段 reasoning 在结束后作为一个 `thinking` step 写入，避免按 token 创建大量步骤。流结束后仍可读取并覆盖完整正文以执行后处理。
+- Plugin Sandbox 的 `console` 只输出对象的有界摘要。调试具体内容时应显式选择并序列化必要字段，不能把带自引用的完整 `ctx` 交给 DevTools 长期持有。
+- 入口自行读取任意 `.chat.json`、容器或资源，处理上下文与 Regex，再决定是否调用模型。系统没有“主上下文入口”。
+- JavaScript 可用 `imports.resource` / `resourceById` 动态读取资源；`imports.containers(scope, "depth:*")` 可按 glob 取得多个容器。
 
-Each plugin owns one serializable nested `root` folder. Tree nodes persist `id`, `name`, `icon`, and structural `order`; files additionally store `content`, container `memberships`, and an independent numeric `priority` (default `100`), while folders store `children`. Literal `imports.*(...)` calls are scanned as dependency declarations instead of persisting a second dependency list.
+## 约定文件
 
-File behavior comes from the suffix:
+- `manifest.json`：配置和 `generatePath`。
+- `containers.json`：容器声明。
+- `regex.json`：可由生成流程读取的规则。
+- `*.chat.json`：角色消息数组，工作区提供结构化编辑器。
+- `*.data.json`：隔离、初值、包装器和变量更新定义。
+- `action/`、`tools/`、`background/`、`temp/`、`components/`：按 `插件系统.md` 的路径约定解释。
 
-- `.md` and `.markdown`: Markdown through Milkdown/Crepe;
-- `.data`: reusable JSON data definition with its own isolation level;
-- `.js`, `.mjs`, `.cjs`, `.ts`: JavaScript;
-- `.json`: JSON;
-- common image and video suffixes: media;
-- `.vue`: component source with template preview;
-- `.jsx`, `.tsx`: component source;
-- everything else: plain text.
+`.chat.json` 编译、`.data.json` 解析和编辑器均归 Plugin 所有。
 
-The source editor uses the bundled Fira Code variable font with contextual/common ligatures, tabular numbers, and a slashed zero. JavaScript and Vue source both use CodeMirror language parsing and the project-owned One Dark Pro semantic theme; this is currently a fixed renderer profile rather than a user-selectable appearance setting.
+## 内置插件
 
-Root `info.md` documents a plugin. Root `manifest.json` is the single plugin configuration file and has one `PluginManifestGroupContent[]` root shape; its built-in `appearance/background` item identifies one media resource with stable `pluginId` and plugin-local `path`. Root `containers.json` owns all JSON container declarations. Root `regex.json` owns ordered message post-processing rules. Root `context.md` is the role-aware Markdown context entry. Root `agentprocess/index.js` is the generation-process entry. Immediate `tools/<name>/tool.js + prompt.md` pairs define CodeAct-callable custom functions and their model-facing documentation. Root `Override.vue` replaces the default conversation content renderer, and `components/` owns reusable plugin Vue components. `action/` provides JavaScript process commands and Markdown composer-template commands, while `background/` provides media candidates.
+`builtIn/core` 是默认流程的可编辑源码：它读取压缩后的聊天记录和 `default.chat.json`，调用 `agent.prepare()`，显式创建 `ToolLoopAgent`，并把结果写入 Conversation 提供的空助手目标。
 
-## Persistence and search
+`builtIn/blank` 只有 `manifest.json` 与 `generate.js`，不声明容器，用于验证最小插件执行路径。
 
-SurrealDB is the plugin source of truth. `resource_plugins` stores plugin-level metadata and the stable root node ID; `resource_plugin_nodes` stores every folder and file independently with its stable node ID, `plugin_id`, `parent_id`, derived plugin-local path, kind, order, resource metadata, and content. A plugin write replaces its metadata and node set inside one transaction, so moves and renames cannot leave a mixed old/new tree. The complete tree is never duplicated into the plugin metadata row.
+`application/builtin-plugins.ts` 把内置文件夹及 `.pulsar-plugin.json` 的路径元信息映射为数据库插件。恢复内置插件时重新读取这份发布源码。
 
-The node table also stores rebuildable `path`, `name`, and indexed `search_text` fields derived from the canonical node value. The global command search queries these fields in SurrealDB, shows matching plugin resources separately from plugin metadata, and opens results through the stable `pluginId` and `nodeId`. Paths are searchable navigation data, not resource identity.
+`builtIn/` 是插件数据目录，不是应用 TypeScript 源码目录；`tsconfig.json` 明确排除其源码检查。Vite 仍通过 `application/builtin-plugins.ts` 的 `?raw` / `?url` glob 将这些数据打包进应用。
 
-Plugin navigation lives in the conversation right sidebar alongside the Conversation and Task tabs. Its Plugin tab renders the current package-local plugin as an expandable root folder, exposes its real activation switch, shows the default first-level structure, and keeps global plugin controls below it. Selecting a node opens that stable resource in the full Plugin workspace. The conversation left sidebar contains no plugin entry or alternate plugin mode.
+## 界面
 
-`agentprocess/` contains process steps such as `step1-prepare.js`, `step2-generate.js`, and `step3-finalize.js`. `index.js` explicitly imports and runs them with `api.runProcess(imports.resource("./step.js"), environmentOverrides?)`. Only source-scoped imported JavaScript resource values are accepted, and recursive process cycles are rejected.
+- 会话界面的顶栏资产按钮控制主画布右侧概念区域内的 `PluginAssetTreePanel` 浮动卡片。卡片以绝对定位覆盖会话画布、从右侧移入，和窗口右缘及 `724px` 中间区域保持间隙，使用圆角、完整边框与有界最大高度，不改变消息线程或输入栏宽度。它只显示当前角色包的本地插件，以及该角色包启用或选为主要插件的全局插件；文件树直接来自 Plugin Store 的数据库节点，树区域使用共享 `ScrollArea`。
+- 文件节点在 `PluginFileEditorDialog` 中打开；桌面端浮窗定位在资产面板左侧并允许双向拖拽缩放，内部编辑区随浮窗可用高度铺满；窄于 768px 时改为不可缩放的视口内全宽浮层。`PluginFileEditorSurface` 按精确约定路径和文件类型映射已有组件：`manifest.json`、`containers.json`、根 `regex.json`、`.chat.json` 使用结构化编辑器，Markdown 使用透明背景 Milkdown/Crepe，JavaScript、Vue、JSON 与数据文件使用 CodeMirror，媒体使用预览。所有保存仍通过 `pluginStore.updateNode()` 落到稳定节点。
+- 桌面运行时继续通过 Tauri/SurrealDB 读写 `resource_plugins` / `resource_plugin_nodes`；纯 Vite 只装载发布内置插件。所有插件加载、保存、删除和节点搜索会写入批量 `[Pulsar DB]` 摘要日志，便于比较数据库接入前后的卡顿。
 
-## Explicit imports
-
-Plugin files are never flattened into the Sandbox environment. Markdown macros and JavaScript use the same source-scoped functions:
-
-- `imports.resource("./relative.md")` reads a file relative to the current resource;
-- `imports.resourceById("resource-id")` reads a visible resource by stable ID;
-- `imports.container("local" | "global", "name")` reads a container from the owning plugin or enabled plugin set;
-- `imports.config.local("group", "content")` reads the source plugin's manifest value;
-- `imports.config.global("pluginId", "group", "content")` reads an enabled global plugin manifest value.
-
-Imported resources render through their normal string representation. Import arguments used for dependency discovery must be string literals; runtime resolution remains authoritative and reports missing resources, visibility errors, and cycles.
-
-Source editors complete and highlight the shared `imports` calls. Milkdown keeps ordinary Markdown semantics and no longer owns a second reference grammar.
-
-## Containers
-
-Every plugin owns one fixed UTF-8 JSON root `containers.json`:
-
-```json
-{
-  "containers": [
-    {
-      "name": "角色上下文",
-      "scope": "local",
-      "description": "角色身份、表达方式与持续对话所需的上下文。"
-    }
-  ]
-}
-```
-
-`description` is optional metadata. It is not a member value and is never injected into generation automatically. `imports.container(...)` completion displays it together with the container name, scope, and owning plugin.
-
-Containers are declarative namespaces. They do not own extractors, transformers, templates, Skill adapters, or other execution policy. Full content is read through `ctx.containers.read(...)` or `plugin.readContainer(...)`, and results always retain IDs, paths, sources, and priorities.
-
-Member resources store `{ container, alias, condition? }` rows in `PluginFile.memberships`. A condition references only `config:local/group/content` and either checks truthiness or JSON equality through `equals`. Membership is authoring metadata and never appears in file content or Markdown rendering.
-
-`local` is visible within the owning plugin and `global` is visible across the enabled plugin set. Container visibility is never folder-relative. Scope controls lookup and never performs automatic injection.
-
-A resolved container is a lazy namespace:
-
-- `get(alias)` returns one member resource;
-- `list()` returns declared resource aliases.
-
-Referenced containers remain namespaced. Duplicate declarations, duplicate aliases, missing targets, plugin-root path escapes, and recursive render cycles produce diagnostics instead of last-write-wins behavior.
-
-Container membership insertion is sorted by file priority from high to low. Equal priorities use stable plugin IDs, paths, and resource IDs rather than user-configurable plugin order. This ordering also determines diagnostic presentation when aliases collide.
-
-The shared resolver also exposes container inspection data to both the workspace and the Plugin capability:
-
-- `plugin.listContainers()` returns each active container's query ID, definition-file ID/path, source plugin, description, direct-use count, and content count;
-- `plugin.getContainer(containerId)` returns direct documents that reference the container and the currently enabled member contents, including member conditions;
-- `plugin.listContainerContents(containerId, page)` pages the member index without rendering full content, while `plugin.readContainer(containerId, resourceIds?)` reads all or selected members through their standard renderer;
-- every returned document or content row includes its resource `id`, plugin-local `path`, type, priority, and source plugin so an Agent can continue with `plugin.getTree(...)`, `imports.resourceById(...)`, or the current plugin's `plugin.read(path)`.
-- plugin-process-only CRUD uses `createContainer`, `updateContainer`, and `removeContainer`; content membership uses `addContainerContent`, `updateContainerContent`, and `removeContainerContent`, while keeping declarations in `containers.json` and membership rows on files.
-
-A file can independently set `contextPlacement.depth` in resource metadata. Its numeric K is a non-negative integer measured from the bottom message boundary; zero appends after the base messages. K is not a declaration in `containers.json` and not an ordinary membership. All anchors are computed from the same unmodified base list, file names must be unique within one K, same-depth resources keep normal priority/stable ordering, role-aware Markdown stays role-aware, and Regex runs after insertion.
-- `plugin.getPackageConfiguration()`, `plugin.setMainPlugin(pluginId)`, and `plugin.setGlobalPluginEnabled(pluginId, enabled)` expose the package's stable local/main/global activation IDs without reintroducing plugin ordering.
-
-## Workspace
-
-`presentation/PluginWorkspacePage.vue` keeps the two-pane tree/editor workflow:
-
-- search, create/import, native and browser file drop, nesting, collapse, and drag move remain in the left tree;
-- the desktop file tree can collapse completely from the selected-file bar, while the mobile layout continues to switch between full tree and full editor views;
-- the selected-file top bar owns the `contextPlacement` switch and numeric depth editor, and reports same-depth filename collisions inline; tree-row hover and long-press placement popovers are removed;
-- plugin identity and plugin-level actions stay in the owning plugin list instead of consuming a second workspace header;
-- the selected file owns name/path/id/icon and content editing;
-- the selected file properties expose priority through minus, value, and plus controls;
-- root `containers.json` switches between raw JSON and a compact filename-selected structured editor for local/global container names, one-line descriptions, and namespaced references; each container's details show direct-use documents and resolved contents with counts, source plugins, priorities, and file navigation; the convention file cannot be renamed, moved, or deleted;
-- every ordinary file exposes one insertion selector in the editor top bar: none, one position container, or one numeric depth. Position choices list visible local/global container names and descriptions; active insertion exposes condition and priority buttons, while the tree row shows the selected insertion destination;
-- root `regex.json` uses a filename-selected structured editor for find/replace expressions, message range, one-based depth bounds, rule order, and `applyOnRending`;
-- root `manifest.json` switches between its GroupContent[] source and a settings-style preview. Built-in `Switch`, `Checkbox`, `Input`, `Textarea`, `Select`, `Slider`, and `MediaSelect` names map to singleton shadcn wrappers; other names resolve template-only Vue files from the owning plugin's `components/` folder;
-- root `Override.vue` and ordinary `.vue` files switch between source and template preview; preview registers template-only components from `components/` and does not execute `<script>`;
-- root `manifest.json`, `containers.json`, `regex.json`, `Override.vue`, `components/`, and `tools/` cannot be renamed, moved, or deleted;
-- Markdown defaults to the Milkdown WYSIWYG editor and supports macros; plugin Markdown also exposes a source/preview toggle for editing leading YAML frontmatter and literal `imports` calls, which are preserved but omitted from rendered content;
-- `.data` and ordinary JavaScript/JSON use code-oriented editing; root `regex.json` switches between its structured renderer and raw JSON, while Vue switches between source and template preview;
-- media files provide direct image or video preview;
-- built-in files are editable, while the plugin header offers a full restore-to-default action.
-
-Below 768px the shared responsive store switches explicitly between tree and editor. Editor content sits in a centered, bounded `bg-background` card over a muted canvas, matching an Obsidian-like document surface with an explicit narrow-window fallback.
-
-The VitePress Plugin guide registers `PluginApiReference.vue`. Its human view renders the complete shared Plugin capability definition, including types, scope notes, query APIs, tree APIs, and Container CRUD. Its send-preview view renders the exact Plugin API prompt produced for the model instead of maintaining a second handwritten inventory. Placeholder SVGs mark the document-graph, container-details, and CodeAct screenshots that can be replaced later.
-
-## Runtime
-
-`application/plugin-reference-resolver.ts` indexes enabled plugin files without evaluating them. It reads declarations only from each root `containers.json`, reports JSON-path diagnostics, reads memberships from file metadata, statically scans literal `imports.*(...)` calls, then resolves resources at runtime. Rendering is cached per resolution task and records a dependency trace.
-
-Normalization preserves the stored tree shape. It does not move declarations, create convention files, or translate another process entry. Container declarations are parsed only from root `containers.json`; plugin generation discovers only root `agentprocess/index.js`.
-
-Enabled root `regex.json` files form one conventional regex container. Files are sorted by descending file priority and then stable plugin/resource IDs. Generation applies every valid rule after the final role-preserving context message list is assembled; conversation and task-panel rendering applies only rules whose persisted field is exactly `applyOnRending: true`. Rendering never rewrites the stored message.
-
-Immediate subfolders of root `tools/` form the custom-tool containers. A tool is active only when the same folder contains exact `tool.js` and `prompt.md` files. Newly created convention files receive global `自定义工具` / `自定义工具文档` memberships for inspection, while runtime discovery remains based on the exact path convention. `prompt.md` is resolved through the normal reference resolver and emitted in one `# 自定义工具` system message with function/prompt IDs and paths. `tool.js` must evaluate to one function; it executes in the authorized Sandbox with a source-plugin-scoped Plugin API and is exposed at `ctx.tools[name]`. Priority and collision handling never use last-write-wins.
-
-`application/plugin-generation-environment.ts` supplies:
-
-1. the authorized base API and active conversation values;
-2. the reference resolver;
-3. the explicitly selected main plugin's root `context.md`;
-4. that same main plugin's non-empty root `agentprocess/index.js`;
-5. the selected action process, if any.
-
-Conversation compiles `context.md` directly to role-preserving messages. `:::pulsar role=...` fences select roles; importing a `.data` resource hydrates its wrapper facade and derives the state instance from its definition and source context. The selected action or process entry receives the same source-scoped `imports` object as Markdown macros.
-
-JavaScript uses ordinary `imports.*(...)` calls and is not passed through text macro expansion, so `{{...}}` and `[[...]]` are not evaluated inside `.js` files. Imported Markdown, text, or component resources still apply their own renderer and macro behavior when converted to a string.
-
-`Agent/application/default-agent.ts` exposes exactly one AI SDK tool, `codeAct`. Its input must be one JavaScript function with an explicit `return`. `Agent/application/code-act.ts` validates that shape and executes it against the already-authorized Sandbox environment. The model receives `{ ok: true, value }` or `{ ok: false, error }`; Feature APIs, Plugin APIs, ask-user interaction, and Skill/MCP extensions remain ordinary functions in that environment rather than separate model tools.
-
-Plugin custom tools follow the same rule: they are functions inside `ctx.tools`, not model-visible AI SDK tools. The model learns their contract from the generated custom-tool documentation block and calls them inside CodeAct.
-
-The restorable global core plugin supplies fallback context, a global base container, actions, background media, and the visible default Agent workflow. Project-aware task context is assembled by the Agent and Conversation features rather than by a package-local system plugin.
+- 文件头使用一个可直接选择“不插入”或目标容器的选择器；条件使用 AND/OR 列表编辑器，并保留 `order` 调整。
+- 深度 0 至 6 是普通内置容器，不重复实现一套数字编辑器。
+- `containers.json` 编辑器使用紧凑卡片展示标题、ID、作用域、单行说明和后缀限制；资源明细按需展开，并保留稳定 ID 和路径导航。

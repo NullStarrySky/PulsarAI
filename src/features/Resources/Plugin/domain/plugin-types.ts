@@ -1,35 +1,18 @@
-import type { PluginManifestValue } from "./plugin-manifest";
-
 export interface PluginTreeNodeBase {
   id: string;
   name: string;
   icon: string;
-  order: number;
+  treeOrder: number;
 }
 
 export interface PluginFile extends PluginTreeNodeBase {
   kind: "file";
   content: unknown;
-  priority: number;
-  memberships: PluginFileMembership[];
-  contextConfig?: {
-    compressionThreshold: number;
+  order: number;
+  insertion?: {
+    target: string;
+    condition?: string;
   };
-  contextPlacement?: {
-    depth: number;
-    condition?: PluginInsertionCondition;
-  };
-}
-
-export interface PluginInsertionCondition {
-  reference: string;
-  equals?: PluginManifestValue;
-}
-
-export interface PluginFileMembership {
-  container: string;
-  alias: string;
-  condition?: PluginInsertionCondition;
 }
 
 export interface PluginFolder extends PluginTreeNodeBase {
@@ -63,6 +46,7 @@ export interface ResolvedPluginAction {
 
 export type PluginFileType =
   | "markdown"
+  | "chat"
   | "data"
   | "javascript"
   | "json"
@@ -71,14 +55,9 @@ export type PluginFileType =
   | "text";
 
 export const pluginConventions = {
-  info: "info.md",
   manifest: "manifest.json",
   containers: "containers.json",
   regex: "regex.json",
-  context: "context.md",
-  override: "Override.vue",
-  agentProcessFolder: "agentprocess",
-  agentProcessEntry: "index.js",
   actionFolder: "action",
   toolsFolder: "tools",
   toolEntry: "tool.js",
@@ -88,7 +67,6 @@ export const pluginConventions = {
 } as const;
 
 const markdownExtensions = new Set(["md", "markdown"]);
-const dataExtensions = new Set(["data"]);
 const javascriptExtensions = new Set(["js", "mjs", "cjs", "ts"]);
 const jsonExtensions = new Set(["json"]);
 const mediaExtensions = new Set([
@@ -113,9 +91,11 @@ export function pluginFileExtension(name: string) {
 }
 
 export function pluginFileType(name: string): PluginFileType {
+  const normalized = name.trim().toLowerCase();
+  if (normalized.endsWith(".chat.json")) return "chat";
+  if (normalized.endsWith(".data.json")) return "data";
   const extension = pluginFileExtension(name);
   if (markdownExtensions.has(extension)) return "markdown";
-  if (dataExtensions.has(extension)) return "data";
   if (javascriptExtensions.has(extension)) return "javascript";
   if (jsonExtensions.has(extension)) return "json";
   if (mediaExtensions.has(extension)) return "media";
@@ -127,7 +107,7 @@ export function sortPluginTreeNodes(nodes: PluginTreeNode[]) {
   return [...nodes].sort(
     (a, b) =>
       Number(b.kind === "folder") - Number(a.kind === "folder")
-      || (a.order ?? 0) - (b.order ?? 0)
+      || (a.treeOrder ?? 0) - (b.treeOrder ?? 0)
       || a.name.localeCompare(b.name, "zh-Hans")
       || a.id.localeCompare(b.id),
   );

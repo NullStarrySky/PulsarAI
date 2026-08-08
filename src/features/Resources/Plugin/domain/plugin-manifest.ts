@@ -26,6 +26,35 @@ export interface PluginManifestGroupContent {
 
 export type PluginManifest = PluginManifestGroupContent[];
 
+export const pluginManifestFixedSettings = {
+  model: {
+    groupId: "generation",
+    groupTitle: "生成",
+    contentId: "model",
+    title: "模型",
+    description: "留空时继承全局默认聊天模型。",
+    component: "ModelSelect",
+  },
+  reasoningEffort: {
+    groupId: "generation",
+    groupTitle: "生成",
+    contentId: "reasoningEffort",
+    title: "推理强度",
+    description: "留空时继承全局推理强度。",
+    component: "ReasoningEffortSelect",
+  },
+  background: {
+    groupId: "appearance",
+    groupTitle: "外观",
+    contentId: "background",
+    title: "会话背景",
+    description: "留空时读取内置插件的背景配置。",
+    component: "MediaSelect",
+  },
+} as const;
+
+export type PluginManifestFixedSetting = keyof typeof pluginManifestFixedSettings;
+
 export interface PluginManifestDiagnostic {
   path: string;
   message: string;
@@ -170,6 +199,53 @@ export function manifestValueAt(
     ?.content.find((item) => item.id === contentId);
   if (!content) throw new Error(`Manifest 配置不存在：${groupId}/${contentId}`);
   return cloneJsonValue(content.value);
+}
+
+export function pluginManifestFixedValue(
+  manifest: PluginManifest,
+  setting: PluginManifestFixedSetting,
+) {
+  const definition = pluginManifestFixedSettings[setting];
+  const content = manifest
+    .find((item) => item.group.id === definition.groupId)
+    ?.content.find((item) => item.id === definition.contentId);
+  return content ? cloneJsonValue(content.value) : null;
+}
+
+export function setPluginManifestFixedValue(
+  manifest: PluginManifest,
+  setting: PluginManifestFixedSetting,
+  value: PluginManifestValue,
+) {
+  if (!isJsonValue(value)) throw new Error("Manifest 配置只能写入 JSON 值。");
+  const definition = pluginManifestFixedSettings[setting];
+  let group = manifest.find((item) => item.group.id === definition.groupId);
+  if (!group) {
+    group = {
+      group: { id: definition.groupId, title: definition.groupTitle },
+      content: [],
+    };
+    manifest.push(group);
+  }
+  let content = group.content.find((item) => item.id === definition.contentId);
+  if (!content) {
+    content = {
+      id: definition.contentId,
+      title: definition.title,
+      description: definition.description,
+      component: definition.component,
+      value: null,
+    };
+    group.content.push(content);
+  }
+  content.value = cloneJsonValue(value);
+  return manifest;
+}
+
+export function pluginGeneratePath(manifest: PluginManifest) {
+  const value = manifestValueAt(manifest, "runtime", "generatePath");
+  if (typeof value !== "string" || !value.trim()) return null;
+  return value.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
 }
 
 export function setManifestValue(

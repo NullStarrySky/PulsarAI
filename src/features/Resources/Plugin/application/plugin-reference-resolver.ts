@@ -1,12 +1,10 @@
-import type { ModelMessage } from "ai";
 import {
-  compileContextDocumentSource,
+  compilePluginChatContext,
   createContextDataFacade,
   type ContextDocumentDataBinding,
-  type ContextDocumentCompileOptions,
-  type ContextDocumentCompileResult,
+  type PluginChatCompileResult,
   type ContextDataValue,
-} from "@/features/Resources/InteractiveDoc/domain/interactive-document";
+} from "@/features/Resources/Plugin/domain/plugin-chat";
 import {
   parsePluginDataDefinition,
   pluginDataInstanceKey,
@@ -16,15 +14,17 @@ import {
   manifestValueAt,
   parsePluginManifest,
   parsePluginManifestReference,
-  type PluginManifestValue,
 } from "@/features/Resources/Plugin/domain/plugin-manifest";
 import {
+  executeSandboxCode,
   resolveSandboxText,
   type SandboxEnvironment,
 } from "@/features/Sandbox/domain/sandbox";
+import { createPluginConditionEnvironment } from "@/features/Resources/Plugin/application/plugin-condition-environment";
 import {
   parsePluginContainerDefinitions,
   parseContainerReferenceTarget,
+  pluginFileMatchesContainerSuffix,
   type PluginContainerDeclaration,
   type PluginContainerScope,
 } from "@/features/Resources/Plugin/domain/plugin-reference";
@@ -59,19 +59,20 @@ export interface GenerationResourceValue {
   name: string;
   icon: string;
   content: unknown;
-  priority: number;
+  order: number;
   pluginId: string;
   pluginName: string;
   path: string;
   type: ReturnType<typeof pluginFileType>;
-  contextConfig?: PluginFile["contextConfig"];
   toString(): string;
 }
 
 export interface PluginContainerValue {
   readonly name: string;
+  readonly title: string;
+  readonly contentSuffixes: string[];
   readonly scope: PluginContainerScope;
-  get(alias: string): unknown;
+  get(path: string): unknown;
   list(): { resources: string[] };
   toString(): string;
 }
@@ -81,19 +82,21 @@ export interface PluginContainerResourceQuery {
   name: string;
   path: string;
   type: ReturnType<typeof pluginFileType>;
-  priority: number;
+  order: number;
   pluginId: string;
   pluginName: string;
 }
 
 export interface PluginContainerContentQuery extends PluginContainerResourceQuery {
-  alias: string;
-  condition?: PluginFile["memberships"][number]["condition"];
+  containerPath: string;
+  condition?: string;
 }
 
 export interface PluginContainerQuery {
   id: string;
   name: string;
+  title: string;
+  contentSuffixes: string[];
   scope: PluginContainerScope;
   description?: string;
   pluginId: string;
@@ -138,7 +141,7 @@ interface ContainerRecord {
   source: ResourceRecord;
   resources: Map<string, {
     record: ResourceRecord;
-    membership: PluginFile["memberships"][number];
+    condition?: string;
   }>;
 }
 
@@ -246,11 +249,11 @@ export class PluginReferenceResolver {
       .filter((record) => this.resourceUsesContainer(record, container))
       .map((record) => this.createResourceQuery(record));
     const contents = [...container.resources.entries()].map(
-      ([alias, entry]) => ({
-        alias,
+      ([containerPath, entry]) => ({
+        containerPath,
         ...this.createResourceQuery(entry.record),
-        ...(entry.membership.condition
-          ? { condition: structuredClone(entry.membership.condition) }
+        ...(entry.condition
+          ? { condition: entry.condition }
           : {}),
       }),
     );
@@ -294,14 +297,14 @@ export class PluginReferenceResolver {
       (item) => item.id === containerId,
     );
     if (!container) throw new Error(`容器不存在：${containerId}`);
-    const entries = [...container.resources.entries()].map(([alias, entry]) => ({
-      alias,
+    const entries = [...container.resources.entries()].map(([containerPath, entry]) => ({
+      containerPath,
       entry,
       query: {
-        alias,
+        containerPath,
         ...this.createResourceQuery(entry.record),
-        ...(entry.membership.condition
-          ? { condition: structuredClone(entry.membership.condition) }
+        ...(entry.condition
+          ? { condition: entry.condition }
           : {}),
       } satisfies PluginContainerContentQuery,
     }));
@@ -327,55 +330,6 @@ export class PluginReferenceResolver {
         content: this.renderResource(item.entry.record.file.id),
       })),
     };
-  }
-
-  compileDepthContainerMessages(): Array<{
-    depth: number;
-    messages: ModelMessage[];
-  }> {
-    const depthContainers = new Map<number, ResourceRecord[]>();
-    for (const record of [...this.records].sort(compareResourceRecords)) {
-      const depth = record.file.contextPlacement?.depth;
-      if (depth == null) continue;
-      if (!this.membershipEnabled(record, record.file.contextPlacement?.condition)) {
-        continue;
-      }
-      const records = depthContainers.get(depth) ?? [];
-      const duplicate = records.find(
-        (item) => item.file.name.toLocaleLowerCase()
-          === record.file.name.toLocaleLowerCase(),
-      );
-      if (duplicate) {
-        throw new Error(
-          `深度容器 ${depth} 内容名称冲突：${record.file.name}（${duplicate.plugin.name} / ${record.plugin.name}）`,
-        );
-      }
-      records.push(record);
-      depthContainers.set(depth, records);
-    }
-    return [...depthContainers.entries()]
-      .sort(([left], [right]) => right - left)
-      .map(([depth, records]) => ({
-        depth,
-        messages: records.flatMap((record) => {
-          const type = pluginFileType(record.file.name);
-          if (type === "markdown") {
-            return this.compileContextDocument(record.file.id).messages;
-          }
-          if (type === "text" || type === "component") {
-            return [{
-              role: "system" as const,
-              content: this.renderResource(record.file.id),
-            }];
-          }
-          this.diagnostics.push({
-            pluginId: record.plugin.id,
-            resourceId: record.file.id,
-            message: `深度容器只接受 Markdown、文本或组件资源：${record.path}`,
-          });
-          return [];
-        }),
-      }));
   }
 
   private resolveResourcePath(from: ResourceRecord, requestedPath: string) {
@@ -421,26 +375,28 @@ export class PluginReferenceResolver {
     );
   }
 
-  compileContextDocument(
+  compileChatContext(
     resourceId: string,
-    options: Pick<ContextDocumentCompileOptions, "dataOverrides"> = {},
-  ): ContextDocumentCompileResult {
+    options: {
+      dataOverrides?: Record<string, ContextDataValue>;
+      environment?: SandboxEnvironment;
+    } = {},
+  ): PluginChatCompileResult {
     const record = this.requireRecord(resourceId);
-    if (pluginFileType(record.file.name) !== "markdown") {
-      throw new Error(`上下文资源不是 Markdown：${record.path}`);
+    if (pluginFileType(record.file.name) !== "chat") {
+      throw new Error(`上下文资源不是 .chat.json：${record.path}`);
     }
     this.tracedResourceIds.add(record.file.id);
     if (options.dataOverrides) this.setDataOverrides(options.dataOverrides);
-    const result = compileContextDocumentSource(record.declarationSource, {
+    return compilePluginChatContext(record.file.content, {
       environment: {
         ...this.environment,
+        ...(options.environment ?? {}),
         imports: this.importsForResource(record.file.id),
       },
       dataOverrides: options.dataOverrides,
       dataBindings: this.dataBindingsForResource(record.file.id),
     });
-    this.addCompileDiagnostics(record, result);
-    return result;
   }
 
   dataBindingsForResource(resourceId: string): ResolvedPluginDataBinding[] {
@@ -476,6 +432,8 @@ export class PluginReferenceResolver {
       if (seen.has(stateKey)) return [];
       seen.add(stateKey);
       return [{
+        id: stateKey,
+        name: stateKey,
         alias: stateKey,
         dataId: target.file.id,
         stateKey,
@@ -503,6 +461,10 @@ export class PluginReferenceResolver {
         this.createContainerValue(
           this.resolveContainer(`container:${scope}/${name}`, from),
           from,
+        ),
+      containers: (scope: PluginContainerScope, pattern: string) =>
+        this.resolveContainers(scope, pattern, from).map((container) =>
+          this.createContainerValue(container, from)
         ),
       config: Object.freeze({
         local: (groupId: string, contentId: string) =>
@@ -647,24 +609,24 @@ export class PluginReferenceResolver {
         message: `${diagnostic.path}：${diagnostic.message}`,
       })));
       for (const declaration of definitions.containers) {
-        const key = containerKey(declaration.scope, declaration.name, record);
+        const key = containerKey(declaration.scope, declaration.id, record);
         if (this.containers.has(key)) {
           this.diagnostics.push({
             pluginId: record.plugin.id,
             resourceId: record.file.id,
-            message: `容器声明冲突：${declaration.scope}/${declaration.name}`,
+            message: `容器声明冲突：${declaration.scope}/${declaration.id}`,
           });
           continue;
         }
         this.containers.set(key, {
           id: createPluginContainerQueryId(
             declaration.scope,
-            declaration.name,
+            declaration.id,
             record.plugin.id,
             record.directory,
           ),
           key,
-          name: declaration.name,
+          name: declaration.id,
           scope: declaration.scope,
           declaration,
           source: record,
@@ -676,29 +638,25 @@ export class PluginReferenceResolver {
     for (
       const record of [...this.records].sort(
         (a, b) =>
-          b.file.priority - a.file.priority
+          b.file.order - a.file.order
           || a.plugin.id.localeCompare(b.plugin.id)
           || a.path.localeCompare(b.path)
           || a.file.id.localeCompare(b.file.id),
       )
     ) {
-      for (const membership of record.file.memberships ?? []) {
+      const insertion = record.file.insertion;
+      if (insertion) {
         try {
-          if (!this.membershipEnabled(record, membership.condition)) continue;
+          if (!this.insertionEnabled(record, insertion.condition)) continue;
           const container = this.resolveContainer(
-            membership.container,
+            insertion.target,
             record,
           );
-          const alias =
-            membership.alias
-            || record.file.name.replace(/\.[^.]+$/, "")
-            || record.file.id;
-          if (container.resources.has(alias)) {
-            throw new Error(
-              `容器 ${container.name} 中的资源别名冲突：${alias}`,
-            );
+          if (!pluginFileMatchesContainerSuffix(record.file.name, container.declaration.contentSuffixes)) {
+            throw new Error(`容器 ${container.name} 不接受 ${record.file.name}`);
           }
-          container.resources.set(alias, { record, membership });
+          const containerPath = `${record.plugin.id}/${record.path}`;
+          container.resources.set(containerPath, { record, condition: insertion.condition });
         } catch (error) {
           this.diagnostics.push({
             pluginId: record.plugin.id,
@@ -711,19 +669,16 @@ export class PluginReferenceResolver {
 
   }
 
-  private membershipEnabled(
+  private insertionEnabled(
     record: ResourceRecord,
-    condition: PluginFile["memberships"][number]["condition"],
+    condition?: string,
   ) {
-    if (!condition?.reference.trim()) return true;
-    const reference = parsePluginManifestReference(condition.reference);
-    if (reference.scope !== "local") {
-      throw new Error("容器成员注入条件只允许引用 config:local/group/content。");
-    }
-    const value = this.resolveManifestValue(condition.reference, record);
-    return Object.prototype.hasOwnProperty.call(condition, "equals")
-      ? manifestValuesEqual(value, condition.equals ?? null)
-      : Boolean(value);
+    if (!condition?.trim()) return true;
+    return Boolean(executeSandboxCode(condition, [{
+      ...this.environment,
+      ...createPluginConditionEnvironment(this.environment.chat ?? this.environment.CHAT),
+      imports: this.importsForResource(record.file.id),
+    }]));
   }
 
   private resolveManifestValue(rawReference: string, from?: ResourceRecord) {
@@ -799,17 +754,34 @@ export class PluginReferenceResolver {
     return container;
   }
 
+  private resolveContainers(
+    scope: PluginContainerScope,
+    pattern: string,
+    from: ResourceRecord,
+  ) {
+    const matcher = globMatcher(pattern);
+    return [...this.containers.values()]
+      .filter((container) =>
+        container.scope === scope
+        && (scope === "global" || container.source.plugin.id === from.plugin.id)
+        && matcher.test(container.name)
+      )
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }
+
   private createContainerValue(
     record: ContainerRecord,
     from: ResourceRecord,
   ): PluginContainerValue {
     const value: PluginContainerValue = {
       name: record.name,
+      title: record.declaration.title,
+      contentSuffixes: [...record.declaration.contentSuffixes],
       scope: record.scope,
-      get: (alias) => {
-        const resource = record.resources.get(alias)?.record;
+      get: (path) => {
+        const resource = record.resources.get(path)?.record;
         if (!resource) {
-          throw new Error(`容器 ${record.name} 没有资源：${alias}`);
+          throw new Error(`容器 ${record.name} 没有资源：${path}`);
         }
         this.tracedResourceIds.add(resource.file.id);
         return this.createImportedValue(from, resource);
@@ -836,6 +808,8 @@ export class PluginReferenceResolver {
     return {
       id: record.id,
       name: record.name,
+      title: record.declaration.title,
+      contentSuffixes: [...record.declaration.contentSuffixes],
       scope: record.scope,
       description: record.declaration.description?.trim() || undefined,
       pluginId: record.source.plugin.id,
@@ -855,10 +829,7 @@ export class PluginReferenceResolver {
       name: record.file.name,
       path: `/${record.path}`,
       type: pluginFileType(record.file.name),
-      ...(record.file.contextConfig
-        ? { contextConfig: structuredClone(record.file.contextConfig) }
-        : {}),
-      priority: record.file.priority,
+      order: record.file.order,
       pluginId: record.plugin.id,
       pluginName: record.plugin.name,
     };
@@ -869,12 +840,15 @@ export class PluginReferenceResolver {
     target: ContainerRecord,
   ) {
     return findPluginImportCalls(resource.declarationSource).some((call) => {
-      if (call.kind !== "container") return false;
+      if (call.kind !== "container" && call.kind !== "containers") return false;
       try {
-        return this.resolveContainer(
-          `container:${call.scope}/${call.name}`,
-          resource,
-        ).key === target.key;
+        return call.kind === "container"
+          ? this.resolveContainer(
+              `container:${call.scope}/${call.name}`,
+              resource,
+            ).key === target.key
+          : this.resolveContainers(call.scope, call.pattern, resource)
+              .some((container) => container.key === target.key);
       } catch {
         return false;
       }
@@ -887,7 +861,7 @@ export class PluginReferenceResolver {
       name: record.file.name,
       icon: record.file.icon,
       content: record.file.content,
-      priority: record.file.priority,
+      order: record.file.order,
       pluginId: record.plugin.id,
       pluginName: record.plugin.name,
       path: record.path,
@@ -902,19 +876,6 @@ export class PluginReferenceResolver {
     const record = this.recordsById.get(resourceId);
     if (!record) throw new Error(`资源不存在：${resourceId}`);
     return record;
-  }
-
-  private addCompileDiagnostics(
-    record: ResourceRecord,
-    result: ContextDocumentCompileResult,
-  ) {
-    for (const error of result.errors) {
-      this.diagnostics.push({
-        pluginId: record.plugin.id,
-        resourceId: record.file.id,
-        message: `${record.path} (${error.sourceId})：${error.message}`,
-      });
-    }
   }
 
   private addDataDiagnostic(record: ResourceRecord, message: string) {
@@ -1000,16 +961,9 @@ function resolveResourcePath(directory: string, requestedPath: string) {
   return normalized.join("/");
 }
 
-function manifestValuesEqual(
-  left: PluginManifestValue,
-  right: PluginManifestValue,
-) {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function compareResourceRecords(left: ResourceRecord, right: ResourceRecord) {
-  return right.file.priority - left.file.priority
-    || left.plugin.id.localeCompare(right.plugin.id)
-    || left.path.localeCompare(right.path)
-    || left.file.id.localeCompare(right.file.id);
+function globMatcher(pattern: string) {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*")
+    .replace(/\?/g, ".");
+  return new RegExp(`^${escaped}$`, "i");
 }

@@ -23,6 +23,7 @@ export const capabilities: CapabilityDefinition = {
       description: "允许通过公开 API 访问的默认配置键。",
       definition: `type DefaultConfigKey =
   | "defaultChatModel"
+  | "reasoningEffort"
   | "fastModel"
   | "embeddingModel"
   | "imageModel"

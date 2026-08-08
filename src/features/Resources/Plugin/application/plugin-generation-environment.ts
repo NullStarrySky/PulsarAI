@@ -5,12 +5,8 @@ import {
   type PluginReferenceDiagnostic,
   type PluginReferenceResolver,
 } from "@/features/Resources/Plugin/application/plugin-reference-resolver";
-import {
-  findPluginNodeByPath,
-  pluginConventions,
-  pluginFileType,
-  type Plugin,
-} from "@/features/Resources/Plugin/domain/plugin-types";
+import type { Plugin } from "@/features/Resources/Plugin/domain/plugin-types";
+import { pluginGenerateFile } from "@/features/Resources/Plugin/domain/plugin-runtime";
 import type { SandboxEnvironment } from "@/features/Sandbox/domain/sandbox";
 
 export interface GenerationPathEnvironmentInput {
@@ -39,7 +35,6 @@ export interface PluginGenerationEnvironment {
   enabledPlugins: Plugin[];
   processPlugin: Plugin | null;
   processResource: GenerationResourceValue | null;
-  contextResource: GenerationResourceValue | null;
   actionProcessResource: GenerationResourceValue | null;
   diagnostics: PluginGenerationDiagnostic[];
 }
@@ -81,40 +76,16 @@ export async function buildPluginGenerationEnvironment(
     (plugin) => plugin.id === input.mainPluginId,
   ) ?? null;
   let processResource: GenerationResourceValue | null = null;
-  let contextResource: GenerationResourceValue | null = null;
 
   if (!processPlugin) {
     throw new Error(`主要插件不存在或未启用：${input.mainPluginId}`);
   }
-  const context = findPluginNodeByPath(
-    processPlugin.root,
-    pluginConventions.context,
-  );
-  if (
-    context?.kind === "file"
-    && pluginFileType(context.name) === "markdown"
-  ) {
-    contextResource = resolver.resourceById(context.id);
-  } else {
-    throw new Error(`主要插件 ${processPlugin.name} 缺少有效的 context.md。`);
-  }
-  const agentProcess = findPluginNodeByPath(
-    processPlugin.root,
-    [
-      pluginConventions.agentProcessFolder,
-      pluginConventions.agentProcessEntry,
-    ],
-  );
-  if (
-    agentProcess?.kind === "file"
-    && pluginFileType(agentProcess.name) === "javascript"
-    && typeof agentProcess.content === "string"
-    && agentProcess.content.trim()
-  ) {
+  const agentProcess = pluginGenerateFile(processPlugin);
+  if (agentProcess) {
     processResource = resolver.resourceById(agentProcess.id);
   } else {
     throw new Error(
-      `主要插件 ${processPlugin.name} 缺少有效的 agentprocess/index.js。`,
+      `主要插件 ${processPlugin.name} 缺少有效的 runtime/generatePath。`,
     );
   }
 
@@ -130,7 +101,6 @@ export async function buildPluginGenerationEnvironment(
     enabledPlugins,
     processPlugin,
     processResource,
-    contextResource,
     actionProcessResource,
     diagnostics: resolver.diagnostics,
   };
