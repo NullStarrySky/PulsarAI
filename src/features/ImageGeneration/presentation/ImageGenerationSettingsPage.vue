@@ -53,8 +53,6 @@ const apiKeyMask = "••••••••";
 const service = useModelCapabilityProviders("image");
 const search = ref("");
 const activeServiceId = ref(COMFYUI_PROVIDER_ID);
-const enabledCollapsed = ref(false);
-const disabledCollapsed = ref(false);
 const novelAISettings = ref(createDefaultNovelAISettings());
 const novelAIApiKey = ref("");
 const novelAIInitialized = ref(false);
@@ -295,8 +293,6 @@ async function runTest() {
 
 <template>
   <ServiceProviderSettingsLayout
-    v-model:enabled-collapsed="enabledCollapsed"
-    v-model:disabled-collapsed="disabledCollapsed"
     :providers="providers"
     :active-provider-id="activeServiceId"
     :search="search"

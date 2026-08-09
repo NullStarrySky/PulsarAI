@@ -13,7 +13,7 @@ export const capabilities: CapabilityDefinition = {
   title: "默认配置",
   description: "读取或修改 Pulsar 的非敏感默认配置。密钥不在此 API 中暴露。",
   documentation: {
-    overview: "管理新资源与未显式覆盖设置时采用的应用级默认值。模型引用以 provider/model 字符串保存，权限默认值不通过此 API 修改。",
+    overview: "管理新资源与未显式覆盖设置时采用的应用级默认值。聊天模型引用以 provider/model/thinkingLevel 字符串保存，末段可省略；权限默认值不通过此 API 修改。",
     notes: [
       "可读取和写入默认聊天、快速、向量化、媒体与提示词优化配置。",
       "模型连接密钥保存在独立 Secret 存储中，永远不会由此 Feature 返回。",
@@ -23,7 +23,6 @@ export const capabilities: CapabilityDefinition = {
       description: "允许通过公开 API 访问的默认配置键。",
       definition: `type DefaultConfigKey =
   | "defaultChatModel"
-  | "reasoningEffort"
   | "fastModel"
   | "embeddingModel"
   | "imageModel"

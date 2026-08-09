@@ -83,8 +83,6 @@ const secretMask = "••••••••";
 const service = useModelCapabilityProviders("tts");
 const search = ref("");
 const activeServiceId = ref(SYSTEM_TTS_SERVICE_ID);
-const enabledCollapsed = ref(false);
-const disabledCollapsed = ref(false);
 const edgeEnabled = ref(true);
 const systemEnabled = ref(true);
 const volcengineSettings = ref(createDefaultVolcengineTtsSettings());
@@ -465,8 +463,6 @@ async function runTest() {
 
 <template>
   <ServiceProviderSettingsLayout
-    v-model:enabled-collapsed="enabledCollapsed"
-    v-model:disabled-collapsed="disabledCollapsed"
     :providers="providers"
     :active-provider-id="activeServiceId"
     :search="search"

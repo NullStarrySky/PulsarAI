@@ -17,13 +17,12 @@ onMounted(() => {
   registerCoreCommands();
   appearance.initialize();
   responsive.refreshPlatform();
-  layout.setShellMode("simplified");
 });
 </script>
 
 <template>
   <div class="flex h-[100dvh] min-w-0 flex-col overflow-hidden bg-background text-foreground">
-    <ShellTopBar />
+    <ShellTopBar v-show="!layout.immersiveConversation" />
     <div class="min-h-0 flex-1">
       <ConversationStageOnePage />
     </div>

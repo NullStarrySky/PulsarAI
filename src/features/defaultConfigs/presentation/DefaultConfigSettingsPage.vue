@@ -10,13 +10,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import SettingGroup from "@/features/Setting/presentation/SettingGroup.vue";
 import SettingItem from "@/features/Setting/presentation/SettingItem.vue";
@@ -58,11 +51,6 @@ function saveOptimizationPrompt() {
 function openPlugin(plugin: Plugin) {
   pluginStore.openPlugin(plugin.id);
   layout.closeSettings();
-  layout.openResourceTab({
-    resourceType: "plugin",
-    resourceId: plugin.id,
-    title: plugin.name,
-  });
 }
 
 async function createGlobalPlugin() {
@@ -92,7 +80,6 @@ async function deleteGlobalPlugin(plugin: Plugin) {
   }
   try {
     await pluginStore.deletePlugin(plugin.id);
-    layout.closeTabsByResource("plugin", plugin.id);
   } catch (error) {
     push.error(error instanceof Error ? error.message : "插件删除失败");
   }
@@ -114,21 +101,6 @@ async function restoreBuiltInPlugin(plugin: Plugin) {
           button-class="w-full justify-between sm:w-80"
           @update:model-value="defaults.setDefaultChatModel"
         />
-      </SettingItem>
-      <SettingItem title="默认推理强度" description="主要插件未覆盖时使用。">
-        <Select
-          :model-value="defaults.reasoningEffort"
-          @update:model-value="defaults.setReasoningEffort($event as never)"
-        >
-          <SelectTrigger class="w-full sm:w-80"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">关闭</SelectItem>
-            <SelectItem value="low">低</SelectItem>
-            <SelectItem value="medium">中</SelectItem>
-            <SelectItem value="high">高</SelectItem>
-            <SelectItem value="xhigh">超高</SelectItem>
-          </SelectContent>
-        </Select>
       </SettingItem>
       <SettingItem title="快速模型" description="用于低延迟、低成本任务。">
         <ModelSelect
@@ -171,7 +143,7 @@ async function restoreBuiltInPlugin(plugin: Plugin) {
       </SettingItem>
     </SettingGroup>
 
-    <SettingGroup title="提示词优化" description="配置会话输入框中的提示词优化工具。">
+    <SettingGroup title="提示词优化">
       <SettingItem title="优化模型" description="执行提示词优化时使用的文本模型。">
         <ModelSelect
           :model-value="defaults.promptOptimizationModel"
@@ -197,7 +169,6 @@ async function restoreBuiltInPlugin(plugin: Plugin) {
 
     <SettingGroup
       title="全局插件"
-      description="管理全局插件的安装级可用状态；每个角色包再按稳定 ID 独立选择主要插件和启用集合。"
     >
       <template #actions>
         <Button

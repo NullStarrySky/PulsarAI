@@ -131,7 +131,6 @@ async function importResourceArchive() {
 
     <SettingGroup
       title="局域网同步"
-      description="使用配对密钥连接同一局域网中的 Pulsar 设备。同步优先复制缺失资源，并保留并发版本。"
     >
       <SettingItem
         title="允许其他设备连接"
@@ -253,7 +252,6 @@ async function importResourceArchive() {
 
     <SettingGroup
       title="资源导入与导出"
-      description="角色包会携带所属会话和本地插件；会话会携带消息容器。归档使用 Zstandard 压缩。"
     >
       <SettingItem title="导出资源" description="内置插件不可导出。归档保留稳定 ID，便于之后更新。">
         <div class="grid w-full gap-2 sm:w-80 sm:grid-cols-[minmax(0,1fr)_auto]">
@@ -303,7 +301,6 @@ async function importResourceArchive() {
 
     <SettingGroup
       title="本地历史备份"
-      description="文件按内容去重并使用 Zstandard 压缩；相邻版本只新增发生变化的对象。"
     >
       <SettingItem title="创建备份" description="创建当前数据库与资源文件的增量历史快照。">
         <Button @click="backup.createLocalBackup">
@@ -390,7 +387,6 @@ async function importResourceArchive() {
 
     <SettingGroup
       title="WebDAV 备份"
-      description="保留现有远程备份配置。传输层尚未启用，不参与局域网同步。"
     >
       <SettingItem title="用户名">
         <Input class="w-full sm:w-80" v-model="backup.remote.username" @change="backup.persist" />

@@ -94,12 +94,6 @@ async function openFavorite(entry: FavoriteMessageEntry) {
       return;
     }
 
-    layout.openResourceTab({
-      resourceType: "conversation",
-      resourceId: entry.conversation.id,
-      packageId: entry.conversation.packageId,
-      title: entry.conversation.title,
-    });
     layout.closeSettings();
     conversation.requestMessageNavigation(
       entry.conversation.id,

@@ -4,6 +4,13 @@ import { Plus, Trash2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  NumberField,
+  NumberFieldContent,
+  NumberFieldDecrement,
+  NumberFieldIncrement,
+  NumberFieldInput,
+} from "@/components/ui/number-field";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -61,7 +68,7 @@ function changeFunction(row: ConditionRow, value: unknown) {
   persist();
 }
 
-function updateDepth(value: string) {
+function updateDepth(value: number | undefined) {
   const next = Number(value);
   depth.value = Number.isFinite(next) && next > 0 ? Math.floor(next) : 4;
   persist();
@@ -136,14 +143,18 @@ function parseCondition(source: string) {
       </label>
       <label class="grid gap-1.5">
         <span class="text-xs font-medium">匹配深度</span>
-        <Input
+        <NumberField
           :model-value="depth"
-          type="number"
-          min="1"
-          step="1"
-          class="h-8"
-          @change="updateDepth(($event.target as HTMLInputElement).value)"
-        />
+          :min="1"
+          :step="1"
+          @update:model-value="updateDepth"
+        >
+          <NumberFieldContent>
+            <NumberFieldDecrement />
+            <NumberFieldInput class="h-8 text-xs" />
+            <NumberFieldIncrement />
+          </NumberFieldContent>
+        </NumberField>
       </label>
     </div>
 

@@ -105,15 +105,8 @@ function createStarterRoot(): PluginFolder {
           {
             id: "model",
             title: "模型",
-            description: "留空时继承全局默认聊天模型。",
+            description: "留空时继承全局默认模型；引用可附带思考强度。",
             component: "ModelSelect",
-            value: null,
-          },
-          {
-            id: "reasoningEffort",
-            title: "推理强度",
-            description: "留空时继承全局推理强度。",
-            component: "ReasoningEffortSelect",
             value: null,
           },
         ],

@@ -3,6 +3,13 @@ import { ref } from "vue";
 import { ChevronRight, MessageSquareText } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
+  Questionnaire,
+  QuestionnaireChoice,
+  QuestionnaireChoices,
+  QuestionnaireItem,
+  QuestionnaireTitle,
+} from "@/components/ui/questionnaire";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -51,48 +58,44 @@ function submitCustomAnswer() {
 </script>
 
 <template>
-  <section class="grid gap-4">
-    <p class="text-base font-medium leading-7 text-foreground">
-      {{ question }}
-    </p>
-
-    <div class="grid gap-2">
-      <Button
-        v-for="(option, index) in options"
-        :key="`${index}:${option.label}:${option.value ?? ''}`"
-        type="button"
-        variant="outline"
-        class="h-auto min-h-12 w-full justify-between gap-4 px-4 py-3 text-left whitespace-normal mobile:min-h-14"
-        @click="selectOption(option)"
-      >
-        <span class="min-w-0">
-          <span class="block font-medium">{{ option.label }}</span>
-          <span
-            v-if="option.description"
-            class="mt-0.5 block text-xs leading-5 text-muted-foreground"
+  <section class="grid gap-3">
+    <Questionnaire @submit.prevent>
+      <QuestionnaireItem name="answer" required>
+        <QuestionnaireTitle>{{ question }}</QuestionnaireTitle>
+        <QuestionnaireChoices>
+          <QuestionnaireChoice
+            v-for="(option, index) in options"
+            :key="`${index}:${option.label}:${option.value ?? ''}`"
+            :value="option.value ?? option.label"
+            @change="selectOption(option)"
           >
-            {{ option.description }}
-          </span>
-        </span>
-        <ChevronRight class="size-4 shrink-0 text-muted-foreground" />
-      </Button>
+            <span class="block font-medium">{{ option.label }}</span>
+            <span
+              v-if="option.description"
+              class="mt-0.5 block text-xs leading-5 text-muted-foreground"
+            >
+              {{ option.description }}
+            </span>
+          </QuestionnaireChoice>
+        </QuestionnaireChoices>
+      </QuestionnaireItem>
+    </Questionnaire>
 
-      <Button
-        type="button"
-        variant="outline"
-        class="h-auto min-h-12 w-full justify-between gap-4 px-4 py-3 text-left mobile:min-h-14"
-        @click="customDialogOpen = true"
-      >
-        <span class="flex min-w-0 items-center gap-3">
-          <MessageSquareText class="size-4 shrink-0 text-muted-foreground" />
-          <span>
-            <span class="block font-medium">自由回复</span>
-            <span class="mt-0.5 block text-xs text-muted-foreground">输入不在预定义选项中的回答</span>
-          </span>
+    <Button
+      type="button"
+      variant="outline"
+      class="h-auto min-h-12 w-full justify-between gap-4 px-4 py-3 text-left mobile:min-h-14"
+      @click="customDialogOpen = true"
+    >
+      <span class="flex min-w-0 items-center gap-3">
+        <MessageSquareText class="size-4 shrink-0 text-muted-foreground" />
+        <span>
+          <span class="block font-medium">自由回复</span>
+          <span class="mt-0.5 block text-xs text-muted-foreground">输入不在预定义选项中的回答</span>
         </span>
-        <ChevronRight class="size-4 shrink-0 text-muted-foreground" />
-      </Button>
-    </div>
+      </span>
+      <ChevronRight class="size-4 shrink-0 text-muted-foreground" />
+    </Button>
 
     <Dialog v-model:open="customDialogOpen">
       <DialogContent class="sm:max-w-lg">

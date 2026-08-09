@@ -14,7 +14,7 @@ const interactiveSelector = [
   "[data-window-drag-block]",
 ].join(",");
 
-export function startWindowDragFromBackground(event: MouseEvent) {
+export async function startWindowDragFromBackground(event: MouseEvent) {
   if (!appWindow || event.button !== 0 || event.buttons !== 1) return;
   const target = event.target;
   if (target instanceof Element && target.closest(interactiveSelector)) return;
@@ -25,7 +25,14 @@ export function startWindowDragFromBackground(event: MouseEvent) {
   }
   document.documentElement.classList.add("native-window-dragging");
   void document.documentElement.offsetWidth;
-  void appWindow.startDragging().finally(() => {
+  try {
+    if (await appWindow.isMaximized()) {
+      await appWindow.unmaximize();
+    }
+    await appWindow.startDragging();
+  } catch {
+    // Native dragging can be cancelled when the pointer is released early.
+  } finally {
     document.documentElement.classList.remove("native-window-dragging");
-  });
+  }
 }

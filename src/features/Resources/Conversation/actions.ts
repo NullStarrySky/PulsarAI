@@ -1,22 +1,11 @@
 import { push } from "notivue";
 import { resetCharacterData } from "@/features/Database/application/database-service";
 import { clearResourceSyncMetadata } from "@/features/Database/application/sync-metadata";
-import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { useConversationStore } from "./application/conversation-store";
 
 export async function createConversationAction() {
   const conversation = useConversationStore();
-  const layout = useLayoutStore();
   await conversation.createConversation();
-  const active = conversation.activeConversation;
-  if (active) {
-    layout.openResourceTab({
-      resourceType: "conversation",
-      resourceId: active.id,
-      packageId: active.packageId,
-      title: active.title,
-    });
-  }
 }
 
 export function editLastMessageAction() {

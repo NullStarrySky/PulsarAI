@@ -25,6 +25,7 @@ export function useModelCapabilityProviders(apiType: ModelApiType) {
       description: provider.description,
       iconUrl: provider.iconUrl,
       enabled: provider.enabled && provider.models.some((model) => model.apiType === apiType && model.enabled),
+      canEnable: Boolean(store.apiKeyStatus[provider.apiKeyName]),
       source: "model",
     })),
   );

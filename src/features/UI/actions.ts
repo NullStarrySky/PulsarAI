@@ -1,17 +1,12 @@
 import {
   Copy,
-  CalendarClock,
-  PanelLeft,
-  PanelRight,
   Pencil,
   RefreshCw,
   Search,
   Settings,
   SquareMinus,
   FilePlus2,
-  Rows3,
   Trash2,
-  X,
 } from "lucide-vue-next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCommandStore, type CommandDefinition } from "@/features/Hotkey/application/command-store";
@@ -49,34 +44,6 @@ function createCoreCommands(): CommandDefinition[] {
       closeOnRun: false,
     },
     {
-      id: "ui.builtin.schedule.open",
-      title: "打开定时任务",
-      category: "界面",
-      icon: CalendarClock,
-      run: () =>
-        useLayoutStore().openResourceTab({
-          resourceType: "builtin",
-          resourceId: "schedule",
-          title: "定时任务",
-        }),
-    },
-    {
-      id: "ui.sidebar.left.toggle",
-      title: "切换左侧栏",
-      category: "界面",
-      defaultHotkey: "Ctrl+B",
-      icon: PanelLeft,
-      run: () => useLayoutStore().toggleLeftSidebar(),
-    },
-    {
-      id: "ui.sidebar.right.toggle",
-      title: "切换右侧栏",
-      category: "界面",
-      defaultHotkey: "Ctrl+Shift+B",
-      icon: PanelRight,
-      run: () => useLayoutStore().toggleRightSidebar(),
-    },
-    {
       id: "ui.settings.open",
       title: "打开设置",
       category: "界面",
@@ -90,30 +57,6 @@ function createCoreCommands(): CommandDefinition[] {
       category: "窗口",
       icon: SquareMinus,
       run: () => getCurrentWindow().minimize(),
-    },
-    {
-      id: "ui.tab.next",
-      title: "下一个标签页",
-      category: "标签页",
-      defaultHotkey: "Ctrl+Tab",
-      icon: Rows3,
-      run: () => useLayoutStore().activateAdjacentTab(1),
-    },
-    {
-      id: "ui.tab.previous",
-      title: "上一个标签页",
-      category: "标签页",
-      defaultHotkey: "Ctrl+Shift+Tab",
-      icon: Rows3,
-      run: () => useLayoutStore().activateAdjacentTab(-1),
-    },
-    {
-      id: "ui.tab.close-current",
-      title: "关闭当前标签页",
-      category: "标签页",
-      defaultHotkey: "Ctrl+W",
-      icon: X,
-      run: () => useLayoutStore().closeActiveTab(),
     },
     {
       id: "conversation.create",

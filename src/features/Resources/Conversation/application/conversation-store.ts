@@ -7,7 +7,6 @@ import {
 } from "@/features/Resources/Plugin/application/plugin-store";
 import type { Plugin } from "@/features/Resources/Plugin/domain/plugin-types";
 import { pluginGenerateFile } from "@/features/Resources/Plugin/domain/plugin-runtime";
-import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { runConversationGeneration } from "./conversation-generation";
 import { buildConversationResourceContext } from "./conversation-resource-context";
 import { deleteConversationMemory } from "./conversation-memory";
@@ -50,6 +49,7 @@ function createMessage(content = "", type: ChatMessageType = "message"): ChatMes
     id: crypto.randomUUID(),
     type,
     content: type === "error" ? formatChatMessageError(content) : content,
+    createdAt: now(),
     meta: {
       steps: [],
     },
@@ -69,6 +69,7 @@ function cloneMessage(message: ChatMessage): ChatMessage {
     id: crypto.randomUUID(),
     type: message.type ?? "message",
     content: message.content,
+    createdAt: now(),
     meta: clonePlain(message.meta),
     parts: message.parts ? clonePlain(message.parts) : undefined,
   };
@@ -216,6 +217,7 @@ export const useConversationStore = defineStore("conversation", {
         content: item.value.content.map((message) => ({
           ...message,
           type: message.type ?? "message",
+          createdAt: message.createdAt ?? message.meta.generateInfo?.startTime ?? now(),
         })),
       }));
 
@@ -229,6 +231,11 @@ export const useConversationStore = defineStore("conversation", {
         this.activeContainerId = "";
       }
       this.loaded = true;
+      if (this.packages.length === 0) {
+        await this.createPackage();
+        return;
+      }
+      await this.openPackage(this.activePackageId || this.packages[0]!.id);
     },
     async ensurePackagePlugin(packageId: string) {
       const item = this.packages.find((packageItem) => packageItem.id === packageId);
@@ -440,6 +447,8 @@ export const useConversationStore = defineStore("conversation", {
       await remove(packageTable, packageId);
       if (options.activateFallback !== false && this.packages[0]) {
         await this.openPackage(this.packages[0].id);
+      } else if (options.activateFallback !== false) {
+        await this.createPackage();
       }
     },
     async openPackage(packageId: string) {
@@ -456,8 +465,7 @@ export const useConversationStore = defineStore("conversation", {
       if (newest) {
         this.openConversation(newest.id);
       } else {
-        this.activeConversationId = "";
-        this.activeContainerId = "";
+        await this.createConversation(packageId);
       }
     },
     async createConversation(
@@ -1148,11 +1156,6 @@ export const useConversationStore = defineStore("conversation", {
       if (!this.generatingConversationIds.includes(container.conversationid)) {
         this.generatingConversationIds.push(container.conversationid);
       }
-      const layout = useLayoutStore();
-      layout.setResourceTabStatus("conversation", container.conversationid, {
-        kind: "loading",
-        label: "生成中",
-      });
       const start = Date.now();
       message.meta.generateInfo = {
         modelName: "default-agent",
@@ -1160,6 +1163,29 @@ export const useConversationStore = defineStore("conversation", {
       };
       await mutate?.(message, container);
       await this.persistContainer(container);
+
+      const replyPersistInterval = 250;
+      let lastReplyPersistAt = 0;
+      let replyPersistTimer: ReturnType<typeof setTimeout> | null = null;
+      let replyPersistQueue = Promise.resolve();
+      const persistReplySnapshot = () => {
+        lastReplyPersistAt = Date.now();
+        replyPersistQueue = replyPersistQueue.then(() => this.persistContainer(container));
+        return replyPersistQueue;
+      };
+      const persistReplyThrottled = async () => {
+        const delay = replyPersistInterval - (Date.now() - lastReplyPersistAt);
+        if (delay <= 0) {
+          await persistReplySnapshot();
+          return;
+        }
+        if (!replyPersistTimer) {
+          replyPersistTimer = setTimeout(() => {
+            replyPersistTimer = null;
+            void persistReplySnapshot();
+          }, delay);
+        }
+      };
 
       try {
         const pluginStore = usePluginStore();
@@ -1232,7 +1258,7 @@ export const useConversationStore = defineStore("conversation", {
           beforeGenerationMessage,
           onReplyChange: async () => {
             await mutate?.(message, container);
-            await this.persistContainer(container);
+            await persistReplyThrottled();
           },
         });
         if (message.type !== "error") {
@@ -1254,11 +1280,15 @@ export const useConversationStore = defineStore("conversation", {
       } finally {
         message.meta.generateInfo.timeUsed = Date.now() - start;
         await mutate?.(message, container);
+        if (replyPersistTimer) {
+          clearTimeout(replyPersistTimer);
+          replyPersistTimer = null;
+        }
+        await replyPersistQueue;
         await this.persistContainer(container);
         this.generatingConversationIds = this.generatingConversationIds.filter(
           (id) => id !== container.conversationid,
         );
-        layout.setResourceTabStatus("conversation", container.conversationid);
       }
     },
     async generateFromPath(mutate?: MessageDraftClosure, usePreviousPath = false) {

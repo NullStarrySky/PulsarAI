@@ -1316,18 +1316,20 @@ async fn database_upsert(
 ) -> Result<(), String> {
     let db = app_db(&app, &state).await?;
     let table = normalize_table_name(&table)?;
-    let sql = format!(
-        "BEGIN TRANSACTION; \
-         DELETE {table} WHERE resource_key = $id; \
-         UPSERT type::record($table_name, $id) CONTENT {{ resource_key: $id, value: $value }}; \
-         COMMIT TRANSACTION;"
-    );
-    db.query(sql)
+    let mut response = db
+        .query(
+            "UPSERT type::thing($table_name, $id) \
+             CONTENT { resource_key: $id, value: $value }",
+        )
         .bind(("table_name", table))
         .bind(("id", id))
         .bind(("value", value))
         .await
         .map_err(|error| error.to_string())?;
+    let errors = response.take_errors();
+    if !errors.is_empty() {
+        return Err(format!("database_upsert statement failed: {errors:?}"));
+    }
     Ok(())
 }
 
@@ -1341,10 +1343,15 @@ async fn database_delete(
     let db = app_db(&app, &state).await?;
     let table = normalize_table_name(&table)?;
     let sql = format!("DELETE {table} WHERE resource_key = $id");
-    db.query(sql)
+    let mut response = db
+        .query(sql)
         .bind(("id", id))
         .await
         .map_err(|error| error.to_string())?;
+    let errors = response.take_errors();
+    if !errors.is_empty() {
+        return Err(format!("database_delete statement failed: {errors:?}"));
+    }
     Ok(())
 }
 

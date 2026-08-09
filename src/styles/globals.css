@@ -142,6 +142,7 @@ html.native-window-dragging #app {
 }
 
 .milkdown {
+  --crepe-base-font-size: 14px;
   background-color: transparent !important;
   --crepe-color-background: transparent !important;
   max-width: 100% !important;
@@ -167,6 +168,15 @@ html.native-window-dragging #app {
   --crepe-font-default: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   --crepe-font-code: var(--font-code);
   color: var(--foreground);
+}
+
+*:focus,
+*:focus-visible {
+  outline: none !important;
+}
+
+*:focus-visible {
+  box-shadow: none !important;
 }
 
 :where(code, pre, kbd, samp, .font-mono) {

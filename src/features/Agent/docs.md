@@ -1,5 +1,7 @@
 # Agent
 
+The registered `agent.ask-user` generation component composes the shadcn-vue Questionnaire form, item, and choice primitives for predefined answers while retaining an explicit freeform-answer dialog. Resolving a choice continues through the Conversation generation-component requester; it does not introduce a second model tool.
+
 `Agent` supplies the AI SDK `ToolLoopAgent` constructor and a lazy `prepare()` provider for the hydrated model, the current conversation reasoning level, the single CodeAct tool, lifecycle hooks, and the registry used by Skill and MCP integrations. It does not own the conversation's main process; the editable built-in Plugin workflow decides whether and how to construct the Agent.
 
 ## CodeAct

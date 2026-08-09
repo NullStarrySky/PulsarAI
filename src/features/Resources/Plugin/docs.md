@@ -1,5 +1,7 @@
 # Plugin
 
+The built-in blank Plugin provides a fast, fine-grained mock stream for UI and persistence checks without calling a model. The focused stage's floating asset tree is height-bounded by the page and gives its tree body to the shared `ScrollArea`.
+
 `插件系统.md` 是插件架构的唯一事实来源。本文件只记录源码落点。
 
 ## 数据与文件
@@ -14,9 +16,10 @@
 ## 运行
 
 - `manifest.json` 的 `runtime/generatePath` 指向唯一生成入口。缺少入口的插件不能设为主要插件；路径存在但不是有效 `.js` 文件时直接报错。
-- `generation/model` 与 `generation/reasoningEffort` 是固定配置键；留空时继承全局默认值，不写入 Conversation。
+- `generation/model` 是固定模型配置键；值使用 `provider/modelId/thinkingLevel`，末段思考强度可省略。强度存在时映射到 AI SDK 顶层 `reasoning`，省略时由 Provider 自动决定；模型与强度都不写入 Conversation。
 - `appearance/background` 保存 `{ pluginId, path }`；留空或引用无效时回退到内置核心插件的同名固定配置。
-- manifest 的 `ModelSelect` 配置组件保存 `providerId/modelId`，支持用 `props.apiType` 限制模型类型；会话工具栏可直接选择具有有效生成入口的主要插件。
+- manifest 的 `ModelSelect` 配置组件保存可选思考末段的 `providerId/modelId/thinkingLevel`，并支持用 `props.apiType` 限制模型类型；主要插件仍从 Plugin 资产管理入口设置。
+- manifest 的 Group 只保存稳定 ID 和标题，并在结构化编辑器中渲染为一级功能 Tab；Group 不保存描述、不渲染边框，字段自身仍保留标题、说明、组件属性和值。
 - Conversation 创建空助手消息后，把原始消息、回复闭包、压缩记忆闭包、`imports`、Agent 与 Feature API 交给该入口。入口返回值不会写入消息；正文、内容部件、过程和模型标识必须通过 `reply` 写入。内置 Agent 使用 AI SDK 7 的 `runner.stream()` 与 `result.stream`，过程回调实时写入步骤，所有 step 的 `text-delta.text` 按到达顺序逐段追加正文；每段 reasoning 在结束后作为一个 `thinking` step 写入，避免按 token 创建大量步骤。流结束后仍可读取并覆盖完整正文以执行后处理。
 - Plugin Sandbox 的 `console` 只输出对象的有界摘要。调试具体内容时应显式选择并序列化必要字段，不能把带自引用的完整 `ctx` 交给 DevTools 长期持有。
 - 入口自行读取任意 `.chat.json`、容器或资源，处理上下文与 Regex，再决定是否调用模型。系统没有“主上下文入口”。
@@ -27,7 +30,7 @@
 - `manifest.json`：配置和 `generatePath`。
 - `containers.json`：容器声明。
 - `regex.json`：可由生成流程读取的规则。
-- `*.chat.json`：角色消息数组，工作区提供结构化编辑器。
+- `*.chat.json`：角色消息数组，文件编辑器提供结构化编辑器。
 - `*.data.json`：隔离、初值、包装器和变量更新定义。
 - `action/`、`tools/`、`background/`、`temp/`、`components/`：按 `插件系统.md` 的路径约定解释。
 
@@ -45,9 +48,9 @@
 
 ## 界面
 
-- 会话界面的顶栏资产按钮控制主画布右侧概念区域内的 `PluginAssetTreePanel` 浮动卡片。卡片以绝对定位覆盖会话画布、从右侧移入，和窗口右缘及 `724px` 中间区域保持间隙，使用圆角、完整边框与有界最大高度，不改变消息线程或输入栏宽度。它只显示当前角色包的本地插件，以及该角色包启用或选为主要插件的全局插件；文件树直接来自 Plugin Store 的数据库节点，树区域使用共享 `ScrollArea`。
-- 文件节点在 `PluginFileEditorDialog` 中打开；桌面端浮窗定位在资产面板左侧并允许双向拖拽缩放，内部编辑区随浮窗可用高度铺满；窄于 768px 时改为不可缩放的视口内全宽浮层。`PluginFileEditorSurface` 按精确约定路径和文件类型映射已有组件：`manifest.json`、`containers.json`、根 `regex.json`、`.chat.json` 使用结构化编辑器，Markdown 使用透明背景 Milkdown/Crepe，JavaScript、Vue、JSON 与数据文件使用 CodeMirror，媒体使用预览。所有保存仍通过 `pluginStore.updateNode()` 落到稳定节点。
-- 桌面运行时继续通过 Tauri/SurrealDB 读写 `resource_plugins` / `resource_plugin_nodes`；纯 Vite 只装载发布内置插件。所有插件加载、保存、删除和节点搜索会写入批量 `[Pulsar DB]` 摘要日志，便于比较数据库接入前后的卡顿。
+- 会话界面的顶栏资产按钮控制主画布右侧概念区域内的 `PluginAssetTreePanel` 浮动卡片。卡片以绝对定位覆盖会话画布、从右侧移入，和窗口右缘及 `724px` 中间区域保持间隙，使用圆角、完整边框与根据可见节点数计算的有界高度，不改变消息线程或输入栏宽度。它将当前角色包的内置插件和全局插件分栏显示；根行只保留 Power 图标按钮，启用时使用绿色 SVG，停用时使用弱化图标。停用不影响展开和浏览文件。只有主要插件在图标按钮前显示皇冠，其他插件通过根行 `...` 菜单设为主要插件。文件树使用共享 `ScrollArea`，支持新建全部约定资源类型、新建文件夹、导入、复制路径、递归复制/粘贴、原地重命名、删除和同插件内拖拽移动；固定约定节点继续禁止改名、移动和删除。文件行紧贴名称显示插入容器标识。
+- 文件节点在 `PluginFileEditorDialog` 中打开；桌面端初始居中，由 `interact.js` 限制在页面内，通过顶栏拖拽并直接从四边或四角缩放，不渲染额外控制点；窄于 768px 时改为不可缩放的视口内浮层。顶栏的插入选择器在下拉列表中以容器标题为主行并显示说明，选中后只显示容器标题；范围和稳定 ID 都不进入选中态文案。选择插入后显示条件列表菜单与 shadcn-vue Number Field 优先级输入；条件扫描深度同样使用 Number Field。内容和插入元信息合并为一次 800ms 防抖自动保存，底栏只显示上次保存时间或错误。`PluginFileEditorSurface` 按精确约定路径和文件类型映射已有组件：`manifest.json`、`containers.json`、根 `regex.json`、`.chat.json` 使用结构化编辑器，Markdown 使用无顶部工具栏的透明背景 Milkdown/Crepe，且保留普通 Enter 换行；Vue 提供组件预览，媒体使用媒体视图。上述文件每次打开都默认进入视图，只有没有可用视图的 JavaScript、普通 JSON、数据和文本文件默认进入 CodeMirror 源码；视图/源码切换只在确有两种模式时显示。所有保存仍通过 `pluginStore.updateNode()` 落到稳定节点。
+- 桌面运行时继续通过 Tauri/SurrealDB 读写 `resource_plugins` / `resource_plugin_nodes`；纯 Vite 只装载发布内置插件。
 
 - 文件头使用一个可直接选择“不插入”或目标容器的选择器；条件使用 AND/OR 列表编辑器，并保留 `order` 调整。
 - 深度 0 至 6 是普通内置容器，不重复实现一套数字编辑器。

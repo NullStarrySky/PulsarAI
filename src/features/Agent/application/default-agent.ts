@@ -1,6 +1,5 @@
 import {
   ToolLoopAgent,
-  generateText,
   isStepCount,
   tool,
   type LanguageModel,
@@ -9,8 +8,9 @@ import {
 } from "ai";
 import { z } from "zod";
 import { getDefaultChatModel } from "@/features/defaultConfigs/application/default-config-service";
-import type { ReasoningEffort } from "@/features/defaultConfigs/domain/default-config";
-import { hydrateModel } from "@/features/ModelConnection/application/model-ai";
+import type { ReasoningEffort } from "@/features/ModelConnection/domain/model-reference";
+import { generateText, hydrateModel } from "@/features/ModelConnection/application/model-ai";
+import { parseModelReference } from "@/features/ModelConnection/domain/model-reference";
 import type { SandboxEnvironment } from "@/features/Sandbox/domain/sandbox";
 import type {
   ChatMessage,
@@ -23,7 +23,6 @@ import { executeCodeAct } from "./code-act";
 export interface CreateDefaultAgentResourcesInput {
   environment?: SandboxEnvironment;
   modelName?: string;
-  reasoningEffort?: ReasoningEffort;
   onStep?: (step: LocalStep | ToolCallResult) => void | Promise<void>;
   variableUpdate?: {
     execute: (source: string) => Promise<unknown>;
@@ -33,7 +32,7 @@ export interface CreateDefaultAgentResourcesInput {
 export interface DefaultAgentResources {
   model: LanguageModel;
   modelName: string;
-  reasoning: ReasoningEffort;
+  reasoning?: ReasoningEffort;
   instructions: string;
   tools: ToolSet;
   stopWhen: ReturnType<typeof isStepCount>;
@@ -134,7 +133,7 @@ export async function createDefaultAgentResources(
   input: CreateDefaultAgentResourcesInput,
 ): Promise<DefaultAgentResources> {
   const modelName = input.modelName || await getDefaultChatModel();
-  const reasoning = input.reasoningEffort ?? "none";
+  const reasoning = parseModelReference(modelName).reasoning;
   await input.onStep?.({
     name: "agent:start",
     message: `使用 ${modelName} 启动内置 agent。`,
@@ -180,13 +179,14 @@ export function createAgentResourceProvider(
   input: CreateDefaultAgentResourcesInput,
 ): AgentResourceProvider {
   let prepared: Promise<DefaultAgentResources> | null = null;
-  const reasoning = input.reasoningEffort ?? "none";
+  const modelName = input.modelName;
+  const reasoning = modelName ? parseModelReference(modelName).reasoning : undefined;
   const ReasoningToolLoopAgent = new Proxy(ToolLoopAgent, {
     construct(target, args, newTarget) {
       const settings = (args[0] ?? {}) as Record<string, unknown>;
       return Reflect.construct(
         target,
-        [{ reasoning, ...settings, allowSystemInMessages: true }],
+        [{ ...(reasoning ? { reasoning } : {}), ...settings, allowSystemInMessages: true }],
         newTarget,
       );
     },

@@ -1,5 +1,5 @@
 <template>
-  <div class="divide-y rounded-lg border bg-card">
+  <div class="divide-y divide-border/70">
     <slot />
   </div>
 </template>

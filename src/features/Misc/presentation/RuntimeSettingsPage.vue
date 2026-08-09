@@ -65,7 +65,7 @@ async function requestNotificationPermission() {
       </SettingItem>
     </SettingGroup>
 
-    <SettingGroup v-if="android" title="Android 电源控制" description="允许 Pulsar 请求不受电池优化限制，以保证后台任务和通知更及时。">
+    <SettingGroup v-if="android" title="Android 电源控制">
       <SettingItem
         title="电池优化状态"
         :description="batteryStatus?.isOptimized ? '当前可能受到 Doze 和电池优化限制。' : '当前未检测到电池优化限制。'"

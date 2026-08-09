@@ -74,8 +74,6 @@ export const useModelConnectionStore = defineStore("modelConnection", {
     search: "",
     modelSearch: "",
     activeProviderId: "openai",
-    enabledCollapsed: false,
-    disabledCollapsed: false,
     activeModelTab: "all" as ModelApiType | "all",
     apiKeyStatus: {} as Record<string, boolean>,
     providers: cloneProviders() as ModelProviderDefinition[],
@@ -84,25 +82,6 @@ export const useModelConnectionStore = defineStore("modelConnection", {
   getters: {
     activeProvider: (state) =>
       state.providers.find((provider) => provider.id === state.activeProviderId) ?? state.providers[0],
-    filteredProviders: (state) => {
-      const keyword = state.search.trim().toLowerCase();
-
-      if (!keyword) {
-        return state.providers;
-      }
-
-      return state.providers.filter((provider) =>
-        [provider.id, provider.name, provider.description]
-          .filter(Boolean)
-          .some((value) => value?.toLowerCase().includes(keyword)),
-      );
-    },
-    enabledProviders(): ModelProviderDefinition[] {
-      return this.filteredProviders.filter((provider) => provider.enabled);
-    },
-    disabledProviders(): ModelProviderDefinition[] {
-      return this.filteredProviders.filter((provider) => !provider.enabled);
-    },
     activeModels(): ModelDefinition[] {
       const provider = this.activeProvider;
       const keyword = this.modelSearch.trim().toLowerCase();
@@ -175,6 +154,14 @@ export const useModelConnectionStore = defineStore("modelConnection", {
         for (const provider of this.providers) {
           registerOpenAICompatibleProvider(provider.id, provider.baseUrl, provider.apiKeyName);
         }
+        await Promise.all(this.providers.map(async (provider) => {
+          const hasApiKey = await hasSecret(provider.apiKeyName);
+          this.apiKeyStatus[provider.apiKeyName] = hasApiKey;
+          if (provider.enabled && !hasApiKey) {
+            provider.enabled = false;
+            await persistProvider(provider);
+          }
+        }));
         this.loaded = true;
       })();
 
@@ -195,10 +182,15 @@ export const useModelConnectionStore = defineStore("modelConnection", {
         return;
       }
 
+      if (patch.enabled === true && !this.apiKeyStatus[provider.apiKeyName]) {
+        return false;
+      }
+
       Object.assign(provider, patch);
 
       registerOpenAICompatibleProvider(provider.id, provider.baseUrl, provider.apiKeyName);
       await persistProvider(provider);
+      return true;
     },
     async refreshSecretStatus(providerId?: string) {
       providerId ??= this.activeProviderId;
@@ -226,6 +218,10 @@ export const useModelConnectionStore = defineStore("modelConnection", {
 
       await clearSecretValue(provider.apiKeyName);
       await this.refreshSecretStatus(providerId);
+      if (provider.enabled) {
+        provider.enabled = false;
+        await persistProvider(provider);
+      }
     },
     async deleteProviderApiKey(providerId: string) {
       const provider = this.providers.find((item) => item.id === providerId);
@@ -235,6 +231,10 @@ export const useModelConnectionStore = defineStore("modelConnection", {
 
       await deleteSecret(provider.apiKeyName);
       await this.refreshSecretStatus(providerId);
+      if (provider.enabled) {
+        provider.enabled = false;
+        await persistProvider(provider);
+      }
     },
     async addProvider(input: NewModelProviderInput) {
       const id = input.id.trim().toLowerCase();
@@ -332,6 +332,9 @@ export const useModelConnectionStore = defineStore("modelConnection", {
       }
 
       if (enabled) {
+        if (!this.apiKeyStatus[provider.apiKeyName]) {
+          return;
+        }
         provider.enabled = true;
         models[0].enabled = true;
       } else {

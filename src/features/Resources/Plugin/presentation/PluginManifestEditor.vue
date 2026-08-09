@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, type Component } from "vue";
+import { computed, ref, watch, type Component } from "vue";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SettingGroup from "@/features/Setting/presentation/SettingGroup.vue";
 import SettingItem from "@/features/Setting/presentation/SettingItem.vue";
 import { resolvePluginComponentByName } from "@/features/Resources/Plugin/application/plugin-vue-runtime";
@@ -15,7 +16,6 @@ import ManifestCheckboxControl from "./manifest-controls/ManifestCheckboxControl
 import ManifestInputControl from "./manifest-controls/ManifestInputControl.vue";
 import ManifestMediaSelectControl from "./manifest-controls/ManifestMediaSelectControl.vue";
 import ManifestModelSelectControl from "./manifest-controls/ManifestModelSelectControl.vue";
-import ManifestReasoningEffortControl from "./manifest-controls/ManifestReasoningEffortControl.vue";
 import ManifestSelectControl from "./manifest-controls/ManifestSelectControl.vue";
 import ManifestSliderControl from "./manifest-controls/ManifestSliderControl.vue";
 import ManifestSwitchControl from "./manifest-controls/ManifestSwitchControl.vue";
@@ -34,7 +34,6 @@ const builtins: Record<string, Component> = {
   input: ManifestInputControl,
   mediaselect: ManifestMediaSelectControl,
   modelselect: ManifestModelSelectControl,
-  reasoningeffortselect: ManifestReasoningEffortControl,
   select: ManifestSelectControl,
   slider: ManifestSliderControl,
   switch: ManifestSwitchControl,
@@ -52,6 +51,14 @@ const parsedSource = computed(() => {
   }
 });
 const parsed = computed(() => parsePluginManifest(parsedSource.value.value));
+const activeGroupId = ref("");
+watch(
+  () => parsed.value.manifest.map((item) => item.group.id),
+  (groupIds) => {
+    if (!groupIds.includes(activeGroupId.value)) activeGroupId.value = groupIds[0] ?? "";
+  },
+  { immediate: true },
+);
 const componentRuntime = computed(() => {
   const components = new Map<string, Component>();
   const diagnostics: string[] = [];
@@ -112,31 +119,46 @@ function updateValue(groupId: string, contentId: string, value: PluginManifestVa
         </AlertDescription>
       </Alert>
 
-      <SettingGroup
-        v-for="groupContent in parsed.manifest"
-        :key="groupContent.group.id"
-        :title="groupContent.group.title"
-        :description="groupContent.group.description"
-      >
-        <SettingItem
-          v-for="content in groupContent.content"
-          :key="content.id"
-          :title="content.title"
-          :description="content.description"
+      <Tabs v-if="parsed.manifest.length" v-model="activeGroupId">
+        <TabsList class="h-9 rounded-full bg-muted/70 p-1">
+          <TabsTrigger
+            v-for="groupContent in parsed.manifest"
+            :key="groupContent.group.id"
+            :value="groupContent.group.id"
+            class="rounded-full px-4 text-xs"
+          >
+            {{ groupContent.group.title }}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent
+          v-for="groupContent in parsed.manifest"
+          :key="groupContent.group.id"
+          :value="groupContent.group.id"
+          class="mt-2"
         >
-          <component
-            :is="control(content.component)"
-            v-if="control(content.component)"
-            :model-value="content.value"
-            :disabled="readonly"
-            v-bind="controlProps(content)"
-            @update:model-value="updateValue(groupContent.group.id, content.id, $event)"
-          />
-          <span v-else class="text-xs text-destructive">
-            无法加载组件 {{ content.component }}
-          </span>
-        </SettingItem>
-      </SettingGroup>
+          <SettingGroup>
+            <SettingItem
+              v-for="content in groupContent.content"
+              :key="content.id"
+              :title="content.title"
+              :description="content.description"
+            >
+              <component
+                :is="control(content.component)"
+                v-if="control(content.component)"
+                :model-value="content.value"
+                :disabled="readonly"
+                v-bind="controlProps(content)"
+                @update:model-value="updateValue(groupContent.group.id, content.id, $event)"
+              />
+              <span v-else class="text-xs text-destructive">
+                无法加载组件 {{ content.component }}
+              </span>
+            </SettingItem>
+          </SettingGroup>
+        </TabsContent>
+      </Tabs>
 
       <p v-if="!parsed.manifest.length && !diagnostics.length" class="py-12 text-center text-sm text-muted-foreground">
         manifest.json 还没有 GroupContent 配置。

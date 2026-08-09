@@ -12,7 +12,7 @@ export const capabilities: CapabilityDefinition = {
   documentation: {
     overview: "使用现有 ModelConnection 与默认模型配置执行一次无工具文本生成，适合摘要、改写和分类等短任务。",
     notes: [
-      "省略 model 时使用默认聊天模型，显式模型值使用 provider/model 引用格式。",
+      "省略 model 时使用默认聊天模型，显式模型值使用 provider/model/thinkingLevel 引用格式，末段可省略。",
       "此入口不创建 Agent，也不启动插件流程或工具循环。",
     ],
     types: [

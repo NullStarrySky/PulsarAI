@@ -30,8 +30,6 @@ const service = useModelCapabilityProviders("asr");
 const systemSupported = supportsSystemStt();
 const search = ref("");
 const activeServiceId = ref(systemSupported ? SYSTEM_STT_SERVICE_ID : "");
-const enabledCollapsed = ref(false);
-const disabledCollapsed = ref(false);
 const systemEnabled = ref(true);
 const audio = ref<Uint8Array>();
 const audioName = ref("");
@@ -187,8 +185,6 @@ async function runTest() {
 
 <template>
   <ServiceProviderSettingsLayout
-    v-model:enabled-collapsed="enabledCollapsed"
-    v-model:disabled-collapsed="disabledCollapsed"
     :providers="providers"
     :active-provider-id="activeServiceId"
     :search="search"

@@ -42,32 +42,6 @@ export async function openSubWindow(params: SubWindowParams) {
   return webview;
 }
 
-export async function popOutWorkspaceTab(tab: {
-  resourceType: string;
-  resourceId: string;
-  packageId?: string;
-  title: string;
-  resourceParams?: Record<string, unknown>;
-}) {
-  const target: SubWindowTarget =
-    tab.resourceType === "builtin"
-      ? {
-          type: "builtin",
-          resourceId: tab.resourceId,
-          title: tab.title,
-          resourceParams: tab.resourceParams,
-        }
-      : {
-          type: "resource",
-          resourceType: tab.resourceType,
-          resourceId: tab.resourceId,
-          packageId: tab.packageId,
-          title: tab.title,
-          resourceParams: tab.resourceParams,
-        };
-  return popOutTarget(target, tab.title);
-}
-
 export async function returnToMain(target: SubWindowTarget) {
   await emit("subwindow:return", target);
 }

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Plus } from "lucide-vue-next";
-import { onMounted, ref, watch } from "vue";
+import { Minimize2 } from "lucide-vue-next";
+import { onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { useConversationStore } from "../application/conversation-store";
 import { usePluginStore } from "@/features/Resources/Plugin/application/plugin-store";
@@ -40,35 +40,6 @@ onMounted(async () => {
   }
 });
 
-watch(
-  () => [
-    conversation.activeConversation?.id,
-    conversation.activeConversation?.title,
-    conversation.activePackage?.id,
-    conversation.activePackage?.name,
-  ] as const,
-  () => {
-    const item = conversation.activeConversation;
-    layout.openTab({
-      id: "conversation-stage:active",
-      title: item?.title ?? conversation.activePackage?.name ?? "会话",
-      resourceType: "conversation-stage",
-      resourceId: item?.id ?? (conversation.activePackageId || "empty"),
-      closable: false,
-    });
-  },
-  { immediate: true },
-);
-
-async function createPackage() {
-  await conversation.createPackage();
-}
-
-async function createConversation() {
-  if (!conversation.activePackageId) return;
-  await conversation.createConversation(conversation.activePackageId);
-}
-
 function openPluginFile(value: SelectedPluginFile) {
   selectedPluginFile.value = value;
   fileEditorOpen.value = true;
@@ -77,7 +48,19 @@ function openPluginFile(value: SelectedPluginFile) {
 
 <template>
   <section class="conversation-stage-one flex h-full min-w-0 flex-col overflow-hidden bg-background text-foreground">
-    <ConversationStageHeader v-model:asset-open="assetPanelOpen" />
+    <ConversationStageHeader v-if="!layout.immersiveConversation" v-model:asset-open="assetPanelOpen" />
+    <Button
+      v-else
+      variant="secondary"
+      size="icon"
+      class="fixed right-4 top-4 z-50 size-11 rounded-full text-muted-foreground shadow-lg hover:bg-muted hover:text-foreground mobile:right-3 mobile:top-3"
+      title="恢复顶栏"
+      aria-label="恢复顶栏"
+      @mousedown.stop.prevent="layout.setImmersiveConversation(false)"
+      @click.stop="layout.setImmersiveConversation(false)"
+    >
+      <Minimize2 class="size-4" />
+    </Button>
 
     <div class="relative min-h-0 flex-1 overflow-hidden">
       <main class="relative h-full min-w-0 overflow-hidden">
@@ -86,24 +69,9 @@ function openPluginFile(value: SelectedPluginFile) {
           <ConversationStageComposer />
         </template>
 
-        <div v-else class="flex h-full min-h-0 items-center justify-center px-6 text-center">
-          <div class="max-w-sm">
-            <div class="mx-auto flex size-14 items-center justify-center rounded-2xl bg-muted text-lg font-semibold text-muted-foreground">
-              {{ conversation.activePackage?.name?.slice(0, 1) ?? "P" }}
-            </div>
-            <h1 class="mt-4 text-lg font-medium">
-              {{ conversation.activePackage ? `和 ${conversation.activePackage.name} 开始新的会话` : "创建第一个角色包" }}
-            </h1>
-            <p class="mt-1 text-sm text-muted-foreground">
-              {{ conversation.activePackage?.description || (conversation.activePackage ? "会话会与当前角色包及其插件资源关联。" : "角色包会显式创建自己的本地插件，不会自动修复或补建关系。") }}
-            </p>
-            <p v-if="initializationError" class="mt-3 text-xs text-destructive">{{ initializationError }}</p>
-            <Button class="mt-5" @click="conversation.activePackage ? createConversation() : createPackage()">
-              <Plus class="size-4" />
-              {{ conversation.activePackage ? "新建会话" : "新建角色包" }}
-            </Button>
-          </div>
-        </div>
+        <p v-if="initializationError" class="absolute inset-x-4 top-4 z-50 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+          {{ initializationError }}
+        </p>
 
       </main>
 

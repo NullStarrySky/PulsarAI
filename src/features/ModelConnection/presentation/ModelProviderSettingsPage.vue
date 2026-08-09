@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useDebounceFn } from "@vueuse/core";
 import { push } from "notivue";
-import { ChevronDown, Clipboard, Plus, Search } from "lucide-vue-next";
+import { Clipboard, Plus, Search } from "lucide-vue-next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,7 +30,9 @@ import { generateText } from "../application/ai";
 import { fetchOpenAICompatibleModels } from "../application/openai-compatible-models";
 import { modelTypeLabels, useModelConnectionStore } from "../application/model-connection-store";
 import type { ModelApiType } from "../domain/model-provider";
+import type { ServiceProviderView } from "../domain/service-provider";
 import ProviderAvatar from "./ProviderAvatar.vue";
+import ServiceProviderSettingsLayout from "./ServiceProviderSettingsLayout.vue";
 
 const store = useModelConnectionStore();
 const providerDialogOpen = ref(false);
@@ -63,6 +65,11 @@ const modelForm = reactive({
 
 const activeProvider = computed(() => store.activeProvider);
 const activeProviderHasKey = computed(() => Boolean(store.apiKeyStatus[activeProvider.value.apiKeyName]));
+const providerViews = computed<ServiceProviderView[]>(() => store.providers.map((provider) => ({
+  ...provider,
+  canEnable: Boolean(store.apiKeyStatus[provider.apiKeyName]),
+  source: "model",
+})));
 const providerChatModels = computed(() => activeProvider.value.models.filter((model) => model.enabled && model.apiType === "chat"));
 
 onMounted(async () => {
@@ -158,6 +165,16 @@ async function activateProvider(providerId: string) {
   await store.refreshSecretStatus(providerId);
 }
 
+async function toggleProviderEnabled(providerId: string, enabled: boolean) {
+  const provider = store.providers.find((item) => item.id === providerId);
+  if (!provider) return;
+  if (enabled && !store.apiKeyStatus[provider.apiKeyName]) {
+    push.warning("请先填写 API Key，再启用该提供商。");
+    return;
+  }
+  await store.patchProvider(providerId, { enabled });
+}
+
 async function checkConnectivity() {
   if (!connectivityModelId.value) {
     push.warning("请先选择一个对话模型。");
@@ -209,86 +226,21 @@ async function fetchModelList() {
 
 <template>
   <section class="flex h-full min-h-0 flex-col">
-    <div class="grid h-full min-h-0 overflow-hidden lg:grid-cols-[15rem_minmax(0,1fr)] mobile:grid-rows-[10rem_minmax(0,1fr)]">
-      <aside class="flex min-h-0 flex-col border-r mobile:border-b mobile:border-r-0">
-        <div class="flex items-center gap-2 border-b p-3">
-          <div class="relative min-w-0 flex-1">
-            <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input v-model="store.search" class="h-8 pl-8" placeholder="搜索服务商" />
-          </div>
-          <Button size="icon" variant="ghost" class="size-8" title="新增服务商" @click="providerDialogOpen = true">
-            <Plus class="size-4" />
-          </Button>
-        </div>
+    <ServiceProviderSettingsLayout
+      :providers="providerViews"
+      :active-provider-id="activeProvider.id"
+      :search="store.search"
+      @update:search="store.search = $event"
+      @select-provider="activateProvider"
+      @toggle-provider="toggleProviderEnabled"
+    >
+      <template #selector-actions>
+        <Button size="icon" variant="ghost" class="size-9" title="新增提供商" @click="providerDialogOpen = true">
+          <Plus />
+        </Button>
+      </template>
 
-        <div class="min-h-0 flex-1 overflow-y-auto p-2">
-          <section>
-            <button
-              class="flex w-full items-center justify-between rounded-md px-2 py-2 text-xs font-medium text-muted-foreground"
-              @click="store.enabledCollapsed = !store.enabledCollapsed"
-            >
-              已启用
-              <ChevronDown :class="cn('size-4 transition-transform', store.enabledCollapsed && '-rotate-90')" />
-            </button>
-            <div v-if="!store.enabledCollapsed" class="space-y-1">
-              <button
-                v-for="provider in store.enabledProviders"
-                :key="provider.id"
-                :class="cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-accent',
-                  provider.id === activeProvider.id && 'bg-accent text-accent-foreground',
-                )"
-                @click="activateProvider(provider.id)"
-              >
-                <ProviderAvatar :name="provider.name" :src="provider.iconUrl" />
-                <span class="min-w-0 truncate">{{ provider.name }}</span>
-              </button>
-            </div>
-          </section>
-
-          <section class="mt-2">
-            <button
-              class="flex w-full items-center justify-between rounded-md px-2 py-2 text-xs font-medium text-muted-foreground"
-              @click="store.disabledCollapsed = !store.disabledCollapsed"
-            >
-              未启用
-              <ChevronDown :class="cn('size-4 transition-transform', store.disabledCollapsed && '-rotate-90')" />
-            </button>
-            <div v-if="!store.disabledCollapsed" class="space-y-1">
-              <button
-                v-for="provider in store.disabledProviders"
-                :key="provider.id"
-                :class="cn(
-                  'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-accent',
-                  provider.id === activeProvider.id && 'bg-accent text-accent-foreground',
-                )"
-                @click="activateProvider(provider.id)"
-              >
-                <ProviderAvatar :name="provider.name" :src="provider.iconUrl" />
-                <span class="min-w-0 truncate">{{ provider.name }}</span>
-              </button>
-            </div>
-          </section>
-        </div>
-      </aside>
-
-      <section class="flex min-h-0 flex-col">
-        <header class="flex items-center justify-between gap-3 border-b px-6 pb-5 pt-6 mobile:px-4 mobile:py-3">
-          <div class="flex min-w-0 items-center gap-3">
-            <ProviderAvatar :name="activeProvider.name" :src="activeProvider.iconUrl" />
-            <div class="min-w-0">
-              <h3 class="truncate text-lg font-semibold">{{ activeProvider.name }}</h3>
-              <p class="truncate text-sm text-muted-foreground">{{ activeProvider.description || activeProvider.id }}</p>
-            </div>
-          </div>
-          <Switch
-            :model-value="activeProvider.enabled"
-            @update:model-value="store.patchProvider(activeProvider.id, { enabled: Boolean($event) })"
-          />
-        </header>
-
-        <div class="min-h-0 flex-1 overflow-y-auto p-6 mobile:p-4">
-          <div class="grid gap-8 mobile:gap-6">
+      <div class="grid gap-8 mobile:gap-6">
             <SettingForm>
               <SettingFormField title="API Key" description="用于连接当前服务商。">
                 <Input
@@ -421,10 +373,8 @@ async function fetchModelList() {
                 </div>
               </div>
             </section>
-          </div>
-        </div>
-      </section>
-    </div>
+      </div>
+    </ServiceProviderSettingsLayout>
 
     <Dialog v-model:open="providerDialogOpen">
       <DialogContent class="sm:max-w-2xl">

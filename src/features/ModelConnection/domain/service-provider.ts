@@ -4,5 +4,6 @@ export interface ServiceProviderView {
   description?: string;
   iconUrl?: string;
   enabled: boolean;
+  canEnable?: boolean;
   source: "model" | "feature";
 }

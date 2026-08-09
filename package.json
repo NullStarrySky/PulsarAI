@@ -50,6 +50,7 @@
     "edge-tts-ts": "^1.0.0",
     "embla-carousel-vue": "^8.6.0",
     "fflate": "^0.8.3",
+    "interactjs": "^1.10.28",
     "lucide-vue-next": "^1.0.0",
     "notivue": "^2.4.5",
     "pinia": "^4.0.2",

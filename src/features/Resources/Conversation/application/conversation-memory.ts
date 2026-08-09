@@ -1,15 +1,11 @@
-import {
-  generateText,
-  type LanguageModel,
-  type ModelMessage,
-} from "ai";
+import { type ModelMessage } from "ai";
 import {
   remove,
   selectAll,
   upsert,
 } from "@/features/Database/application/database-service";
 import { getFastModel } from "@/features/defaultConfigs/application/default-config-service";
-import { hydrateModel } from "@/features/ModelConnection/application/model-ai";
+import { generateText } from "@/features/ModelConnection/application/model-ai";
 import {
   createContextDataFacade,
   type ContextDataValue,
@@ -618,7 +614,7 @@ async function persistSummary(input: {
 }) {
   const modelName = await getFastModel();
   const result = await generateText({
-    model: hydrateModel(modelName, "chat") as LanguageModel,
+    model: modelName,
     instructions: [
       "你是会话压缩记忆 Agent。",
       "把给定的连续历史区间压缩成可继续递归摘要的中文记忆。",

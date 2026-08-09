@@ -19,7 +19,6 @@ export interface PluginManifestGroupContent {
   group: {
     id: string;
     title: string;
-    description?: string;
   };
   content: PluginManifestContent[];
 }
@@ -32,16 +31,8 @@ export const pluginManifestFixedSettings = {
     groupTitle: "生成",
     contentId: "model",
     title: "模型",
-    description: "留空时继承全局默认聊天模型。",
+    description: "留空时继承全局默认模型；引用可附带思考强度。",
     component: "ModelSelect",
-  },
-  reasoningEffort: {
-    groupId: "generation",
-    groupTitle: "生成",
-    contentId: "reasoningEffort",
-    title: "推理强度",
-    description: "留空时继承全局推理强度。",
-    component: "ReasoningEffortSelect",
   },
   background: {
     groupId: "appearance",
@@ -155,9 +146,6 @@ export function parsePluginManifest(value: unknown): {
       group: {
         id: groupId,
         title: normalizedText(rawGroup.group.title) || groupId,
-        ...(normalizedText(rawGroup.group.description)
-          ? { description: normalizedText(rawGroup.group.description) }
-          : {}),
       },
       content,
     } satisfies PluginManifestGroupContent];

@@ -16,6 +16,7 @@ import PluginChatEditor from "./PluginChatEditor.vue";
 import PluginContainerDefinitionsEditor from "./PluginContainerDefinitionsEditor.vue";
 import PluginManifestEditor from "./PluginManifestEditor.vue";
 import PluginRegexEditor from "./PluginRegexEditor.vue";
+import PluginVuePreview from "./PluginVuePreview.vue";
 
 const props = defineProps<{
   plugin: Plugin;
@@ -92,13 +93,19 @@ const codeLanguage = computed(() => {
       :model-value="modelValue"
       @update:model-value="emit('update:modelValue', $event)"
     />
+    <PluginVuePreview
+      v-else-if="type === 'component' && mode === 'preview'"
+      :plugin="plugin"
+      :file="file"
+      :source="modelValue"
+    />
     <div v-else-if="type === 'markdown' && mode === 'preview'" class="plugin-file-milkdown h-full min-h-0 overflow-hidden">
       <ConversationComposerEditor
         :model-value="modelValue"
         placeholder="输入 Markdown 内容"
         enable-block-edit
-        enable-top-bar
         :enable-ai="false"
+        :submit-on-enter="false"
         @update:model-value="emit('update:modelValue', $event)"
       />
     </div>

@@ -14,6 +14,7 @@ const props = withDefaults(
     enableAi?: boolean;
     enableTopBar?: boolean;
     compact?: boolean;
+    submitOnEnter?: boolean;
   }>(),
   {
     modelValue: "",
@@ -22,6 +23,7 @@ const props = withDefaults(
     enableAi: true,
     enableTopBar: false,
     compact: false,
+    submitOnEnter: true,
   },
 );
 
@@ -32,6 +34,7 @@ const emit = defineEmits<{
 const appearance = useAppearanceStore();
 
 function handleKeydown(event: KeyboardEvent) {
+  if (!props.submitOnEnter) return;
   if (event.key !== "Enter" || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) {
     return;
   }
@@ -41,6 +44,8 @@ function handleKeydown(event: KeyboardEvent) {
   if (!shouldSubmit) return;
   event.preventDefault();
   event.stopPropagation();
+  const editor = (event.target as HTMLElement | null)?.closest?.(".ProseMirror");
+  if (!(editor?.textContent ?? props.modelValue).trim()) return;
   emit("submit");
 }
 
@@ -151,7 +156,7 @@ const ComposerInner = defineComponent({
         'conversation-composer-editor--block-edit': props.enableBlockEdit,
         'conversation-composer-editor--compact': props.compact,
       }"
-      @keydown="handleKeydown"
+      @keydown.capture="handleKeydown"
     >
       <ComposerInner
         :model-value="props.modelValue"
@@ -194,7 +199,7 @@ const ComposerInner = defineComponent({
 .conversation-composer-editor .ProseMirror {
   overflow-y: auto !important;
   padding: 0.4rem 0.35rem 2rem 0.35rem !important; /* Added 2rem bottom padding for selection toolbar */
-  font-size: 0.92rem;
+  font-size: 14px !important;
   line-height: 1.55;
 }
 
@@ -202,7 +207,7 @@ const ComposerInner = defineComponent({
   min-height: 6rem !important;
   max-height: 12rem;
   padding: 0.5rem 0.45rem 2rem 0.45rem !important;
-  font-size: 1rem;
+  font-size: 14px !important;
 }
 
 .conversation-composer-editor .ProseMirror > * {
@@ -216,19 +221,19 @@ const ComposerInner = defineComponent({
 
 .conversation-composer-editor--compact,
 .conversation-composer-editor--compact :where(.milkdown, .editor, .ProseMirror) {
-  min-height: 2.75rem !important;
+  min-height: 2.25rem !important;
 }
 
 .conversation-composer-editor--compact .ProseMirror {
-  max-height: 10rem !important;
-  padding: 0.35rem 0.25rem !important;
-  font-size: 0.9375rem;
-  line-height: 1.5rem;
+  max-height: 8rem !important;
+  padding: 0.1rem 0.25rem 0.2rem !important;
+  font-size: 14px !important;
+  line-height: 1.4rem;
 }
 
 .mobile-layout .conversation-composer-editor--compact .ProseMirror {
-  min-height: 2.75rem !important;
-  padding: 0.4rem 0.25rem !important;
-  font-size: 1rem;
+  min-height: 2.25rem !important;
+  padding: 0.1rem 0.25rem 0.2rem !important;
+  font-size: 14px !important;
 }
 </style>

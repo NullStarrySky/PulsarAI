@@ -2,9 +2,7 @@
 
 `application/database-service.ts` 通过 Tauri `database_select_all`、`database_select_one`、`database_upsert`、`database_delete` 和 `database_reset_character_data` 访问 SurrealDB。Plugin 的元信息、稳定节点和搜索继续使用专用的 `database_load_plugins`、`database_save_plugin`、`database_delete_plugin` 与 `database_search_plugin_nodes` 命令。
 
-所有前端数据库边界都通过 `application/database-log.ts` 记录 `[Pulsar DB]` 日志。日志以 200ms 批次输出，包含操作序号、操作名、表名、记录 ID、结果数量、成功状态和耗时；查询内容只记录长度，不打印记录正文或搜索文本。日志批处理只影响控制台输出，不延迟或合并真实数据库调用。
-
-通用 `database_upsert` 使用调用方提供的资源 ID 构造确定性的 SurrealDB record ID，并在同一显式事务内清理相同 `resource_key` 的旧随机记录后执行 `UPSERT`。这保证同一资源的并发写入不会通过 `DELETE + CREATE` 竞态制造重复行。
+通用 `database_upsert` 使用 SurrealDB 2.6 的 `type::thing(table, id)` 以调用方资源 ID 构造确定性的 record ID，并直接执行单条 `UPSERT`。不能在 2.6 中按新版参数顺序调用 `type::record(table, id)`；该版本的同名函数参数顺序不同，会把资源 ID 误作表名。通用写入和删除都会检查 SurrealDB response 内的逐语句错误，避免命令表面成功、实际没有落盘，进而导致角色包和会话在刷新后消失。
 
 ModelConnection Store 使用共享的 in-flight Promise 串行化首次初始化。读取 provider 时不再无条件全量写回；如果检测到历史重复 `resource_key`，只按唯一 provider ID 顺序写入一次，借助事务 upsert 压缩重复记录。
 

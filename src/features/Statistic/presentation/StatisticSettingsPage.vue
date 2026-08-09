@@ -49,7 +49,7 @@ function formatSize(bytes: number) {
       </div>
     </section>
 
-    <SettingGroup title="过去一年热力图" description="根据启动和消息事件统计活跃度。">
+    <SettingGroup title="过去一年热力图">
       <div class="px-4 py-4">
         <div class="grid grid-flow-col grid-rows-7 justify-start gap-1 overflow-x-auto pb-1">
           <span
@@ -63,7 +63,7 @@ function formatSize(bytes: number) {
       </div>
     </SettingGroup>
 
-    <SettingGroup title="磁盘管理" description="按 JSON 数据体积估算各类资源占比。">
+    <SettingGroup title="磁盘管理">
       <SettingItem title="分析维度" description="切换类型占比或角色包占比。">
         <div class="flex gap-1 rounded-md bg-muted p-1">
           <Button size="sm" :variant="diskMode === 'type' ? 'secondary' : 'ghost'" @click="diskMode = 'type'">资源</Button>

@@ -30,11 +30,8 @@ import {
 } from "@/features/Resources/Plugin/domain/plugin-types";
 import { createPluginSelfApi } from "@/features/Resources/Plugin/capabilities";
 import { pluginFixedSettingValue } from "@/features/Resources/Plugin/domain/plugin-runtime";
-import {
-  getDefaultChatModel,
-  getDefaultReasoningEffort,
-} from "@/features/defaultConfigs/application/default-config-service";
-import type { ReasoningEffort } from "@/features/defaultConfigs/domain/default-config";
+import { getDefaultChatModel } from "@/features/defaultConfigs/application/default-config-service";
+import { parseModelReference } from "@/features/ModelConnection/domain/model-reference";
 import { buildCapabilityRuntime } from "@/features/Capabilities/application/capability-registry";
 import {
   executeSandboxCodeAsync,
@@ -183,21 +180,12 @@ export async function runConversationGeneration(
 ): Promise<RunConversationGenerationResult> {
   const mainPlugin = input.plugins.find((plugin) => plugin.id === input.mainPluginId);
   if (!mainPlugin) throw new Error(`主要插件不存在：${input.mainPluginId}`);
-  const [defaultModel, defaultReasoningEffort] = await Promise.all([
-    getDefaultChatModel(),
-    getDefaultReasoningEffort(),
-  ]);
+  const defaultModel = await getDefaultChatModel();
   const configuredModel = pluginFixedSettingValue(mainPlugin, "model");
-  const configuredReasoningEffort = pluginFixedSettingValue(
-    mainPlugin,
-    "reasoningEffort",
-  );
   const modelName = typeof configuredModel === "string" && configuredModel.trim()
     ? configuredModel.trim()
     : defaultModel;
-  const reasoningEffort = isReasoningEffort(configuredReasoningEffort)
-    ? configuredReasoningEffort
-    : defaultReasoningEffort;
+  const reasoningEffort = parseModelReference(modelName).reasoning;
   const initialGenerateInfo = input.emptyMessage.meta.generateInfo ??= {
     modelName,
     startTime: new Date().toISOString(),
@@ -218,7 +206,7 @@ export async function runConversationGeneration(
       prompt: input.prompt,
       baseEnvironment: {
         ...capabilityRuntime.environment,
-        reasoningEffort,
+        reasoningEffort: reasoningEffort ?? "auto",
       },
     },
   );
@@ -346,7 +334,6 @@ export async function runConversationGeneration(
   const agentResources = createAgentResourceProvider({
     environment: finalEnvironment,
     modelName,
-    reasoningEffort,
     onStep: reply.addStep,
     variableUpdate: dataDefinitions.some((item) => item.enableUpdater)
       ? {
@@ -622,14 +609,6 @@ export async function runConversationGeneration(
     diagnostics: pluginEnvironment.diagnostics,
     processPluginId,
   };
-}
-
-function isReasoningEffort(value: unknown): value is ReasoningEffort {
-  return value === "none"
-    || value === "low"
-    || value === "medium"
-    || value === "high"
-    || value === "xhigh";
 }
 
 function fillEnvironmentMetadata(

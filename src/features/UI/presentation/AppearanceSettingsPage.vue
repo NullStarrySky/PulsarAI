@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { FileCode2, Import, Monitor, Moon, Sun, Type } from "lucide-vue-next";
+import { Check, FileCode2, Import, Monitor, Moon, Sun, Type } from "lucide-vue-next";
 import { push } from "notivue";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,7 @@ import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import SettingForm from "@/features/Setting/presentation/SettingForm.vue";
 import SettingFormField from "@/features/Setting/presentation/SettingFormField.vue";
 import SettingPage from "@/features/Setting/presentation/SettingPage.vue";
@@ -50,6 +51,11 @@ const themeModeOptions = [
   { id: "dark", label: "深色", icon: Moon },
   { id: "system", label: "系统", icon: Monitor },
 ] as const;
+
+function themeDescription(themeId: string) {
+  if (appearance.customThemes.some((theme) => theme.id === themeId)) return "导入的自定义配色";
+  return "内置配色方案";
+}
 
 function openThemeImport() {
   themeCss.value = "";
@@ -91,41 +97,55 @@ function importFont() {
 </script>
 
 <template>
-  <SettingPage title="外观" description="调整主题、字体和界面显示比例。">
-    <SettingForm>
-      <SettingFormField title="主题" description="选择内置主题，或导入 tweakcn 风格的 CSS 主题文件。">
-        <div class="ml-auto flex items-center gap-2">
-          <span class="size-4 shrink-0 rounded-full border" :style="{ backgroundColor: activeAccent }" />
-          <Select v-model="appearance.themeId">
-            <SelectTrigger class="w-40"><SelectValue placeholder="选择主题" /></SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem v-for="theme in appearance.themes" :key="theme.id" :value="theme.id">
-                  {{ theme.name }}
-                </SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="icon" title="导入主题" @click="openThemeImport">
-            <Import class="size-4" />
-          </Button>
-        </div>
-      </SettingFormField>
+  <SettingPage title="主题" description="调整主题、字体和界面显示比例。">
+    <section class="flex flex-col gap-3">
+      <h3 class="text-sm font-semibold">外观模式</h3>
+      <ToggleGroup v-model="appearance.themeMode" type="single" variant="outline" :spacing="1" class="rounded-full bg-muted/55 p-1">
+        <ToggleGroupItem
+          v-for="option in themeModeOptions"
+          :key="option.id"
+          :value="option.id"
+          class="h-9 rounded-full border-0 px-4 data-[state=on]:bg-background data-[state=on]:shadow-sm"
+        >
+          <component :is="option.icon" data-icon="inline-start" />
+          {{ option.label }}
+        </ToggleGroupItem>
+      </ToggleGroup>
+    </section>
 
-      <SettingFormField title="显示模式" description="固定浅色、深色，或跟随系统。">
-        <div class="ml-auto grid w-full max-w-md grid-cols-3 gap-1 rounded-md bg-muted p-1">
-          <Button
-            v-for="option in themeModeOptions"
-            :key="option.id"
-            :variant="appearance.themeMode === option.id ? 'secondary' : 'ghost'"
-            class="h-8"
-            @click="appearance.themeMode = option.id"
-          >
-            <component :is="option.icon" class="size-4" />
-            {{ option.label }}
-          </Button>
-        </div>
-      </SettingFormField>
+    <section class="flex flex-col gap-3">
+      <div class="flex items-center justify-between gap-4">
+        <h3 class="text-sm font-semibold">颜色主题</h3>
+        <Button variant="ghost" size="sm" class="rounded-full" @click="openThemeImport">
+          <Import data-icon="inline-start" />
+          导入主题
+        </Button>
+      </div>
+      <div class="grid grid-cols-3 gap-2 mobile:grid-cols-1">
+        <button
+          v-for="theme in appearance.themes"
+          :key="theme.id"
+          type="button"
+          class="group flex min-w-0 items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors hover:bg-muted/65"
+          :class="appearance.themeId === theme.id && 'bg-muted text-foreground shadow-sm'"
+          @click="appearance.themeId = theme.id"
+        >
+          <span class="size-9 shrink-0 rounded-full ring-1 ring-border/70" :style="{ backgroundColor: theme.accent }" />
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-sm font-medium">{{ theme.name }}</span>
+            <span class="mt-0.5 block truncate text-xs text-muted-foreground">{{ themeDescription(theme.id) }}</span>
+          </span>
+          <Check v-if="appearance.themeId === theme.id" class="size-4 shrink-0" />
+        </button>
+      </div>
+    </section>
+
+    <section class="flex flex-col gap-3">
+      <div class="flex items-center gap-2">
+        <span class="size-3 rounded-full" :style="{ backgroundColor: activeAccent }" />
+        <h3 class="text-sm font-semibold">自定义</h3>
+      </div>
+      <SettingForm>
 
       <SettingFormField
         title="自定义 CSS"
@@ -203,7 +223,8 @@ function importFont() {
           </SelectContent>
         </Select>
       </SettingFormField>
-    </SettingForm>
+      </SettingForm>
+    </section>
 
     <Dialog v-model:open="themeImportOpen">
       <DialogContent class="flex h-[min(52rem,88vh)] max-h-[88vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl mobile:h-[100dvh] mobile:max-h-none mobile:w-screen mobile:rounded-none mobile:border-0">

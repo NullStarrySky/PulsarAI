@@ -158,6 +158,7 @@ export type ChatMessage = {
   id: string;
   type: ChatMessageType;
   content: string;
+  createdAt: string;
   favorite?: boolean;
   meta: ChatMessageMeta;
   parts?: AdditionalParts[];

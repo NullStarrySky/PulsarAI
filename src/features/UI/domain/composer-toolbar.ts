@@ -1,7 +1,5 @@
 export const composerToolDefinitions = [
-  { id: "plugin", label: "主要插件" },
   { id: "model", label: "模型" },
-  { id: "reasoning", label: "思考深度" },
   { id: "optimize", label: "优化提示词" },
   { id: "attachment", label: "附加文件" },
   { id: "whiteboard", label: "白板" },
@@ -19,8 +17,8 @@ export interface ComposerToolbarLayout {
 }
 
 export const defaultComposerToolbarLayout: ComposerToolbarLayout = {
-  left: ["plugin", "model", "reasoning", "optimize", "attachment"],
-  right: ["whiteboard", "map", "fullscreen"],
+  left: ["optimize", "attachment"],
+  right: ["model", "whiteboard", "map", "fullscreen"],
   unused: [],
 };
 

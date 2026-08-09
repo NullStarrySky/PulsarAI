@@ -1,12 +1,20 @@
 # Conversation
 
+The focused conversation stage always has an active database-backed character package and conversation. Initialization creates and selects the missing resource, and opening or deleting the last conversation creates a fresh blank conversation instead of routing through a separate empty page. One conversation per package may be marked as its template; new conversations clone its active path and renderer, and management lists show the template badge.
+
+Streaming assistant changes update the in-memory message immediately and throttle intermediate container persistence to one write per 250ms. Generation completion waits for any queued write and persists the final container state without throttling.
+
+Current chat messages compose the shadcn-vue Attachment, Bubble, Marker, Message, and Message Scroller primitives. Concrete message versions retain `createdAt`; the footer shows time, sibling-version navigation, message actions, and the visible-path floor number. The latest assistant footer remains visible. A blank conversation shows prompt suggestions above the composer and only fills the draft when selected.
+
 完整架构见 [`../Plugin/# PulsarAI 会话系统架构`](../Plugin/#%20PulsarAI%20会话系统架构)。
 
 Conversation 初始化只并行读取并一次性提交角色包、分类、会话和消息容器状态；没有角色包时保持空状态，不自动创建默认角色包、不补建插件，也不选择第一项。角色包及其本地插件只由明确的新建操作产生。
 
-当前主界面由 `ConversationStageOnePage` 编排，但数据与行为仍归 Conversation Store。`ConversationStageHeader` 负责角色包/会话选择、新建、置顶和删除；新写的 `ConversationStageThread` 与 `ConversationStageComposer` 保留 `724px` 中间列、全画布滚动和浮动输入栏，并复用细粒度的消息渲染、附件、Action、工具栏、分支图与生成组件，不挂载旧的 `ConversationWorkspacePage`。旧页面只作为功能清单参考。角色包或会话为空时只显示显式创建入口，不生成演示数据。
+当前主界面由 `ConversationStageOnePage` 编排，但数据与行为仍归 Conversation Store。`ConversationStageHeader` 负责角色包/会话选择、新建、置顶和删除；`ConversationStageThread` 与 `ConversationStageComposer` 保留 `724px` 中间列、全画布滚动和浮动输入栏，并复用细粒度的消息渲染、附件、Action、工具栏、分支图与生成组件。角色包或会话为空时只显示显式创建入口，不生成演示数据。
 
 生成只固定外层生命周期：创建空助手容器与消息版本、重放 `.data.json` 更新、构建授权环境、运行主要插件 `runtime/generatePath`，最后绑定结果。Conversation 不编译固定上下文，不自动读取深度容器，也不自动执行 Regex。
+
+Composer 的模型入口位于右侧并保存组合引用 `provider/modelId/thinkingLevel`；思考强度在模型菜单内调整。工具目录不再包含独立强度按钮或主要插件选择器，主要插件仍由 Plugin 资产管理入口设置。
 
 流程获得：
 

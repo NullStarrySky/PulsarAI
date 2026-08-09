@@ -8,7 +8,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useWindowLifecycleStore } from "@/features/UI/application/window-lifecycle-store";
-import { useLayoutStore } from "@/features/UI/application/layout-store";
 import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
 import SettingGroup from "../SettingGroup.vue";
 import SettingItem from "../SettingItem.vue";
@@ -20,7 +19,6 @@ const compactMode = ref(false);
 const enableAnimations = ref(true);
 const windowLifecycle = useWindowLifecycleStore();
 const appearance = useAppearanceStore();
-const layout = useLayoutStore();
 
 function setCloseBehavior(value: unknown) {
   if (value === "ask" || value === "exit" || value === "tray") {
@@ -47,15 +45,6 @@ function setCloseBehavior(value: unknown) {
     </SettingGroup>
 
     <SettingGroup title="启动与关闭">
-      <SettingItem
-        title="退出时保留标签页"
-        description="重新启动 Pulsar 时恢复主窗口中仍然打开的资源标签页。"
-      >
-        <SettingSwitch
-          :model-value="layout.keepTabsOnExit"
-          @update:model-value="layout.setKeepTabsOnExit"
-        />
-      </SettingItem>
       <SettingItem
         title="关闭主窗口时"
         description="决定点击关闭按钮后是询问、直接退出，还是继续在系统托盘运行。"

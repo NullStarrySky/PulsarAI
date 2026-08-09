@@ -1,118 +1,75 @@
 <script setup lang="ts">
-import { RefreshCcw } from "lucide-vue-next";
-import { onMounted, ref } from "vue";
-import { Badge } from "@/components/ui/badge";
+import { ref, watch } from "vue";
+import { Info, RefreshCcw } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
-import SettingForm from "@/features/Setting/presentation/SettingForm.vue";
-import SettingFormField from "@/features/Setting/presentation/SettingFormField.vue";
+import { Switch } from "@/components/ui/switch";
 import SettingPage from "@/features/Setting/presentation/SettingPage.vue";
 import AppIcon from "@/features/UI/presentation/AppIcon.vue";
-import {
-  detectEnvironmentTools,
-  type EnvironmentToolStatus,
-} from "../application/environment-check";
+import { useLayoutStore } from "@/features/UI/application/layout-store";
 
 const version = "0.1.0";
-const projectAddress = "";
+const autoCheckUpdates = ref(localStorage.getItem("pulsarai:auto-check-updates") !== "false");
 const checking = ref(false);
 const updateStatus = ref("");
-const environmentTools = ref<EnvironmentToolStatus[]>([]);
+const changelogOpen = ref(false);
+const layout = useLayoutStore();
 
-const techStack = [
-  "Tauri 2",
-  "Vue 3",
-  "TypeScript",
-  "Bun",
-  "Vite",
-  "Pinia",
-  "Tailwind CSS v4",
-  "shadcn-vue",
-  "AI SDK",
-  "Milkdown/Crepe",
-  "SurrealDB",
-];
-
-function checkForUpdates() {
-  updateStatus.value = "暂未配置更新源";
-}
-
-onMounted(() => {
-  void refreshEnvironment();
+watch(autoCheckUpdates, (enabled) => {
+  localStorage.setItem("pulsarai:auto-check-updates", String(enabled));
 });
 
-async function refreshEnvironment() {
+async function checkForUpdates() {
   checking.value = true;
-  try {
-    environmentTools.value = await detectEnvironmentTools();
-  } finally {
-    checking.value = false;
-  }
+  updateStatus.value = "";
+  await Promise.resolve();
+  updateStatus.value = "暂未配置更新源";
+  checking.value = false;
 }
 </script>
 
 <template>
-  <SettingPage title="关于 Pulsar" description="应用信息、技术栈和版本记录。">
-    <section
-      class="flex items-center gap-5 rounded-xl border bg-card p-5 shadow-sm mobile:flex-col mobile:items-start mobile:p-4"
-    >
-      <AppIcon class="size-20 mobile:size-16" />
-      <div class="min-w-0">
-        <h3 class="text-xl font-semibold tracking-tight">PulsarAI</h3>
-        <p class="mt-1 text-sm leading-6 text-muted-foreground">
-          一个开放、可扩展的本地 AI 工作空间。
-        </p>
-        <Badge class="mt-3" variant="secondary">v{{ version }}</Badge>
-      </div>
-    </section>
+  <SettingPage title="关于" description="PulsarAI 版本与更新信息。">
+    <div class="mx-auto flex min-h-full w-full max-w-xl flex-col py-4 mobile:py-0">
+      <section class="flex flex-col items-center py-3 text-center">
+        <AppIcon class="size-20" />
+        <h2 class="mt-3 text-3xl font-semibold tracking-tight">PulsarAI</h2>
+        <p class="mt-1 text-sm text-muted-foreground">版本 v{{ version }}</p>
+      </section>
 
-    <SettingForm>
-      <SettingFormField title="版本" :description="updateStatus || `当前版本 ${version}`">
-        <Button size="sm" variant="outline" @click="checkForUpdates">检查更新</Button>
-      </SettingFormField>
-
-      <SettingFormField title="开源协议" description="PulsarAI 的开源许可。">
-        <Badge variant="outline">AGPL-3.0</Badge>
-      </SettingFormField>
-
-      <SettingFormField title="项目地址" description="GitHub 发布后在这里补全。">
-        <span class="block truncate text-sm text-muted-foreground">{{ projectAddress || "暂未发布" }}</span>
-      </SettingFormField>
-
-      <SettingFormField title="技术栈" description="当前应用使用的主要运行时、框架和组件。">
-        <div class="flex flex-wrap justify-end gap-2 mobile:justify-start">
-          <Badge v-for="item in techStack" :key="item" variant="secondary">{{ item }}</Badge>
+      <section class="mt-8 flex flex-col gap-6">
+        <div class="flex items-center justify-between gap-6 px-4">
+          <div class="min-w-0">
+            <h3 class="text-sm font-semibold">自动检查更新</h3>
+            <p class="mt-1 text-xs text-muted-foreground">启动时自动检查新版本</p>
+          </div>
+          <Switch v-model="autoCheckUpdates" aria-label="自动检查更新" />
         </div>
-      </SettingFormField>
 
-      <SettingFormField title="环境检测" description="检测后续插件和 agent 常用的本机命令。">
-        <Button size="sm" variant="outline" :disabled="checking" @click="refreshEnvironment">
-          <RefreshCcw class="size-4" :class="checking && 'animate-spin'" />
-          重新检测
+        <Button
+          variant="outline"
+          class="h-10 w-full rounded-full"
+          :disabled="checking"
+          @click="checkForUpdates"
+        >
+          <RefreshCcw data-icon="inline-start" :class="checking && 'animate-spin'" />
+          {{ checking ? "检查中" : "检查更新" }}
         </Button>
-      </SettingFormField>
 
-      <SettingFormField
-        v-for="tool in environmentTools"
-        :key="tool.id"
-        :title="tool.name"
-        :description="tool.error || tool.installPath || '未获取到安装地址'"
-      >
-        <div class="flex min-w-0 flex-col items-end gap-1 mobile:items-start">
-          <Badge :variant="tool.installed ? 'default' : 'destructive'">
-            {{ tool.installed ? "已安装" : "未安装" }}
-          </Badge>
-          <span class="max-w-64 truncate text-xs text-muted-foreground mobile:max-w-full">
-            {{ tool.version || "版本未知" }}
-          </span>
+        <p v-if="updateStatus" class="text-center text-xs text-muted-foreground">{{ updateStatus }}</p>
+
+        <Button variant="ghost" class="mx-auto" @click="changelogOpen = !changelogOpen">
+          <Info data-icon="inline-start" />
+          查看更新日志
+        </Button>
+
+        <div v-if="changelogOpen" class="rounded-xl bg-muted/45 px-4 py-3 text-sm text-muted-foreground">
+          当前开发版本暂无公开更新记录。
         </div>
-      </SettingFormField>
+      </section>
 
-      <SettingFormField title="版本历史" description="未来发布日志会按版本折叠展示。">
-        <details class="rounded-md border bg-background px-3 py-2 text-sm">
-          <summary class="cursor-pointer font-medium">更新日志</summary>
-          <p class="mt-3 text-muted-foreground">暂无记录</p>
-        </details>
-      </SettingFormField>
-    </SettingForm>
+      <div class="mt-auto flex justify-end pt-10">
+        <Button class="rounded-full px-7" @click="layout.closeSettings()">完成</Button>
+      </div>
+    </div>
   </SettingPage>
 </template>

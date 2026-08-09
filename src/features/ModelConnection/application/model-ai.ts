@@ -18,6 +18,7 @@ import { createDeepSeek } from "@ai-sdk/deepseek";
 import { createOpenAI } from "@ai-sdk/openai";
 import { modelProxyFetch } from "../infrastructure/model-proxy-fetch";
 import { HuggingFaceImageModel } from "../infrastructure/huggingface-image-model";
+import { parseModelReference } from "../domain/model-reference";
 
 export type HydratableModel = string | LanguageModel | ImageModel | EmbeddingModel | TranscriptionModel | SpeechModel;
 export type ModelKind = "chat" | "image" | "embedding" | "asr" | "tts";
@@ -119,8 +120,7 @@ export function hydrateModel(model: HydratableModel, kind: ModelKind = "chat") {
     return model;
   }
 
-  const [providerId, ...modelIdParts] = model.split("/");
-  const modelId = modelIdParts.join("/");
+  const { providerId, modelId } = parseModelReference(model);
   const config = providerConfigs[providerId];
   const builder = providerBuilders[providerId];
 
@@ -141,32 +141,32 @@ export function hydrateModel(model: HydratableModel, kind: ModelKind = "chat") {
 
 type WithModel<T> = T extends { model: unknown } ? Omit<T, "model"> & { model: HydratableModel } : T;
 
-export function generateText(options: WithModel<Parameters<typeof baseGenerateText>[0]>) {
-  return baseGenerateText({
+function hydrateChatOptions<T extends { model: HydratableModel }>(options: T) {
+  const input = options as T & { reasoning?: unknown };
+  const parsed = typeof options.model === "string" ? parseModelReference(options.model) : null;
+  return {
     ...options,
+    ...(parsed?.reasoning && input.reasoning === undefined
+      ? { reasoning: parsed.reasoning }
+      : {}),
     model: hydrateModel(options.model, "chat") as LanguageModel,
-  });
+  };
+}
+
+export function generateText(options: WithModel<Parameters<typeof baseGenerateText>[0]>) {
+  return baseGenerateText(hydrateChatOptions(options));
 }
 
 export function streamText(options: WithModel<Parameters<typeof baseStreamText>[0]>) {
-  return baseStreamText({
-    ...options,
-    model: hydrateModel(options.model, "chat") as LanguageModel,
-  });
+  return baseStreamText(hydrateChatOptions(options));
 }
 
 export function generateObject(options: WithModel<Parameters<typeof baseGenerateObject>[0]>) {
-  return baseGenerateObject({
-    ...options,
-    model: hydrateModel(options.model, "chat") as LanguageModel,
-  });
+  return baseGenerateObject(hydrateChatOptions(options));
 }
 
 export function streamObject(options: WithModel<Parameters<typeof baseStreamObject>[0]>) {
-  return baseStreamObject({
-    ...options,
-    model: hydrateModel(options.model, "chat") as LanguageModel,
-  });
+  return baseStreamObject(hydrateChatOptions(options));
 }
 
 export function embed(options: WithModel<Parameters<typeof baseEmbed>[0]>) {

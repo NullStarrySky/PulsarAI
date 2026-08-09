@@ -1,5 +1,5 @@
 import type { Component } from "vue";
-import { BarChart3, BellRing, Brain, CreditCard, History, ImageIcon, Info, Keyboard, Languages, Mic, Palette, Settings, SlidersHorizontal, Star, Volume2 } from "lucide-vue-next";
+import { BarChart3, Brain, CreditCard, History, ImageIcon, Info, Keyboard, Languages, Mic, Palette, Settings, Star, Volume2 } from "lucide-vue-next";
 import GeneralSettingsPage from "../presentation/pages/GeneralSettingsPage.vue";
 import SubscriptionSettingsPage from "../presentation/pages/SubscriptionSettingsPage.vue";
 import ModelProviderSettingsPage from "@/features/ModelConnection/presentation/ModelProviderSettingsPage.vue";
@@ -20,32 +20,24 @@ export interface SettingPageMeta {
   id: string;
   icon: Component;
   title: string;
-  group: string;
 }
 
-export interface SettingGroupMeta {
+export interface SettingPageTab {
   id: string;
   title: string;
+  component: Component;
 }
 
 export interface RegisteredSettingPage {
   meta: SettingPageMeta;
-  component: Component;
+  component?: Component;
+  tabs?: SettingPageTab[];
 }
 
-const groups = new Map<string, SettingGroupMeta>();
 const pages = new Map<string, RegisteredSettingPage>();
-
-export function registerSettingGroup(group: SettingGroupMeta) {
-  groups.set(group.id, group);
-}
 
 export function registerSettingPage(page: RegisteredSettingPage) {
   pages.set(page.meta.id, page);
-}
-
-export function getSettingGroups() {
-  return [...groups.values()];
 }
 
 export function getSettingPages() {
@@ -57,166 +49,62 @@ export function getSettingPage(pageId: string) {
 }
 
 export function ensureDefaultSettingPages() {
-  if (pages.size > 0) {
-    return;
-  }
-
-  registerSettingGroup({ id: "general", title: "基础" });
-  registerSettingGroup({ id: "conversation", title: "会话" });
-  registerSettingGroup({ id: "account", title: "账户" });
-  registerSettingGroup({ id: "appearance", title: "外观" });
-  registerSettingGroup({ id: "provider", title: "提供商" });
-  registerSettingGroup({ id: "tools", title: "工具" });
-  registerSettingGroup({ id: "data", title: "数据" });
-  registerSettingGroup({ id: "about", title: "关于" });
+  if (pages.size > 0) return;
 
   registerSettingPage({
-    meta: {
-      id: "general.behavior",
-      icon: Settings,
-      title: "通用设置",
-      group: "general",
-    },
-    component: GeneralSettingsPage,
-  });
-
-  registerSettingPage({
-    meta: {
-      id: "general.defaults",
-      icon: SlidersHorizontal,
-      title: "默认项",
-      group: "general",
-    },
-    component: DefaultConfigSettingsPage,
-  });
-
-  registerSettingPage({
-    meta: {
-      id: "general.runtime",
-      icon: BellRing,
-      title: "运行时",
-      group: "general",
-    },
-    component: RuntimeSettingsPage,
-  });
-
-  registerSettingPage({
-    meta: {
-      id: "conversation.favorites",
-      icon: Star,
-      title: "消息收藏",
-      group: "conversation",
-    },
-    component: ConversationFavoriteSettingsPage,
-  });
-
-  registerSettingPage({
-    meta: {
-      id: "account.subscription",
-      icon: CreditCard,
-      title: "订阅方案",
-      group: "account",
-    },
-    component: SubscriptionSettingsPage,
-  });
-
-  registerSettingPage({
-    meta: {
-      id: "appearance.theme",
-      icon: Palette,
-      title: "外观",
-      group: "appearance",
-    },
-    component: AppearanceSettingsPage,
-  });
-
-  registerSettingPage({
-    meta: {
-      id: "tools.hotkey",
-      icon: Keyboard,
-      title: "快捷键",
-      group: "tools",
-    },
+    meta: { id: "tools.hotkey", icon: Keyboard, title: "快捷键" },
     component: HotkeySettingsPage,
   });
-
   registerSettingPage({
-    meta: {
-      id: "tools.translate",
-      icon: Languages,
-      title: "翻译",
-      group: "tools",
-    },
-    component: TranslateSettingsPage,
+    meta: { id: "general", icon: Settings, title: "通用" },
+    tabs: [
+      { id: "application", title: "应用", component: GeneralSettingsPage },
+      { id: "defaults", title: "默认项", component: DefaultConfigSettingsPage },
+      { id: "runtime", title: "运行时", component: RuntimeSettingsPage },
+    ],
   });
-
   registerSettingPage({
-    meta: {
-      id: "provider.models",
-      icon: Brain,
-      title: "模型提供商",
-      group: "provider",
-    },
+    meta: { id: "appearance.theme", icon: Palette, title: "主题" },
+    component: AppearanceSettingsPage,
+  });
+  registerSettingPage({
+    meta: { id: "provider.models", icon: Brain, title: "模型" },
     component: ModelProviderSettingsPage,
   });
-
   registerSettingPage({
-    meta: {
-      id: "provider.tts",
-      icon: Volume2,
-      title: "文本转语音",
-      group: "provider",
-    },
+    meta: { id: "provider.tts", icon: Volume2, title: "语音生成" },
     component: TtsSettingsPage,
   });
-
   registerSettingPage({
-    meta: {
-      id: "provider.stt",
-      icon: Mic,
-      title: "语音转文字",
-      group: "provider",
-    },
+    meta: { id: "provider.stt", icon: Mic, title: "语音识别" },
     component: SttSettingsPage,
   });
-
   registerSettingPage({
-    meta: {
-      id: "provider.image-generation",
-      icon: ImageIcon,
-      title: "图片生成",
-      group: "provider",
-    },
+    meta: { id: "provider.image-generation", icon: ImageIcon, title: "图片生成" },
     component: ImageGenerationSettingsPage,
   });
-
   registerSettingPage({
-    meta: {
-      id: "data.backup",
-      icon: History,
-      title: "版本管理",
-      group: "data",
-    },
+    meta: { id: "tools.translate", icon: Languages, title: "翻译" },
+    component: TranslateSettingsPage,
+  });
+  registerSettingPage({
+    meta: { id: "conversation.favorites", icon: Star, title: "消息收藏" },
+    component: ConversationFavoriteSettingsPage,
+  });
+  registerSettingPage({
+    meta: { id: "account.subscription", icon: CreditCard, title: "订阅方案" },
+    component: SubscriptionSettingsPage,
+  });
+  registerSettingPage({
+    meta: { id: "data.backup", icon: History, title: "版本管理" },
     component: BackupSettingsPage,
   });
-
   registerSettingPage({
-    meta: {
-      id: "data.statistic",
-      icon: BarChart3,
-      title: "数据统计",
-      group: "data",
-    },
+    meta: { id: "data.statistic", icon: BarChart3, title: "数据统计" },
     component: StatisticSettingsPage,
   });
-
   registerSettingPage({
-    meta: {
-      id: "about.app",
-      icon: Info,
-      title: "关于",
-      group: "about",
-    },
+    meta: { id: "about.app", icon: Info, title: "关于" },
     component: AboutSettingsPage,
   });
 }
