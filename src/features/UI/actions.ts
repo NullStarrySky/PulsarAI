@@ -1,11 +1,12 @@
 import {
   Copy,
+  FilePlus2,
+  Mic,
   Pencil,
   RefreshCw,
   Search,
   Settings,
   SquareMinus,
-  FilePlus2,
   Trash2,
 } from "lucide-vue-next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -17,6 +18,7 @@ import {
   regenerateLastMessageAction,
   resetCharacterDataAction,
 } from "@/features/Resources/Conversation/actions";
+import { toggleSttRecordingAction } from "@/features/STT/actions";
 import { useLayoutStore } from "./application/layout-store";
 
 let registered = false;
@@ -96,6 +98,14 @@ function createCoreCommands(): CommandDefinition[] {
       category: "对话",
       icon: Copy,
       run: copyLastMessageAction,
+    },
+    {
+      id: "stt.toggle-recording",
+      title: "开启/关闭语音输入",
+      category: "语音",
+      defaultHotkey: "Alt+V",
+      icon: Mic,
+      run: toggleSttRecordingAction,
     },
   ];
 }

@@ -121,8 +121,8 @@ const MarkdownInner = defineComponent({
 
 .conversation-markdown .ProseMirror {
   color: inherit;
-  font-size: 14px !important;
-  line-height: 1.5;
+  font-size: var(--editor-font-size, 14px) !important;
+  line-height: var(--editor-line-height, 16px) !important;
   overflow-wrap: anywhere;
   padding: 0 0.35rem !important;
 }

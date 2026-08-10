@@ -18,8 +18,8 @@ export const capabilities: CapabilityDefinition = {
     read: [
       {
         name: "listPackages",
-        signature: "listPackages(): CharacterPackageSummary[]",
-        description: "列出角色包的 id、名称与说明。",
+        signature: "listPackages(): Array<{ id, name, nickname?, description, categoryId }>",
+        description: "列出角色包的 id、名称、来源 nickname 与说明。",
         example: "conversation.listPackages()",
       },
       {
@@ -33,7 +33,7 @@ export const capabilities: CapabilityDefinition = {
       name: "create",
       signature: "create(input?: { packageId?: string; kind?: 'chat' | 'test'; binding?: ConversationResourceBinding }): Promise<ConversationSummary>",
       description: "在指定角色包或当前角色包中新建并打开普通或测试对话；测试对话可显式绑定资源。",
-      example: "await conversation.create({ kind: 'test', binding: { packageId, pluginId, resourceType: 'plugin', resourceId: pluginId, resourcePath: '/', resourceTitle: '插件测试' } })",
+      example: "await conversation.create({ kind: 'test', binding: { resourceType: 'plugin', resourceId: pluginId } })",
     }],
     send: [
       {
@@ -56,9 +56,10 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
   ...(granted.has("read") ? {
     listPackages: () => {
       const store = useConversationStore();
-      return store.packages.map(({ id, name, description, categoryId }) => ({
+      return store.packages.map(({ id, name, nickname, description, categoryId }) => ({
         id,
         name,
+        nickname,
         description,
         categoryId,
       }));
@@ -84,11 +85,8 @@ export const builder = createCapabilityBuilder(capabilities, (granted) => ({
       packageId?: string;
       kind?: "chat" | "test";
       binding?: {
-        packageId?: string;
         resourceType: string;
         resourceId: string;
-        resourcePath: string;
-        resourceTitle: string;
         pluginId?: string;
       };
     }) => {

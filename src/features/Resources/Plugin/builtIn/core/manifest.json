@@ -37,13 +37,14 @@
       {
         "id": "background",
         "title": "会话背景",
-        "description": "选择启用插件提供的背景媒体。",
-        "component": "MediaSelect",
-        "props": { "allowEmpty": true },
-        "value": {
-          "pluginId": "builtin-core-plugin",
-          "path": "background/classroom.png"
-        }
+        "description": "从 background 容器选择路径 ID；角色本地插件中的同 ID 背景优先。",
+        "component": "PathSelect",
+        "props": {
+          "allowEmpty": true,
+          "containerId": "background",
+          "pathRegex": "^background/.+\\.(?:png|jpe?g|gif|webp|avif|svg|mp4|webm)$"
+        },
+        "value": "background/classroom"
       }
     ]
   }

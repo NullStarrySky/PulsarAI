@@ -19,6 +19,8 @@ src-tauri/target
 apikeys
 todo
 migrations
+!src/features/Migrations/
+!src/features/Migrations/**
 codex-full.html
 codex-ui-prototype.html
 

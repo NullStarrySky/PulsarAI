@@ -1,8 +1,9 @@
 import { defineStore } from "pinia";
 import { builtinModelProviders } from "./builtin-providers";
 import { loadPersistedProviders, persistProvider } from "./model-provider-persistence";
+import { remove } from "@/features/Database/application/database-service";
 import { providerIconUrl } from "./provider-icons";
-import { registerOpenAICompatibleProvider } from "./model-ai";
+import { registerOpenAICompatibleProvider, unregisterProviderHydration } from "./model-ai";
 import {
   clearSecretValue,
   deleteSecret,
@@ -261,6 +262,18 @@ export const useModelConnectionStore = defineStore("modelConnection", {
 
       if (input.apiKey) {
         await this.saveProviderApiKey(id, input.apiKey);
+      }
+    },
+    async deleteProvider(providerId: string) {
+      const provider = this.providers.find((item) => item.id === providerId);
+      if (!provider || provider.builtIn) return;
+      this.providers = this.providers.filter((item) => item.id !== providerId);
+      await deleteSecret(provider.apiKeyName);
+      await remove("model_connection_providers", providerId);
+      unregisterProviderHydration(providerId);
+      delete this.apiKeyStatus[provider.apiKeyName];
+      if (this.activeProviderId === providerId) {
+        this.activeProviderId = this.providers[0]?.id ?? "";
       }
     },
     async addModel(providerId: string, input: NewModelInput) {

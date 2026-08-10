@@ -137,15 +137,13 @@ export async function evaluateConversationVariables(
       if (cached) {
         state = cached;
       } else {
-        const result = await applyVariableUpdate(
-          update.source,
-          definitions,
-          state,
-        );
-        if (!result.ok) {
-          throw new Error(`消息 ${message.id} 的变量更新失败：${result.error}`);
+        for (const source of update.sources) {
+          const result = await applyVariableUpdate(source, definitions, state);
+          if (!result.ok) {
+            throw new Error(`消息 ${message.id} 的变量更新失败：${result.error}`);
+          }
+          state = result.state;
         }
-        state = result.state;
         writeStateCache(nextKey, state);
       }
       versionKey = nextKey;
@@ -167,12 +165,11 @@ export async function executeVariableUpdateIntent(
 ): Promise<VariableUpdateExecutionResult> {
   const result = await applyVariableUpdate(source, definitions, evaluation.state);
   if (!result.ok) return result;
-  const sourceHash = hashText(source.trim());
+  const sourceHash = hashText(JSON.stringify([source.trim()]));
   return {
     ...result,
     update: {
-      intent: "variable-update",
-      source: source.trim(),
+      sources: [source.trim()],
       sourceHash,
       definitionHash: evaluation.definitionHash,
       createdAt: new Date().toISOString(),
@@ -186,21 +183,12 @@ export function appendConversationVariableUpdate(
 ): ConversationVariableUpdate {
   if (!previous) return next;
   const sources = [
-    ...(previous.sources?.length ? previous.sources : [previous.source]),
-    ...(next.sources?.length ? next.sources : [next.source]),
+    ...previous.sources,
+    ...next.sources,
   ];
-  const source = [
-    "function () {",
-    `  const updates = [${sources.map((item) => `(${item})`).join(",\n")}];`,
-    "  const results = [];",
-    "  for (const update of updates) results.push(update());",
-    "  return results;",
-    "}",
-  ].join("\n");
   return {
     ...next,
-    source,
-    sourceHash: hashText(source),
+    sourceHash: hashText(JSON.stringify(sources)),
     sources,
   };
 }
@@ -270,9 +258,8 @@ async function applyVariableUpdate(
       state,
       facades: createVariableFacades(definitions, state, true),
       update: {
-        intent: "variable-update",
-        source: source.trim(),
-        sourceHash: hashText(source.trim()),
+        sources: [source.trim()],
+        sourceHash: hashText(JSON.stringify([source.trim()])),
         definitionHash: "",
         createdAt: "",
       },

@@ -211,6 +211,7 @@ export const useConversationStore = defineStore("conversation", {
       const nextConversations = conversations.map((item) => ({
         ...item.value,
         rendererId: item.value.rendererId ?? "chat",
+        isEphemeral: item.value.isEphemeral ?? false,
       }));
       const nextContainers = containers.map((item) => ({
         ...item.value,
@@ -225,6 +226,11 @@ export const useConversationStore = defineStore("conversation", {
       this.categories = categories.map((item) => item.value);
       this.conversations = nextConversations;
       this.containers = nextContainers;
+
+      const ephemeralConversations = nextConversations.filter((item) => item.isEphemeral);
+      for (const ep of ephemeralConversations) {
+        await this.deleteConversation(ep.id, { activateFallback: false });
+      }
       if (!nextPackages.some((item) => item.id === this.activePackageId)) {
         this.activePackageId = "";
         this.activeConversationId = "";
@@ -345,20 +351,21 @@ export const useConversationStore = defineStore("conversation", {
     },
     async createPackage(
       input?: Partial<
-        Pick<CharacterPackage, "name" | "description" | "icon" | "categoryId">
+        Pick<CharacterPackage, "id" | "pluginId" | "name" | "nickname" | "description" | "icon" | "categoryId">
       >,
       options: { activate?: boolean } = {},
     ) {
       const item: CharacterPackage = {
-        id: crypto.randomUUID(),
+        id: input?.id ?? crypto.randomUUID(),
         name: input?.name?.trim() || "新角色包",
+        nickname: input?.nickname?.trim() || undefined,
         icon: input?.icon || "",
         description: input?.description?.trim(),
         categoryId: input?.categoryId ?? null,
         order: Math.max(-1, ...this.packages.map((packageItem) => packageItem.order ?? -1)) + 1,
         pinned: false,
         conversations: [],
-        pluginId: "",
+        pluginId: input?.pluginId ?? "",
         mainPluginId: builtinCorePluginId,
         enabledGlobalPluginIds: [],
         syncEnabled: true,
@@ -476,6 +483,8 @@ export const useConversationStore = defineStore("conversation", {
         kind?: ConversationKind;
         rendererId?: ConversationRendererId;
         title?: string;
+        ignoreTemplate?: boolean;
+        isEphemeral?: boolean;
       } = {},
     ) {
       packageId ??= this.activePackageId;
@@ -483,15 +492,26 @@ export const useConversationStore = defineStore("conversation", {
       if (!packageItem) {
         throw new Error("无法创建对话：请先选择角色包。");
       }
-      const template = this.conversations.find((item) => item.packageId === packageId && item.isTemplate);
+      const template = input.ignoreTemplate
+        ? null
+        : this.conversations.find((item) => item.packageId === packageId && item.isTemplate);
       const conversation: Conversation = {
         id: crypto.randomUUID(),
         packageId,
         kind: input.kind ?? "chat",
         binding: input.binding ? clonePlain(input.binding) : undefined,
-        title: input.title?.trim() || template?.title || "新对话",
+        title:
+          input.title?.trim()
+          || (input.isEphemeral
+            ? input.ignoreTemplate
+              ? "临时空白对话"
+              : template
+                ? `临时 ${template.title}`
+                : "临时对话"
+            : template?.title || "新对话"),
         pinned: false,
         isTemplate: false,
+        isEphemeral: Boolean(input.isEphemeral),
         rendererId: input.rendererId ?? template?.rendererId ?? "chat",
         rootContainerId: null,
         lastContainerId: null,
@@ -678,6 +698,7 @@ export const useConversationStore = defineStore("conversation", {
           | "title"
           | "pinned"
           | "isTemplate"
+          | "isEphemeral"
           | "kind"
           | "binding"
           | "rendererId"

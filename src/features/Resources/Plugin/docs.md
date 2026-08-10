@@ -17,7 +17,8 @@ The built-in blank Plugin provides a fast, fine-grained mock stream for UI and p
 
 - `manifest.json` 的 `runtime/generatePath` 指向唯一生成入口。缺少入口的插件不能设为主要插件；路径存在但不是有效 `.js` 文件时直接报错。
 - `generation/model` 是固定模型配置键；值使用 `provider/modelId/thinkingLevel`，末段思考强度可省略。强度存在时映射到 AI SDK 顶层 `reasoning`，省略时由 Provider 自动决定；模型与强度都不写入 Conversation。
-- `appearance/background` 保存 `{ pluginId, path }`；留空或引用无效时回退到内置核心插件的同名固定配置。
+- `appearance/background` 只保存在内置核心 Plugin，值为去掉扩展名的插件内路径 ID，例如 `background/classroom`。候选资源必须注册到 `background` 容器；同一 ID 按角色本地、全局、内置顺序解析。
+- manifest 的通用 `PathSelect` 通过 `props.pathRegex` 过滤插件内路径，选项和值隐藏已识别扩展名；可用 `props.containerId` 进一步限制容器。
 - manifest 的 `ModelSelect` 配置组件保存可选思考末段的 `providerId/modelId/thinkingLevel`，并支持用 `props.apiType` 限制模型类型；主要插件仍从 Plugin 资产管理入口设置。
 - manifest 的 Group 只保存稳定 ID 和标题，并在结构化编辑器中渲染为一级功能 Tab；Group 不保存描述、不渲染边框，字段自身仍保留标题、说明、组件属性和值。
 - Conversation 创建空助手消息后，把原始消息、回复闭包、压缩记忆闭包、`imports`、Agent 与 Feature API 交给该入口。入口返回值不会写入消息；正文、内容部件、过程和模型标识必须通过 `reply` 写入。内置 Agent 使用 AI SDK 7 的 `runner.stream()` 与 `result.stream`，过程回调实时写入步骤，所有 step 的 `text-delta.text` 按到达顺序逐段追加正文；每段 reasoning 在结束后作为一个 `thinking` step 写入，避免按 token 创建大量步骤。流结束后仍可读取并覆盖完整正文以执行后处理。
@@ -45,6 +46,10 @@ The built-in blank Plugin provides a fast, fine-grained mock stream for UI and p
 `application/builtin-plugins.ts` 把内置文件夹及 `.pulsar-plugin.json` 的路径元信息映射为数据库插件。恢复内置插件时重新读取这份发布源码。
 
 `builtIn/` 是插件数据目录，不是应用 TypeScript 源码目录；`tsconfig.json` 明确排除其源码检查。Vite 仍通过 `application/builtin-plugins.ts` 的 `?raw` / `?url` glob 将这些数据打包进应用。
+
+SillyTavern 导入由 `src/features/Migrations/SillyTavern` 负责，Plugin 只接收已经转换和放置的目标树。角色卡写入包本地 `character/main.md`、`character/user/`、`lorebooks/` 与根 `regex.json`；未认领世界书写成独立全局 Plugin；仅 OpenAI Chat Completion 预设和背景扩展现有内置核心 Plugin。预设的绝对深度 prompt 与 `.chat.json` 放在同一入口目录，拆成带休眠 depth insertion 的 `.md`，避免未选择的多个预设一起生效。每个导入 Plugin 都保留 `migration/` 报告，未知字段和近似映射不得在 Plugin Store 中静默丢弃。
+
+迁移文本里的简单 SillyTavern 宏和同步 ST-Prompt-Template EJS 在写入 Plugin 前已经变成普通 `{{ JavaScript }}`。Plugin resolver 只运行既有动态表达式，不识别外部模板语法；复杂或依赖外部 API 的模板被写成惰性注释并进入迁移诊断。
 
 ## 界面
 

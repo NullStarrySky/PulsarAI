@@ -49,7 +49,7 @@ function selectProvider(providerId: string) {
   <Popover v-model:open="open">
     <PopoverTrigger as-child>
       <Button v-if="activeProvider" variant="ghost" class="h-11 max-w-full justify-start gap-2 px-2">
-        <ProviderAvatar :name="activeProvider.name" :src="activeProvider.iconUrl" />
+        <ProviderAvatar :name="activeProvider.name" :src="activeProvider.iconUrl" :provider-id="activeProvider.id" />
         <span class="min-w-0 text-left">
           <span class="block truncate text-sm font-medium">{{ activeProvider.name }}</span>
           <span class="block truncate text-xs font-normal text-muted-foreground">
@@ -86,7 +86,7 @@ function selectProvider(providerId: string) {
               class="flex min-w-0 flex-1 items-center gap-2 text-left"
               @click="selectProvider(provider.id)"
             >
-              <ProviderAvatar :name="provider.name" :src="provider.iconUrl" />
+              <ProviderAvatar :name="provider.name" :src="provider.iconUrl" :provider-id="provider.id" />
               <span class="min-w-0 flex-1 truncate text-sm">{{ provider.name }}</span>
               <Check v-if="provider.id === activeProviderId" class="shrink-0 text-muted-foreground" />
             </button>

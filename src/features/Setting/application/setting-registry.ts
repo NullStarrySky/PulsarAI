@@ -1,5 +1,5 @@
 import type { Component } from "vue";
-import { BarChart3, Brain, CreditCard, History, ImageIcon, Info, Keyboard, Languages, Mic, Palette, Settings, Star, Volume2 } from "lucide-vue-next";
+import { BarChart3, Brain, CreditCard, History, ImageIcon, Import, Info, Keyboard, Languages, Mic, Palette, Settings, Star, Volume2 } from "lucide-vue-next";
 import GeneralSettingsPage from "../presentation/pages/GeneralSettingsPage.vue";
 import SubscriptionSettingsPage from "../presentation/pages/SubscriptionSettingsPage.vue";
 import ModelProviderSettingsPage from "@/features/ModelConnection/presentation/ModelProviderSettingsPage.vue";
@@ -15,6 +15,7 @@ import ConversationFavoriteSettingsPage from "@/features/Resources/Conversation/
 import TtsSettingsPage from "@/features/TTS/presentation/TtsSettingsPage.vue";
 import SttSettingsPage from "@/features/STT/presentation/SttSettingsPage.vue";
 import ImageGenerationSettingsPage from "@/features/ImageGeneration/presentation/ImageGenerationSettingsPage.vue";
+import SillyTavernMigrationSettingsPage from "@/features/Migrations/SillyTavern/presentation/SillyTavernMigrationSettingsPage.vue";
 
 export interface SettingPageMeta {
   id: string;
@@ -98,6 +99,10 @@ export function ensureDefaultSettingPages() {
   registerSettingPage({
     meta: { id: "data.backup", icon: History, title: "版本管理" },
     component: BackupSettingsPage,
+  });
+  registerSettingPage({
+    meta: { id: "data.migration", icon: Import, title: "数据迁移" },
+    component: SillyTavernMigrationSettingsPage,
   });
   registerSettingPage({
     meta: { id: "data.statistic", icon: BarChart3, title: "数据统计" },

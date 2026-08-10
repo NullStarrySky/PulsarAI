@@ -46,6 +46,18 @@ const uiScaleValue = computed({
     appearance.uiScale = value[0] ?? appearance.uiScale;
   },
 });
+const editorFontSizeValue = computed({
+  get: () => [appearance.editorFontSize],
+  set: (value: number[]) => {
+    appearance.editorFontSize = value[0] ?? appearance.editorFontSize;
+  },
+});
+const editorLineHeightValue = computed({
+  get: () => [appearance.editorLineHeight],
+  set: (value: number[]) => {
+    appearance.editorLineHeight = value[0] ?? appearance.editorLineHeight;
+  },
+});
 const themeModeOptions = [
   { id: "light", label: "浅色", icon: Sun },
   { id: "dark", label: "深色", icon: Moon },
@@ -198,6 +210,38 @@ function importFont() {
         </div>
       </SettingFormField>
 
+      <SettingFormField title="编辑器段落字号" description="Milkdown 编辑器与消息渲染段落 (.milkdown .ProseMirror p) 的字体大小。">
+        <div class="ml-auto grid w-full max-w-xl grid-cols-[minmax(0,1fr)_5rem] items-center gap-3">
+          <Slider v-model="editorFontSizeValue" :min="10" :max="40" :step="1" />
+          <div class="flex items-center gap-1">
+            <Input
+              v-model.number="appearance.editorFontSize"
+              type="number"
+              min="10"
+              max="40"
+              class="h-8 w-14 px-1.5 text-center text-xs font-mono"
+            />
+            <span class="text-xs text-muted-foreground">px</span>
+          </div>
+        </div>
+      </SettingFormField>
+
+      <SettingFormField title="编辑器段落行高" description="Milkdown 编辑器与消息渲染段落 (.milkdown .ProseMirror p) 的行高。">
+        <div class="ml-auto grid w-full max-w-xl grid-cols-[minmax(0,1fr)_5rem] items-center gap-3">
+          <Slider v-model="editorLineHeightValue" :min="10" :max="60" :step="1" />
+          <div class="flex items-center gap-1">
+            <Input
+              v-model.number="appearance.editorLineHeight"
+              type="number"
+              min="10"
+              max="60"
+              class="h-8 w-14 px-1.5 text-center text-xs font-mono"
+            />
+            <span class="text-xs text-muted-foreground">px</span>
+          </div>
+        </div>
+      </SettingFormField>
+
       <SettingFormField
         title="交互式代码预览"
         description="将消息中包含 HTML 或脚本的代码块放入隔离页面运行。最新消息会优先显示预览，仍可随时切回源码。"
@@ -206,6 +250,44 @@ function importFont() {
           v-model="appearance.interactiveCodePreview"
           aria-label="启用交互式代码预览"
         />
+      </SettingFormField>
+
+      <SettingFormField
+        title="Zen 包裹边框"
+        description="为应用整体包裹一层沉浸式边框。关闭后应用视图无缝充满窗口。"
+      >
+        <Switch
+          v-model="appearance.zenFrameEnabled"
+          aria-label="启用 Zen 包裹边框"
+        />
+      </SettingFormField>
+
+      <SettingFormField
+        v-if="appearance.zenFrameEnabled"
+        title="Zen 边框颜色"
+        description="应用整体包裹边框与顶栏基础底色。默认基于颜色主题自动推断，也可自定义指定。"
+      >
+        <div class="ml-auto flex items-center gap-2">
+          <Select v-model="appearance.frameColorMode">
+            <SelectTrigger class="w-32"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="auto">自动推断</SelectItem>
+              <SelectItem value="custom">自定义</SelectItem>
+            </SelectContent>
+          </Select>
+          <div v-if="appearance.frameColorMode === 'custom'" class="flex items-center gap-1.5">
+            <input
+              v-model="appearance.frameCustomColor"
+              type="color"
+              class="size-8 cursor-pointer rounded-lg border border-border bg-transparent p-0.5"
+            />
+            <Input
+              v-model="appearance.frameCustomColor"
+              class="h-8 w-24 text-xs font-mono"
+              placeholder="#1e1e24"
+            />
+          </div>
+        </div>
       </SettingFormField>
 
       <SettingFormField

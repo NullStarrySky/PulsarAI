@@ -16,6 +16,8 @@ export interface CharacterPackageConversationLink {
 export interface CharacterPackage {
   id: string;
   name: string;
+  /** Stable source-facing alias such as an imported character-card filename. */
+  nickname?: string;
   icon: string;
   description?: string;
   categoryId?: string | null;
@@ -45,8 +47,8 @@ export interface ConversationResourceBinding {
   packageId?: string;
   resourceType: string;
   resourceId: string;
-  resourcePath: string;
-  resourceTitle: string;
+  resourcePath?: string;
+  resourceTitle?: string;
   pluginId?: string;
 }
 
@@ -58,6 +60,7 @@ export interface Conversation {
   title: string;
   pinned?: boolean;
   isTemplate?: boolean;
+  isEphemeral?: boolean;
   rendererId?: ConversationRendererId;
   rootContainerId: string | null;
   lastContainerId: string | null;
@@ -124,10 +127,10 @@ export interface ActionPart {
 export type AdditionalParts = TextPart | ImagePart | FilePart | ComponentPart | ActionPart;
 
 export interface ConversationVariableUpdate {
-  intent: "variable-update";
-  source: string;
+  intent?: "variable-update";
+  source?: string;
   sourceHash: string;
-  sources?: string[];
+  sources: string[];
   definitionHash: string;
   createdAt: string;
 }

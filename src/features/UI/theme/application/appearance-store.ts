@@ -30,6 +30,11 @@ interface AppearanceSnapshot {
   composerSendWithEnter: boolean;
   interactiveCodePreview: boolean;
   mobileNavigationBarMode: MobileNavigationBarMode;
+  zenFrameEnabled: boolean;
+  frameColorMode: "auto" | "custom";
+  frameCustomColor: string;
+  editorFontSize: number;
+  editorLineHeight: number;
 }
 
 const storageKey = "pulsarai:appearance:v1";
@@ -51,11 +56,26 @@ export const useAppearanceStore = defineStore("appearance", () => {
   const composerSendWithEnter = ref(snapshot.composerSendWithEnter);
   const interactiveCodePreview = ref(snapshot.interactiveCodePreview);
   const mobileNavigationBarMode = ref(snapshot.mobileNavigationBarMode);
+  const zenFrameEnabled = ref<boolean>(snapshot.zenFrameEnabled ?? true);
+  const frameColorMode = ref<"auto" | "custom">(snapshot.frameColorMode ?? "auto");
+  const frameCustomColor = ref(snapshot.frameCustomColor ?? "#1e1e24");
+  const editorFontSize = ref(snapshot.editorFontSize ?? 14);
+  const editorLineHeight = ref(snapshot.editorLineHeight ?? 16);
 
   const themes = computed(() => [...builtInThemes, ...customThemes.value]);
   const fonts = computed(() => [...builtInFonts, ...customFonts.value]);
   const activeTheme = computed(() => themes.value.find((theme) => theme.id === themeId.value) ?? builtInThemes[0]);
   const activeFont = computed(() => fonts.value.find((font) => font.id === fontId.value) ?? builtInFonts[0]);
+
+  const zenFrameIsDark = computed(() => {
+    if (!zenFrameEnabled.value) {
+      return typeof document !== "undefined" ? document.documentElement.classList.contains("dark") : true;
+    }
+    if (frameColorMode.value === "custom" && frameCustomColor.value) {
+      return isColorDark(frameCustomColor.value);
+    }
+    return typeof document !== "undefined" ? document.documentElement.classList.contains("dark") : true;
+  });
 
   watch(
     [
@@ -71,6 +91,11 @@ export const useAppearanceStore = defineStore("appearance", () => {
       composerSendWithEnter,
       interactiveCodePreview,
       mobileNavigationBarMode,
+      zenFrameEnabled,
+      frameColorMode,
+      frameCustomColor,
+      editorFontSize,
+      editorLineHeight,
     ],
     () => {
       persistSnapshot({
@@ -86,6 +111,11 @@ export const useAppearanceStore = defineStore("appearance", () => {
         composerSendWithEnter: composerSendWithEnter.value,
         interactiveCodePreview: interactiveCodePreview.value,
         mobileNavigationBarMode: mobileNavigationBarMode.value,
+        zenFrameEnabled: zenFrameEnabled.value,
+        frameColorMode: frameColorMode.value,
+        frameCustomColor: frameCustomColor.value,
+        editorFontSize: editorFontSize.value,
+        editorLineHeight: editorLineHeight.value,
       });
       applyAppearance();
     },
@@ -131,6 +161,15 @@ export const useAppearanceStore = defineStore("appearance", () => {
     );
     applyFont(activeFont.value, fontSize.value);
     document.body.style.setProperty("zoom", String(uiScale.value / 100));
+    if (frameColorMode.value === "custom" && frameCustomColor.value) {
+      document.documentElement.style.setProperty("--zen-frame-bg", frameCustomColor.value);
+      document.documentElement.style.setProperty("--zen-frame-border", frameCustomColor.value);
+    } else {
+      document.documentElement.style.removeProperty("--zen-frame-bg");
+      document.documentElement.style.removeProperty("--zen-frame-border");
+    }
+    document.documentElement.style.setProperty("--editor-font-size", `${editorFontSize.value}px`);
+    document.documentElement.style.setProperty("--editor-line-height", `${editorLineHeight.value}px`);
     void syncMobileNavigationBar(
       mobileNavigationBarMode.value,
       topBarIsDark,
@@ -152,6 +191,12 @@ export const useAppearanceStore = defineStore("appearance", () => {
     themeId,
     themeMode,
     mobileNavigationBarMode,
+    zenFrameEnabled,
+    zenFrameIsDark,
+    frameColorMode,
+    frameCustomColor,
+    editorFontSize,
+    editorLineHeight,
     themes,
     uiScale,
     importFont,
@@ -161,6 +206,24 @@ export const useAppearanceStore = defineStore("appearance", () => {
     setComposerToolbar,
   };
 });
+
+function isColorDark(hexColor: string): boolean {
+  if (!hexColor || typeof hexColor !== "string") return true;
+  const hex = hexColor.replace("#", "").trim();
+  if (hex.length === 3) {
+    const r = parseInt(hex[0] + hex[0], 16);
+    const g = parseInt(hex[1] + hex[1], 16);
+    const b = parseInt(hex[2] + hex[2], 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 < 150;
+  }
+  if (hex.length === 6) {
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 < 150;
+  }
+  return true;
+}
 
 function applyTheme(
   theme: ThemeDefinition,
@@ -247,6 +310,11 @@ function readSnapshot(): AppearanceSnapshot {
     composerSendWithEnter: true,
     interactiveCodePreview: false,
     mobileNavigationBarMode: "topbar",
+    zenFrameEnabled: true,
+    frameColorMode: "auto",
+    frameCustomColor: "#1e1e24",
+    editorFontSize: 14,
+    editorLineHeight: 16,
   };
   if (typeof localStorage === "undefined") {
     return fallback;
@@ -270,6 +338,11 @@ function readSnapshot(): AppearanceSnapshot {
         typeof parsed.interactiveCodePreview === "boolean"
           ? parsed.interactiveCodePreview
           : fallback.interactiveCodePreview,
+      zenFrameEnabled: typeof parsed.zenFrameEnabled === "boolean" ? parsed.zenFrameEnabled : fallback.zenFrameEnabled,
+      frameColorMode: parsed.frameColorMode === "custom" ? "custom" : "auto",
+      frameCustomColor: typeof parsed.frameCustomColor === "string" ? parsed.frameCustomColor : fallback.frameCustomColor,
+      editorFontSize: typeof parsed.editorFontSize === "number" ? parsed.editorFontSize : fallback.editorFontSize,
+      editorLineHeight: typeof parsed.editorLineHeight === "number" ? parsed.editorLineHeight : fallback.editorLineHeight,
     };
   } catch {
     return fallback;

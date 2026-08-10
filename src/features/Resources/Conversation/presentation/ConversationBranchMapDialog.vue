@@ -143,9 +143,6 @@ const layout = computed<BranchMapLayout>(() => {
   }
 
   const byId = new Map(containers.map((container) => [container.id, container]));
-  const sourceOrder = new Map(
-    containers.map((container, index) => [container.id, index]),
-  );
   const childrenByParent = new Map<string, ChatMessageContainer[]>();
   for (const container of containers) {
     if (!container.previousContainer || !byId.has(container.previousContainer)) {
@@ -155,22 +152,8 @@ const layout = computed<BranchMapLayout>(() => {
     children.push(container);
     childrenByParent.set(container.previousContainer, children);
   }
-  for (const [parentId, children] of childrenByParent) {
-    const preferredOrder =
-      byId.get(parentId)?.availableNextContainer ?? [];
-    children.sort((left, right) => {
-      const leftPreferred = preferredOrder.indexOf(left.id);
-      const rightPreferred = preferredOrder.indexOf(right.id);
-      if (leftPreferred >= 0 || rightPreferred >= 0) {
-        if (leftPreferred < 0) return 1;
-        if (rightPreferred < 0) return -1;
-        return leftPreferred - rightPreferred;
-      }
-      return (
-        (sourceOrder.get(left.id) ?? Number.MAX_SAFE_INTEGER)
-        - (sourceOrder.get(right.id) ?? Number.MAX_SAFE_INTEGER)
-      );
-    });
+  for (const children of childrenByParent.values()) {
+    children.sort((left, right) => left.id.localeCompare(right.id));
   }
 
   const roots = containers.filter(

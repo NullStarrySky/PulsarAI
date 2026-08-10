@@ -199,15 +199,15 @@ const ComposerInner = defineComponent({
 .conversation-composer-editor .ProseMirror {
   overflow-y: auto !important;
   padding: 0.4rem 0.35rem 2rem 0.35rem !important; /* Added 2rem bottom padding for selection toolbar */
-  font-size: 14px !important;
-  line-height: 1.55;
+  font-size: var(--editor-font-size, 14px) !important;
+  line-height: var(--editor-line-height, 16px) !important;
 }
 
 .mobile-layout .conversation-composer-editor .ProseMirror {
   min-height: 6rem !important;
   max-height: 12rem;
   padding: 0.5rem 0.45rem 2rem 0.45rem !important;
-  font-size: 14px !important;
+  font-size: var(--editor-font-size, 14px) !important;
 }
 
 .conversation-composer-editor .ProseMirror > * {
@@ -227,13 +227,13 @@ const ComposerInner = defineComponent({
 .conversation-composer-editor--compact .ProseMirror {
   max-height: 8rem !important;
   padding: 0.1rem 0.25rem 0.2rem !important;
-  font-size: 14px !important;
-  line-height: 1.4rem;
+  font-size: var(--editor-font-size, 14px) !important;
+  line-height: var(--editor-line-height, 16px) !important;
 }
 
 .mobile-layout .conversation-composer-editor--compact .ProseMirror {
   min-height: 2.25rem !important;
   padding: 0.1rem 0.25rem 0.2rem !important;
-  font-size: 14px !important;
+  font-size: var(--editor-font-size, 14px) !important;
 }
 </style>

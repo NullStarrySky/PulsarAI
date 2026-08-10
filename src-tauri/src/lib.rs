@@ -15,14 +15,22 @@ use std::{
     thread,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use surrealdb::{engine::local::{Db, SurrealKv}, Surreal};
-use tauri::{AppHandle, Manager, State};
+use surrealdb::{
+    engine::local::{Db, SurrealKv},
+    Surreal,
+};
 #[cfg(desktop)]
 use tauri::{
     menu::{MenuBuilder, MenuItemBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
+use tauri::{AppHandle, Manager, State};
 use tokio::sync::OnceCell;
+
+mod migration;
+use migration::{
+    migration_read_binary, migration_read_png_character, migration_read_text, migration_scan_path,
+};
 
 struct AppState {
     db: OnceCell<Surreal<Db>>,
@@ -2060,6 +2068,10 @@ pub fn run() {
             lan_sync_fetch,
             lan_sync_push,
             model_proxy_fetch,
+            migration_scan_path,
+            migration_read_text,
+            migration_read_binary,
+            migration_read_png_character,
             app_exit,
         ])
         .run(tauri::generate_context!())

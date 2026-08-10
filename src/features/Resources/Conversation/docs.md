@@ -36,3 +36,9 @@ Composer 的模型入口位于右侧并保存组合引用 `provider/modelId/thin
 变量更新只保存可重放更新函数与哈希，按活动消息版本路径重放；不为每条消息持久化完整状态快照。`.data.json` 文件本身不会被运行状态改写。
 
 插件测试使用数据库 `kind: "test"` 会话；临时测试会话只存在于当前 Agent 运行期，复用正常生成路径但不进入列表、搜索、备份或同步。
+
+`Conversation.binding` 只保存 `resourceType`、稳定 `resourceId` 和必要时的 `pluginId`。标题、插件节点路径与所属角色包在读取时解析；插件文件移动或重命名不要求同步改写会话。消息树只持久化 `previousContainer` 与 `activeNextContainer`，可用分支通过父 ID 查询得到，不再双向维护子 ID 数组。
+
+一条消息的可重放变量更新统一保存为有序 `sources` 数组；CodeAct 的 `variable-update` 是调用时意图，不重复写入消息记录。
+
+SillyTavern JSONL 会话由 `src/features/Migrations/SillyTavern` 在提交阶段写入本 Feature。每条原消息对应一个 `ChatMessageContainer`，`mes` 与 `swipes` 对应其中的具体消息版本，`swipe_id` 选择活动版本；原有会话先导入，角色卡首条消息与备用开场白另建模板会话。导入关系只通过角色卡名称/文件 nickname 的唯一匹配建立，缺失或歧义会阻止提交，不由 Conversation Store 猜测归属。

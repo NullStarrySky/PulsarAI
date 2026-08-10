@@ -48,6 +48,8 @@ html.native-window-dragging #app {
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-zen-frame-bg: var(--zen-frame-bg);
+  --color-zen-frame-border: var(--zen-frame-border);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -77,6 +79,8 @@ html.native-window-dragging #app {
   --border: oklch(0.9 0 0);
   --input: oklch(0.9 0 0);
   --ring: oklch(0.7 0 0);
+  --zen-frame-bg: oklch(0.94 0 0);
+  --zen-frame-border: oklch(0.88 0 0);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -98,6 +102,8 @@ html.native-window-dragging #app {
   --destructive: oklch(0.7 0.19 22);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
+  --zen-frame-bg: oklch(0.11 0 0);
+  --zen-frame-border: oklch(0.22 0 0 / 80%);
   --ring: oklch(0.56 0 0);
 }
 
@@ -142,7 +148,7 @@ html.native-window-dragging #app {
 }
 
 .milkdown {
-  --crepe-base-font-size: 14px;
+  --crepe-base-font-size: var(--editor-font-size, 14px);
   background-color: transparent !important;
   --crepe-color-background: transparent !important;
   max-width: 100% !important;
@@ -343,6 +349,16 @@ html.native-window-dragging #app {
   box-sizing: border-box !important;
 }
 
+.milkdown .ProseMirror,
+.milkdown .ProseMirror p {
+  font-size: var(--editor-font-size, 14px) !important;
+  line-height: var(--editor-line-height, 16px) !important;
+}
+
+.milkdown .ProseMirror p {
+  padding: 4px 0;
+}
+
 .dark .milkdown-toolbar button {
   color: var(--foreground) !important;
 }
@@ -386,4 +402,48 @@ html.native-window-dragging #app {
   --crepe-color-hover: var(--accent);
   --crepe-color-selected: color-mix(in srgb, var(--primary), transparent 78%);
   --crepe-color-inline-area: var(--muted);
+}
+
+/* 视窗及界面滚动条：背景色透明，完全屏蔽顶部/底部上滑下滑按钮，只保留浮动滑块本身 */
+* {
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background-color: transparent !important;
+}
+
+::-webkit-scrollbar-button,
+::-webkit-scrollbar-button:single-button,
+::-webkit-scrollbar-button:vertical:decrement,
+::-webkit-scrollbar-button:vertical:increment,
+::-webkit-scrollbar-button:horizontal:decrement,
+::-webkit-scrollbar-button:horizontal:increment {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-track-piece {
+  background-color: transparent !important;
+  border-radius: 0 !important;
+  border: none !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) !important;
+  border-radius: 9999px !important;
+  border: none !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--muted-foreground) 55%, transparent) !important;
+}
+
+::-webkit-scrollbar-corner {
+  background-color: transparent !important;
 }

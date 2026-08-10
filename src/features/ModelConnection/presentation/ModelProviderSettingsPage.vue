@@ -349,7 +349,7 @@ async function fetchModelList() {
                   class="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto]"
                 >
                   <div class="flex min-w-0 items-center gap-3">
-                    <ProviderAvatar :name="model.name" :src="model.iconUrl || activeProvider.iconUrl" />
+                    <ProviderAvatar :name="model.name" :src="model.iconUrl || activeProvider.iconUrl" :provider-id="activeProvider?.id || model.id" />
                     <div class="min-w-0">
                       <div class="flex min-w-0 items-center gap-2">
                         <span class="truncate text-sm font-medium">{{ model.name }}</span>

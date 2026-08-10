@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   Braces,
   ClipboardPaste,
@@ -15,6 +15,7 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  GripVertical,
   Image,
   MoreHorizontal,
   Package,
@@ -22,6 +23,7 @@ import {
   Power,
   Trash2,
   Upload,
+  X,
 } from "lucide-vue-next";
 import { push } from "notivue";
 import { Button } from "@/components/ui/button";
@@ -87,6 +89,7 @@ const newFileTypes: Array<{ id: NewPluginFileType; label: string; extension: str
 
 const emit = defineEmits<{
   select: [value: { plugin: Plugin; file: PluginFile; path: string }];
+  close: [];
 }>();
 
 const pluginStore = usePluginStore();
@@ -102,6 +105,36 @@ const renameTarget = ref<{ pluginId: string; nodeId: string } | null>(null);
 const renameDraft = ref("");
 const renamingKey = ref("");
 const draggingNode = ref<{ pluginId: string; nodeId: string } | null>(null);
+const panelPosition = ref<{ x: number; y: number } | null>(null);
+let isDraggingPanel = false;
+let dragStartX = 0;
+let dragStartY = 0;
+let initialX = 0;
+let initialY = 0;
+
+function startPanelDrag(e: MouseEvent) {
+  if ((e.target as HTMLElement).closest("button, input")) return;
+  isDraggingPanel = true;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  initialX = panelPosition.value?.x ?? 0;
+  initialY = panelPosition.value?.y ?? 0;
+  window.addEventListener("mousemove", onPanelDrag);
+  window.addEventListener("mouseup", stopPanelDrag);
+}
+
+function onPanelDrag(e: MouseEvent) {
+  if (!isDraggingPanel) return;
+  const dx = e.clientX - dragStartX;
+  const dy = e.clientY - dragStartY;
+  panelPosition.value = { x: initialX + dx, y: initialY + dy };
+}
+
+function stopPanelDrag() {
+  isDraggingPanel = false;
+  window.removeEventListener("mousemove", onPanelDrag);
+  window.removeEventListener("mouseup", stopPanelDrag);
+}
 
 const internalPlugins = computed(() => pluginStore.sortedPlugins.filter(
   (plugin) => plugin.packageId === conversation.activePackageId,
@@ -451,15 +484,32 @@ watch(packagePlugins, (plugins) => {
     expandedIds.value = new Set([keyFor(first.id, first.root.id)]);
   }
 });
+onUnmounted(() => {
+  stopPanelDrag();
+});
 </script>
 
 <template>
-  <aside class="asset-tree-panel absolute right-3 top-3 z-40 flex max-h-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-2xl border border-border/80 bg-popover shadow-sm mobile:right-2 mobile:top-2 mobile:max-h-[calc(100%-1rem)]">
-    <div class="flex h-12 shrink-0 items-center justify-between border-b border-border/80 px-3">
-      <h2 class="text-base font-medium">资产</h2>
-      <Button variant="ghost" size="icon-sm" class="rounded-full" title="导入文件" aria-label="导入文件" @click="chooseImport">
-        <Upload class="size-4" />
-      </Button>
+  <aside
+    class="asset-tree-panel absolute right-3 top-3 z-40 flex max-h-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-2xl border border-border/80 bg-popover/95 shadow-xl backdrop-blur-md transition-shadow mobile:right-2 mobile:top-2 mobile:max-h-[calc(100%-1rem)]"
+    :style="panelPosition ? { transform: `translate3d(${panelPosition.x}px, ${panelPosition.y}px, 0)` } : undefined"
+  >
+    <div
+      class="flex h-12 shrink-0 select-none items-center justify-between border-b border-border/80 px-3 cursor-grab active:cursor-grabbing"
+      @mousedown="startPanelDrag"
+    >
+      <h2 class="flex items-center gap-1.5 text-base font-medium">
+        <GripVertical class="size-4 text-muted-foreground/70" />
+        资产
+      </h2>
+      <div class="flex items-center gap-1">
+        <Button variant="ghost" size="icon-sm" class="rounded-full" title="导入文件" aria-label="导入文件" @click.stop="chooseImport">
+          <Upload class="size-4" />
+        </Button>
+        <Button variant="ghost" size="icon-sm" class="rounded-full hover:bg-destructive/15 hover:text-destructive" title="关闭资产" aria-label="关闭资产" @click.stop="emit('close')">
+          <X class="size-4" />
+        </Button>
+      </div>
       <input ref="importInput" class="hidden" type="file" multiple @change="importFiles" />
     </div>
 

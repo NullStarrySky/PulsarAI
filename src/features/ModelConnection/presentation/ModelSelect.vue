@@ -88,6 +88,7 @@ function updateThinking(values: number[] | undefined) {
         <ProviderAvatar
           :name="selectedModel?.name || selectedProvider?.name || parsed.modelId || '模型'"
           :src="selectedModel?.iconUrl || selectedProvider?.iconUrl"
+          :provider-id="selectedProvider?.id || parsed.providerId"
         />
         <span class="min-w-0 truncate">{{ selectedModel?.name || parsed.modelId || "未设置" }}</span>
         <span v-if="(apiType ?? 'chat') === 'chat'" class="shrink-0 text-muted-foreground">{{ selectedThinkingLabel }}</span>
@@ -99,7 +100,7 @@ function updateThinking(values: number[] | undefined) {
       <DropdownMenuGroup>
         <DropdownMenuSub v-for="provider in providers" :key="provider.id">
           <DropdownMenuSubTrigger>
-            <ProviderAvatar :name="provider.name" :src="provider.iconUrl" />
+            <ProviderAvatar :name="provider.name" :src="provider.iconUrl" :provider-id="provider.id" />
             <span class="min-w-0 flex-1 truncate">{{ provider.name }}</span>
             <Check v-if="provider.id === parsed.providerId" class="text-muted-foreground" />
           </DropdownMenuSubTrigger>

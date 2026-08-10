@@ -22,6 +22,7 @@ import ConversationComposerEditor from "./ConversationComposerEditor.vue";
 import ConversationComposerToolbarTools from "./ConversationComposerToolbarTools.vue";
 import GenerationComponentDialog from "./GenerationComponentDialog.vue";
 import MessageAttachmentStrip from "./MessageAttachmentStrip.vue";
+import SttInputButton from "@/features/STT/presentation/SttInputButton.vue";
 
 const conversation = useConversationStore();
 const plugin = usePluginStore();
@@ -33,6 +34,11 @@ const attachmentInput = ref<HTMLInputElement | null>(null);
 const fullscreenOpen = ref(false);
 const whiteboardOpen = ref(false);
 const mapOpen = ref(false);
+
+function onSttResult(resultText: string) {
+  if (!resultText) return;
+  input.value = input.value.trim() ? `${input.value.trim()} ${resultText}` : resultText;
+}
 
 const actions = computed(() =>
 	plugin.actionResourcesForPackage(
@@ -177,6 +183,7 @@ async function onAttachmentsSelected(event: Event) {
                 @map="mapOpen = true"
                 @fullscreen="fullscreenOpen = true"
               />
+              <SttInputButton @result="onSttResult" />
               <Button v-if="conversation.activeConversationGenerating" size="icon-sm" class="rounded-full" title="生成中"><Square class="size-3.5 fill-current" /></Button>
               <Button v-else size="icon-sm" class="rounded-full" title="发送" :disabled="!canSend" @click="send"><Send class="size-4" /></Button>
             </div>

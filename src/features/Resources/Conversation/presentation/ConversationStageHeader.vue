@@ -1,18 +1,28 @@
 <script setup lang="ts">
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   CalendarClock,
+  ChevronDown,
+  Clock,
+  FilePlus2,
   FolderTree,
   Grid2X2,
   List,
   Maximize2,
+  Minus,
   MoreHorizontal,
   Pin,
+  PinOff,
   Plus,
   Search,
   Settings,
+  TimerOff,
   Trash2,
+  X,
 } from "lucide-vue-next";
-import { computed, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { push } from "notivue";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,7 +38,9 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCommandStore } from "@/features/Hotkey/application/command-store";
+import { useResponsiveStore } from "@/features/Misc/application/responsive-store";
 import { useLayoutStore } from "@/features/UI/application/layout-store";
+import { useAppearanceStore } from "@/features/UI/theme/application/appearance-store";
 import SchedulePage from "@/features/UI/schedule/presentation/SchedulePage.vue";
 import { useConversationStore } from "../application/conversation-store";
 import type { CharacterPackage, Conversation } from "../domain/conversation-types";
@@ -38,8 +50,101 @@ const assetOpen = defineModel<boolean>("assetOpen", { required: true });
 const conversation = useConversationStore();
 const command = useCommandStore();
 const layout = useLayoutStore();
+const responsive = useResponsiveStore();
+const appearance = useAppearanceStore();
+const appWindow = isTauri() ? getCurrentWindow() : null;
+
+const topBarContainerClass = computed(() => {
+  if (!appearance.zenFrameEnabled) {
+    return "bg-background text-foreground border-b border-border/80";
+  }
+  return appearance.zenFrameIsDark
+    ? "bg-zen-frame-bg text-white"
+    : "bg-zen-frame-bg text-slate-900";
+});
+
+const headerBtnClass = computed(() => {
+  if (!appearance.zenFrameEnabled) {
+    return "text-muted-foreground/75 hover:bg-muted/60 hover:text-foreground";
+  }
+  return appearance.zenFrameIsDark
+    ? "text-white/80 hover:bg-white/15 hover:text-white"
+    : "text-slate-700 hover:bg-black/10 hover:text-slate-950";
+});
+
+const headerActiveBtnClass = computed(() => {
+  if (!appearance.zenFrameEnabled) {
+    return "bg-muted/75 text-foreground";
+  }
+  return appearance.zenFrameIsDark
+    ? "bg-white/20 text-white"
+    : "bg-black/15 text-slate-950";
+});
+
+const headerDividerClass = computed(() => {
+  if (!appearance.zenFrameEnabled) {
+    return "bg-border/60";
+  }
+  return appearance.zenFrameIsDark ? "bg-white/20" : "bg-black/15";
+});
+
+const windowCloseBtnClass = computed(() => {
+  if (!appearance.zenFrameEnabled) {
+    return "text-muted-foreground/75 hover:bg-destructive hover:text-destructive-foreground";
+  }
+  return appearance.zenFrameIsDark
+    ? "text-white/80 hover:bg-red-600 hover:text-white"
+    : "text-slate-700 hover:bg-red-600 hover:text-white";
+});
+
+const isHovered = ref(false);
+
+function handleMouseMove(e: MouseEvent) {
+  if (layout.topBarPinned) return;
+  if (e.clientY <= 14) {
+    isHovered.value = true;
+  }
+}
+
+onMounted(() => {
+  if (typeof window !== "undefined") {
+    window.addEventListener("mousemove", handleMouseMove);
+  }
+});
+
+onUnmounted(() => {
+  if (typeof window !== "undefined") {
+    window.removeEventListener("mousemove", handleMouseMove);
+  }
+});
+
+const isHeaderVisible = computed(() => {
+  return (
+    layout.topBarPinned ||
+    isHovered.value ||
+    packageMenuOpen.value ||
+    conversationMenuOpen.value ||
+    moreMenuOpen.value ||
+    descriptionEditorOpen.value ||
+    renamingPackage.value ||
+    renamingConversation.value
+  );
+});
+
+async function minimizeWindow() {
+  await appWindow?.minimize();
+}
+
+async function toggleMaximize() {
+  await appWindow?.toggleMaximize();
+}
+
+async function closeWindow() {
+  await appWindow?.close();
+}
 const packageMenuOpen = ref(false);
 const conversationMenuOpen = ref(false);
+const moreMenuOpen = ref(false);
 const scheduleOpen = ref(false);
 const packageSearch = ref("");
 const conversationSearch = ref("");
@@ -110,10 +215,16 @@ async function togglePackagePin(item: CharacterPackage) {
   await conversation.updatePackage(item.id, { pinned: !item.pinned });
 }
 
-async function createConversation() {
+async function createConversation(options: { ignoreTemplate?: boolean; isEphemeral?: boolean } = {}) {
   if (!conversation.activePackageId) return;
   conversationMenuOpen.value = false;
-  await conversation.createConversation(conversation.activePackageId);
+  await conversation.createConversation(conversation.activePackageId, options);
+}
+
+async function cancelActiveConversationEphemeral() {
+  if (!conversation.activeConversation) return;
+  await conversation.updateConversation(conversation.activeConversation.id, { isEphemeral: false });
+  push.success("已取消临时状态，转换为普通会话");
 }
 
 function selectConversation(item: Conversation) {
@@ -201,7 +312,20 @@ async function toggleActiveConversationTemplate() {
 </script>
 
 <template>
-  <header class="relative z-30 flex h-12 shrink-0 select-none items-center border-b border-border/60 bg-transparent px-3 mobile:h-14 mobile:px-2" @mousedown="startWindowDragFromBackground">
+  <div v-if="!layout.topBarPinned" class="fixed top-0 left-0 right-0 z-40 h-3" @mouseenter="isHovered = true" />
+
+  <header
+    class="select-none items-center px-3 transition-all duration-200 ease-out mobile:px-2"
+    :class="[
+      topBarContainerClass,
+      layout.topBarPinned
+        ? 'relative z-30 flex h-10 shrink-0 border-b border-zen-frame-border/80 mobile:h-12'
+        : 'fixed top-1.5 left-1.5 right-1.5 z-50 flex h-10 rounded-xl border border-zen-frame-border/80 shadow-xl backdrop-blur-md mobile:h-12',
+      !layout.topBarPinned && (isHeaderVisible ? 'translate-y-0 opacity-100 pointer-events-auto' : '-translate-y-[calc(100%+1rem)] opacity-0 pointer-events-none')
+    ]"
+    @mousedown="startWindowDragFromBackground"
+    @mouseleave="isHovered = false"
+  >
     <div class="flex min-w-0 flex-1 items-center gap-1.5">
       <div v-if="renamingPackage" class="flex h-9 min-w-0 max-w-44 items-center gap-2 px-1.5 mobile:max-w-32">
         <Avatar class="size-7 shrink-0">
@@ -219,7 +343,7 @@ async function toggleActiveConversationTemplate() {
       </div>
       <Popover v-else v-model:open="packageMenuOpen">
         <PopoverTrigger as-child>
-          <button type="button" class="flex h-9 min-w-0 max-w-44 items-center gap-2 rounded-lg px-1.5 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mobile:max-w-32">
+          <button type="button" class="flex h-9 min-w-0 max-w-44 items-center gap-2 rounded-lg px-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mobile:max-w-32" :class="headerBtnClass">
             <Avatar class="size-7">
               <AvatarImage v-if="conversation.activePackage?.icon" :src="conversation.activePackage.icon" :alt="conversation.activePackage.name" />
               <AvatarFallback class="font-semibold text-white" :style="packageColor(conversation.activePackage)">
@@ -289,7 +413,7 @@ async function toggleActiveConversationTemplate() {
         <Button size="sm" @click="confirmPackageDescription">保存</Button>
       </div>
 
-      <span class="h-4 w-px shrink-0 bg-border" />
+      <span class="h-4 w-px shrink-0" :class="headerDividerClass" />
 
       <Input
         v-if="renamingConversation"
@@ -302,9 +426,10 @@ async function toggleActiveConversationTemplate() {
       />
       <Popover v-else v-model:open="conversationMenuOpen">
         <PopoverTrigger as-child>
-          <button type="button" class="flex h-9 min-w-0 max-w-[320px] items-center rounded-lg px-2 text-left text-base font-medium hover:bg-muted/60 mobile:max-w-[42vw] mobile:text-sm">
+          <button type="button" class="flex h-9 min-w-0 max-w-[320px] items-center rounded-lg px-2 text-left text-base font-medium mobile:max-w-[42vw] mobile:text-sm" :class="headerBtnClass">
             <span class="truncate">{{ conversation.activeConversation?.title ?? "选择会话" }}</span>
             <Badge v-if="conversation.activeConversation?.isTemplate" variant="secondary" class="ml-1 shrink-0 px-1.5 text-[10px]">模板</Badge>
+            <Badge v-if="conversation.activeConversation?.isEphemeral" variant="secondary" class="ml-1 shrink-0 bg-amber-500/15 text-amber-600 dark:text-amber-400 px-1.5 text-[10px]">临时</Badge>
           </button>
         </PopoverTrigger>
         <PopoverContent align="start" :side-offset="7" class="w-[min(20rem,calc(100vw-1rem))] gap-0 rounded-xl border border-border/80 p-2 shadow-xl">
@@ -313,7 +438,21 @@ async function toggleActiveConversationTemplate() {
               <Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input v-model="conversationSearch" class="h-9 pl-8 focus:!border-border focus-visible:!border-border focus-visible:!ring-0 focus-visible:!ring-offset-0" placeholder="搜索会话" />
             </div>
-            <Button variant="secondary" size="icon-sm" :disabled="!conversation.activePackageId" title="新建会话" @click="createConversation"><Plus class="size-4" /></Button>
+            <div class="flex items-center">
+              <Button variant="secondary" size="icon-sm" class="rounded-r-none border-r border-border/60" :disabled="!conversation.activePackageId" title="新建会话" @click="createConversation()"><Plus class="size-4" /></Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger as-child>
+                  <Button variant="secondary" size="icon-sm" class="w-6 rounded-l-none px-0" :disabled="!conversation.activePackageId" title="新建方式">
+                    <ChevronDown class="size-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" class="w-36">
+                  <DropdownMenuItem @click="createConversation()"><Plus data-icon="inline-start" />新建默认会话</DropdownMenuItem>
+                  <DropdownMenuItem @click="createConversation({ ignoreTemplate: true })"><FilePlus2 data-icon="inline-start" />新建空白会话</DropdownMenuItem>
+                  <DropdownMenuItem @click="createConversation({ isEphemeral: true })"><Clock data-icon="inline-start" />新建临时会话</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
           <ScrollArea class="mt-1 h-[min(19rem,55vh)]">
             <div class="space-y-0.5 p-1">
@@ -322,6 +461,7 @@ async function toggleActiveConversationTemplate() {
                 <span class="flex min-w-0 flex-1 items-center gap-1">
                   <span class="truncate text-sm">{{ item.title }}</span>
                   <Badge v-if="item.isTemplate" variant="secondary" class="shrink-0 px-1.5 text-[10px]">模板</Badge>
+                  <Badge v-if="item.isEphemeral" variant="secondary" class="shrink-0 bg-amber-500/15 text-amber-600 dark:text-amber-400 px-1.5 text-[10px]">临时</Badge>
                 </span>
                 <span class="shrink-0 text-xs text-muted-foreground group-hover:hidden">{{ updatedAtLabel(item.updatedAt) }}</span>
                 <span class="hidden shrink-0 group-hover:flex mobile:flex">
@@ -335,9 +475,9 @@ async function toggleActiveConversationTemplate() {
         </PopoverContent>
       </Popover>
 
-      <DropdownMenu>
+      <DropdownMenu v-model:open="moreMenuOpen">
         <DropdownMenuTrigger as-child>
-          <Button variant="ghost" size="icon-sm" class="rounded-full text-muted-foreground" title="角色与会话操作">
+          <Button variant="ghost" size="icon-sm" class="rounded-full" :class="headerBtnClass" title="角色与会话操作">
             <MoreHorizontal />
           </Button>
         </DropdownMenuTrigger>
@@ -356,6 +496,9 @@ async function toggleActiveConversationTemplate() {
           <DropdownMenuItem :disabled="!conversation.activeConversation" @click="toggleActiveConversationTemplate">
             {{ conversation.activeConversation?.isTemplate ? "取消会话模板" : "将对话设为模板" }}
           </DropdownMenuItem>
+          <DropdownMenuItem v-if="conversation.activeConversation?.isEphemeral" @click="cancelActiveConversationEphemeral">
+            <TimerOff data-icon="inline-start" />取消临时状态
+          </DropdownMenuItem>
           <DropdownMenuItem :disabled="!conversation.activeConversation" @click="renameActiveConversation">重命名会话</DropdownMenuItem>
           <DropdownMenuItem class="text-destructive focus:text-destructive" :disabled="!conversation.activeConversation" @click="conversation.activeConversation && removeConversation(conversation.activeConversation)">删除会话</DropdownMenuItem>
         </DropdownMenuContent>
@@ -363,11 +506,29 @@ async function toggleActiveConversationTemplate() {
     </div>
 
     <div class="flex shrink-0 items-center gap-0.5">
-      <Button variant="ghost" size="icon-sm" class="rounded-full text-muted-foreground/65 hover:bg-muted/60" title="设置" @click="layout.openSettings"><Settings class="size-4.5" /></Button>
-      <Button variant="ghost" size="icon-sm" class="rounded-full text-muted-foreground/65 hover:bg-muted/60" title="定时任务" @click="scheduleOpen = true"><CalendarClock class="size-4.5" /></Button>
-      <Button variant="ghost" size="icon-sm" class="rounded-full text-muted-foreground/65 hover:bg-muted/60" title="搜索" @click="command.openPalette()"><Search class="size-4.5" /></Button>
-      <Button variant="ghost" size="icon-sm" class="rounded-full text-muted-foreground/65 hover:bg-muted/60" :class="assetOpen && 'bg-muted/75'" title="资产" @click="assetOpen = !assetOpen"><FolderTree class="size-4.5" /></Button>
-      <Button variant="ghost" size="icon-sm" class="rounded-full text-muted-foreground/65 hover:bg-muted/60" title="沉浸全屏" @click="layout.setImmersiveConversation(true)"><Maximize2 /></Button>
+      <Button variant="ghost" size="icon-sm" class="rounded-full" :class="headerBtnClass" title="设置" @click="layout.openSettings"><Settings class="size-4" /></Button>
+      <Button variant="ghost" size="icon-sm" class="rounded-full" :class="headerBtnClass" title="定时任务" @click="scheduleOpen = true"><CalendarClock class="size-4" /></Button>
+      <Button variant="ghost" size="icon-sm" class="rounded-full" :class="headerBtnClass" title="搜索" @click="command.openPalette()"><Search class="size-4" /></Button>
+      <Button variant="ghost" size="icon-sm" class="rounded-full" :class="[headerBtnClass, assetOpen && headerActiveBtnClass]" title="资产" @click="assetOpen = !assetOpen"><FolderTree class="size-4" /></Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        class="rounded-full"
+        :class="[headerBtnClass, !layout.topBarPinned && headerActiveBtnClass]"
+        :title="layout.topBarPinned ? '自动折叠顶栏' : '固定顶栏'"
+        @click="layout.toggleTopBarPinned()"
+      >
+        <Pin v-if="layout.topBarPinned" class="size-4" />
+        <PinOff v-else class="size-4" />
+      </Button>
+
+      <span v-if="!responsive.isMobileLayout" class="mx-0.5 h-4 w-px shrink-0 border-l" :class="headerDividerClass" />
+
+      <template v-if="!responsive.isMobileLayout">
+        <Button variant="ghost" size="icon-sm" class="rounded-full" :class="headerBtnClass" title="最小化" aria-label="最小化窗口" @click="minimizeWindow"><Minus class="size-4" /></Button>
+        <Button variant="ghost" size="icon-sm" class="rounded-full" :class="headerBtnClass" title="最大化或还原" aria-label="最大化或还原窗口" @click="toggleMaximize"><Maximize2 class="size-4" /></Button>
+        <Button variant="ghost" size="icon-sm" class="rounded-full" :class="windowCloseBtnClass" title="关闭" aria-label="关闭窗口" @click="closeWindow"><X class="size-4" /></Button>
+      </template>
     </div>
   </header>
 

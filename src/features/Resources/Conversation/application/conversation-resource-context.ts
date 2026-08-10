@@ -2,6 +2,8 @@ import pluginGuide from "@/features/Resources/Plugin/guide.md?raw";
 import conversationGuide from "@/features/Resources/Conversation/guide.md?raw";
 import {
   findPluginNodeByPath,
+  findPluginTreeNode,
+  pluginNodePath,
   type Plugin,
   type PluginFile,
 } from "@/features/Resources/Plugin/domain/plugin-types";
@@ -15,18 +17,6 @@ function textContent(file?: PluginFile | null) {
   if (!file) return "";
   if (typeof file.content === "string") return file.content;
   return JSON.stringify(file.content, null, 2);
-}
-
-function pluginFile(plugin: Plugin, path: string) {
-  const prefix = `/plugins/${plugin.id}`;
-  const relative = path.startsWith(prefix)
-    ? path.slice(prefix.length)
-    : path;
-  const segments = relative.split("/").filter(Boolean);
-  const node = segments.length
-    ? findPluginNodeByPath(plugin.root, segments)
-    : plugin.root;
-  return node?.kind === "file" ? node : null;
 }
 
 function rootFile(plugin: Plugin, name: string) {
@@ -44,20 +34,39 @@ export function buildConversationResourceContext(
   const binding = conversation.binding;
   if (!binding) return "";
 
-  const executionPackage = packages.find(
-    (item) => item.id === conversation.packageId,
-  );
-  const resourcePackage = binding.packageId
-    ? packages.find((item) => item.id === binding.packageId)
+  const executionPackage = packages.find((item) => item.id === conversation.packageId);
+  const plugin = binding.resourceType === "plugin" || binding.pluginId
+    ? plugins.find((item) => item.id === (binding.pluginId ?? binding.resourceId)) ?? null
     : null;
+  const targetConversation = binding.resourceType === "conversation"
+    ? conversations.find((item) => item.id === binding.resourceId) ?? null
+    : null;
+  const resourcePackageId = plugin?.packageId
+    ?? targetConversation?.packageId
+    ?? (binding.resourceType === "package" ? binding.resourceId : null);
+  const resourcePackage = resourcePackageId
+    ? packages.find((item) => item.id === resourcePackageId) ?? null
+    : null;
+  const selectedNode = plugin && binding.resourceId !== plugin.id
+    ? findPluginTreeNode(plugin.root, binding.resourceId)
+    : null;
+  const selected = selectedNode?.kind === "file" ? selectedNode : null;
+  const resourcePath = selectedNode && plugin
+    ? `/${pluginNodePath(plugin.root, selectedNode.id).join("/")}`
+    : plugin ? "/" : "";
+  const resourceTitle = selectedNode?.name
+    ?? plugin?.name
+    ?? targetConversation?.title
+    ?? resourcePackage?.name
+    ?? binding.resourceId;
   const sections = [
     "# Bound resource context",
     `Conversation kind: ${conversation.kind}`,
     `Execution package: ${executionPackage?.name ?? conversation.packageId} (${conversation.packageId})`,
-    `Resource title: ${binding.resourceTitle}`,
+    `Resource title: ${resourceTitle}`,
     `Resource type: ${binding.resourceType}`,
     `Resource id: ${binding.resourceId}`,
-    `Resource path: ${binding.resourcePath}`,
+    ...(resourcePath ? [`Resource path: ${resourcePath}`] : []),
     `Resource package: ${
       resourcePackage
         ? `${resourcePackage.name} (${resourcePackage.id})`
@@ -66,80 +75,73 @@ export function buildConversationResourceContext(
     "Treat the following resource and documentation as authoritative context for this conversation. Inspect the bound resource before proposing changes.",
   ];
 
-  if (binding.resourceType === "plugin" || binding.pluginId) {
-    const plugin = plugins.find(
-      (item) => item.id === (binding.pluginId ?? binding.resourceId),
+  if (plugin) {
+    sections.push(
+      "## Plugin metadata",
+      JSON.stringify(
+        {
+          id: plugin.id,
+          name: plugin.name,
+          packageId: plugin.packageId,
+          enabled: plugin.enabled,
+          local: plugin.id === resourcePackage?.pluginId,
+          main: plugin.id === resourcePackage?.mainPluginId,
+          shortDescription: plugin.shortDescription,
+        },
+        null,
+        2,
+      ),
     );
-    if (plugin) {
+    if (selected) {
       sections.push(
-        "## Plugin metadata",
-        JSON.stringify(
-          {
-            id: plugin.id,
-            name: plugin.name,
-            packageId: plugin.packageId,
-            enabled: plugin.enabled,
-            local: plugin.id === resourcePackage?.pluginId,
-            main: plugin.id === resourcePackage?.mainPluginId,
-            shortDescription: plugin.shortDescription,
-          },
-          null,
-          2,
-        ),
+        `## Current plugin file: ${resourcePath}`,
+        textContent(selected),
       );
-      const selected = pluginFile(plugin, binding.resourcePath);
-      if (selected) {
-        sections.push(
-          `## Current plugin file: ${binding.resourcePath}`,
-          textContent(selected),
-        );
-      }
-      const info = rootFile(plugin, "info.md");
-      if (info && info.id !== selected?.id) {
-        sections.push("## Plugin info.md", textContent(info));
-      }
-      const agents = rootFile(plugin, "AGENTS.md");
-      if (agents && agents.id !== selected?.id) {
-        sections.push("## Plugin AGENTS.md", textContent(agents));
-      }
+    }
+    const info = rootFile(plugin, "info.md");
+    if (info && info.id !== selected?.id) {
+      sections.push("## Plugin info.md", textContent(info));
+    }
+    const agents = rootFile(plugin, "AGENTS.md");
+    if (agents && agents.id !== selected?.id) {
+      sections.push("## Plugin AGENTS.md", textContent(agents));
     }
     sections.push("## Plugin system documentation", pluginGuide);
-  } else {
-    if (binding.resourceType === "conversation") {
-      const target = conversations.find((item) => item.id === binding.resourceId);
-      if (target) {
-        const path: ChatMessageContainer[] = [];
-        const seen = new Set<string>();
-        let current = containers.find(
-          (item) => item.id === (target.lastContainerId ?? target.rootContainerId),
-        );
-        while (current && !seen.has(current.id)) {
-          seen.add(current.id);
-          path.unshift(current);
-          current = current.previousContainer
-            ? containers.find((item) => item.id === current?.previousContainer)
-            : undefined;
-        }
-        sections.push(
-          "## Current conversation resource",
-          JSON.stringify(
-            {
-              ...target,
-              messages: path.flatMap((container) => {
-                const message = container.activeMessage === null
-                  ? null
-                  : container.content[container.activeMessage] ?? null;
-                return !message || message.type === "error"
-                  ? []
-                  : [{ role: container.role, content: message.content }];
-              }),
-            },
-            null,
-            2,
-          ),
-        );
-      }
+  } else if (targetConversation) {
+    const path: ChatMessageContainer[] = [];
+    const seen = new Set<string>();
+    let current = containers.find(
+      (item) => item.id === (
+        targetConversation.lastContainerId ?? targetConversation.rootContainerId
+      ),
+    );
+    while (current && !seen.has(current.id)) {
+      seen.add(current.id);
+      path.unshift(current);
+      current = current.previousContainer
+        ? containers.find((item) => item.id === current?.previousContainer)
+        : undefined;
     }
+    sections.push(
+      "## Current conversation resource",
+      JSON.stringify(
+        {
+          ...targetConversation,
+          messages: path.flatMap((container) => {
+            const message = container.activeMessage === null
+              ? null
+              : container.content[container.activeMessage] ?? null;
+            return !message || message.type === "error"
+              ? []
+              : [{ role: container.role, content: message.content }];
+          }),
+        },
+        null,
+        2,
+      ),
+    );
+    sections.push("## Conversation system documentation", conversationGuide);
+  } else {
     sections.push("## Conversation system documentation", conversationGuide);
   }
 

@@ -8,6 +8,10 @@ import {
   getPromptOptimizationModel,
   getPromptOptimizationPrompt,
   getSpeechModel,
+  getSttAutoPolish,
+  getSttLanguage,
+  getSttPolishModel,
+  getSttPolishPrompt,
   getTranscriptionModel,
   setDefaultChatModel,
   setEmbeddingModel,
@@ -16,6 +20,10 @@ import {
   setPromptOptimizationModel,
   setPromptOptimizationPrompt,
   setSpeechModel,
+  setSttAutoPolish,
+  setSttLanguage,
+  setSttPolishModel,
+  setSttPolishPrompt,
   setTranscriptionModel,
 } from "./default-config-service";
 
@@ -29,11 +37,28 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
     transcriptionModel: fallbackDefaultConfigs.transcriptionModel,
     promptOptimizationModel: fallbackDefaultConfigs.promptOptimizationModel,
     promptOptimizationPrompt: fallbackDefaultConfigs.promptOptimizationPrompt,
+    sttLanguage: fallbackDefaultConfigs.sttLanguage,
+    sttAutoPolish: fallbackDefaultConfigs.sttAutoPolish,
+    sttPolishModel: fallbackDefaultConfigs.sttPolishModel,
+    sttPolishPrompt: fallbackDefaultConfigs.sttPolishPrompt,
     loaded: false,
   }),
   actions: {
     async load() {
-      const [defaultChatModel, fastModel, embeddingModel, imageModel, speechModel, transcriptionModel, promptOptimizationModel, promptOptimizationPrompt] = await Promise.all([
+      const [
+        defaultChatModel,
+        fastModel,
+        embeddingModel,
+        imageModel,
+        speechModel,
+        transcriptionModel,
+        promptOptimizationModel,
+        promptOptimizationPrompt,
+        sttLanguage,
+        sttAutoPolish,
+        sttPolishModel,
+        sttPolishPrompt,
+      ] = await Promise.all([
         getDefaultChatModel(),
         getFastModel(),
         getEmbeddingModel(),
@@ -42,6 +67,10 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
         getTranscriptionModel(),
         getPromptOptimizationModel(),
         getPromptOptimizationPrompt(),
+        getSttLanguage(),
+        getSttAutoPolish(),
+        getSttPolishModel(),
+        getSttPolishPrompt(),
       ]);
       this.defaultChatModel = migrateModelRef(defaultChatModel);
       this.fastModel = migrateModelRef(fastModel || defaultChatModel);
@@ -51,6 +80,10 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
       this.transcriptionModel = migrateModelRef(transcriptionModel);
       this.promptOptimizationModel = migrateModelRef(promptOptimizationModel);
       this.promptOptimizationPrompt = promptOptimizationPrompt;
+      this.sttLanguage = sttLanguage;
+      this.sttAutoPolish = sttAutoPolish;
+      this.sttPolishModel = migrateModelRef(sttPolishModel || defaultChatModel);
+      this.sttPolishPrompt = sttPolishPrompt;
       await Promise.all([
         this.defaultChatModel !== defaultChatModel ? setDefaultChatModel(this.defaultChatModel) : Promise.resolve(),
         this.fastModel !== fastModel ? setFastModel(this.fastModel) : Promise.resolve(),
@@ -59,6 +92,7 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
         this.speechModel !== speechModel ? setSpeechModel(this.speechModel) : Promise.resolve(),
         this.transcriptionModel !== transcriptionModel ? setTranscriptionModel(this.transcriptionModel) : Promise.resolve(),
         this.promptOptimizationModel !== promptOptimizationModel ? setPromptOptimizationModel(this.promptOptimizationModel) : Promise.resolve(),
+        this.sttPolishModel !== sttPolishModel ? setSttPolishModel(this.sttPolishModel) : Promise.resolve(),
       ]);
       this.loaded = true;
     },
@@ -93,6 +127,22 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
     async setPromptOptimizationPrompt(prompt: string) {
       this.promptOptimizationPrompt = prompt;
       await setPromptOptimizationPrompt(prompt);
+    },
+    async setSttLanguage(language: string) {
+      this.sttLanguage = language;
+      await setSttLanguage(language);
+    },
+    async setSttAutoPolish(autoPolish: boolean) {
+      this.sttAutoPolish = autoPolish;
+      await setSttAutoPolish(autoPolish);
+    },
+    async setSttPolishModel(model: string) {
+      this.sttPolishModel = model;
+      await setSttPolishModel(model);
+    },
+    async setSttPolishPrompt(prompt: string) {
+      this.sttPolishPrompt = prompt;
+      await setSttPolishPrompt(prompt);
     },
   },
 });

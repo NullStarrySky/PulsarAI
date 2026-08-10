@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  Camera,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -18,6 +19,7 @@ import {
 } from "lucide-vue-next";
 import { computed, reactive } from "vue";
 import { push } from "notivue";
+import { toBlob } from "html-to-image";
 import { Button } from "@/components/ui/button";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
@@ -100,6 +102,32 @@ async function copy(container: ChatMessageContainer) {
   push.success("已复制");
 }
 
+async function exportScreenshot(container: ChatMessageContainer) {
+  const el = document.getElementById(`message-bubble-${container.id}`);
+  if (!el) {
+    push.error("未找到消息元素");
+    return;
+  }
+  try {
+    const blob = await toBlob(el, {
+      cacheBust: true,
+      pixelRatio: 2,
+      style: {
+        borderRadius: "16px",
+      },
+    });
+    if (!blob) {
+      throw new Error("生成截图失败");
+    }
+    await navigator.clipboard.write([
+      new ClipboardItem({ [blob.type || "image/png"]: blob }),
+    ]);
+    push.success("截图已复制到剪切板");
+  } catch (error) {
+    push.error(error instanceof Error ? error.message : "截图导出失败");
+  }
+}
+
 async function toggleFavorite(container: ChatMessageContainer) {
   const message = messageOf(container);
   if (!message) return;
@@ -174,6 +202,7 @@ function dragImmersiveConversationBackground(event: MouseEvent) {
                       </details>
 
                       <Bubble
+                        :id="'message-bubble-' + container.id"
                         data-window-drag-block
                         :align="container.role === 'user' ? 'end' : 'start'"
                         :variant="container.role === 'user' ? 'tinted' : 'ghost'"
@@ -222,6 +251,7 @@ function dragImmersiveConversationBackground(event: MouseEvent) {
                           <DropdownMenu>
                             <DropdownMenuTrigger as-child><Button variant="ghost" size="icon-sm" class="rounded-full"><MoreHorizontal /></Button></DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              <DropdownMenuItem @click="exportScreenshot(container)"><Camera data-icon="inline-start" />截图并导出</DropdownMenuItem>
                               <DropdownMenuItem @click="toggleFavorite(container)"><StarOff v-if="messageOf(container)?.favorite" data-icon="inline-start" /><Star v-else data-icon="inline-start" />{{ messageOf(container)?.favorite ? "取消收藏" : "收藏" }}</DropdownMenuItem>
                               <DropdownMenuItem v-if="container.role !== 'user'" @click="translateMessage(container)"><RotateCcw v-if="messageOf(container)?.meta.translation" data-icon="inline-start" /><Languages v-else data-icon="inline-start" />{{ messageOf(container)?.meta.translation ? "还原原文" : "翻译" }}</DropdownMenuItem>
                               <DropdownMenuItem class="text-destructive focus:text-destructive" @click="conversation.deleteContainer(container.id)"><Trash2 data-icon="inline-start" />删除消息</DropdownMenuItem>

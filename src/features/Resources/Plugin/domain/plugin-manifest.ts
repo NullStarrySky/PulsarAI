@@ -39,8 +39,8 @@ export const pluginManifestFixedSettings = {
     groupTitle: "外观",
     contentId: "background",
     title: "会话背景",
-    description: "留空时读取内置插件的背景配置。",
-    component: "MediaSelect",
+    description: "从 background 容器选择扩展名无关的路径 ID；角色本地插件的同 ID 资源优先。",
+    component: "PathSelect",
   },
 } as const;
 

@@ -16,6 +16,7 @@ import ManifestCheckboxControl from "./manifest-controls/ManifestCheckboxControl
 import ManifestInputControl from "./manifest-controls/ManifestInputControl.vue";
 import ManifestMediaSelectControl from "./manifest-controls/ManifestMediaSelectControl.vue";
 import ManifestModelSelectControl from "./manifest-controls/ManifestModelSelectControl.vue";
+import ManifestPathSelectControl from "./manifest-controls/ManifestPathSelectControl.vue";
 import ManifestSelectControl from "./manifest-controls/ManifestSelectControl.vue";
 import ManifestSliderControl from "./manifest-controls/ManifestSliderControl.vue";
 import ManifestSwitchControl from "./manifest-controls/ManifestSwitchControl.vue";
@@ -34,6 +35,7 @@ const builtins: Record<string, Component> = {
   input: ManifestInputControl,
   mediaselect: ManifestMediaSelectControl,
   modelselect: ManifestModelSelectControl,
+  pathselect: ManifestPathSelectControl,
   select: ManifestSelectControl,
   slider: ManifestSliderControl,
   switch: ManifestSwitchControl,
@@ -95,6 +97,9 @@ function controlProps(content: PluginManifestContent) {
     ...(content.props ?? {}),
     ...(content.component.toLocaleLowerCase() === "mediaselect"
       ? { plugins: props.plugins }
+      : {}),
+    ...(content.component.toLocaleLowerCase() === "pathselect"
+      ? { plugins: props.plugins, plugin: props.plugin }
       : {}),
   };
 }

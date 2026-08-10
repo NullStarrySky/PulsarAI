@@ -400,7 +400,7 @@ API 对象：`environment.defaultConfigs`
 
 读取或修改 Pulsar 的非敏感默认配置。密钥不在此 API 中暴露。
 
-管理新资源与未显式覆盖设置时采用的应用级默认值。模型引用以 provider/model 字符串保存，权限默认值不通过此 API 修改。
+管理新资源与未显式覆盖设置时采用的应用级默认值。聊天模型引用以 provider/model/thinkingLevel 字符串保存，末段可省略；权限默认值不通过此 API 修改。
 
 <a id="feature-defaultConfigs-notes"></a>
 ### 使用说明
@@ -418,7 +418,6 @@ API 对象：`environment.defaultConfigs`
 ```ts
 type DefaultConfigKey =
   | "defaultChatModel"
-  | "reasoningEffort"
   | "fastModel"
   | "embeddingModel"
   | "imageModel"
@@ -652,7 +651,7 @@ API 对象：`environment.modelConnection`
 <a id="feature-modelConnection-notes"></a>
 ### 使用说明
 
-- 省略 model 时使用默认聊天模型，显式模型值使用 provider/model 引用格式。
+- 省略 model 时使用默认聊天模型，显式模型值使用 provider/model/thinkingLevel 引用格式，末段可省略。
 - 此入口不创建 Agent，也不启动插件流程或工具循环。
 
 <a id="feature-modelConnection-types"></a>
@@ -1058,25 +1057,25 @@ type ControlledGlobalGroup =
 
 API 对象：`environment.setting`
 
-查询 Pulsar 已注册的设置分组与页面。
+查询 Pulsar 已注册的设置页面与一级功能 Tab。
 
 读取设置导航的注册信息，适合发现可打开页面或生成帮助说明。它不会返回任何设置值、模型密钥或其他 Secret。
 
 <a id="feature-setting-notes"></a>
 ### 使用说明
 
-- groups 决定设置导航分区，pages 保存标题、说明、图标和所属分组等元数据。
+- pages 按设置导航顺序返回；tabs 是页面内部可选的一级功能划分。
 - 需要读取具体配置时应使用该配置所属 Feature 的公开 API。
 
 <a id="feature-setting-types"></a>
 ### 类型
 
-#### SettingGroupMeta
+#### SettingTabMeta
 
-设置导航中的一个分组。
+设置页面内部的一级功能 Tab。
 
 ```ts
-interface SettingGroupMeta {
+interface SettingTabMeta {
   id: string;
   title: string;
 }
@@ -1084,14 +1083,13 @@ interface SettingGroupMeta {
 
 #### SettingPageMeta
 
-设置页面的导航元数据。icon 是已注册 Vue 组件。
+设置页面的公开导航元数据。
 
 ```ts
 interface SettingPageMeta {
   id: string;
-  icon: Component;
   title: string;
-  group: string;
+  tabs: SettingTabMeta[];
 }
 ```
 
@@ -1101,7 +1099,6 @@ interface SettingPageMeta {
 
 ```ts
 interface SettingDirectory {
-  groups: SettingGroupMeta[];
   pages: SettingPageMeta[];
 }
 ```
@@ -1122,7 +1119,7 @@ interface SettingDirectory {
 
 ##### `setting.list(): SettingDirectory`
 
-列出设置分组与页面的元数据，不返回配置值或密钥。
+按导航顺序列出设置页面与一级功能 Tab，不返回配置值或密钥。
 
 **示例：**
 
@@ -1341,14 +1338,13 @@ translate.getConfig()
 
 API 对象：`environment.ui`
 
-打开设置或工作区资源，并控制主界面的侧栏。
+控制设置窗口和会话输入框工具栏。
 
-提供应用壳层的可见交互入口，包括设置、资源标签、侧栏、顶栏标签状态和输入框工具栏布局。领域操作仍由对应 Feature 自己负责。
+提供应用壳层的设置入口和输入框工具栏布局。领域操作仍由对应 Feature 自己负责。
 
 <a id="feature-ui-notes"></a>
 ### 使用说明
 
-- openResource 只负责打开标签，不负责创建或验证资源内容。
 - 工具栏布局中的每个已知工具只保留一次，缺失工具会按默认分区补回。
 
 <a id="feature-ui-types"></a>
@@ -1361,23 +1357,11 @@ API 对象：`environment.ui`
 ```ts
 type ComposerToolId =
   | "model"
-  | "reasoning"
   | "optimize"
   | "attachment"
   | "whiteboard"
   | "map"
   | "fullscreen";
-```
-
-#### TopBarStatus
-
-资源标签可以显示的短期状态。
-
-```ts
-interface TopBarStatus {
-  kind: "loading" | "success" | "warning" | "error";
-  label?: string;
-}
 ```
 
 #### ComposerToolbarLayout
@@ -1401,9 +1385,6 @@ interface ComposerToolbarLayout {
 | --- | --- |
 | `all` | 全部界面权限 |
 | `settings` | 打开或关闭设置 |
-| `resources` | 打开工作区资源 |
-| `layout` | 控制侧栏布局 |
-| `topBarStatus` | 改变顶栏标签状态 |
 | `composerToolbar` | 配置会话输入框工具栏 |
 
 #### 打开或关闭设置
@@ -1418,48 +1399,6 @@ interface ComposerToolbarLayout {
 
 ```js
 ui.setSettingsOpen(true)
-```
-
-#### 打开工作区资源
-
-权限标识：`resources`
-
-##### `ui.openResource(input: { type: string; id: string; title: string; packageId?: string }): void`
-
-在主工作区打开资源标签。
-
-**示例：**
-
-```js
-ui.openResource({ type: 'plugin', id: pluginId, title: '插件' })
-```
-
-#### 控制侧栏布局
-
-权限标识：`layout`
-
-##### `ui.setSidebars(input: { left?: boolean; right?: boolean }): void`
-
-显式设置左右侧栏是否打开。
-
-**示例：**
-
-```js
-ui.setSidebars({ right: true })
-```
-
-#### 改变顶栏标签状态
-
-权限标识：`topBarStatus`
-
-##### `ui.setTopBarStatus(tabId: string, status?: { kind: 'loading' | 'success' | 'warning' | 'error'; label?: string }): void`
-
-设置或清除指定顶栏标签的状态。loading 状态会显示旋转指示器。
-
-**示例：**
-
-```js
-ui.setTopBarStatus('conversation:id', { kind: 'loading', label: '生成中' })
 ```
 
 #### 配置会话输入框工具栏
@@ -1483,5 +1422,5 @@ ui.getComposerToolbar()
 **示例：**
 
 ```js
-ui.setComposerToolbar({ left: ['model', 'attachment'], right: ['map', 'fullscreen'], unused: ['whiteboard'] })
+ui.setComposerToolbar({ left: ['attachment'], right: ['model', 'map', 'fullscreen'], unused: ['whiteboard', 'optimize'] })
 ```

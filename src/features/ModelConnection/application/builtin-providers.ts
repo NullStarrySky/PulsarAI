@@ -58,6 +58,8 @@ export const builtinModelProviders: ModelProviderDefinition[] = [
     id: "huggingface",
     name: "Hugging Face",
     description: "Inference Providers 多模型平台；仅显式登记可生成图片的模型。",
+    icon: "huggingface",
+    iconUrl: providerIconUrl("huggingface"),
     baseUrl: "https://router.huggingface.co",
     apiKeyName: "huggingface_API_KEY",
     enabled: false,

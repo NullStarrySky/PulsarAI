@@ -11,6 +11,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import SettingGroup from "@/features/Setting/presentation/SettingGroup.vue";
 import SettingItem from "@/features/Setting/presentation/SettingItem.vue";
 import SettingPage from "@/features/Setting/presentation/SettingPage.vue";
@@ -25,16 +32,21 @@ const pluginStore = usePluginStore();
 const layout = useLayoutStore();
 const importInput = ref<HTMLInputElement | null>(null);
 const optimizationPromptDraft = ref("");
+const sttPolishPromptDraft = ref("");
 const globalPlugins = computed(() => pluginStore.globalPlugins);
 
 onMounted(async () => {
   await Promise.all([defaults.load(), pluginStore.initialize()]);
   optimizationPromptDraft.value = defaults.promptOptimizationPrompt;
+  sttPolishPromptDraft.value = defaults.sttPolishPrompt;
 });
 
 onBeforeUnmount(() => {
   if (optimizationPromptDraft.value !== defaults.promptOptimizationPrompt) {
     void defaults.setPromptOptimizationPrompt(optimizationPromptDraft.value);
+  }
+  if (sttPolishPromptDraft.value !== defaults.sttPolishPrompt) {
+    void defaults.setSttPolishPrompt(sttPolishPromptDraft.value);
   }
 });
 
@@ -45,6 +57,16 @@ function updateOptimizationPromptDraft(value: string | number) {
 function saveOptimizationPrompt() {
   if (optimizationPromptDraft.value !== defaults.promptOptimizationPrompt) {
     void defaults.setPromptOptimizationPrompt(optimizationPromptDraft.value);
+  }
+}
+
+function updateSttPolishPromptDraft(value: string | number) {
+  sttPolishPromptDraft.value = String(value);
+}
+
+function saveSttPolishPrompt() {
+  if (sttPolishPromptDraft.value !== defaults.sttPolishPrompt) {
+    void defaults.setSttPolishPrompt(sttPolishPromptDraft.value);
   }
 }
 
@@ -162,6 +184,53 @@ async function restoreBuiltInPlugin(plugin: Plugin) {
             placeholder="输入提示词优化模板"
             @update:model-value="updateOptimizationPromptDraft"
             @blur="saveOptimizationPrompt"
+          />
+        </template>
+      </SettingItem>
+    </SettingGroup>
+
+    <SettingGroup title="语音转文本 (STT)">
+      <SettingItem title="识别语言" description="指定语音识别的默认语言（支持自动检测或特定语种）。">
+        <Select :model-value="defaults.sttLanguage" @update:model-value="(val) => defaults.setSttLanguage(String(val || 'auto'))">
+          <SelectTrigger class="w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="auto">自动检测</SelectItem>
+            <SelectItem value="zh">中文</SelectItem>
+            <SelectItem value="en">English</SelectItem>
+            <SelectItem value="ja">日本語</SelectItem>
+            <SelectItem value="ko">한국어</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingItem>
+
+      <SettingItem title="自动进行语音润色" description="开启后，在语音转写完成后自动调用文本模型对结果进行精简与修饰。">
+        <Switch
+          :checked="defaults.sttAutoPolish"
+          @update:checked="defaults.setSttAutoPolish"
+        />
+      </SettingItem>
+
+      <SettingItem title="语音润色模型" description="用于对识别后的文本进行润色的文本模型。">
+        <ModelSelect
+          :model-value="defaults.sttPolishModel"
+          button-class="w-full justify-between sm:w-80"
+          @update:model-value="defaults.setSttPolishModel"
+        />
+      </SettingItem>
+
+      <SettingItem
+        title="润色提示词"
+        description="定义语音识别文本的润色规则；使用 {{text}} 表示识别出的原始文本。"
+      >
+        <template #bottom>
+          <Textarea
+            :model-value="sttPolishPromptDraft"
+            class="min-h-28 resize-y"
+            placeholder="输入语音润色提示词"
+            @update:model-value="updateSttPolishPromptDraft"
+            @blur="saveSttPolishPrompt"
           />
         </template>
       </SettingItem>

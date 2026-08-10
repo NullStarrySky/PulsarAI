@@ -33,6 +33,7 @@ Pulsar is a highly open LLM frontend. The first usable milestone is a complete b
 - Translate: `src/features/Translate/`
 - Misc platform helpers: `src/features/Misc/`
 - Notification delivery and built-in notification center: `src/features/Notification/`
+- External resource migration: `src/features/Migrations/`
 - Subwindow: `src/features/SubWindow/`
 - Feature API registry, on-demand documentation, and exceptional-method policy: `src/features/Capabilities/`
 - Scheduled tasks: `src/features/UI/schedule/`
@@ -166,12 +167,12 @@ The VitePress site lives under `docs/`. Each owning feature's `capabilities.ts` 
 - The workspace empty state creates a normal `chat` conversation only after the first message. The user chooses an existing character package or creates a new one; no built-in character package is used as a storage bucket. Plugin tests use `kind: "test"`, and `Conversation.binding` records their related resource.
 - The right sidebar keeps conversation and plugin panels. Plugin test conversations stay in the database and outside the distributable plugin tree.
 - A conversation can be marked as the package template. Creating a conversation clones that template's active container path; without a template it creates a minimal empty system container.
-- Conversations are paths of linked `ChatMessageContainer` records. Each container stores one role, sibling messages, active message index, previous container id, available next containers, and active next container.
+- Conversations are paths of linked `ChatMessageContainer` records. Each container stores one role, sibling messages, active message index, previous container id, and active next container. Available branches are derived by querying containers whose `previousContainer` points at the parent.
 - The active conversation path is derived from the current container by walking `previousContainer` links.
 - Generation appends a user container and an empty assistant container, builds the authorized runtime environment, indexes enabled Plugin resources, then runs the main plugin's manifest `runtime/generatePath`. The process receives raw messages plus reply and compression-memory closures and owns context construction, processing, Regex, and model calls. The editable built-in workflow owns the visible `new ToolLoopAgent(...)` example; there is no implicit Agent fallback.
 - User messages may persist base64 file parts with media type, filename, and size. Before generation, text and files are converted into AI SDK `UserModelMessage` array content so attachments remain part of branched and regenerated context.
 - Regeneration creates an alternative message inside the current assistant container. It does not create a new container branch.
-- Container branches are sibling containers linked from the previous container through `availableNextContainer`; a single next container is the normal path and is not shown as a branch badge.
+- Container branches are sibling containers with the same `previousContainer`; a single next container is the normal path and is not shown as a branch badge.
 - Resource images are uploaded as bytes to Tauri, renamed to UUID files under app data, stored with a `file://` prefix, and displayed through Tauri `convertFileSrc`.
 
 ## Phase 3.5 Plugin Resources

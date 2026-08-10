@@ -86,3 +86,35 @@ export function getPromptOptimizationPrompt() {
 export function setPromptOptimizationPrompt(prompt: string) {
   return setDefaultConfig(defaultConfigKeys.promptOptimizationPrompt, prompt);
 }
+
+export function getSttLanguage() {
+  return getDefaultConfig(defaultConfigKeys.sttLanguage, fallbackDefaultConfigs.sttLanguage);
+}
+
+export function setSttLanguage(language: string) {
+  return setDefaultConfig(defaultConfigKeys.sttLanguage, language);
+}
+
+export function getSttAutoPolish() {
+  return getDefaultConfig(defaultConfigKeys.sttAutoPolish, fallbackDefaultConfigs.sttAutoPolish);
+}
+
+export function setSttAutoPolish(autoPolish: boolean) {
+  return setDefaultConfig(defaultConfigKeys.sttAutoPolish, autoPolish);
+}
+
+export function getSttPolishModel() {
+  return getDefaultConfig(defaultConfigKeys.sttPolishModel, fallbackDefaultConfigs.sttPolishModel);
+}
+
+export function setSttPolishModel(model: string) {
+  return setDefaultConfig(defaultConfigKeys.sttPolishModel, model);
+}
+
+export function getSttPolishPrompt() {
+  return getDefaultConfig(defaultConfigKeys.sttPolishPrompt, fallbackDefaultConfigs.sttPolishPrompt);
+}
+
+export function setSttPolishPrompt(prompt: string) {
+  return setDefaultConfig(defaultConfigKeys.sttPolishPrompt, prompt);
+}

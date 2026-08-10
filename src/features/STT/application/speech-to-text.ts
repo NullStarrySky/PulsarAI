@@ -6,6 +6,7 @@ import {
 
 export type TranscribeOptions = Omit<Parameters<typeof transcribeWithModel>[0], "model"> & {
   model?: HydratableModel;
+  language?: string;
 };
 
 export async function transcribe(options: TranscribeOptions) {

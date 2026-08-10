@@ -32,6 +32,9 @@ import {
   setPluginManifestFixedValue,
 } from "@/features/Resources/Plugin/domain/plugin-manifest";
 import { createBuiltinPlugins } from "@/features/Resources/Plugin/application/builtin-plugins";
+import {
+  backgroundPathSelectionOptions,
+} from "@/features/Resources/Plugin/domain/plugin-path-selection";
 
 export const builtinCorePluginId = "builtin-core-plugin";
 let initializePromise: Promise<void> | null = null;
@@ -110,16 +113,6 @@ function createStarterRoot(): PluginFolder {
             value: null,
           },
         ],
-      },
-      {
-        group: { id: "appearance", title: "外观" },
-        content: [{
-          id: "background",
-          title: "会话背景",
-          description: "留空时读取内置插件的背景配置。",
-          component: "MediaSelect",
-          value: null,
-        }],
       },
     ], { treeOrder: 0 }),
     createContainerDefinitionsFile([
@@ -275,13 +268,7 @@ function configuredBackground(plugin: Plugin) {
   } catch {
     return null;
   }
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const pluginId = (value as Record<string, unknown>).pluginId;
-  const path = (value as Record<string, unknown>).path;
-  return typeof pluginId === "string" && pluginId.trim()
-    && typeof path === "string" && path.trim()
-    ? { pluginId: pluginId.trim(), path: path.trim() }
-    : null;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function clearConfiguredBackground(plugin: Plugin) {
@@ -629,27 +616,17 @@ export const usePluginStore = defineStore("plugin-resource", {
           enabledGlobalPluginIds,
           mainPluginId,
         );
-        const candidates: Plugin[] = [];
-        const main = enabled.find((plugin) => plugin.id === mainPluginId);
         const fallback = pluginStateItems(this).find(
           (plugin) => plugin.id === builtinCorePluginId,
         );
-        if (main) candidates.push(main);
-        if (fallback && fallback.id !== main?.id) candidates.push(fallback);
-        for (const plugin of candidates) {
-          const selection = configuredBackground(plugin);
-          if (!selection) continue;
-          const sourcePlugin = enabled.find(
-            (candidate) => candidate.id === selection.pluginId,
-          ) ?? (selection.pluginId === fallback?.id ? fallback : null);
-          const match = sourcePlugin
-            ? findPluginNodeByPath(sourcePlugin.root, selection.path)
-            : null;
-          if (match?.kind === "file" && pluginFileType(match.name) === "media") {
-            return match;
-          }
-        }
-        return null;
+        if (!fallback) return null;
+        const selection = configuredBackground(fallback);
+        if (!selection) return null;
+        const candidates = fallback && !enabled.some((plugin) => plugin.id === fallback.id)
+          ? [...enabled, fallback]
+          : enabled;
+        return backgroundPathSelectionOptions(candidates)
+          .find((candidate) => candidate.value === selection)?.file ?? null;
       };
     },
     actionResourcesForPackage(): (
@@ -766,20 +743,13 @@ export const usePluginStore = defineStore("plugin-resource", {
       return searchPersistedPluginNodes(query, limit);
     },
     async pruneInvalidBackgroundSelections() {
-      for (const plugin of pluginStateItems(this)) {
-        const selection = configuredBackground(plugin);
-        if (!selection) continue;
-        const sourcePlugin = pluginStateItems(this).find(
-          (candidate) => candidate.id === selection.pluginId,
-        );
-        const resource = sourcePlugin
-          ? findPluginNodeByPath(sourcePlugin.root, selection.path)
-          : null;
-        if (resource?.kind === "file" && pluginFileType(resource.name) === "media") {
-          continue;
-        }
-        if (clearConfiguredBackground(plugin)) await this.persistPlugin(plugin);
-      }
+      const builtin = pluginStateItems(this).find((plugin) => plugin.id === builtinCorePluginId);
+      if (!builtin) return;
+      const selection = configuredBackground(builtin);
+      if (!selection) return;
+      const exists = backgroundPathSelectionOptions(pluginStateItems(this))
+        .some((candidate) => candidate.value === selection);
+      if (!exists && clearConfiguredBackground(builtin)) await this.persistPlugin(builtin);
     },
     openPlugin(pluginId: string) {
       if (pluginStateItems(this).some((plugin) => plugin.id === pluginId)) {
@@ -839,7 +809,6 @@ export const usePluginStore = defineStore("plugin-resource", {
       }
 
       const previous = clonePlain(plugin);
-      const relatedPluginSnapshots = new Map<string, Plugin>();
       plugin.id = nextId;
       const { useConversationStore } = await import(
         "@/features/Resources/Conversation/application/conversation-store"
@@ -847,31 +816,7 @@ export const usePluginStore = defineStore("plugin-resource", {
       const conversation = useConversationStore();
       await conversation.initialize();
       try {
-        for (const candidate of pluginStateItems(this)) {
-          const manifest = findPluginNodeByPath(candidate.root, pluginConventions.manifest);
-          if (manifest?.kind !== "file") continue;
-          const parsed = parsePluginManifest(manifest.content);
-          if (parsed.diagnostics.length) continue;
-          const background = pluginManifestFixedValue(parsed.manifest, "background");
-          if (
-            !background
-            || typeof background !== "object"
-            || Array.isArray(background)
-            || background.pluginId !== pluginId
-          ) continue;
-          relatedPluginSnapshots.set(candidate.id, clonePlain(candidate));
-          setPluginManifestFixedValue(parsed.manifest, "background", {
-            ...background,
-            pluginId: nextId,
-          });
-          manifest.content = parsed.manifest;
-        }
         await this.persistPlugin(plugin);
-        for (const candidate of pluginStateItems(this)) {
-          if (candidate !== plugin && relatedPluginSnapshots.has(candidate.id)) {
-            await this.persistPlugin(candidate);
-          }
-        }
         for (const item of conversation.packages) {
           let changed = false;
           if (item.pluginId === pluginId) {
@@ -923,10 +868,6 @@ export const usePluginStore = defineStore("plugin-resource", {
         await deletePersistedPlugin(previous);
       } catch (error) {
         plugin.id = pluginId;
-        for (const [id, snapshot] of relatedPluginSnapshots) {
-          const index = pluginStateItems(this).findIndex((item) => item.id === id);
-          if (index >= 0) pluginStateItems(this).splice(index, 1, snapshot);
-        }
         throw error;
       }
       if (this.activePluginId === pluginId) this.activePluginId = nextId;

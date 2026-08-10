@@ -291,10 +291,6 @@ function mergeContainer(local: ChatMessageContainer, remote: ChatMessageContaine
   return {
     ...clonePlain(local),
     content: mergeMessageVersions(local.content, remote.content),
-    availableNextContainer: unionIds(
-      local.availableNextContainer,
-      remote.availableNextContainer,
-    ),
   };
 }
 
@@ -1055,10 +1051,6 @@ export const useBackupStore = defineStore("backup", {
           binding: sourceConversation.binding
             ? {
                 ...clonePlain(sourceConversation.binding),
-                packageId: sourceConversation.binding.packageId
-                  ? packageIdMap.get(sourceConversation.binding.packageId)
-                    ?? sourceConversation.binding.packageId
-                  : undefined,
                 pluginId: sourceConversation.binding.pluginId
                   ? pluginIdMap.get(sourceConversation.binding.pluginId)
                     ?? sourceConversation.binding.pluginId
@@ -1102,9 +1094,6 @@ export const useBackupStore = defineStore("backup", {
           previousContainer: sourceContainer.previousContainer
             ? containerIdMap.get(sourceContainer.previousContainer) ?? null
             : null,
-          availableNextContainer: sourceContainer.availableNextContainer
-            .map((id) => containerIdMap.get(id))
-            .filter((id): id is string => Boolean(id)),
           activeNextContainer: sourceContainer.activeNextContainer
             ? containerIdMap.get(sourceContainer.activeNextContainer) ?? null
             : null,

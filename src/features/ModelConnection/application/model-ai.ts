@@ -115,6 +115,12 @@ export function registerOpenAICompatibleProvider(providerId: string, baseURL: st
   providerBuilders[providerId] = providerBuilders.openai;
 }
 
+export function unregisterProviderHydration(providerId: string) {
+  if (providerId === "openai" || providerId === "deepseek") return;
+  delete providerConfigs[providerId];
+  delete providerBuilders[providerId];
+}
+
 export function hydrateModel(model: HydratableModel, kind: ModelKind = "chat") {
   if (typeof model !== "string") {
     return model;
