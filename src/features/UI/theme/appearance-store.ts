@@ -11,7 +11,7 @@ import {
   defaultComposerToolbarLayout,
   normalizeComposerToolbarLayout,
   type ComposerToolbarLayout,
-} from "@/features/UI/composer-toolbar";
+} from "@/features/Conversation/composer/composer-toolbar";
 import {
   syncMobileNavigationBar,
   type MobileNavigationBarMode,

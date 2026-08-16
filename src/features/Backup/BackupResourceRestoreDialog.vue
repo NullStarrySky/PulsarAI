@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useConversationStore } from "@/features/Resources/Conversation/store/conversation-store";
+import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import {
   useBackupStore,
   type ResourceImportMode,

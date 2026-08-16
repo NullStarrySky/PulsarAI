@@ -8,12 +8,6 @@
     "test": "vitest run",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "docs:generate": "bun scripts/generate-capability-reference.ts",
-    "docs:generate:watch": "bun --watch scripts/generate-capability-reference.ts",
-    "docs:serve": "vitepress dev docs --host 127.0.0.1",
-    "docs:dev": "bun run docs:generate && bun run --parallel docs:generate:watch docs:serve",
-    "docs:build": "bun run docs:generate && vitepress build docs",
-    "docs:preview": "vitepress preview docs",
     "tauri": "bun scripts/run-tauri.ts"
   },
   "dependencies": {

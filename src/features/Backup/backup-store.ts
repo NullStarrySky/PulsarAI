@@ -13,20 +13,20 @@ import {
   writeSyncMetadata,
   type EntitySyncMeta,
 } from "@/features/Database/sync-metadata";
-import { useConversationStore } from "@/features/Resources/Conversation/store/conversation-store";
+import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import type {
   CharacterPackage,
   ChatMessage,
   ChatMessageContainer,
   Conversation,
-} from "@/features/Resources/Conversation/messages/conversation-types";
-import { usePluginStore } from "@/features/Resources/Plugin/tree/plugin-store";
+} from "@/features/Conversation/messages/conversation-types";
+import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import type {
   Plugin,
   PluginResource,
   PluginFolder,
   PluginTreeNode,
-} from "@/features/Resources/Plugin/tree/plugin-types";
+} from "@/features/Plugin/tree/plugin-types";
 
 export type BackupInterval = "off" | "10m" | "30m" | "1h" | "6h" | "1d" | "1w";
 export type BackupLimit = "3" | "5" | "10" | "20" | "50" | "unlimited";

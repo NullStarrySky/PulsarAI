@@ -22,9 +22,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useConversationStore } from "@/features/Resources/Conversation/store/conversation-store";
-import { usePluginStore } from "@/features/Resources/Plugin/tree/plugin-store";
-import type { Plugin } from "@/features/Resources/Plugin/tree/plugin-types";
+import { useConversationStore } from "@/features/Conversation/store/conversation-store";
+import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
+import type { Plugin } from "@/features/Plugin/tree/plugin-types";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingItem from "@/features/Setting/components/SettingItem.vue";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";

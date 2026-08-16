@@ -1,7 +1,7 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import { selectAll, upsert } from "@/features/Database/database-service";
-import { useConversationStore } from "@/features/Resources/Conversation/store/conversation-store";
+import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import { createStatisticEvent, createYearHeatmap, type StatisticEvent } from "./statistic";
 
 const table = "statistic_events";

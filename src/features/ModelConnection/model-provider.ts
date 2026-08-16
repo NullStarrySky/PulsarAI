@@ -96,7 +96,8 @@ export interface NewModelProviderInput {
   id: string;
   name?: string;
   description?: string;
-  iconUrl?: string;
+  /** Built-in icon id; custom OpenAI-compatible providers default to "openai". */
+  icon?: string;
   baseUrl?: string;
   apiKey?: string;
 }

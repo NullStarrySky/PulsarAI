@@ -1,5 +1,4 @@
 import type { ModelMessage } from "ai";
-import { createSandboxScope } from "./sandbox-globals";
 
 export type SandboxEnvironment = Record<string | number, unknown>;
 
@@ -42,11 +41,10 @@ export function mergeSandboxEnvironments(environments: SandboxEnvironment[] = []
 export function executeSandboxCode(code: string, environments: SandboxEnvironment[] = []): unknown {
   try {
     const environment = mergeEnvironment(environments);
-    const scope = createSandboxScope(environment);
     const body = buildExecutableBody(code.trim(), environment);
     const runner = new Function("environment", "with (environment) {\n" + body + "\n}");
-    const result = runner.call(scope, scope);
-    return typeof result === "function" ? result.call(scope, scope) : result;
+    const result = runner.call(environment, environment);
+    return typeof result === "function" ? result.call(environment, environment) : result;
   } catch (error) {
     throw sandboxExecutionError(error, code);
   }
@@ -58,12 +56,11 @@ export async function executeSandboxCodeAsync(
 ): Promise<unknown> {
   try {
     const environment = mergeEnvironment(environments);
-    const scope = createSandboxScope(environment);
     const body = buildExecutableBody(code.trim(), environment);
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
     const runner = new AsyncFunction("environment", "with (environment) {\n" + body + "\n}");
-    const result = await runner.call(scope, scope);
-    return typeof result === "function" ? await result.call(scope, scope) : result;
+    const result = await runner.call(environment, environment);
+    return typeof result === "function" ? await result.call(environment, environment) : result;
   } catch (error) {
     throw sandboxExecutionError(error, code);
   }
@@ -75,16 +72,15 @@ export function createSandboxFunction(
 ): (...args: unknown[]) => unknown {
   try {
     const environment = mergeEnvironment(environments);
-    const scope = createSandboxScope(environment);
     const body = buildExecutableBody(code.trim(), environment);
     const runner = new Function("environment", "with (environment) {\n" + body + "\n}");
-    const value = runner.call(scope, scope);
+    const value = runner.call(environment, environment);
     if (typeof value !== "function") {
       throw new Error("自定义工具的 tool.js 必须只包含一个函数。");
     }
     return (...args: unknown[]) => {
       try {
-        const result = Reflect.apply(value, scope, args);
+        const result = Reflect.apply(value, environment, args);
         return result instanceof Promise
           ? result.catch((error) => {
               throw sandboxExecutionError(error, code);

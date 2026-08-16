@@ -1,12 +1,12 @@
-import amberMinimalCss from "../styles/theme/amber-minimal.css?raw";
-import catppuccinCss from "../styles/theme/catppuccin.css?raw";
-import claymorphismCss from "../styles/theme/claymorphism.css?raw";
-import cleanSlateCss from "../styles/theme/clean-slate.css?raw";
-import defaultCss from "../styles/theme/default.css?raw";
-import solarDuskCss from "../styles/theme/solar-dusk.css?raw";
-import tangerineCss from "../styles/theme/tangerine.css?raw";
-import twitterCss from "../styles/theme/twitter.css?raw";
-import violetBloomCss from "../styles/theme/violet-bloom.css?raw";
+import amberMinimalCss from "./styles/theme/amber-minimal.css?raw";
+import catppuccinCss from "./styles/theme/catppuccin.css?raw";
+import claymorphismCss from "./styles/theme/claymorphism.css?raw";
+import cleanSlateCss from "./styles/theme/clean-slate.css?raw";
+import defaultCss from "./styles/theme/default.css?raw";
+import solarDuskCss from "./styles/theme/solar-dusk.css?raw";
+import tangerineCss from "./styles/theme/tangerine.css?raw";
+import twitterCss from "./styles/theme/twitter.css?raw";
+import violetBloomCss from "./styles/theme/violet-bloom.css?raw";
 
 export type ThemeMode = "light" | "dark" | "system";
 

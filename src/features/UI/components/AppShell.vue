@@ -3,7 +3,7 @@ import { Notification, Notivue } from "notivue";
 import { onBeforeUnmount, onMounted } from "vue";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useHotkeyStore } from "@/features/Hotkey/hotkey-store";
-import ConversationStageOnePage from "@/features/Resources/Conversation/stage/ConversationStageOnePage.vue";
+import ConversationStageOnePage from "@/features/Conversation/stage/ConversationStageOnePage.vue";
 import SettingsDialog from "@/features/Setting/components/SettingsDialog.vue";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";

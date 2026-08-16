@@ -98,6 +98,7 @@ function updateThinking(values: number[] | undefined) {
           :name="hasSelection ? selectedModel?.name || selectedProvider?.name || parsed.modelId : emptyLabel"
           :src="selectedModel?.iconUrl || selectedProvider?.iconUrl"
           :provider-id="selectedProvider?.id || parsed.providerId"
+          :icon-id="selectedProvider?.icon"
         />
         <span class="min-w-0 truncate">{{ hasSelection ? selectedModel?.name || parsed.modelId : emptyLabel }}</span>
         <span v-if="(apiType ?? 'chat') === 'chat' && hasSelection" class="shrink-0 text-muted-foreground">{{ selectedThinkingLabel }}</span>
@@ -114,7 +115,7 @@ function updateThinking(values: number[] | undefined) {
         <DropdownMenuSeparator v-if="allowEmpty && providers.length" />
         <DropdownMenuSub v-for="provider in providers" :key="provider.id">
           <DropdownMenuSubTrigger>
-            <ProviderAvatar :name="provider.name" :src="provider.iconUrl" :provider-id="provider.id" />
+            <ProviderAvatar :name="provider.name" :src="provider.iconUrl" :provider-id="provider.id" :icon-id="provider.icon" />
             <span class="min-w-0 flex-1 truncate">{{ provider.name }}</span>
             <Check v-if="provider.id === parsed.providerId" class="text-muted-foreground" />
           </DropdownMenuSubTrigger>

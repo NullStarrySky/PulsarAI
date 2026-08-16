@@ -1,15 +1,15 @@
 import { getSpeechModel } from "@/features/defaultConfigs/default-config-service";
-import { useConversationStore } from "@/features/Resources/Conversation/store/conversation-store";
-import { usePluginStore } from "@/features/Resources/Plugin/tree/plugin-store";
+import { useConversationStore } from "@/features/Conversation/store/conversation-store";
+import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import {
   findPluginNodeByPath,
   type PluginFile,
   type PluginFolder,
-} from "@/features/Resources/Plugin/tree/plugin-types";
+} from "@/features/Plugin/tree/plugin-types";
 import {
   createPluginMediaContent,
   pluginMediaSource,
-} from "@/features/Resources/Plugin/editors/media/plugin-media";
+} from "@/features/Plugin/editors/media/plugin-media";
 import { generateSpeech } from "./text-to-speech";
 import { PIPER_TTS_PROVIDER_ID } from "./providers/piper-tts-client";
 

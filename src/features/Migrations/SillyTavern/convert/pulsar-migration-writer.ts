@@ -1,6 +1,6 @@
 import type { Pinia } from "pinia";
-import { useConversationStore } from "@/features/Resources/Conversation/store/conversation-store";
-import { usePluginStore } from "@/features/Resources/Plugin/tree/plugin-store";
+import { useConversationStore } from "@/features/Conversation/store/conversation-store";
+import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import { useModelConnectionStore } from "@/features/ModelConnection/services/model-connection-store";
 import {
   findPluginNodeByPath,
@@ -8,12 +8,12 @@ import {
   type Plugin,
   type PluginFile,
   type PluginFolder,
-} from "@/features/Resources/Plugin/tree/plugin-types";
+} from "@/features/Plugin/tree/plugin-types";
 import {
   parsePluginManifest,
   setPluginManifestFixedValue,
-} from "@/features/Resources/Plugin/editors/manifest/plugin-manifest";
-import { pluginPathSelectionValue } from "@/features/Resources/Plugin/tree/plugin-path-selection";
+} from "@/features/Plugin/editors/manifest/plugin-manifest";
+import { pluginPathSelectionValue } from "@/features/Plugin/tree/plugin-path-selection";
 import type {
   ConversationMigrationArtifact,
   MigratedLorebookEntry,
@@ -27,7 +27,7 @@ import type { SillyTavernReaderTransport } from "./source-types";
 import type {
   ChatMessage,
   ChatMessageContainer,
-} from "@/features/Resources/Conversation/messages/conversation-types";
+} from "@/features/Conversation/messages/conversation-types";
 
 export interface SillyTavernImportCommitResult {
   planId: string;

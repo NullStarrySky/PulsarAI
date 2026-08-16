@@ -1,10 +1,17 @@
 import {
-  ensureNotificationPermission,
-  sendNotification,
-} from "@/features/Notification/notification-service";
+  isPermissionGranted,
+  requestPermission,
+  sendNotification as sendExternalNotification,
+} from "@choochmeque/tauri-plugin-notifications-api";
 import { useRuntimePreferenceStore } from "./runtime-preference-store";
 
-export { ensureNotificationPermission };
+export async function ensureNotificationPermission() {
+  const granted = await isPermissionGranted();
+  if (granted) {
+    return true;
+  }
+  return (await requestPermission()) === "granted";
+}
 
 let audioContext: AudioContext | null = null;
 
@@ -18,10 +25,11 @@ export async function notifyReplyCompleted(input: { title?: string; body?: strin
     playCompletionSound();
   }
 
-  if (preferences.notifyOnReplyComplete) {
-    await sendNotification({
+  if (preferences.notifyOnReplyComplete && (await ensureNotificationPermission())) {
+    await sendExternalNotification({
       title: input.title || "Pulsar",
       body: input.body || "回复已完成。",
+      autoCancel: true,
     });
   }
 }

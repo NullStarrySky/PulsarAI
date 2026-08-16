@@ -32,6 +32,7 @@ import { modelTypeLabels, useModelConnectionStore } from "../services/model-conn
 import type { ModelApiType, ModelDefinition, ModelPricing } from "../model-provider";
 import type { ServiceProviderView } from "../service-provider";
 import ProviderAvatar from "./ProviderAvatar.vue";
+import ProviderIconPicker from "./ProviderIconPicker.vue";
 import ServiceProviderSettingsLayout from "./ServiceProviderSettingsLayout.vue";
 
 const store = useModelConnectionStore();
@@ -50,7 +51,7 @@ const providerForm = reactive({
   id: "",
   name: "",
   description: "",
-  iconUrl: "",
+  icon: "",
   baseUrl: "",
   apiKey: "",
 });
@@ -153,7 +154,7 @@ function resetProviderForm() {
   providerForm.id = "";
   providerForm.name = "";
   providerForm.description = "";
-  providerForm.iconUrl = "";
+  providerForm.icon = "";
   providerForm.baseUrl = "";
   providerForm.apiKey = "";
 }
@@ -302,6 +303,14 @@ async function fetchModelList() {
 
       <div class="grid gap-8 mobile:gap-6">
             <SettingForm>
+              <SettingFormField v-if="!activeProvider.builtIn" title="图标" description="点击更换当前自定义服务商的图标。">
+                <ProviderIconPicker
+                  :model-value="activeProvider.icon || 'openai'"
+                  :name="activeProvider.name"
+                  @update:model-value="store.patchProvider(activeProvider.id, { icon: $event })"
+                />
+              </SettingFormField>
+
               <SettingFormField title="API Key" description="用于连接当前服务商。">
                 <Input
                   :model-value="apiKeyDraft"
@@ -409,7 +418,7 @@ async function fetchModelList() {
                   class="grid gap-3 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto]"
                 >
                   <div class="flex min-w-0 items-center gap-3">
-                    <ProviderAvatar :name="model.name" :src="model.iconUrl || activeProvider.iconUrl" :provider-id="activeProvider?.id || model.id" />
+                    <ProviderAvatar :name="model.name" :src="model.iconUrl || activeProvider.iconUrl" :provider-id="activeProvider?.id || model.id" :icon-id="activeProvider?.icon" />
                     <div class="min-w-0">
                       <div class="flex min-w-0 items-center gap-2">
                         <span class="truncate text-sm font-medium">{{ model.name }}</span>
@@ -460,8 +469,8 @@ async function fetchModelList() {
           <SettingFormField title="简介">
             <Input v-model="providerForm.description" placeholder="简短说明" />
           </SettingFormField>
-          <SettingFormField title="图标地址">
-            <Input v-model="providerForm.iconUrl" placeholder="可选" />
+          <SettingFormField title="图标" description="点击更换，默认使用 OpenAI 图标。">
+            <ProviderIconPicker v-model="providerForm.icon" :name="providerForm.name" />
           </SettingFormField>
           <SettingFormField title="API 代理地址">
             <Input v-model="providerForm.baseUrl" placeholder="https://api.example.com/v1" />

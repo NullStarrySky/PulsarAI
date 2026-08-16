@@ -17,7 +17,7 @@ import {
   editLastMessageAction,
   regenerateLastMessageAction,
   resetCharacterDataAction,
-} from "@/features/Resources/Conversation/actions";
+} from "@/features/Conversation/actions";
 import { toggleSttRecordingAction } from "@/features/STT/actions";
 import { useLayoutStore } from "./layout-store";
 

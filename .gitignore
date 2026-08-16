@@ -17,11 +17,10 @@ src-tauri/target
 .prompt_history
 .vscode
 apikeys
-todo
-migrations
+todo.todo
+
 refs/
-!src/features/Migrations/
-!src/features/Migrations/**
+
 
 
 # Editor directories and files

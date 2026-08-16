@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useHotkeyStore } from "@/features/Hotkey/hotkey-store";
-import { useConversationStore } from "@/features/Resources/Conversation/store/conversation-store";
+import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 
 type SearchResult = {
   id: string;

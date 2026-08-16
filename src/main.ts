@@ -1,8 +1,8 @@
-import { createApp } from "vue";
-import { createPinia } from "pinia";
 import { createNotivue } from "notivue";
+import { createPinia } from "pinia";
+import { createApp } from "vue";
 import App from "./App.vue";
-import "@/features/Agent/components/register-agent-generation-components";
+import "@/features/Plugin/agent/components/register-agent-generation-components";
 import "./styles/globals.css";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
@@ -12,7 +12,12 @@ import "@milkdown/kit/prose/tables/style/tables.css";
 import "@milkdown/kit/prose/view/style/prosemirror.css";
 import "notivue/notification.css";
 import "notivue/animations.css";
-import { enableD2, enableKatex, enableMermaid, setInfographicLoader } from "markstream-vue";
+import {
+  enableD2,
+  enableKatex,
+  enableMermaid,
+  setInfographicLoader,
+} from "markstream-vue";
 
 enableMermaid();
 enableKatex();

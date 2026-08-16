@@ -4,7 +4,7 @@ import { computed, onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useConversationStore } from "@/features/Resources/Conversation/store/conversation-store";
+import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 
 const props = defineProps<{ modelValue: string }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();

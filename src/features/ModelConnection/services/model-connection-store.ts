@@ -2,7 +2,6 @@ import { defineStore } from "pinia";
 import { builtinModelProviders } from "./builtin-providers";
 import { loadPersistedProviders, persistProvider } from "./model-provider-persistence";
 import { remove } from "@/features/Database/database-service";
-import { providerIconUrl } from "./provider-icons";
 import { registerProviderHydration, unregisterProviderHydration } from "./model-ai";
 import {
   clearSecretValue,
@@ -120,6 +119,12 @@ export const useModelConnectionStore = defineStore("modelConnection", {
 
         this.providers = [...merged.values()];
 
+        for (const provider of this.providers) {
+          if (!provider.builtIn && !provider.icon && !provider.iconUrl) {
+            provider.icon = "openai";
+          }
+        }
+
         const persistedIds = new Set(persistedProviders.map((provider) => provider.id));
         if (persistedIds.size < persistedProviders.length) {
           console.warn(
@@ -230,7 +235,7 @@ export const useModelConnectionStore = defineStore("modelConnection", {
         id,
         name: input.name?.trim() || id,
         description: input.description?.trim(),
-        iconUrl: providerIconUrl(id, input.iconUrl?.trim()),
+        icon: input.icon?.trim().toLowerCase() || "openai",
         baseUrl: input.baseUrl?.trim() || "",
         apiKeyName: `${id}_API_KEY`,
         enabled: false,

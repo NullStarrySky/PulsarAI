@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingItem from "@/features/Setting/components/SettingItem.vue";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
-import { useConversationStore } from "@/features/Resources/Conversation/store/conversation-store";
+import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import { useStatisticStore } from "./statistic-store";
 
 const conversation = useConversationStore();
