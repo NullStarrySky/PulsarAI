@@ -11,7 +11,7 @@ import {
 } from '@lucide/vue'
 import { reactiveOmit } from '@vueuse/core'
 import { Toaster as Sonner } from 'vue-sonner'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils.ts'
 
 const props = defineProps<ToasterProps>()
 const delegatedProps = reactiveOmit(props, 'class', 'toastOptions')

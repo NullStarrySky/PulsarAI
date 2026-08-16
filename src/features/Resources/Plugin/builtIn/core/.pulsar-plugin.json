@@ -15,7 +15,7 @@
     "AGENTS.md": { "id": "builtin-agents", "icon": "", "treeOrder": 1, "order": 100 },
     "manifest.json": { "id": "builtin-manifest", "icon": "", "treeOrder": 2, "order": 100 },
     "containers.json": { "id": "builtin-containers", "icon": "", "treeOrder": 3, "order": 100 },
-    "default.chat.json": { "id": "builtin-default-chat", "icon": "", "treeOrder": 4, "order": 100 },
+    "default.chat.json": { "id": "builtin-default-chat", "icon": "", "treeOrder": 4, "order": 100, "insertion": { "target": "chat" } },
     "prompt.md": { "id": "builtin-prompt", "icon": "", "treeOrder": 5, "order": 100 },
     "generate.js": { "id": "builtin-generate", "icon": "", "treeOrder": 6, "order": 100 },
     "regex.json": { "id": "builtin-regex", "icon": "", "treeOrder": 7, "order": 100, "insertion": { "target": "REGEX" } },
@@ -24,6 +24,12 @@
     "background/classroom.png": { "id": "builtin-background-classroom", "icon": "", "treeOrder": 0, "order": 100, "insertion": { "target": "background" } },
     "tools": { "id": "builtin-tools", "icon": "", "treeOrder": 10 },
     "action": { "id": "builtin-action", "icon": "", "treeOrder": 11 },
-    "temp": { "id": "builtin-temp", "icon": "", "treeOrder": 12 }
+    "action/goal.js": { "id": "builtin-action-goal", "icon": "", "treeOrder": 0, "order": 100, "insertion": { "target": "COMMAND" } },
+    "action/process.js": { "id": "builtin-action-process", "icon": "", "treeOrder": 1, "order": 100, "insertion": { "target": "COMMAND" } },
+    "goal": { "id": "builtin-goal", "icon": "", "treeOrder": 12 },
+    "goal/goal.data": { "id": "builtin-goal-data", "icon": "", "treeOrder": 0, "order": 100 },
+    "temp": { "id": "builtin-temp", "icon": "", "treeOrder": 13 },
+    "cache": { "id": "builtin-cache", "icon": "", "treeOrder": 14 },
+    "skill": { "id": "builtin-skill", "icon": "", "treeOrder": 15 }
   }
 }

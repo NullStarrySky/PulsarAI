@@ -1,7 +1,7 @@
 import { push } from "notivue";
-import { resetCharacterData } from "@/features/Database/application/database-service";
-import { clearResourceSyncMetadata } from "@/features/Database/application/sync-metadata";
-import { useConversationStore } from "./application/conversation-store";
+import { resetCharacterData } from "@/features/Database/database-service";
+import { clearResourceSyncMetadata } from "@/features/Database/sync-metadata";
+import { useConversationStore } from "@/features/Resources/Conversation/store/conversation-store";
 
 export async function createConversationAction() {
   const conversation = useConversationStore();
@@ -13,7 +13,7 @@ export function editLastMessageAction() {
 }
 
 export function regenerateLastMessageAction() {
-  return useConversationStore().regenerate();
+  return useConversationStore().requestContainer({ mode: "regenerate" });
 }
 
 export async function copyLastMessageAction() {

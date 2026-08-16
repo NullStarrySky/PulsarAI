@@ -1,15 +1,15 @@
 # Capabilities
 
-`Capabilities` owns the public Feature API registry used by generated JavaScript. Every participating Feature exports one `capabilities.ts` file containing its runtime builder and shared documentation contract.
+`Capabilities` owns the public Feature API registry used by generated JavaScript. There is no per-feature capability module and no grant system: every participating Feature documents its public API in a root `docs.ts` (`FeatureDocs`: id, title, description, optional human documentation, flat `api` list), and the registry fully includes the runtime objects.
 
-Public APIs are always assembled into the Sandbox at both `<featureId>` and `capabilities.<featureId>`. The runtime does not read default grants, character-package overrides, or a per-conversation enable switch. A small explicit policy removes only methods classified as destructive, externally effectful, paid, or arbitrary execution; removing documentation alone is never treated as enforcement.
+`docs-index.ts` aggregates all `docs.ts` metadata. It imports metadata only, so `read_docs()` and the VitePress generation script can load the catalog without touching Pinia stores or other runtime dependencies.
 
-Human-facing reference content lives in the optional `documentation` field of each stable Capability definition. `domain/capability-markdown.ts` converts those definitions into one complete Markdown document, a render model, and the matching page outline. `scripts/generate-capability-reference.ts` writes the generated reference before VitePress starts or builds.
+`registry.ts` wires each feature's runtime API (`buildFeatureApiRuntime()`), exposes it at both `environment.<featureId>` and `environment.capabilities.<featureId>`, and applies one central on-demand blocklist: methods classified as destructive, externally effectful, paid, or arbitrary execution are removed from the actual runtime object, not merely hidden from documentation. `createDocsReader()` backs `read_docs()` with the same definitions and reports per-method `availability`.
 
-The generation context contains only a short bootstrap explaining `readDocs()`. `readDocs()` returns the Feature directory, `readDocs(featureId)` returns one complete definition plus per-method availability, and `readDocs(featureId, apiName)` returns a single function contract. Blocked methods are reported with `availability: "blocked"` and are absent from the actual runtime object.
+The generation context contains only a short bootstrap explaining `read_docs(featureId?, apiName?)`. `read_docs()` returns the Feature directory, `read_docs(featureId)` returns one complete definition plus per-method availability, and `read_docs(featureId, apiName)` returns a single function contract. It returns `null` when the requested Feature or function does not exist. Blocked methods are reported with `availability: "blocked"` and are absent from the actual runtime object.
 
-Builders still organize functions by stable sub-capability ids for ownership and human grouping, but those ids are no longer persisted as user grants. `application/capability-registry.ts` requests every public group once, applies the exceptional-method policy, and exposes the resulting objects.
+`docs-markdown.ts` converts the definitions into one complete Markdown document, a render model, and the matching page outline. `scripts/generate-capability-reference.ts` writes the generated reference before VitePress starts or builds.
 
-Dangerous browser globals remain handled by the `globals` capability's filtered Proxy. Ordinary language/browser helpers stay available, while network, storage, navigation, worker, and dynamic-code globals remain explicit exceptional capabilities.
+Dangerous browser globals remain handled by the `globals` entry's filtered Proxy (`Sandbox/sandbox-globals.ts`); it grants all controlled globals by default, while `createSandboxScope` keeps a deny-all fallback for environments without an explicit `globals` object.
 
-This is an application API policy boundary, not an operating-system security sandbox. New external APIs must be added to the owning Feature definition, documented in its metadata, and consumed through the central registry so runtime, `readDocs()`, and VitePress stay synchronized.
+This is an application API policy boundary, not an operating-system security sandbox. New external APIs must be added to the owning Feature's `docs.ts`, wired once in the central registry, and stay synchronized across runtime, `read_docs()`, and VitePress automatically.

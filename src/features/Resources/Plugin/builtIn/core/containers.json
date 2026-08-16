@@ -1,6 +1,7 @@
 {
   "containers": [
     { "id": "character", "title": "角色", "scope": "global", "description": "汇集角色定义文档。", "contentSuffixes": ["md"] },
+    { "id": "user", "title": "用户角色", "scope": "global", "description": "汇集用户扮演角色的信息说明。", "contentSuffixes": ["md"] },
     { "id": "before_char", "title": "角色定义前", "scope": "global", "description": "插入到角色定义之前的补充文档。", "contentSuffixes": ["md"] },
     { "id": "after_char", "title": "角色定义后", "scope": "global", "description": "插入到角色定义之后的补充文档。", "contentSuffixes": ["md"] },
     { "id": "document", "title": "文档", "scope": "global", "description": "汇集可直接进入上下文的普通文档。", "contentSuffixes": ["md"] },
@@ -15,8 +16,11 @@
     { "id": "CTX_PROCESS_BEFORE_REGEX", "title": "正则前上下文处理", "scope": "global", "description": "注册正则执行前的上下文处理脚本。", "contentSuffixes": ["js"] },
     { "id": "REGEX", "title": "正则规则", "scope": "global", "description": "注册可由生成流程读取的正则规则。", "contentSuffixes": ["json"] },
     { "id": "DATA", "title": "数据定义", "scope": "global", "description": "注册可水合的数据定义。", "contentSuffixes": ["data.json"] },
+    { "id": "Skill", "title": "Skill", "scope": "global", "description": "注册可按名称按需读取的 Skill 文档。", "contentSuffixes": ["md"] },
+    { "id": "COMMAND", "title": "命令", "scope": "global", "description": "注册输入框可调用的 JavaScript、Markdown 和 Vue 命令。", "contentSuffixes": ["js", "md", "vue"] },
     { "id": "LEFTPANEL", "title": "左侧面板", "scope": "global", "description": "注册左侧面板组件。", "contentSuffixes": ["vue"] },
     { "id": "RIGHTPANEL", "title": "右侧面板", "scope": "global", "description": "注册右侧面板组件。", "contentSuffixes": ["vue"] },
-    { "id": "background", "title": "背景", "scope": "global", "description": "注册可供选择的背景媒体。", "contentSuffixes": ["media"] }
+    { "id": "background", "title": "背景", "scope": "global", "description": "注册可供选择的背景媒体。", "contentSuffixes": ["media"], "selectionMode": "single", "overrideStrategy": "override" },
+    { "id": "chat", "title": "聊天入口", "scope": "global", "description": "注册可供选择的聊天上下文入口文件。", "contentSuffixes": ["chat.json"], "selectionMode": "single", "overrideStrategy": "override" }
   ]
 }

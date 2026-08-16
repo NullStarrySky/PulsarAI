@@ -1,31 +1,15 @@
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { createServer } from "vite";
-import type { CapabilityDefinition } from "../src/features/Capabilities/domain/capability";
-import { createCapabilityMarkdownDocument } from "../src/features/Capabilities/domain/capability-markdown";
-
-const vite = await createServer({
-  server: { middlewareMode: true },
-  appType: "custom",
-});
-let capabilityDefinitions: CapabilityDefinition[];
-try {
-  const registry = await vite.ssrLoadModule(
-    "/src/features/Capabilities/application/capability-registry.ts",
-  );
-  capabilityDefinitions = registry.capabilityDefinitions as CapabilityDefinition[];
-} finally {
-  await vite.close();
-}
+import type { FeatureDocs } from "../src/features/Capabilities/types";
+import { createDocsMarkdownDocument } from "../src/features/Capabilities/docs-markdown";
+import { featureDocs } from "../src/features/Capabilities/docs-index";
 
 const outputPath = fileURLToPath(
   new URL("../docs/api/capability-reference.generated.md", import.meta.url),
 );
-const unstableCapabilityIds = new Set(["conversation", "plugin"]);
-const document = createCapabilityMarkdownDocument(
-  capabilityDefinitions.filter(
-    (definition) => !unstableCapabilityIds.has(definition.id),
-  ),
+const unstableFeatureIds = new Set(["conversation", "plugin"]);
+const document = createDocsMarkdownDocument(
+  featureDocs.filter((docs) => !unstableFeatureIds.has(docs.id)) as FeatureDocs[],
 );
 const source = [
   "---",

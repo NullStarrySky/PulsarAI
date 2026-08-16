@@ -2,7 +2,7 @@
 
 `ImageGeneration` 是纯图片生成服务 Feature，不拥有 Conversation、消息附件或资源落盘逻辑。
 
-- `application/image-generation.ts` 保持 AI SDK `generateImage` 的参数形状，并允许省略 `model` 后重定向到 DefaultConfig。
+- `image-generation.ts` 保持 AI SDK `generateImage` 的参数形状，并允许省略 `model` 后重定向到 DefaultConfig。
 - 可生成 `ImageModel` 的远程平台由 ModelConnection 统一管理 API Key、地址和模型对象。
 - 专用图片服务只在无法合理建模为模型提供商时放入本 Feature。
 - 需要庞大本地模型、独立守护进程或复杂硬件环境的 provider 原则上暂不接入；ComfyUI 与 AUTOMATIC1111/Forge 是用户明确批准的常用本地服务例外。
@@ -26,9 +26,9 @@
 
 ## NovelAI adapter
 
-- `application/image-generation.ts` 识别 `novelai/<model>` 引用；其他引用继续进入 AI SDK 图片模型流程。
-- `application/novelai-settings.ts` 将非敏感参数持久化到 DefaultConfig，并将 API Key 保存到共享 Secret 数据表。
-- `infrastructure/novelai-image-client.ts` 通过现有 Tauri `modelProxyFetch` 调用 `<baseUrl>/ai/generate-image`，请求发出前才替换 Secret 占位符。
+- `image-generation.ts` 识别 `novelai/<model>` 引用；其他引用继续进入 AI SDK 图片模型流程。
+- `novelai-settings.ts` 将非敏感参数持久化到 DefaultConfig，并将 API Key 保存到共享 Secret 数据表。
+- `providers/novelai-image-client.ts` 通过现有 Tauri `modelProxyFetch` 调用 `<baseUrl>/ai/generate-image`，请求发出前才替换 Secret 占位符。
 - 请求保留迁移实现中与文生图直接相关的模型、尺寸、采样器、steps、guidance、seed、质量标签、负向提示词和 V4 prompt 结构。
 - 响应同时兼容 JSON base64 图片数组与 ZIP 图片归档；ZIP 只提取 PNG、JPEG 和 WebP。
 - 多账号路由、Vibe、角色坐标、Prompt LLM、图片到图片和图库生命周期暂不进入最小 adapter；它们可以在有明确 Feature 需求时沿当前 provider-specific 参数表单继续扩展。

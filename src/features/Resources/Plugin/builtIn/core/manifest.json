@@ -15,36 +15,19 @@
     "group": { "id": "generation", "title": "生成" },
     "content": [
       {
-        "id": "model",
-        "title": "模型",
-        "description": "留空时继承全局默认模型；引用可附带思考强度。",
-        "component": "ModelSelect",
-        "value": null
+        "id": "useStreamText",
+        "title": "使用 streamText 模式",
+        "description": "开启时使用单次 streamText 生成正文，关闭时使用 ToolLoopAgent 支持多步工具循环。",
+        "component": "Switch",
+        "value": false
       },
       {
         "id": "compressionThreshold",
-        "title": "压缩阈值",
-        "description": "0 关闭压缩；正值表示保留原文的最近消息窗口。",
+        "title": "上下文保留比例",
+        "description": "压缩时保留最近原文上下文的比例；0% 关闭压缩。",
         "component": "Slider",
-        "props": { "min": 0, "max": 64, "step": 4 },
-        "value": 16
-      }
-    ]
-  },
-  {
-    "group": { "id": "appearance", "title": "外观" },
-    "content": [
-      {
-        "id": "background",
-        "title": "会话背景",
-        "description": "从 background 容器选择路径 ID；角色本地插件中的同 ID 背景优先。",
-        "component": "PathSelect",
-        "props": {
-          "allowEmpty": true,
-          "containerId": "background",
-          "pathRegex": "^background/.+\\.(?:png|jpe?g|gif|webp|avif|svg|mp4|webm)$"
-        },
-        "value": "background/classroom"
+        "props": { "min": 0, "max": 100, "step": 5, "suffix": "%" },
+        "value": 25
       }
     ]
   }

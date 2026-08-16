@@ -4,7 +4,7 @@ import type { HTMLAttributes } from 'vue'
 import type { TabsListVariants } from '.'
 import { reactiveOmit } from '@vueuse/core'
 import { TabsList } from 'reka-ui'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils.ts'
 import { tabsListVariants } from '.'
 
 const props = withDefaults(defineProps<TabsListProps & {

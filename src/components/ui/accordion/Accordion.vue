@@ -6,7 +6,7 @@ import {
   AccordionRoot,
   useForwardPropsEmits,
 } from 'reka-ui'
-import { cn } from '@/lib/utils'
+import { cn } from '@/lib/utils.ts'
 
 const props = defineProps<AccordionRootProps & { class?: HTMLAttributes['class'] }>()
 const emits = defineEmits<AccordionRootEmits>()

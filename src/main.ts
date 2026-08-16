@@ -2,13 +2,24 @@ import { createApp } from "vue";
 import { createPinia } from "pinia";
 import { createNotivue } from "notivue";
 import App from "./App.vue";
+import "@/features/Agent/components/register-agent-generation-components";
 import "./styles/globals.css";
+import "markstream-vue/index.css";
+import "katex/dist/katex.min.css";
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/frame.css";
 import "@milkdown/kit/prose/tables/style/tables.css";
 import "@milkdown/kit/prose/view/style/prosemirror.css";
 import "notivue/notification.css";
 import "notivue/animations.css";
+import { enableD2, enableKatex, enableMermaid, setInfographicLoader } from "markstream-vue";
+
+enableMermaid();
+enableKatex();
+enableD2();
+setInfographicLoader(async () => {
+  return await import("@antv/infographic");
+});
 
 const app = createApp(App);
 const pinia = createPinia();

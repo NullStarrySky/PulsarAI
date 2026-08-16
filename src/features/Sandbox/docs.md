@@ -2,7 +2,7 @@
 
 `Sandbox` owns controlled frontend JavaScript execution and macro expansion helpers for generation-time text.
 
-Core exports live in `domain/sandbox.ts`:
+Core exports live in `sandbox.ts`:
 
 - `runSandbox` returns `{ ok, value, error }` for external callers that should not handle thrown exceptions.
 - `executeSandboxCode` and `executeSandboxCodeAsync` execute snippets against merged environment objects.
@@ -22,6 +22,6 @@ Ordinary globals such as language built-ins, `console`, timers, animation helper
 
 This Proxy boundary is intended to prevent accidental ambient browser access and make authorization failures explicit. It is not a hostile-code security boundary: JavaScript reflection and constructor chains cannot be comprehensively isolated inside the same browser realm. Untrusted external scripts must still remain disabled until the user reviews and authorizes them.
 
-`Capabilities` supplies the default base environment. Public Feature objects are always available at both `<featureId>` and `capabilities.<featureId>`; `readDocs()` retrieves their shared contracts on demand. Centrally blocked special methods are absent from the runtime object. Frontend JavaScript execution itself is not an operating-system isolation boundary.
+`Capabilities` supplies the default base environment. Public Feature objects are always available at both `<featureId>` and `capabilities.<featureId>`; `read_docs(featureId?, apiName?)` retrieves their shared contracts on demand. With no arguments it returns the Feature directory, with `featureId` the full definition, and with both arguments a single contract or `null`. Centrally blocked special methods are absent from the runtime object. Frontend JavaScript execution itself is not an operating-system isolation boundary.
 
 The model does not receive one AI SDK tool per capability. `codeAct` is the only model tool; Feature APIs, Plugin APIs, ask-user interaction, registered Skill/MCP extensions, Plugin `ctx.tools`, and pure `ctx.containers` list/read operations are ordinary functions in the merged environment. CodeAct returns either the function's value or a structured error to the model.

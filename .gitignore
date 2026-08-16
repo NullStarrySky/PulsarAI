@@ -19,10 +19,10 @@ src-tauri/target
 apikeys
 todo
 migrations
+refs/
 !src/features/Migrations/
 !src/features/Migrations/**
-codex-full.html
-codex-ui-prototype.html
+
 
 # Editor directories and files
 .vscode/*

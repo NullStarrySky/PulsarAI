@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-vue-next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useCommandStore, type CommandDefinition } from "@/features/Hotkey/application/command-store";
+import { useCommandStore, type CommandDefinition } from "@/features/Hotkey/command-store";
 import {
   copyLastMessageAction,
   createConversationAction,
@@ -19,7 +19,7 @@ import {
   resetCharacterDataAction,
 } from "@/features/Resources/Conversation/actions";
 import { toggleSttRecordingAction } from "@/features/STT/actions";
-import { useLayoutStore } from "./application/layout-store";
+import { useLayoutStore } from "./layout-store";
 
 let registered = false;
 

@@ -25,9 +25,13 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 use tauri::{AppHandle, Manager, State};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use playwright_rs::{LaunchOptions, Playwright};
 use tokio::sync::OnceCell;
 
 mod migration;
+mod piper_tts;
+mod stt;
 use migration::{
     migration_read_binary, migration_read_png_character, migration_read_text, migration_scan_path,
 };
@@ -213,8 +217,7 @@ fn restore_marker_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn backup_dir(app: &AppHandle, directory: String) -> Result<PathBuf, String> {
     let dir = if directory.trim().is_empty() {
-        app
-            .path()
+        app.path()
             .app_data_dir()
             .map_err(|error| error.to_string())?
             .join("backups")
@@ -344,10 +347,7 @@ fn collect_files(path: &Path, output: &mut Vec<PathBuf>) -> Result<(), String> {
         return Ok(());
     }
     for entry in fs::read_dir(path).map_err(|error| error.to_string())? {
-        collect_files(
-            &entry.map_err(|error| error.to_string())?.path(),
-            output,
-        )?;
+        collect_files(&entry.map_err(|error| error.to_string())?.path(), output)?;
     }
     Ok(())
 }
@@ -368,10 +368,7 @@ fn hash_file(path: &Path) -> Result<(String, u64), String> {
     Ok((format!("{:x}", hasher.finalize()), size))
 }
 
-fn store_backup_object(
-    backup_root: &Path,
-    source: &Path,
-) -> Result<(String, u64, u64), String> {
+fn store_backup_object(backup_root: &Path, source: &Path) -> Result<(String, u64, u64), String> {
     let object_dir = backup_root.join(BACKUP_OBJECT_DIR);
     fs::create_dir_all(&object_dir).map_err(|error| error.to_string())?;
     let temporary = object_dir.join(format!("object.tmp-{}", uuid::Uuid::new_v4()));
@@ -419,8 +416,7 @@ fn create_incremental_manifest(
         collect_files(root, &mut source_files)?;
         source_files.sort();
         for source in source_files {
-            let (object, size, compressed_size) =
-                store_backup_object(backup_root, &source)?;
+            let (object, size, compressed_size) = store_backup_object(backup_root, &source)?;
             files.push(BackupFileEntry {
                 path: relative_archive_path(prefix, root, &source)?,
                 object,
@@ -454,7 +450,10 @@ fn materialize_manifest_files(
         }
         let relative = safe_relative_path(&entry.path)?;
         if let Some(required_prefix) = prefix {
-            if relative.components().next().and_then(|value| value.as_os_str().to_str())
+            if relative
+                .components()
+                .next()
+                .and_then(|value| value.as_os_str().to_str())
                 != Some(required_prefix)
             {
                 continue;
@@ -512,20 +511,17 @@ fn write_resource_archive_file(
     resources: &Path,
 ) -> Result<(), String> {
     let output = fs::File::create(path).map_err(|error| error.to_string())?;
-    let mut encoder = zstd::stream::write::Encoder::new(output, 3)
-        .map_err(|error| error.to_string())?;
+    let mut encoder =
+        zstd::stream::write::Encoder::new(output, 3).map_err(|error| error.to_string())?;
     encoder
         .write_all(RESOURCE_ARCHIVE_MAGIC)
         .map_err(|error| error.to_string())?;
     let resource_root = resources
         .canonicalize()
         .unwrap_or_else(|_| resources.to_path_buf());
-    let mut portable_payload =
-        serde_json::to_value(payload).map_err(|error| error.to_string())?;
-    let resource_files =
-        make_resource_paths_portable(&mut portable_payload, &resource_root)?;
-    let snapshot =
-        serde_json::to_vec(&portable_payload).map_err(|error| error.to_string())?;
+    let mut portable_payload = serde_json::to_value(payload).map_err(|error| error.to_string())?;
+    let resource_files = make_resource_paths_portable(&mut portable_payload, &resource_root)?;
+    let snapshot = serde_json::to_vec(&portable_payload).map_err(|error| error.to_string())?;
     encoder
         .write_all(&(snapshot.len() as u64).to_le_bytes())
         .and_then(|_| encoder.write_all(&snapshot))
@@ -565,11 +561,7 @@ fn make_resource_paths_portable(
         .canonicalize()
         .unwrap_or_else(|_| resources.to_path_buf());
 
-    fn visit(
-        value: &mut serde_json::Value,
-        root: &Path,
-        files: &mut HashSet<PathBuf>,
-    ) {
+    fn visit(value: &mut serde_json::Value, root: &Path, files: &mut HashSet<PathBuf>) {
         match value {
             serde_json::Value::String(text) => {
                 let raw_path = strip_file_url(text);
@@ -622,7 +614,10 @@ fn restore_resource_paths(value: &mut serde_json::Value, resources: &Path) {
                 if let Ok(relative) = safe_relative_path(relative) {
                     *text = format!(
                         "file://{}",
-                        resources.join(relative).to_string_lossy().replace('\\', "/"),
+                        resources
+                            .join(relative)
+                            .to_string_lossy()
+                            .replace('\\', "/"),
                     );
                 }
             }
@@ -641,16 +636,18 @@ fn restore_resource_paths(value: &mut serde_json::Value, resources: &Path) {
     }
 }
 
-fn read_resource_archive_header<R: Read>(
-    reader: &mut R,
-) -> Result<serde_json::Value, String> {
+fn read_resource_archive_header<R: Read>(reader: &mut R) -> Result<serde_json::Value, String> {
     let mut magic = vec![0_u8; RESOURCE_ARCHIVE_MAGIC.len()];
-    reader.read_exact(&mut magic).map_err(|error| error.to_string())?;
+    reader
+        .read_exact(&mut magic)
+        .map_err(|error| error.to_string())?;
     if magic != RESOURCE_ARCHIVE_MAGIC {
         return Err("不是受支持的 Pulsar 资源归档".to_string());
     }
     let mut length = [0_u8; 8];
-    reader.read_exact(&mut length).map_err(|error| error.to_string())?;
+    reader
+        .read_exact(&mut length)
+        .map_err(|error| error.to_string())?;
     let length = u64::from_le_bytes(length);
     if length > 128 * 1024 * 1024 {
         return Err("资源归档元数据过大".to_string());
@@ -667,8 +664,7 @@ fn read_resource_archive_file(
     resources: &Path,
 ) -> Result<ResourceArchivePayload, String> {
     let input = fs::File::open(path).map_err(|error| error.to_string())?;
-    let mut decoder =
-        zstd::stream::read::Decoder::new(input).map_err(|error| error.to_string())?;
+    let mut decoder = zstd::stream::read::Decoder::new(input).map_err(|error| error.to_string())?;
     let mut payload = read_resource_archive_header(&mut decoder)?;
     restore_resource_paths(&mut payload, resources);
     serde_json::from_value(payload).map_err(|error| error.to_string())
@@ -680,8 +676,7 @@ fn restore_resource_archive_files(
     overwrite: bool,
 ) -> Result<(), String> {
     let input = fs::File::open(archive_path).map_err(|error| error.to_string())?;
-    let mut decoder =
-        zstd::stream::read::Decoder::new(input).map_err(|error| error.to_string())?;
+    let mut decoder = zstd::stream::read::Decoder::new(input).map_err(|error| error.to_string())?;
     let _ = read_resource_archive_header(&mut decoder)?;
     loop {
         let mut name_length = [0_u8; 4];
@@ -696,12 +691,15 @@ fn restore_resource_archive_files(
             return Err("资源归档路径过长".to_string());
         }
         let mut name = vec![0_u8; name_length as usize];
-        decoder.read_exact(&mut name).map_err(|error| error.to_string())?;
-        let relative = safe_relative_path(
-            std::str::from_utf8(&name).map_err(|error| error.to_string())?,
-        )?;
+        decoder
+            .read_exact(&mut name)
+            .map_err(|error| error.to_string())?;
+        let relative =
+            safe_relative_path(std::str::from_utf8(&name).map_err(|error| error.to_string())?)?;
         let mut size = [0_u8; 8];
-        decoder.read_exact(&mut size).map_err(|error| error.to_string())?;
+        decoder
+            .read_exact(&mut size)
+            .map_err(|error| error.to_string())?;
         let mut remaining = u64::from_le_bytes(size);
         let destination = target.join(relative);
         if let Some(parent) = destination.parent() {
@@ -747,6 +745,49 @@ async fn open_database(path: &Path) -> Result<Surreal<Db>, String> {
     .await
     .map_err(|error| error.to_string())?;
     Ok(db)
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSearchRequest {
+    query: String,
+    #[serde(default = "default_web_search_limit")]
+    limit: usize,
+    provider: Option<String>,
+}
+
+fn default_web_search_limit() -> usize {
+    5
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WebSearchResult {
+    title: String,
+    url: String,
+    snippet: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExaSearchResponse {
+    #[serde(default)]
+    results: Vec<ExaSearchItem>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ExaSearchItem {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    url: String,
+    #[serde(default)]
+    highlights: Vec<String>,
+    #[serde(default)]
+    summary: String,
+    #[serde(default)]
+    text: String,
 }
 
 fn plugin_node_content_text(node: &serde_json::Value) -> String {
@@ -966,7 +1007,10 @@ async fn select_plugin_values(db: &Surreal<Db>) -> Result<Vec<serde_json::Value>
                 .filter(|path| !path.is_empty())
                 .unwrap_or("/");
             let parent_id = ids_by_path.get(parent_path).ok_or_else(|| {
-                format!("插件 {plugin_id} 的节点 {} 缺少父路径 {parent_path}", record.path)
+                format!(
+                    "插件 {plugin_id} 的节点 {} 缺少父路径 {parent_path}",
+                    record.path
+                )
             })?;
             children
                 .entry(parent_id.clone())
@@ -1023,7 +1067,11 @@ fn handle_lan_connection(
         }
         buffer.extend_from_slice(&chunk[..count]);
         if buffer.len() > 32 * 1024 * 1024 {
-            return http_response(&mut stream, "413 Payload Too Large", br#"{"error":"snapshot too large"}"#);
+            return http_response(
+                &mut stream,
+                "413 Payload Too Large",
+                br#"{"error":"snapshot too large"}"#,
+            );
         }
         if let Some(header_end) = buffer.windows(4).position(|value| value == b"\r\n\r\n") {
             let headers = String::from_utf8_lossy(&buffer[..header_end + 4]);
@@ -1044,7 +1092,11 @@ fn handle_lan_connection(
     }
 
     let Some(header_end) = buffer.windows(4).position(|value| value == b"\r\n\r\n") else {
-        return http_response(&mut stream, "400 Bad Request", br#"{"error":"invalid request"}"#);
+        return http_response(
+            &mut stream,
+            "400 Bad Request",
+            br#"{"error":"invalid request"}"#,
+        );
     };
     let headers = String::from_utf8_lossy(&buffer[..header_end]);
     let mut lines = headers.lines();
@@ -1052,26 +1104,31 @@ fn handle_lan_connection(
     let authorized = lines.any(|line| {
         line.split_once(':')
             .map(|(name, value)| {
-                name.eq_ignore_ascii_case("x-pulsar-pairing-key")
-                    && value.trim() == pairing_key
+                name.eq_ignore_ascii_case("x-pulsar-pairing-key") && value.trim() == pairing_key
             })
             .unwrap_or(false)
     });
     if !authorized {
-        return http_response(&mut stream, "401 Unauthorized", br#"{"error":"pairing key rejected"}"#);
+        return http_response(
+            &mut stream,
+            "401 Unauthorized",
+            br#"{"error":"pairing key rejected"}"#,
+        );
     }
 
     if request_line.starts_with("GET /snapshot ") {
         let body = serde_json::to_vec(
-            &*snapshot.lock().map_err(|_| "同步快照锁不可用".to_string())?,
+            &*snapshot
+                .lock()
+                .map_err(|_| "同步快照锁不可用".to_string())?,
         )
         .map_err(|error| error.to_string())?;
         return http_response(&mut stream, "200 OK", &body);
     }
 
     if request_line.starts_with("POST /snapshot ") {
-        let value: serde_json::Value = serde_json::from_slice(&buffer[header_end + 4..])
-            .map_err(|error| error.to_string())?;
+        let value: serde_json::Value =
+            serde_json::from_slice(&buffer[header_end + 4..]).map_err(|error| error.to_string())?;
         pending
             .lock()
             .map_err(|_| "同步队列锁不可用".to_string())?
@@ -1112,12 +1169,12 @@ fn apply_pending_restore(app: &AppHandle) -> Result<(), String> {
     let backup_path = PathBuf::from(pending.backup_path);
     let manifest = read_backup_manifest(&backup_path)?;
     let materialized = if manifest.version >= 2 {
-        let target = app_data_dir(app)?.join(format!(
-            "restore-materialized-{}",
-            timestamp_millis(),
-        ));
+        let target =
+            app_data_dir(app)?.join(format!("restore-materialized-{}", timestamp_millis(),));
         materialize_manifest_files(
-            backup_path.parent().ok_or_else(|| "备份目录无效".to_string())?,
+            backup_path
+                .parent()
+                .ok_or_else(|| "备份目录无效".to_string())?,
             &manifest,
             &target,
             None,
@@ -1129,7 +1186,8 @@ fn apply_pending_restore(app: &AppHandle) -> Result<(), String> {
     let source_root = materialized.as_deref().unwrap_or(&backup_path);
     let source = source_root.join("surrealdb");
     let target = db_dir(app)?;
-    let old_target = app_data_dir(app)?.join(format!("surrealdb-before-restore-{}", timestamp_millis()));
+    let old_target =
+        app_data_dir(app)?.join(format!("surrealdb-before-restore-{}", timestamp_millis()));
 
     if target.exists() {
         fs::rename(&target, &old_target).map_err(|error| error.to_string())?;
@@ -1137,10 +1195,7 @@ fn apply_pending_restore(app: &AppHandle) -> Result<(), String> {
     copy_dir_recursive(&source, &target)?;
     let resource_source = source_root.join("resources");
     if resource_source.exists() {
-        copy_dir_recursive(
-            &resource_source,
-            &app_data_dir(app)?.join("resources"),
-        )?;
+        copy_dir_recursive(&resource_source, &app_data_dir(app)?.join("resources"))?;
     }
     if let Some(path) = materialized {
         let _ = fs::remove_dir_all(path);
@@ -1199,9 +1254,15 @@ async fn hydrate_placeholders(db: &Surreal<Db>, input: &str) -> Result<String, S
 }
 
 #[tauri::command]
-async fn secret_has(app: AppHandle, state: State<'_, AppState>, name: String) -> Result<bool, String> {
+async fn secret_has(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<bool, String> {
     let db = app_db(&app, &state).await?;
-    Ok(get_secret_value(db, &name).await?.is_some_and(|value| !value.is_empty()))
+    Ok(get_secret_value(db, &name)
+        .await?
+        .is_some_and(|value| !value.is_empty()))
 }
 
 #[tauri::command]
@@ -1212,16 +1273,22 @@ async fn secret_set(
     value: String,
 ) -> Result<(), String> {
     let db = app_db(&app, &state).await?;
-    db.query("DELETE secret WHERE name = $name; CREATE secret CONTENT { name: $name, value: $value };")
-        .bind(("name", name))
-        .bind(("value", value))
-        .await
-        .map_err(|error| error.to_string())?;
+    db.query(
+        "DELETE secret WHERE name = $name; CREATE secret CONTENT { name: $name, value: $value };",
+    )
+    .bind(("name", name))
+    .bind(("value", value))
+    .await
+    .map_err(|error| error.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-async fn secret_clear_value(app: AppHandle, state: State<'_, AppState>, name: String) -> Result<(), String> {
+async fn secret_clear_value(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<(), String> {
     let db = app_db(&app, &state).await?;
     db.query("UPDATE secret SET value = '' WHERE name = $name")
         .bind(("name", name))
@@ -1231,7 +1298,11 @@ async fn secret_clear_value(app: AppHandle, state: State<'_, AppState>, name: St
 }
 
 #[tauri::command]
-async fn secret_delete(app: AppHandle, state: State<'_, AppState>, name: String) -> Result<(), String> {
+async fn secret_delete(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<(), String> {
     let db = app_db(&app, &state).await?;
     db.query("DELETE secret WHERE name = $name")
         .bind(("name", name))
@@ -1273,7 +1344,11 @@ async fn config_set(
 }
 
 #[tauri::command]
-async fn config_delete(app: AppHandle, state: State<'_, AppState>, key: String) -> Result<(), String> {
+async fn config_delete(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    key: String,
+) -> Result<(), String> {
     let db = app_db(&app, &state).await?;
     db.query("DELETE config WHERE key = $key")
         .bind(("key", key))
@@ -1369,7 +1444,7 @@ async fn database_reset_character_data(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let db = app_db(&app, &state).await?;
-    db.query(
+    let mut response = db.query(
         "BEGIN TRANSACTION; \
          DELETE resource_conversation_memory_segments; \
          DELETE resource_message_containers; \
@@ -1382,6 +1457,10 @@ async fn database_reset_character_data(
     )
     .await
     .map_err(|error| error.to_string())?;
+    let errors = response.take_errors();
+    if !errors.is_empty() {
+        return Err(format!("database_reset_character_data statement failed: {errors:?}"));
+    }
 
     let resources = app_data_dir(&app)?.join("resources");
     if resources.exists() {
@@ -1536,12 +1615,19 @@ async fn resource_save_image(
         .chars()
         .filter(|character| character.is_ascii_alphanumeric())
         .collect::<String>();
-    let extension = if extension.is_empty() { "png".to_string() } else { extension };
+    let extension = if extension.is_empty() {
+        "png".to_string()
+    } else {
+        extension
+    };
     let file_name = format!("{}.{}", uuid::Uuid::new_v4(), extension);
     let file_path: PathBuf = image_dir.join(file_name);
     fs::write(&file_path, bytes).map_err(|error| error.to_string())?;
 
-    Ok(format!("file://{}", file_path.to_string_lossy().replace('\\', "/")))
+    Ok(format!(
+        "file://{}",
+        file_path.to_string_lossy().replace('\\', "/")
+    ))
 }
 
 #[tauri::command]
@@ -1657,16 +1743,8 @@ async fn backup_read_resources(
     let backup_path = root.join(backup_id);
     let manifest = read_backup_manifest(&backup_path)?;
     let materialized = if manifest.version >= 2 {
-        let target = app_data_dir(&app)?.join(format!(
-            "backup-read-{}",
-            uuid::Uuid::new_v4(),
-        ));
-        materialize_manifest_files(
-            &root,
-            &manifest,
-            &target,
-            Some("surrealdb"),
-        )?;
+        let target = app_data_dir(&app)?.join(format!("backup-read-{}", uuid::Uuid::new_v4(),));
+        materialize_manifest_files(&root, &manifest, &target, Some("surrealdb"))?;
         Some(target)
     } else {
         None
@@ -1702,12 +1780,7 @@ async fn backup_restore_resource_files(
     let backup_path = root.join(backup_id);
     let manifest = read_backup_manifest(&backup_path)?;
     if manifest.version >= 2 {
-        materialize_manifest_files(
-            &root,
-            &manifest,
-            &app_data_dir(&app)?,
-            Some("resources"),
-        )?;
+        materialize_manifest_files(&root, &manifest, &app_data_dir(&app)?, Some("resources"))?;
     } else {
         let source = backup_path.join("resources");
         if source.exists() {
@@ -1744,10 +1817,7 @@ async fn resource_archive_read(
     app: AppHandle,
     path: String,
 ) -> Result<ResourceArchivePayload, String> {
-    read_resource_archive_file(
-        Path::new(&path),
-        &app_data_dir(&app)?.join("resources"),
-    )
+    read_resource_archive_file(Path::new(&path), &app_data_dir(&app)?.join("resources"))
 }
 
 #[tauri::command]
@@ -1957,9 +2027,244 @@ async fn model_proxy_fetch(
             })
         })
         .collect();
-    let body = response.bytes().await.map_err(|error| error.to_string())?.to_vec();
+    let body = response
+        .bytes()
+        .await
+        .map_err(|error| error.to_string())?
+        .to_vec();
 
-    Ok(ProxyFetchResponse { status, headers, body })
+    Ok(ProxyFetchResponse {
+        status,
+        headers,
+        body,
+    })
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+async fn playwright_web_search(query: &str, limit: usize) -> Result<Vec<WebSearchResult>, String> {
+    let playwright = Playwright::launch()
+        .await
+        .map_err(|error| format!("无法启动 Playwright driver：{error}"))?;
+    let browser = match playwright
+        .chromium()
+        .launch_with_options(
+            LaunchOptions::new().headless(true).args(vec![
+                "--disable-gpu".to_string(),
+                "--no-first-run".to_string(),
+            ]),
+        )
+        .await
+    {
+        Ok(browser) => browser,
+        Err(error) => {
+            let _ = playwright.shutdown().await;
+            return Err(format!("无法启动 Playwright Chromium：{error}"));
+        }
+    };
+
+    let search_url = format!(
+        "https://html.duckduckgo.com/html/?q={}",
+        urlencoding::encode(query),
+    );
+    let search_result = async {
+        let page = browser
+            .new_page()
+            .await
+            .map_err(|error| error.to_string())?;
+        page.goto(&search_url, None)
+            .await
+            .map_err(|error| error.to_string())?;
+        let items = page.locator(".result");
+        items
+            .wait_for(None)
+            .await
+            .map_err(|error| error.to_string())?;
+        let mut results = Vec::new();
+        for item in items.all().await.map_err(|error| error.to_string())? {
+            if results.len() >= limit {
+                break;
+            }
+            let link = item.locator(".result__a");
+            let title = link
+                .inner_text()
+                .await
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            let url = link
+                .get_attribute("href")
+                .await
+                .unwrap_or_default()
+                .unwrap_or_default();
+            if title.is_empty() || url.is_empty() {
+                continue;
+            }
+            let snippet = item
+                .locator(".result__snippet")
+                .inner_text()
+                .await
+                .unwrap_or_default()
+                .trim()
+                .to_string();
+            results.push(WebSearchResult {
+                title,
+                url,
+                snippet,
+            });
+        }
+        Ok::<_, String>(results)
+    }
+    .await;
+    let _ = browser.close().await;
+    let _ = playwright.shutdown().await;
+    search_result
+}
+
+async fn exa_web_search(
+    app: &AppHandle,
+    state: &AppState,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<WebSearchResult>, String> {
+    let db = app_db(app, state).await?;
+    let api_key = get_secret_value(db, "webSearch.exa.apiKey")
+        .await?
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "请先在网络搜索设置中填写 Exa API Key。".to_string())?;
+    let response = state
+        .http
+        .post("https://api.exa.ai/search")
+        .header("x-api-key", api_key)
+        .json(&serde_json::json!({
+            "query": query,
+            "type": "auto",
+            "numResults": limit,
+            "contents": { "highlights": true },
+        }))
+        .send()
+        .await
+        .map_err(|error| format!("Exa 搜索请求失败：{error}"))?
+        .error_for_status()
+        .map_err(|error| format!("Exa 搜索请求失败：{error}"))?;
+    let response: ExaSearchResponse = response
+        .json()
+        .await
+        .map_err(|error| format!("Exa 搜索响应无效：{error}"))?;
+    Ok(response
+        .results
+        .into_iter()
+        .filter_map(|result| {
+            let title = result.title.trim().to_string();
+            let url = result.url.trim().to_string();
+            if title.is_empty() || url.is_empty() {
+                return None;
+            }
+            let snippet = result
+                .highlights
+                .into_iter()
+                .next()
+                .filter(|value| !value.trim().is_empty())
+                .or_else(|| (!result.summary.trim().is_empty()).then_some(result.summary))
+                .unwrap_or(result.text)
+                .chars()
+                .take(1_200)
+                .collect();
+            Some(WebSearchResult { title, url, snippet })
+        })
+        .collect())
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tauri::command]
+async fn web_search(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: WebSearchRequest,
+) -> Result<Vec<WebSearchResult>, String> {
+    let query = request.query.trim();
+    if query.is_empty() {
+        return Err("搜索关键词不能为空。".to_string());
+    }
+    let limit = request.limit.clamp(1, 10);
+
+    match request.provider.as_deref().unwrap_or("playwright") {
+        "playwright" => playwright_web_search(query, limit).await,
+        "exa" => exa_web_search(&app, &state, query, limit).await,
+        provider => Err(format!("未知网络搜索提供商：{provider}")),
+    }
+}
+
+#[cfg(any(target_os = "android", target_os = "ios"))]
+#[tauri::command]
+async fn web_search(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: WebSearchRequest,
+) -> Result<Vec<WebSearchResult>, String> {
+    let query = request.query.trim();
+    if query.is_empty() {
+        return Err("搜索关键词不能为空。".to_string());
+    }
+    let limit = request.limit.clamp(1, 10);
+    match request.provider.as_deref().unwrap_or("playwright") {
+        "exa" => exa_web_search(&app, &state, query, limit).await,
+        "playwright" => Err("Playwright 浏览器搜索目前仅支持桌面端。移动端请启用 Exa。".to_string()),
+        provider => Err(format!("未知网络搜索提供商：{provider}")),
+    }
+}
+
+#[tauri::command]
+fn stt_whisper_candle_models(app: AppHandle) -> Result<Vec<stt::WhisperModelPack>, String> {
+    stt::list(&app)
+}
+
+#[tauri::command]
+async fn stt_whisper_candle_download(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: stt::WhisperDownloadRequest,
+) -> Result<stt::WhisperModelPack, String> {
+    stt::download(&app, &state.http, request).await
+}
+
+#[tauri::command]
+fn stt_whisper_candle_delete(app: AppHandle, id: String) -> Result<(), String> {
+    stt::delete(&app, &id)
+}
+
+#[tauri::command]
+async fn stt_transcribe(
+    app: AppHandle,
+    request: stt::WhisperTranscribeRequest,
+) -> Result<stt::WhisperTranscription, String> {
+    stt::transcribe(&app, request).await
+}
+
+#[tauri::command]
+fn tts_piper_models(app: AppHandle) -> Result<Vec<piper_tts::PiperModelPack>, String> {
+    piper_tts::list(&app)
+}
+
+#[tauri::command]
+async fn tts_piper_download(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: piper_tts::PiperDownloadRequest,
+) -> Result<piper_tts::PiperModelPack, String> {
+    piper_tts::download(&app, &state.http, request).await
+}
+
+#[tauri::command]
+fn tts_piper_delete(app: AppHandle, id: String) -> Result<(), String> {
+    piper_tts::delete(&app, &id)
+}
+
+#[tauri::command]
+async fn tts_piper_synthesize(
+    app: AppHandle,
+    request: piper_tts::PiperSynthesizeRequest,
+) -> Result<piper_tts::PiperSynthesis, String> {
+    piper_tts::synthesize(&app, request).await
 }
 
 #[tauri::command]
@@ -2068,6 +2373,15 @@ pub fn run() {
             lan_sync_fetch,
             lan_sync_push,
             model_proxy_fetch,
+            web_search,
+            stt_whisper_candle_models,
+            stt_whisper_candle_download,
+            stt_whisper_candle_delete,
+            stt_transcribe,
+            tts_piper_models,
+            tts_piper_download,
+            tts_piper_delete,
+            tts_piper_synthesize,
             migration_scan_path,
             migration_read_text,
             migration_read_binary,

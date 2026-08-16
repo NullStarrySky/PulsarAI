@@ -1,36 +1,36 @@
 ---
-capabilityOutline: [{"id":"feature-capabilitySystem","label":"Feature API 文档","children":[{"id":"feature-capabilitySystem-notes","label":"使用说明"},{"id":"feature-capabilitySystem-types","label":"类型"},{"id":"feature-capabilitySystem-api","label":"API 定义"}]},{"id":"feature-about","label":"关于与环境检查","children":[{"id":"feature-about-notes","label":"使用说明"},{"id":"feature-about-types","label":"类型"},{"id":"feature-about-api","label":"API 定义"}]},{"id":"feature-agent","label":"Agent","children":[{"id":"feature-agent-notes","label":"使用说明"},{"id":"feature-agent-types","label":"类型"},{"id":"feature-agent-api","label":"API 定义"}]},{"id":"feature-backup","label":"版本管理","children":[{"id":"feature-backup-notes","label":"使用说明"},{"id":"feature-backup-types","label":"类型"},{"id":"feature-backup-api","label":"API 定义"}]},{"id":"feature-database","label":"数据库","children":[{"id":"feature-database-notes","label":"使用说明"},{"id":"feature-database-types","label":"类型"},{"id":"feature-database-api","label":"API 定义"}]},{"id":"feature-defaultConfigs","label":"默认配置","children":[{"id":"feature-defaultConfigs-notes","label":"使用说明"},{"id":"feature-defaultConfigs-types","label":"类型"},{"id":"feature-defaultConfigs-api","label":"API 定义"}]},{"id":"feature-hotkey","label":"命令与快捷键","children":[{"id":"feature-hotkey-notes","label":"使用说明"},{"id":"feature-hotkey-types","label":"类型"},{"id":"feature-hotkey-api","label":"API 定义"}]},{"id":"feature-misc","label":"运行环境","children":[{"id":"feature-misc-notes","label":"使用说明"},{"id":"feature-misc-types","label":"类型"},{"id":"feature-misc-api","label":"API 定义"}]},{"id":"feature-modelConnection","label":"模型连接","children":[{"id":"feature-modelConnection-notes","label":"使用说明"},{"id":"feature-modelConnection-types","label":"类型"},{"id":"feature-modelConnection-api","label":"API 定义"}]},{"id":"feature-notification","label":"通知","children":[{"id":"feature-notification-notes","label":"使用说明"},{"id":"feature-notification-types","label":"类型"},{"id":"feature-notification-api","label":"API 定义"}]},{"id":"feature-resources","label":"通用资源文件","children":[{"id":"feature-resources-notes","label":"使用说明"},{"id":"feature-resources-types","label":"类型"},{"id":"feature-resources-api","label":"API 定义"}]},{"id":"feature-component","label":"组件资源","children":[{"id":"feature-component-notes","label":"使用说明"},{"id":"feature-component-types","label":"类型"},{"id":"feature-component-api","label":"API 定义"}]},{"id":"feature-sandbox","label":"代码执行","children":[{"id":"feature-sandbox-notes","label":"使用说明"},{"id":"feature-sandbox-types","label":"类型"},{"id":"feature-sandbox-api","label":"API 定义"}]},{"id":"feature-globals","label":"全局对象","children":[{"id":"feature-globals-notes","label":"使用说明"},{"id":"feature-globals-types","label":"类型"},{"id":"feature-globals-api","label":"API 定义"}]},{"id":"feature-setting","label":"设置目录","children":[{"id":"feature-setting-notes","label":"使用说明"},{"id":"feature-setting-types","label":"类型"},{"id":"feature-setting-api","label":"API 定义"}]},{"id":"feature-statistic","label":"统计","children":[{"id":"feature-statistic-notes","label":"使用说明"},{"id":"feature-statistic-types","label":"类型"},{"id":"feature-statistic-api","label":"API 定义"}]},{"id":"feature-subWindow","label":"子窗口","children":[{"id":"feature-subWindow-notes","label":"使用说明"},{"id":"feature-subWindow-types","label":"类型"},{"id":"feature-subWindow-api","label":"API 定义"}]},{"id":"feature-translate","label":"翻译","children":[{"id":"feature-translate-notes","label":"使用说明"},{"id":"feature-translate-types","label":"类型"},{"id":"feature-translate-api","label":"API 定义"}]},{"id":"feature-ui","label":"界面","children":[{"id":"feature-ui-notes","label":"使用说明"},{"id":"feature-ui-types","label":"类型"},{"id":"feature-ui-api","label":"API 定义"}]}]
+capabilityOutline: [{"id":"feature-docs","label":"Feature API 文档","children":[{"id":"feature-docs-notes","label":"使用说明"},{"id":"feature-docs-types","label":"类型"},{"id":"feature-docs-api","label":"API 定义"}]},{"id":"feature-about","label":"关于与环境检查","children":[{"id":"feature-about-notes","label":"使用说明"},{"id":"feature-about-types","label":"类型"},{"id":"feature-about-api","label":"API 定义"}]},{"id":"feature-agent","label":"Agent","children":[{"id":"feature-agent-notes","label":"使用说明"},{"id":"feature-agent-types","label":"类型"},{"id":"feature-agent-api","label":"API 定义"}]},{"id":"feature-backup","label":"版本管理","children":[{"id":"feature-backup-notes","label":"使用说明"},{"id":"feature-backup-types","label":"类型"},{"id":"feature-backup-api","label":"API 定义"}]},{"id":"feature-database","label":"数据库","children":[{"id":"feature-database-notes","label":"使用说明"},{"id":"feature-database-types","label":"类型"},{"id":"feature-database-api","label":"API 定义"}]},{"id":"feature-defaultConfigs","label":"默认配置","children":[{"id":"feature-defaultConfigs-notes","label":"使用说明"},{"id":"feature-defaultConfigs-types","label":"类型"},{"id":"feature-defaultConfigs-api","label":"API 定义"}]},{"id":"feature-hotkey","label":"命令与快捷键","children":[{"id":"feature-hotkey-notes","label":"使用说明"},{"id":"feature-hotkey-types","label":"类型"},{"id":"feature-hotkey-api","label":"API 定义"}]},{"id":"feature-misc","label":"运行环境","children":[{"id":"feature-misc-notes","label":"使用说明"},{"id":"feature-misc-types","label":"类型"},{"id":"feature-misc-api","label":"API 定义"}]},{"id":"feature-modelConnection","label":"模型连接","children":[{"id":"feature-modelConnection-notes","label":"使用说明"},{"id":"feature-modelConnection-types","label":"类型"},{"id":"feature-modelConnection-api","label":"API 定义"}]},{"id":"feature-notification","label":"通知","children":[{"id":"feature-notification-notes","label":"使用说明"},{"id":"feature-notification-types","label":"类型"},{"id":"feature-notification-api","label":"API 定义"}]},{"id":"feature-resources","label":"通用资源文件","children":[{"id":"feature-resources-notes","label":"使用说明"},{"id":"feature-resources-types","label":"类型"},{"id":"feature-resources-api","label":"API 定义"}]},{"id":"feature-sandbox","label":"代码执行","children":[{"id":"feature-sandbox-notes","label":"使用说明"},{"id":"feature-sandbox-types","label":"类型"},{"id":"feature-sandbox-api","label":"API 定义"}]},{"id":"feature-globals","label":"全局对象","children":[{"id":"feature-globals-notes","label":"使用说明"},{"id":"feature-globals-types","label":"类型"},{"id":"feature-globals-api","label":"API 定义"}]},{"id":"feature-setting","label":"设置目录","children":[{"id":"feature-setting-notes","label":"使用说明"},{"id":"feature-setting-types","label":"类型"},{"id":"feature-setting-api","label":"API 定义"}]},{"id":"feature-statistic","label":"统计","children":[{"id":"feature-statistic-notes","label":"使用说明"},{"id":"feature-statistic-types","label":"类型"},{"id":"feature-statistic-api","label":"API 定义"}]},{"id":"feature-subWindow","label":"子窗口","children":[{"id":"feature-subWindow-notes","label":"使用说明"},{"id":"feature-subWindow-types","label":"类型"},{"id":"feature-subWindow-api","label":"API 定义"}]},{"id":"feature-translate","label":"翻译","children":[{"id":"feature-translate-notes","label":"使用说明"},{"id":"feature-translate-types","label":"类型"},{"id":"feature-translate-api","label":"API 定义"}]},{"id":"feature-ui","label":"界面","children":[{"id":"feature-ui-notes","label":"使用说明"},{"id":"feature-ui-types","label":"类型"},{"id":"feature-ui-api","label":"API 定义"}]},{"id":"feature-webSearch","label":"网络搜索","children":[{"id":"feature-webSearch-notes","label":"使用说明"},{"id":"feature-webSearch-types","label":"类型"},{"id":"feature-webSearch-api","label":"API 定义"}]}]
 editLink: false
 ---
 
 # Pulsar Feature API
 
-本文档由各 Feature 的 capabilities 定义自动生成，说明可用场景、关键类型、权限边界与公开 API。
+本文档由各 Feature 的 docs.ts 定义自动生成，说明可用场景、关键类型与公开 API。
 
-<a id="feature-capabilitySystem"></a>
+<a id="feature-docs"></a>
 ## Feature API 文档
 
-API 对象：`environment.capabilitySystem`
+API 对象：`environment.docs`
 
 查询当前 Feature API 注册表公开的 Feature 与函数元数据。
 
-提供注册表自身的只读元数据；普通公开 API 始终可用，少数特殊操作由运行时策略封锁。
+提供注册表自身的只读元数据；公开 API 始终可用，少数特殊操作由运行时策略封锁。
 
-<a id="feature-capabilitySystem-notes"></a>
+<a id="feature-docs-notes"></a>
 ### 使用说明
 
-- list、get、readDocs 与人类文档使用同一份定义。
+- list、get、read_docs 与人类文档使用同一份定义。
 - 被策略封锁的函数不会出现在普通生成运行时中。
 
-<a id="feature-capabilitySystem-types"></a>
+<a id="feature-docs-types"></a>
 ### 类型
 
-#### CapabilityApiDoc
+#### FeatureApiDoc
 
 一个公开函数的人类与模型共用说明。
 
 ```ts
-interface CapabilityApiDoc {
+interface FeatureApiDoc {
   name: string;
   signature: string;
   description: string;
@@ -39,77 +39,65 @@ interface CapabilityApiDoc {
 }
 ```
 
-#### CapabilityTypeDoc
-
-人类文档中展示的 TypeScript 类型片段。
-
-```ts
-interface CapabilityTypeDoc {
-  name: string;
-  description?: string;
-  definition: string;
-}
-```
-
-#### CapabilityHumanDocumentation
-
-只进入人类文档的 Feature 介绍、说明与类型清单。
-
-```ts
-interface CapabilityHumanDocumentation {
-  overview: string;
-  notes?: string[];
-  types?: CapabilityTypeDoc[];
-}
-```
-
-#### CapabilityDefinition
+#### FeatureDocs
 
 一个 Feature 的完整文档与 API 元数据。
 
 ```ts
-interface CapabilityDefinition {
+interface FeatureDocs {
   id: string;
   title: string;
   description: string;
-  documentation?: CapabilityHumanDocumentation;
-  subCaps: Record<string, string>;
-  api: Record<string, CapabilityApiDoc[]>;
+  documentation?: FeatureDocsDetail;
+  api: FeatureApiDoc[];
 }
 ```
 
-<a id="feature-capabilitySystem-api"></a>
+#### ReadDocsResult
+
+read_docs 根据参数返回目录、完整 Feature 定义、单个函数契约或 null。
+
+```ts
+type ReadDocsResult =
+  | FeatureDocsEntry[]
+  | FeatureDocsResult
+  | FeatureApiDocResult
+  | null;
+```
+
+<a id="feature-docs-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部文档元数据 |
-| `read` | 读取 API 文档 |
-
-#### 读取 API 文档
-
-权限标识：`read`
-
-##### `capabilitySystem.list(): Promise<CapabilityDefinition[]>`
+##### `docs.list(): Promise<FeatureDocs[]>`
 
 列出全部 Feature 的文档和 API 元数据。
 
 **示例：**
 
 ```js
-await capabilitySystem.list()
+await docs.list()
 ```
 
-##### `capabilitySystem.get(featureId: string): Promise<CapabilityDefinition | null>`
+##### `docs.get(featureId: string): Promise<FeatureDocs | null>`
 
 按 Feature id 查询文档和 API 元数据。
 
 **示例：**
 
 ```js
-await capabilitySystem.get('conversation')
+await docs.get('conversation')
+```
+
+##### `docs.read_docs(featureId?: string, apiName?: string): ReadDocsResult`
+
+按需读取 Sandbox 中公开 Feature API 的目录、完整定义或单个函数契约。省略 featureId 返回目录；指定 featureId 返回该 Feature 的文档、类型、API 与可用状态；再指定 apiName 返回单个函数。
+
+**返回：** 目录项数组、含每个函数 availability 的完整 Feature 定义、单个函数契约；未找到 Feature 或函数时返回 null。
+
+**示例：**
+
+```js
+const api = read_docs('conversation', 'requestContainer');
 ```
 
 <a id="feature-about"></a>
@@ -148,17 +136,6 @@ type EnvironmentToolStatus = {
 <a id="feature-about-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部环境检查权限 |
-| `checkEnvironment` | 检查开发环境 |
-
-#### 检查开发环境
-
-权限标识：`checkEnvironment`
-
 ##### `about.checkEnvironment(): Promise<EnvironmentToolStatus[]>`
 
 检查应用已知的本地环境工具。
@@ -174,9 +151,9 @@ await about.checkEnvironment()
 
 API 对象：`environment.agent`
 
-在 CodeAct 上下文中查询并调用 Agent 扩展。
+在 CodeAct 上下文中查询并调用 Agent 扩展、询问用户及提示建议卡片。
 
-ToolLoopAgent 只向模型暴露一个 codeAct 工具。Skill 与 MCP 扩展保留在 Agent 注册表中，并通过这里的普通上下文函数由 codeAct 调用。
+ToolLoopAgent 只向模型暴露一个 codeAct 工具。Skill 与 MCP 扩展保留在 Agent 注册表中，并通过这里的普通上下文函数由 codeAct 调用。`agent.askUser` 和 `agent.askSuggestion` 可直接触发卡片组件并等待用户交互。
 
 <a id="feature-agent-notes"></a>
 ### 使用说明
@@ -184,6 +161,8 @@ ToolLoopAgent 只向模型暴露一个 codeAct 工具。Skill 与 MCP 扩展保�
 - 扩展不再作为独立模型工具出现，因此不会扩大模型工具列表。
 - 省略 source 时会合并全部已注册扩展来源。
 - callExtension 只调用已经注册且提供本地 execute 实现的扩展。
+- askUser 支持单问题与 Approval Card 多问题排版。
+- askSuggestion 用于展示 Recommendation Card 推荐与备选方案。
 
 <a id="feature-agent-types"></a>
 ### 类型
@@ -210,17 +189,6 @@ type AgentExtensionSummary = {
 
 <a id="feature-agent-api"></a>
 ### API 定义
-
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部 Agent 权限 |
-| `readTools` | 读取并调用 Agent 扩展 |
-
-#### 读取并调用 Agent 扩展
-
-权限标识：`readTools`
 
 ##### `agent.listTools(source?: AgentExtensionSource): string[]`
 
@@ -250,6 +218,26 @@ agent.listExtensions('skill')
 
 ```js
 await agent.callExtension('mcp', 'search', { query: 'PulsarAI' })
+```
+
+##### `agent.askUser(input: AskUserInput): Promise<AskUserResult>`
+
+在 Approval Card 中弹出单问题或多问题表单并等待用户选择与输入。
+
+**示例：**
+
+```js
+await agent.askUser({ questions: [{ question: '发布多少种口味？', options: ['3种', '5种'] }] })
+```
+
+##### `agent.askSuggestion(input: AskSuggestionInput): Promise<AskSuggestionResult>`
+
+在 Recommendation Card 中展示推荐方案与 Alternatives 抽屉并等待用户确认。
+
+**示例：**
+
+```js
+await agent.askSuggestion({ title: '确认补货订单？', options: [{ key: '1', short: '方案A', body: '详情...', signal: 3, label: '高置信度', cta: '接受' }] })
 ```
 
 <a id="feature-backup"></a>
@@ -288,18 +276,6 @@ interface BackupInfo {
 <a id="feature-backup-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部已开放的版本管理权限 |
-| `read` | 读取备份列表 |
-| `create` | 创建本地备份 |
-
-#### 读取备份列表
-
-权限标识：`read`
-
 ##### `backup.list(): Promise<BackupInfo[]>`
 
 刷新并返回当前备份目录中的历史版本。
@@ -309,10 +285,6 @@ interface BackupInfo {
 ```js
 await backup.list()
 ```
-
-#### 创建本地备份
-
-权限标识：`create`
 
 ##### `backup.create(): Promise<void>`
 
@@ -331,13 +303,13 @@ API 对象：`environment.database`
 
 访问 Pulsar 本地数据库的底层记录。除诊断或迁移外应优先使用所属 Feature 的高层 API。
 
-这是 SurrealDB 记录层的通用逃生口，允许按表名直接读写值。它绕过所属 Feature 的业务校验，因此默认权限应保持保守。
+这是 SurrealDB 记录层的通用逃生口，允许按表名直接读写值。它绕过所属 Feature 的业务校验，因此写入与删除默认被策略屏蔽。
 
 <a id="feature-database-notes"></a>
 ### 使用说明
 
 - 表名和记录结构不会在运行时替调用方推断，调用方必须掌握对应 Feature 的持久化契约。
-- 删除权限与写入权限分离，便于只允许迁移脚本新增或更新数据。
+- 写入与删除方法默认从运行时对象移除，仅在明确授权的环境中按需放开。
 
 <a id="feature-database-types"></a>
 ### 类型
@@ -356,19 +328,6 @@ interface DatabaseRecord<T> {
 <a id="feature-database-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部数据库权限 |
-| `read` | 读取数据库记录 |
-| `write` | 写入数据库记录 |
-| `delete` | 删除数据库记录 |
-
-#### 读取数据库记录
-
-权限标识：`read`
-
 ##### `database.selectAll<T>(table: string): Promise<Array<{ id: string | null; value: T }>>`
 
 读取一个表中的全部记录。
@@ -377,17 +336,9 @@ interface DatabaseRecord<T> {
 
 按 id 读取单条记录。
 
-#### 写入数据库记录
-
-权限标识：`write`
-
 ##### `database.upsert<T>(table: string, id: string, value: T): Promise<void>`
 
 新增或替换一条记录。
-
-#### 删除数据库记录
-
-权限标识：`delete`
 
 ##### `database.remove(table: string, id: string): Promise<void>`
 
@@ -400,7 +351,7 @@ API 对象：`environment.defaultConfigs`
 
 读取或修改 Pulsar 的非敏感默认配置。密钥不在此 API 中暴露。
 
-管理新资源与未显式覆盖设置时采用的应用级默认值。聊天模型引用以 provider/model/thinkingLevel 字符串保存，末段可省略；权限默认值不通过此 API 修改。
+管理新资源与未显式覆盖设置时采用的应用级默认值。聊天模型引用以 provider/model/thinkingLevel 字符串保存，末段可省略。
 
 <a id="feature-defaultConfigs-notes"></a>
 ### 使用说明
@@ -430,18 +381,6 @@ type DefaultConfigKey =
 <a id="feature-defaultConfigs-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部默认配置权限 |
-| `read` | 读取默认配置 |
-| `write` | 修改默认配置 |
-
-#### 读取默认配置
-
-权限标识：`read`
-
 ##### `defaultConfigs.get(key: DefaultConfigKey): Promise<string>`
 
 读取一个默认配置。
@@ -453,10 +392,6 @@ type DefaultConfigKey =
 ```js
 await defaultConfigs.get('defaultChatModel')
 ```
-
-#### 修改默认配置
-
-权限标识：`write`
 
 ##### `defaultConfigs.set(key: DefaultConfigKey, value: string): Promise<void>`
 
@@ -503,18 +438,6 @@ interface CommandSummary {
 <a id="feature-hotkey-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部命令权限 |
-| `read` | 读取命令 |
-| `execute` | 执行命令 |
-
-#### 读取命令
-
-权限标识：`read`
-
 ##### `hotkey.listCommands(): CommandSummary[]`
 
 列出命令 id、标题、说明、分类和默认快捷键。
@@ -524,10 +447,6 @@ interface CommandSummary {
 ```js
 hotkey.listCommands()
 ```
-
-#### 执行命令
-
-权限标识：`execute`
 
 ##### `hotkey.execute(commandId: string): Promise<void>`
 
@@ -586,19 +505,6 @@ type MobileNavigationBarMode =
 <a id="feature-misc-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部运行环境权限 |
-| `readPlatform` | 读取平台信息 |
-| `notify` | 发送本地通知 |
-| `mobileNavigationBar` | 设置移动端系统导航栏 |
-
-#### 读取平台信息
-
-权限标识：`readPlatform`
-
 ##### `misc.getPlatform(): PlatformInfo`
 
 返回平台、系统类型、系统家族、架构和版本。
@@ -611,10 +517,6 @@ type MobileNavigationBarMode =
 misc.getPlatform()
 ```
 
-#### 发送本地通知
-
-权限标识：`notify`
-
 ##### `misc.notify(input?: { title?: string; body?: string }): Promise<void>`
 
 在系统允许时发送本地通知。
@@ -624,10 +526,6 @@ misc.getPlatform()
 ```js
 await misc.notify({ title: '完成', body: '任务已处理' })
 ```
-
-#### 设置移动端系统导航栏
-
-权限标识：`mobileNavigationBar`
 
 ##### `misc.setMobileNavigationBar(mode: 'topbar' | 'system' | 'light' | 'dark'): Promise<boolean>`
 
@@ -682,17 +580,6 @@ interface GenerateTextResult {
 <a id="feature-modelConnection-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部模型连接权限 |
-| `generateText` | 生成文本 |
-
-#### 生成文本
-
-权限标识：`generateText`
-
 ##### `modelConnection.generateText(input: { prompt: string; model?: string; system?: string }): Promise<{ text: string }>`
 
 使用指定模型或默认聊天模型生成文本。
@@ -716,7 +603,7 @@ API 对象：`environment.notification`
 ### 使用说明
 
 - 外部通知是默认投递方式，但不会自动复制一份到内置通知中心。
-- 读取权限只返回通知元数据和正文，不会改变 read 状态。
+- 读取只返回通知元数据和正文，不会改变 read 状态。
 
 <a id="feature-notification-types"></a>
 ### 类型
@@ -751,19 +638,6 @@ interface PulsarNotification {
 <a id="feature-notification-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部通知权限 |
-| `read` | 读取内置通知 |
-| `sendInternal` | 发送内置通知 |
-| `sendExternal` | 发送系统通知 |
-
-#### 读取内置通知
-
-权限标识：`read`
-
 ##### `notification.list(): PulsarNotification[]`
 
 列出内置通知，最新通知在前。
@@ -774,10 +648,6 @@ interface PulsarNotification {
 notification.list()
 ```
 
-#### 发送内置通知
-
-权限标识：`sendInternal`
-
 ##### `notification.sendInternal(input: { title?: string; body?: string; level?: NotificationLevel }): Promise<PulsarNotification>`
 
 将通知写入 Pulsar 内置通知中心。
@@ -787,10 +657,6 @@ notification.list()
 ```js
 await notification.sendInternal({ title: '完成', body: '任务已完成' })
 ```
-
-#### 发送系统通知
-
-权限标识：`sendExternal`
 
 ##### `notification.sendExternal(input: { title?: string; body?: string }): Promise<boolean>`
 
@@ -831,18 +697,6 @@ type ResourceFileUrl = string;
 <a id="feature-resources-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部通用资源文件权限 |
-| `read` | 解析资源显示地址 |
-| `delete` | 删除资源文件 |
-
-#### 解析资源显示地址
-
-权限标识：`read`
-
 ##### `resources.displayUrl(fileUrl?: string): string`
 
 把本地资源地址转换为可显示的 URL。
@@ -852,10 +706,6 @@ type ResourceFileUrl = string;
 ```js
 resources.displayUrl(fileUrl)
 ```
-
-#### 删除资源文件
-
-权限标识：`delete`
 
 ##### `resources.deleteFile(fileUrl: string): Promise<void>`
 
@@ -867,62 +717,12 @@ resources.displayUrl(fileUrl)
 await resources.deleteFile(fileUrl)
 ```
 
-<a id="feature-component"></a>
-## 组件资源
-
-API 对象：`environment.component`
-
-生成 Pulsar 组件资源的基础内容。
-
-创建一个可以继续编辑的 Vue 单文件组件模板。返回值只是源码文本，不会自动保存资源或执行组件脚本。
-
-<a id="feature-component-notes"></a>
-### 使用说明
-
-- name 只用于模板中的初始展示文本，调用方仍需通过所属资源 Feature 完成持久化。
-- 插件动态预览对脚本执行有独立限制，生成模板不代表获得运行权限。
-
-<a id="feature-component-types"></a>
-### 类型
-
-#### ComponentSource
-
-完整 Vue SFC 源码。
-
-```ts
-type ComponentSource = string;
-```
-
-<a id="feature-component-api"></a>
-### API 定义
-
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部组件资源权限 |
-| `createTemplate` | 创建组件模板 |
-
-#### 创建组件模板
-
-权限标识：`createTemplate`
-
-##### `component.createTemplate(name?: string): string`
-
-返回一个可编辑的默认 Vue 组件资源。
-
-**示例：**
-
-```js
-component.createTemplate('CounterButton')
-```
-
 <a id="feature-sandbox"></a>
 ## 代码执行
 
 API 对象：`environment.sandbox`
 
-执行局部 JavaScript 辅助逻辑。Feature 操作仍受各自权限对象限制。
+执行局部 JavaScript 辅助逻辑。危险方法由运行时策略按需屏蔽。
 
 执行短小 JavaScript 表达式或语句，用于数据转换、条件判断和组合运行时可用的 Feature API。它是应用级权限边界，不是操作系统安全沙箱。
 
@@ -930,7 +730,7 @@ API 对象：`environment.sandbox`
 ### 使用说明
 
 - values 中的键会作为本次代码执行的局部变量，并优先于普通全局对象。
-- 浏览器高风险全局对象由独立 globals 权限控制。
+- 浏览器高风险全局对象由独立的 globals 对象控制。
 
 <a id="feature-sandbox-types"></a>
 ### 类型
@@ -945,17 +745,6 @@ type SandboxValues = Record<string, unknown>;
 
 <a id="feature-sandbox-api"></a>
 ### API 定义
-
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部代码执行权限 |
-| `execute` | 执行 JavaScript |
-
-#### 执行 JavaScript
-
-权限标识：`execute`
 
 ##### `sandbox.execute(code: string, values?: Record<string, unknown>): Promise<unknown>`
 
@@ -972,22 +761,22 @@ await sandbox.execute('items.map(x => x.id)', { items })
 
 API 对象：`environment.globals`
 
-控制 Sandbox JavaScript 对浏览器全局对象的直接访问。未授权对象仍提供可识别的 Proxy 占位，并在读取、调用或写入时抛出权限错误。
+Sandbox JavaScript 对浏览器全局对象的直接访问。被屏蔽对象仍提供可识别的 Proxy 占位，并在读取、调用或写入时抛出权限错误。
 
-把具有网络、持久化、页面控制、跨上下文或动态代码生成能力的浏览器对象划分为独立授权组。普通语言内建、计时器和编码工具不需要这些权限。
+把具有网络、持久化、页面控制、跨上下文或动态代码生成能力的浏览器对象整体开放；需要收紧时由运行时策略按需屏蔽。
 
 <a id="feature-globals-notes"></a>
 ### 使用说明
 
 - window、self 与 globalThis 只暴露同一份过滤后的对象视图。
-- 未授权对象会在访问时抛出明确权限错误，但这不等同于隔离同一 JavaScript Realm 中的恶意代码。
+- 被屏蔽对象会在访问时抛出明确权限错误，但这不等同于隔离同一 JavaScript Realm 中的恶意代码。
 
 <a id="feature-globals-types"></a>
 ### 类型
 
 #### ControlledGlobalGroup
 
-高风险浏览器全局对象的权限分组。
+高风险浏览器全局对象的分组。
 
 ```ts
 type ControlledGlobalGroup =
@@ -1001,52 +790,21 @@ type ControlledGlobalGroup =
 <a id="feature-globals-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部全局对象权限 |
-| `network` | 主动网络访问（fetch、WebSocket、XHR、媒体加载） |
-| `storage` | 浏览器存储（localStorage、IndexedDB、Cache） |
-| `page` | 页面、导航与浏览器状态（document、location、navigator） |
-| `workers` | Worker 与跨上下文消息通道 |
-| `codeGeneration` | 动态代码生成（eval、Function） |
-
-#### 主动网络访问（fetch、WebSocket、XHR、媒体加载）
-
-权限标识：`network`
-
 ##### `globals.fetch(input, init?): Promise<Response>`
 
 访问浏览器网络请求相关全局对象；也可直接使用 fetch、WebSocket 或 XMLHttpRequest。
-
-#### 浏览器存储（localStorage、IndexedDB、Cache）
-
-权限标识：`storage`
 
 ##### `globals.localStorage: Storage`
 
 访问浏览器存储相关全局对象。
 
-#### 页面、导航与浏览器状态（document、location、navigator）
-
-权限标识：`page`
-
 ##### `globals.document: Document`
 
 访问页面、地址、导航器、父窗口和打开窗口等广泛的浏览器能力。
 
-#### Worker 与跨上下文消息通道
-
-权限标识：`workers`
-
 ##### `globals.Worker: typeof Worker`
 
 创建 Worker 或跨上下文消息通道。
-
-#### 动态代码生成（eval、Function）
-
-权限标识：`codeGeneration`
 
 ##### `globals.Function: FunctionConstructor`
 
@@ -1106,17 +864,6 @@ interface SettingDirectory {
 <a id="feature-setting-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部设置目录权限 |
-| `read` | 读取设置目录 |
-
-#### 读取设置目录
-
-权限标识：`read`
-
 ##### `setting.list(): SettingDirectory`
 
 按导航顺序列出设置页面与一级功能 Tab，不返回配置值或密钥。
@@ -1172,17 +919,6 @@ interface StatisticSummary {
 
 <a id="feature-statistic-api"></a>
 ### API 定义
-
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部统计权限 |
-| `read` | 读取统计 |
-
-#### 读取统计
-
-权限标识：`read`
 
 ##### `statistic.summary(): Promise<StatisticSummary>`
 
@@ -1243,17 +979,6 @@ type SubWindowTarget =
 <a id="feature-subWindow-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部子窗口权限 |
-| `open` | 打开子窗口 |
-
-#### 打开子窗口
-
-权限标识：`open`
-
 ##### `subWindow.open(target: SubWindowTarget, title?: string): Promise<void>`
 
 按资源、内置页面或组件目标打开子窗口。
@@ -1297,18 +1022,6 @@ interface TranslateConfig {
 <a id="feature-translate-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部翻译权限 |
-| `translate` | 翻译文本 |
-| `readConfig` | 读取翻译语言配置 |
-
-#### 翻译文本
-
-权限标识：`translate`
-
 ##### `translate.text(value: string): Promise<string>`
 
 使用当前提供商与语言设置翻译文本。
@@ -1318,10 +1031,6 @@ interface TranslateConfig {
 ```js
 await translate.text('Hello')
 ```
-
-#### 读取翻译语言配置
-
-权限标识：`readConfig`
 
 ##### `translate.getConfig(): { sourceLanguage: string; targetLanguage: string; provider: string }`
 
@@ -1379,18 +1088,6 @@ interface ComposerToolbarLayout {
 <a id="feature-ui-api"></a>
 ### API 定义
 
-#### 权限
-
-| 权限标识 | 说明 |
-| --- | --- |
-| `all` | 全部界面权限 |
-| `settings` | 打开或关闭设置 |
-| `composerToolbar` | 配置会话输入框工具栏 |
-
-#### 打开或关闭设置
-
-权限标识：`settings`
-
 ##### `ui.setSettingsOpen(open: boolean): void`
 
 打开或关闭设置窗口。
@@ -1400,10 +1097,6 @@ interface ComposerToolbarLayout {
 ```js
 ui.setSettingsOpen(true)
 ```
-
-#### 配置会话输入框工具栏
-
-权限标识：`composerToolbar`
 
 ##### `ui.getComposerToolbar(): ComposerToolbarLayout`
 
@@ -1423,4 +1116,49 @@ ui.getComposerToolbar()
 
 ```js
 ui.setComposerToolbar({ left: ['attachment'], right: ['model', 'map', 'fullscreen'], unused: ['whiteboard', 'optimize'] })
+```
+
+<a id="feature-webSearch"></a>
+## 网络搜索
+
+API 对象：`environment.webSearch`
+
+通过已启用的 Playwright Chromium 或 Exa 搜索提供商执行网页搜索，返回可引用的结果摘要。
+
+网络搜索在设置中选择已启用提供商：Playwright 使用 Rust 侧隔离的 headless Chromium，Exa 使用 Exa Search API。前端和 Sandbox 不接触浏览器、driver、WebDriver 或 API Key 明文。
+
+<a id="feature-webSearch-notes"></a>
+### 使用说明
+
+- Playwright 仅支持桌面端，并要求已安装匹配版本的 Playwright Chromium。
+- Exa API Key 保存为 Secret，并且只由原生请求层写入 x-api-key。
+- 移动端可使用已启用的 Exa；不提供浏览器自动化搜索。
+- 结果来自搜索结果页，调用方应在回答前按需打开并核实来源。
+
+<a id="feature-webSearch-types"></a>
+### 类型
+
+#### WebSearchResult
+
+搜索结果的最小可序列化表示。
+
+```ts
+interface WebSearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+}
+```
+
+<a id="feature-webSearch-api"></a>
+### API 定义
+
+##### `webSearch.search(input: { query: string; limit?: number }): Promise<WebSearchResult[]>`
+
+使用设置中的活动提供商执行关键词搜索，最多返回 10 条结果。
+
+**示例：**
+
+```js
+await webSearch.search({ query: 'PulsarAI', limit: 5 })
 ```

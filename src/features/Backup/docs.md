@@ -75,8 +75,8 @@ The peer history map records the last successful merge time for each device ID. 
 
 ## Ownership
 
-- UI and orchestration: `application/backup-store.ts`
-- resource selection: `presentation/BackupResourceRestoreDialog.vue`
-- settings surface: `presentation/BackupSettingsPage.vue`
-- version metadata: `src/features/Database/application/sync-metadata.ts`
+- UI and orchestration: `backup-store.ts`
+- resource selection: `BackupResourceRestoreDialog.vue`
+- settings surface: `BackupSettingsPage.vue`
+- version metadata: `src/features/Database/sync-metadata.ts`
 - backup and LAN transport commands: `src-tauri/src/lib.rs`

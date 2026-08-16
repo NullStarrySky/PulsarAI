@@ -1,6 +1,6 @@
 # TTS
 
-`TTS` 是纯文本转语音服务 Feature，不拥有 Conversation 或消息逻辑。目前包含系统 TTS、`edge-tts-ts@1.0.0`、火山引擎 OpenSpeech、ElevenLabs 与 Azure Speech 专用 adapter，并可引用 ModelConnection 中的 speech models。
+`TTS` 是纯文本转语音服务 Feature，不拥有 Conversation 或消息逻辑。目前包含系统 TTS、`edge-tts-ts@1.0.0`、Piper、火山引擎 OpenSpeech、ElevenLabs 与 Azure Speech 专用 adapter，并可引用 ModelConnection 中的 speech models。
 
 ## 应用接口
 
@@ -11,10 +11,21 @@
 - `generateSpeech({ model: "volcengine-tts/<resourceId>", ... })`：通过 AI SDK `SpeechModelV4` 形状调用 OpenSpeech HTTP Chunked v3，返回 MP3 字节。
 - `generateSpeech({ model: "elevenlabs/<modelId>", ... })`：调用 ElevenLabs TTS，并将统一 `voice` / `speed` 映射到 Voice ID 与 `voice_settings`。
 - `generateSpeech({ model: "azure-speech/standard", ... })`：调用区域化 Azure Speech REST endpoint，将文本、voice、style 和 speed 编译为 SSML。
+- `generateSpeech({ model: "piper/<id>", ... })`：由 Rust 侧的 sherpa-onnx Piper/VITS 引擎生成 WAV；`voice` 只接受非负整数 speaker ID，单说话人模型使用 `0`。
 
 系统 TTS 只播放语音，不返回音频字节，因此不会伪装成 AI SDK `SpeechModel`，也不能作为 `generateSpeech` 的默认模型。其声音列表、预览、停止和参数表单由系统服务区单独承载。
 
-第三方库仅允许出现在 `infrastructure/edge-tts-client.ts`。调用方不应持有 `Communicate`，也不应依赖第三方 chunk 类型。
+## 本地 Piper
+
+Piper 是唯一当前接入的本地 TTS 回退路径。模型由 TTS Feature 下载到 App data 的 `tts/piper/<id>/<version>/`，下载前校验固定的 SHA-256 和压缩包大小，删除只影响该模型包和索引。前端只处理元数据，不接触模型路径。
+
+安装包使用 sherpa-onnx 的官方 Piper `tar.bz2` 分发：解压后的根目录必须包含一个 `.onnx`、`tokens.txt` 和 `espeak-ng-data/`。这避免从 Piper 原始 `.onnx.json` 再做本地转换，也不要求用户安装 Python。Rust 命令在 CPU 上构造 VITS 引擎并返回 16-bit WAV 字节；模型包不进入应用安装包。
+
+Piper 依赖 sherpa-onnx 的静态原生库，因此它不是“纯 Rust、零原生运行时”方案；但静态库由 Cargo 为目标平台自动获取，不要求用户手动安装 CMake、Clang 或独立服务进程。Piper 只提供预训练声音，不能作为语音克隆功能。
+
+会话消息工具栏的朗读按钮使用配置的 AI SDK SpeechModel，按消息 ID、正文、模型与声音计算 SHA-256，并把生成音频写入角色包 Plugin 的 `temp/`。编辑消息会改变键而不再命中旧缓存；缓存文件不参与消息持久化语义。
+
+第三方库仅允许出现在 `providers/edge-tts-client.ts`。调用方不应持有 `Communicate`，也不应依赖第三方 chunk 类型。
 
 `edge-tts-ts@1.0.0` 会在浏览器中调用 `new WebSocket(url, { headers })`，把 Node `ws` 的 options 错当成浏览器子协议。`load-edge-tts.ts` 在首次动态加载该包时临时安装兼容构造器，并在模块加载后立刻恢复全局构造器：
 

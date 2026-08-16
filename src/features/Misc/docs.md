@@ -4,8 +4,8 @@
 
 ## Platform and responsive state
 
-- `domain/platform.ts` wraps `@tauri-apps/plugin-os`. `isMobilePlatform()` reports Android or iOS by default and supports a session-only override for development preview.
-- `application/responsive-store.ts` is the shared UI source for mobile layout. `isMobileLayout` becomes true when either the platform API reports mobile or the viewport is narrower than 768px.
+- `platform.ts` wraps `@tauri-apps/plugin-os`. `isMobilePlatform()` reports Android or iOS by default and supports a session-only override for development preview.
+- `responsive-store.ts` is the shared UI source for mobile layout. `isMobileLayout` becomes true when either the platform API reports mobile or the viewport is narrower than 768px.
 - The store applies the `mobile-layout` root class. Components use the `mobile:` Tailwind variant declared in `src/styles/globals.css` instead of duplicating platform and viewport checks.
 
 ## Mobile preview command
@@ -23,4 +23,4 @@ Disabling preview clears the override and restores the previous desktop size. Th
 
 ## Android navigation bar
 
-`application/mobile-navigation-bar.ts` wraps `tauri-plugin-m3` 0.3.2. The Rust plugin and `m3:default` capability are Android-only. Appearance defaults to `topbar`, which resolves the current actual top-bar light/dark mode and calls `M3.setBarColor`; `system`, `light`, and `dark` are also available. Desktop never imports the guest API and hides the setting.
+`mobile-navigation-bar.ts` wraps `tauri-plugin-m3` 0.3.2. The Rust plugin and `m3:default` capability are Android-only. Appearance defaults to `topbar`, which resolves the current actual top-bar light/dark mode and calls `M3.setBarColor`; `system`, `light`, and `dark` are also available. Desktop never imports the guest API and hides the setting.

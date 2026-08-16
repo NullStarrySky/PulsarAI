@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import AppShell from "@/features/UI/presentation/AppShell.vue";
+import AppShell from "@/features/UI/components/AppShell.vue";
 </script>
 
 <template>
