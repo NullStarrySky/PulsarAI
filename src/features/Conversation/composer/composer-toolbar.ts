@@ -1,4 +1,4 @@
-export const composerToolDefinitions = [
+const composerToolDefinitions = [
   { id: "model", label: "模型" },
   { id: "optimize", label: "优化提示词" },
   { id: "attachment", label: "附加文件" },
@@ -57,18 +57,4 @@ export function normalizeComposerToolbarLayout(
   return layout;
 }
 
-export function moveComposerTool(
-  layout: ComposerToolbarLayout,
-  toolId: ComposerToolId,
-  target: ComposerToolbarZone,
-  beforeId?: ComposerToolId,
-) {
-  const next = normalizeComposerToolbarLayout(layout);
-  for (const zone of ["left", "right", "unused"] as const) {
-    next[zone] = next[zone].filter((id) => id !== toolId);
-  }
-  const targetItems = next[target];
-  const targetIndex = beforeId ? targetItems.indexOf(beforeId) : -1;
-  targetItems.splice(targetIndex < 0 ? targetItems.length : targetIndex, 0, toolId);
-  return next;
-}
+

@@ -15,22 +15,16 @@ function pluginFixture(): Plugin {
     shortDescription: "",
     enabled: true,
     builtIn: false,
-    root: {
-      id: "root-a",
-      name: "Plugin A",
-      icon: "folder",
+    nodes: [{
+      id: "file-a",
+      path: "state.json",
+      name: "state.json",
+      icon: "file",
       treeOrder: 0,
-      kind: "folder",
-      children: [{
-        id: "file-a",
-        name: "state.json",
-        icon: "file",
-        treeOrder: 0,
-        kind: "file",
-        content: "base",
-        order: 100,
-      }],
-    },
+      kind: "file",
+      content: "base",
+      order: 100,
+    }],
   };
 }
 
@@ -54,6 +48,7 @@ function pathFixture(): ChatMessageContainer[] {
               target: { kind: "plugin-node", pluginId: "plugin-a", resourceId: "file-a" },
               value: {
                 id: "file-a",
+                path: "state.json",
                 name: "state.json",
                 icon: "file",
                 treeOrder: 0,
@@ -80,6 +75,7 @@ function pathFixture(): ChatMessageContainer[] {
                 target: { kind: "plugin-node", pluginId: "plugin-a", resourceId: "file-a" },
                 value: {
                   id: "file-a",
+                  path: "state.json",
                   name: "state.json",
                   icon: "file",
                   treeOrder: 0,
@@ -116,9 +112,9 @@ describe("Conversation resource overlay", () => {
     const plugins = [pluginFixture()];
     const overlay = createConversationResourceOverlay(plugins, pathFixture());
 
-    expect(overlay.plugins[0]!.root.children[0]).toMatchObject({ content: "active" });
+    expect(overlay.plugins[0]!.nodes[0]).toMatchObject({ content: "active" });
     expect(overlay.dataValues["data-instance-a"]).toEqual({ count: 2 });
-    expect(plugins[0]!.root.children[0]).toMatchObject({ content: "base" });
+    expect(plugins[0]!.nodes[0]).toMatchObject({ content: "base" });
   });
 
   test("applies create, move, and remove in order", () => {
@@ -126,14 +122,29 @@ describe("Conversation resource overlay", () => {
     applyConversationResourceOperation(overlay, {
       type: "create",
       pluginId: "plugin-a",
-      parentId: "root-a",
+      parentPath: "",
       node: {
         id: "folder-a",
+        path: "folder",
         name: "folder",
         icon: "folder",
         treeOrder: 1,
         kind: "folder",
-        children: [],
+      },
+    });
+    applyConversationResourceOperation(overlay, {
+      type: "create",
+      pluginId: "plugin-a",
+      parentPath: "folder",
+      node: {
+        id: "file-b",
+        path: "folder/nested.json",
+        name: "nested.json",
+        icon: "file",
+        treeOrder: 0,
+        kind: "file",
+        content: "",
+        order: 100,
       },
     });
     applyConversationResourceOperation(overlay, {
@@ -141,18 +152,54 @@ describe("Conversation resource overlay", () => {
       pluginId: "plugin-a",
       resourceId: "file-a",
       targetPluginId: "plugin-a",
-      parentId: "folder-a",
+      targetParentPath: "folder",
       name: "moved.json",
     });
     applyConversationResourceOperation(overlay, {
       type: "remove",
-      target: { kind: "plugin-node", pluginId: "plugin-a", resourceId: "file-a" },
+      target: { kind: "plugin-node", pluginId: "plugin-a", resourceId: "folder-a" },
     });
 
-    expect(overlay.plugins[0]!.root.children).toHaveLength(1);
-    expect(overlay.plugins[0]!.root.children[0]).toMatchObject({
-      id: "folder-a",
-      children: [],
+    expect(overlay.plugins[0]!.nodes).toHaveLength(0);
+  });
+
+  test("renames rewrite descendant paths", () => {
+    const overlay = createConversationResourceOverlay([pluginFixture()], []);
+    applyConversationResourceOperation(overlay, {
+      type: "create",
+      pluginId: "plugin-a",
+      parentPath: "",
+      node: {
+        id: "folder-a",
+        path: "folder",
+        name: "folder",
+        icon: "folder",
+        treeOrder: 1,
+        kind: "folder",
+      },
     });
+    applyConversationResourceOperation(overlay, {
+      type: "move",
+      pluginId: "plugin-a",
+      resourceId: "file-a",
+      targetPluginId: "plugin-a",
+      targetParentPath: "folder",
+      name: "state.json",
+    });
+    applyConversationResourceOperation(overlay, {
+      type: "edit",
+      target: { kind: "plugin-node", pluginId: "plugin-a", resourceId: "folder-a" },
+      value: {
+        id: "folder-a",
+        path: "renamed",
+        name: "renamed",
+        icon: "folder",
+        treeOrder: 1,
+        kind: "folder",
+      },
+    });
+
+    const file = overlay.plugins[0]!.nodes.find((node) => node.id === "file-a");
+    expect(file?.path).toBe("renamed/state.json");
   });
 });

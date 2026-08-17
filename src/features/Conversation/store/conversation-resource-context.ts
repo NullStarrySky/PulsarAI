@@ -3,7 +3,6 @@ import conversationGuide from "@/features/Conversation/guide.md?raw";
 import {
   findPluginNodeByPath,
   findPluginTreeNode,
-  pluginNodePath,
   type Plugin,
   type PluginFile,
 } from "@/features/Plugin/tree/plugin-types";
@@ -21,7 +20,7 @@ function textContent(file?: PluginFile | null) {
 }
 
 function rootFile(plugin: Plugin, name: string) {
-  const node = findPluginNodeByPath(plugin.root, [name]);
+  const node = findPluginNodeByPath(plugin, [name]);
   return node?.kind === "file" ? node : null;
 }
 
@@ -49,11 +48,11 @@ export function buildConversationResourceContext(
     ? packages.find((item) => item.id === resourcePackageId) ?? null
     : null;
   const selectedNode = plugin && binding.resourceId !== plugin.id
-    ? findPluginTreeNode(plugin.root, binding.resourceId)
+    ? findPluginTreeNode(plugin, binding.resourceId)
     : null;
   const selected = selectedNode?.kind === "file" ? selectedNode : null;
-  const resourcePath = selectedNode && plugin
-    ? `/${pluginNodePath(plugin.root, selectedNode.id).join("/")}`
+  const resourcePath = selectedNode
+    ? `/${selectedNode.path}`
     : plugin ? "/" : "";
   const resourceTitle = selectedNode?.name
     ?? plugin?.name

@@ -20,7 +20,7 @@ import {
 import {
   pluginConditionDefinitions,
   type PluginConditionFunction,
-} from "@/features/Plugin/runtime/plugin-condition-environment";
+} from "@/features/Plugin/runtime/environment";
 
 interface ConditionRow {
   id: string;
@@ -49,7 +49,7 @@ function load(source: string) {
 }
 
 function definition(functionName: PluginConditionFunction) {
-  return pluginConditionDefinitions.find((item) => item.id === functionName)!;
+  return pluginConditionDefinitions.find((item: { id: string }) => item.id === functionName)!;
 }
 
 function addRow() {

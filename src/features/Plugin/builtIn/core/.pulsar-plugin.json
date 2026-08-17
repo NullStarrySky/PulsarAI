@@ -17,7 +17,7 @@
     "containers.json": { "id": "builtin-containers", "icon": "", "treeOrder": 3, "order": 100 },
     "default.chat.json": { "id": "builtin-default-chat", "icon": "", "treeOrder": 4, "order": 100, "insertion": { "target": "chat" } },
     "prompt.md": { "id": "builtin-prompt", "icon": "", "treeOrder": 5, "order": 100 },
-    "generate.js": { "id": "builtin-generate", "icon": "", "treeOrder": 6, "order": 100 },
+    "generate.js": { "id": "builtin-generate", "icon": "", "treeOrder": 6, "order": 100, "insertion": { "target": "generatePath" } },
     "regex.json": { "id": "builtin-regex", "icon": "", "treeOrder": 7, "order": 100, "insertion": { "target": "REGEX" } },
     "components": { "id": "builtin-components", "icon": "", "treeOrder": 8 },
     "background": { "id": "builtin-background", "icon": "", "treeOrder": 9 },

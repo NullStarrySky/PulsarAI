@@ -3,7 +3,14 @@ import { computed } from "vue";
 import ConversationComposerEditor from "@/features/Conversation/composer/ConversationComposerEditor.vue";
 import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
-import { createPluginReferenceResolver } from "@/features/Plugin/runtime/plugin-reference-resolver";
+import { useContainerStore } from "@/features/Plugin/tree/container-store";
+
+const containerStore = useContainerStore();
+const containerDetails = computed(() => containerStore.listContainers(
+  visiblePlugins.value.some((item) => item.id === props.plugin.id)
+    ? visiblePlugins.value
+    : [props.plugin, ...visiblePlugins.value]
+));
 import { pluginMediaSource, pluginMediaType } from "@/features/Plugin/editors/media/plugin-media";
 import {
   pluginConventions,
@@ -46,23 +53,7 @@ const visiblePlugins = computed(() => pluginStore.sortedPluginsForPackage(
   conversation.activePackage?.enabledGlobalPluginIds,
   conversation.activePackage?.mainPluginId,
 ));
-const resolver = computed(() => createPluginReferenceResolver(
-  visiblePlugins.value.some((item) => item.id === props.plugin.id)
-    ? visiblePlugins.value
-    : [props.plugin, ...visiblePlugins.value],
-  {
-    environment: {
-      chat: [],
-      CHAT: [],
-      PROJECT_AGENT_PROMPT: "[PROJECT_AGENT_PROMPT]",
-    },
-    sourceOverrides: { [props.file.id]: props.modelValue },
-  },
-));
-const containerDetails = computed(() => resolver.value.listContainers().flatMap((item) => {
-  const detail = resolver.value.getContainer(item.id);
-  return detail ? [detail] : [];
-}));
+
 const codeLanguage = computed(() => {
   if (type.value === "javascript") return "javascript";
   if (type.value === "component") return props.file.name.toLocaleLowerCase().endsWith(".vue") ? "vue" : "javascript";

@@ -5,10 +5,8 @@ import {
   type Component,
 } from "vue";
 import {
-  findPluginNodeByPath,
-  flattenPluginFiles,
   pluginConventions,
-  pluginNodePath,
+  pluginFiles,
   type Plugin,
   type PluginFile,
 } from "@/features/Plugin/tree/plugin-types";
@@ -51,16 +49,16 @@ export function resolvePluginComponentByName(
   plugin: Plugin,
   name: string,
 ): PluginVueRuntimeResult {
-  const folder = findPluginNodeByPath(
-    plugin.root,
-    pluginConventions.componentsFolder,
+  const folder = plugin.nodes.find(
+    (node) => node.path === pluginConventions.componentsFolder && node.kind === "folder",
   );
-  if (folder?.kind !== "folder") {
+  if (!folder) {
     return { component: null, diagnostics: ["插件缺少 components/ 目录。"] };
   }
-  const file = flattenPluginFiles(folder).find(
+  const file = pluginFiles(plugin).find(
     (item) =>
-      item.name.toLocaleLowerCase().endsWith(".vue")
+      item.path.startsWith(`${pluginConventions.componentsFolder}/`)
+      && item.name.toLocaleLowerCase().endsWith(".vue")
       && componentName(item.name) === name,
   );
   return file
@@ -73,21 +71,22 @@ function compilePluginComponentRegistry(
   excludedFileId: string,
   diagnostics: string[],
 ) {
-  const folder = findPluginNodeByPath(
-    plugin.root,
-    pluginConventions.componentsFolder,
+  const folder = plugin.nodes.find(
+    (node) => node.path === pluginConventions.componentsFolder && node.kind === "folder",
   );
-  if (folder?.kind !== "folder") return {};
+  if (!folder) return {};
   const registry: Record<string, Component> = {};
   const compiled: Array<{ name: string; template: string }> = [];
-  for (const file of flattenPluginFiles(folder)) {
+  for (const file of pluginFiles(plugin).filter(
+    (item) => item.path.startsWith(`${pluginConventions.componentsFolder}/`),
+  )) {
     if (file.id === excludedFileId || !file.name.toLowerCase().endsWith(".vue")) {
       continue;
     }
     const source = typeof file.content === "string" ? file.content : "";
     const template = /<template(?:\s[^>]*)?>([\s\S]*?)<\/template>/i.exec(source)?.[1];
     if (template == null) {
-      diagnostics.push(`${pluginNodePath(plugin.root, file.id).join("/")} 缺少 <template>。`);
+      diagnostics.push(`${file.path} 缺少 <template>。`);
       continue;
     }
     const name = componentName(file.name);

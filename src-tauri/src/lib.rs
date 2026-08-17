@@ -2,7 +2,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fs,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
@@ -71,14 +71,6 @@ struct ConfigRecord {
 struct DatabaseRecord {
     #[serde(rename(deserialize = "resource_key", serialize = "id"))]
     id: Option<String>,
-    value: serde_json::Value,
-}
-
-#[derive(Debug)]
-struct PluginNodeRecord {
-    resource_key: String,
-    plugin_id: String,
-    path: String,
     value: serde_json::Value,
 }
 
@@ -801,226 +793,100 @@ fn plugin_node_content_text(node: &serde_json::Value) -> String {
 fn collect_plugin_node_records(
     plugin_id: &str,
     plugin_name: &str,
-    node: &serde_json::Value,
-    parent_id: Option<&str>,
-    parent_path: &str,
-    output: &mut Vec<serde_json::Value>,
-) -> Result<(), String> {
-    let object = node
-        .as_object()
-        .ok_or_else(|| "插件树节点必须是对象".to_string())?;
-    let node_id = object
-        .get("id")
-        .and_then(serde_json::Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| "插件树节点缺少稳定 ID".to_string())?;
-    let name = object
-        .get("name")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or_default();
-    let kind = object
-        .get("kind")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("file");
-    let path = if parent_id.is_none() {
-        "/".to_string()
-    } else if parent_path.is_empty() || parent_path == "/" {
-        name.to_string()
-    } else {
-        format!("{parent_path}/{name}")
-    };
-    let content_text = plugin_node_content_text(node);
-    let search_text = format!("{path}\n{name}\n{content_text}");
-    let mut stored_node = node.clone();
-    if let Some(stored_object) = stored_node.as_object_mut() {
-        stored_object.remove("children");
-    }
-    output.push(serde_json::json!({
-        "resource_key": node_id,
-        "plugin_id": plugin_id,
-        "plugin_name": plugin_name,
-        "parent_id": parent_id,
-        "path": path,
-        "name": name,
-        "kind": kind,
-        "search_text": search_text,
-        "value": stored_node,
-    }));
-    if let Some(children) = object.get("children").and_then(serde_json::Value::as_array) {
-        for child in children {
-            collect_plugin_node_records(
-                plugin_id,
-                plugin_name,
-                child,
-                Some(node_id),
-                &path,
-                output,
-            )?;
-        }
-    }
-    Ok(())
-}
-
-fn assemble_plugin_node(
-    node_id: &str,
-    nodes: &HashMap<String, PluginNodeRecord>,
-    children: &HashMap<String, Vec<String>>,
-    visiting: &mut HashSet<String>,
-) -> Result<serde_json::Value, String> {
-    if !visiting.insert(node_id.to_string()) {
-        return Err(format!("插件树包含循环引用：{node_id}"));
-    }
-    let record = nodes
-        .get(node_id)
-        .ok_or_else(|| format!("插件树缺少节点：{node_id}"))?;
-    let mut node = record.value.clone();
-    if node.get("kind").and_then(serde_json::Value::as_str) == Some("folder") {
-        let mut child_ids = children.get(node_id).cloned().unwrap_or_default();
-        child_ids.sort_by(|left, right| {
-            let left_node = nodes.get(left).map(|item| &item.value);
-            let right_node = nodes.get(right).map(|item| &item.value);
-            let left_order = left_node
-                .and_then(|item| item.get("treeOrder"))
-                .and_then(serde_json::Value::as_i64)
-                .unwrap_or_default();
-            let right_order = right_node
-                .and_then(|item| item.get("treeOrder"))
-                .and_then(serde_json::Value::as_i64)
-                .unwrap_or_default();
-            left_order
-                .cmp(&right_order)
-                .then_with(|| {
-                    left_node
-                        .and_then(|item| item.get("name"))
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or_default()
-                        .cmp(
-                            right_node
-                                .and_then(|item| item.get("name"))
-                                .and_then(serde_json::Value::as_str)
-                                .unwrap_or_default(),
-                        )
-                })
-                .then_with(|| left.cmp(right))
-        });
-        let assembled = child_ids
-            .iter()
-            .map(|child_id| assemble_plugin_node(child_id, nodes, children, visiting))
-            .collect::<Result<Vec<_>, _>>()?;
+    nodes: &serde_json::Value,
+) -> Result<Vec<serde_json::Value>, String> {
+    let list = nodes
+        .as_array()
+        .ok_or_else(|| "插件 nodes 必须是数组".to_string())?;
+    let mut records = Vec::with_capacity(list.len());
+    let mut seen_paths = HashSet::new();
+    for node in list {
         let object = node
-            .as_object_mut()
-            .ok_or_else(|| format!("插件节点不是对象：{node_id}"))?;
-        object.insert("children".to_string(), serde_json::Value::Array(assembled));
-        object
-            .entry("collapsed".to_string())
-            .or_insert(serde_json::Value::Bool(false));
+            .as_object()
+            .ok_or_else(|| "插件节点必须是对象".to_string())?;
+        let node_id = object
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| "插件节点缺少稳定 ID".to_string())?;
+        let name = object
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default();
+        let kind = object
+            .get("kind")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("file");
+        let path = object
+            .get("path")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| format!("插件节点 {node_id} 缺少 path"))?
+            .to_string();
+        if !seen_paths.insert(path.clone()) {
+            return Err(format!("插件 {plugin_id} 包含重复路径：{path}"));
+        }
+        let content_text = plugin_node_content_text(node);
+        let search_text = format!("{path}\n{name}\n{content_text}");
+        let mut stored_node = node.clone();
+        if let Some(stored_object) = stored_node.as_object_mut() {
+            stored_object.remove("collapsed");
+        }
+        records.push(serde_json::json!({
+            "resource_key": node_id,
+            "plugin_id": plugin_id,
+            "plugin_name": plugin_name,
+            "path": path,
+            "name": name,
+            "kind": kind,
+            "search_text": search_text,
+            "value": stored_node,
+        }));
     }
-    visiting.remove(node_id);
-    Ok(node)
+    Ok(records)
 }
 
 async fn select_plugin_values(db: &Surreal<Db>) -> Result<Vec<serde_json::Value>, String> {
     let metadata = select_database_values(db, "resource_plugins").await?;
     let mut result = db
         .query(
-            "SELECT resource_key, plugin_id, path, value \
-             FROM resource_plugin_nodes ORDER BY plugin_id, resource_key",
+            "SELECT plugin_id, path, value \
+             FROM resource_plugin_nodes ORDER BY plugin_id, path",
         )
         .await
         .map_err(|error| error.to_string())?;
-    let node_values: Vec<serde_json::Value> = result
+    let node_rows: Vec<serde_json::Value> = result
         .take(0)
         .map_err(|error| format!("读取插件节点失败：{error}"))?;
-    let node_records = node_values
-        .into_iter()
-        .map(|value| {
-            let object = value
-                .as_object()
-                .ok_or_else(|| "插件节点记录不是对象".to_string())?;
-            let resource_key = object
-                .get("resource_key")
-                .and_then(serde_json::Value::as_str)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| "插件节点记录缺少 resource_key".to_string())?;
-            let plugin_id = object
-                .get("plugin_id")
-                .and_then(serde_json::Value::as_str)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| format!("插件节点 {resource_key} 缺少 plugin_id"))?;
-            let path = object
-                .get("path")
-                .and_then(serde_json::Value::as_str)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| format!("插件节点 {resource_key} 缺少 path"))?;
-            let node = object
-                .get("value")
-                .cloned()
-                .ok_or_else(|| format!("插件节点 {resource_key} 缺少 value"))?;
-            Ok(PluginNodeRecord {
-                resource_key: resource_key.to_string(),
-                plugin_id: plugin_id.to_string(),
-                path: path.to_string(),
-                value: node,
-            })
-        })
-        .collect::<Result<Vec<_>, String>>()?;
+    let mut nodes_by_plugin: std::collections::BTreeMap<String, Vec<serde_json::Value>> =
+        std::collections::BTreeMap::new();
+    for row in node_rows {
+        let object = row
+            .as_object()
+            .ok_or_else(|| "插件节点记录不是对象".to_string())?;
+        let plugin_id = object
+            .get("plugin_id")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "插件节点记录缺少 plugin_id".to_string())?
+            .to_string();
+        let node = object
+            .get("value")
+            .cloned()
+            .ok_or_else(|| "插件节点记录缺少 value".to_string())?;
+        nodes_by_plugin.entry(plugin_id).or_default().push(node);
+    }
     let mut plugins = Vec::with_capacity(metadata.len());
     for mut plugin in metadata {
         let plugin_id = plugin
             .get("id")
             .and_then(serde_json::Value::as_str)
-            .unwrap_or_default();
-        let root_id = plugin
-            .get("rootId")
-            .and_then(serde_json::Value::as_str)
-            .ok_or_else(|| format!("插件 {plugin_id} 缺少根节点 ID"))?;
-        let nodes = node_records
-            .iter()
-            .filter(|record| record.plugin_id == plugin_id)
-            .map(|record| {
-                (
-                    record.resource_key.clone(),
-                    PluginNodeRecord {
-                        resource_key: record.resource_key.clone(),
-                        plugin_id: record.plugin_id.clone(),
-                        path: record.path.clone(),
-                        value: record.value.clone(),
-                    },
-                )
-            })
-            .collect::<HashMap<_, _>>();
-        let mut ids_by_path = HashMap::new();
-        for record in nodes.values() {
-            if ids_by_path
-                .insert(record.path.clone(), record.resource_key.clone())
-                .is_some()
-            {
-                return Err(format!("插件 {plugin_id} 包含重复路径：{}", record.path));
-            }
-        }
-        let mut children: HashMap<String, Vec<String>> = HashMap::new();
-        for record in nodes.values().filter(|record| record.path != "/") {
-            let parent_path = record
-                .path
-                .rsplit_once('/')
-                .map(|(path, _)| path)
-                .filter(|path| !path.is_empty())
-                .unwrap_or("/");
-            let parent_id = ids_by_path.get(parent_path).ok_or_else(|| {
-                format!(
-                    "插件 {plugin_id} 的节点 {} 缺少父路径 {parent_path}",
-                    record.path
-                )
-            })?;
-            children
-                .entry(parent_id.clone())
-                .or_default()
-                .push(record.resource_key.clone());
-        }
-        let root = assemble_plugin_node(root_id, &nodes, &children, &mut HashSet::new())?;
+            .unwrap_or_default()
+            .to_string();
+        let nodes = nodes_by_plugin.remove(&plugin_id).unwrap_or_default();
         if let Some(object) = plugin.as_object_mut() {
             object.remove("rootId");
-            object.insert("root".to_string(), root);
+            object.insert("nodes".to_string(), serde_json::Value::Array(nodes));
         }
         plugins.push(plugin);
     }
@@ -1497,22 +1363,17 @@ async fn database_save_plugin(
         .get("name")
         .and_then(serde_json::Value::as_str)
         .unwrap_or_default();
-    let root = plugin_object
-        .get("root")
-        .ok_or_else(|| format!("插件 {plugin_id} 缺少根节点"))?;
-    let root_id = root
-        .get("id")
-        .and_then(serde_json::Value::as_str)
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| format!("插件 {plugin_id} 的根节点缺少 ID"))?;
-
     let mut metadata = plugin.clone();
     if let Some(object) = metadata.as_object_mut() {
-        object.remove("root");
-        object.insert("rootId".to_string(), serde_json::json!(root_id));
+        object.remove("nodes");
     }
-    let mut nodes = Vec::new();
-    collect_plugin_node_records(plugin_id, plugin_name, root, None, "", &mut nodes)?;
+    let nodes = collect_plugin_node_records(
+        plugin_id,
+        plugin_name,
+        plugin_object
+            .get("nodes")
+            .ok_or_else(|| format!("插件 {plugin_id} 缺少 nodes"))?,
+    )?;
 
     let db = app_db(&app, &state).await?;
     db.query(

@@ -21,11 +21,10 @@ import type {
   Conversation,
 } from "@/features/Conversation/messages/conversation-types";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
-import type {
-  Plugin,
-  PluginResource,
-  PluginFolder,
-  PluginTreeNode,
+import {
+  pluginParentPath,
+  type Plugin,
+  type PluginTreeNode,
 } from "@/features/Plugin/tree/plugin-types";
 
 export type BackupInterval = "off" | "10m" | "30m" | "1h" | "6h" | "1d" | "1w";
@@ -294,86 +293,69 @@ function mergeContainer(local: ChatMessageContainer, remote: ChatMessageContaine
   };
 }
 
-function mergePluginResource(
-  local: PluginResource,
-  remote: PluginResource,
-  names: Iterable<string>,
-) {
-  if (valuesEqual(local, remote)) {
-    return [clonePlain(local)];
-  }
-  return [
-    clonePlain(local),
-    {
-      ...clonePlain(remote),
-      id: crypto.randomUUID(),
-      name: uniqueRestoredName(remote.name, names),
-      treeOrder: Math.max(local.treeOrder ?? 0, remote.treeOrder ?? 0) + 1,
-    },
-  ];
-}
-
-function mergePluginFolder(local: PluginFolder, remote: PluginFolder): PluginFolder {
-  const children = local.children.map(clonePlain);
-  for (const remoteChild of remote.children) {
-    const index = children.findIndex((child) => child.id === remoteChild.id);
-    if (index < 0) {
-      children.push(clonePlain(remoteChild));
+function mergePluginNodes(
+  local: PluginTreeNode[],
+  remote: PluginTreeNode[],
+): PluginTreeNode[] {
+  const result = local.map(clonePlain);
+  const siblingNamesAt = (parentPath: string) =>
+    result
+      .filter((node) => pluginParentPath(node.path) === parentPath)
+      .map((node) => node.name);
+  for (const remoteNode of remote) {
+    const existing = result.find((node) => node.path === remoteNode.path);
+    if (!existing) {
+      result.push(clonePlain(remoteNode));
       continue;
     }
-    const localChild = children[index]!;
-    if (localChild.kind === "folder" && remoteChild.kind === "folder") {
-      children[index] = mergePluginFolder(localChild, remoteChild);
+    if (existing.kind !== remoteNode.kind) {
+      // Kind conflict at the same path: keep local and add a renamed copy.
+      const parentPath = pluginParentPath(remoteNode.path);
+      const name = uniqueRestoredName(
+        remoteNode.name,
+        siblingNamesAt(parentPath),
+      );
+      const path = parentPath ? `${parentPath}/${name}` : name;
+      result.push({
+        ...clonePlain(remoteNode),
+        id: crypto.randomUUID(),
+        path,
+        name,
+        treeOrder: Math.max(existing.treeOrder ?? 0, remoteNode.treeOrder ?? 0) + 1,
+      });
       continue;
     }
-    if (localChild.kind === "file" && remoteChild.kind === "file") {
-      const alreadyPreserved = children.some(
-        (child) =>
-          child.kind === "file"
+    if (existing.kind === "file" && remoteNode.kind === "file") {
+      const alreadyPreserved = result.some(
+        (node) =>
+          node.kind === "file"
+          && node.path !== remoteNode.path
           && valuesEqualWithoutKeys(
-            child as unknown as Record<string, unknown>,
-            remoteChild as unknown as Record<string, unknown>,
-            ["id", "name", "treeOrder"],
+            node as unknown as Record<string, unknown>,
+            remoteNode as unknown as Record<string, unknown>,
+            ["id", "name", "treeOrder", "path"],
           ),
       );
       if (alreadyPreserved) {
         continue;
       }
-      const merged = mergePluginResource(
-        localChild,
-        remoteChild,
-        children.map((child) => child.name),
+      const parentPath = pluginParentPath(remoteNode.path);
+      const name = uniqueRestoredName(
+        remoteNode.name,
+        siblingNamesAt(parentPath),
       );
-      children.splice(index, 1, ...merged);
-      continue;
+      const path = parentPath ? `${parentPath}/${name}` : name;
+      result.push({
+        ...clonePlain(remoteNode),
+        id: crypto.randomUUID(),
+        path,
+        name,
+        treeOrder: Math.max(existing.treeOrder ?? 0, remoteNode.treeOrder ?? 0) + 1,
+      });
     }
-    const alreadyPreserved = children.some(
-      (child) =>
-        child.kind === remoteChild.kind
-        && valuesEqualWithoutKeys(
-          child as unknown as Record<string, unknown>,
-          remoteChild as unknown as Record<string, unknown>,
-          ["id", "name", "treeOrder"],
-        ),
-    );
-    if (alreadyPreserved) {
-      continue;
-    }
-    const duplicate: PluginTreeNode = {
-      ...clonePlain(remoteChild),
-      id: crypto.randomUUID(),
-      name: uniqueRestoredName(
-        remoteChild.name,
-        children.map((child) => child.name),
-      ),
-      treeOrder: Math.max(localChild.treeOrder ?? 0, remoteChild.treeOrder ?? 0) + 1,
-    };
-    children.push(duplicate);
+    // Matching folder rows carry no content; keep the local one.
   }
-  return {
-    ...clonePlain(local),
-    children,
-  };
+  return result;
 }
 
 function mergePlugin(local: Plugin, remote: Plugin) {
@@ -383,7 +365,7 @@ function mergePlugin(local: Plugin, remote: Plugin) {
     id: local.id,
     packageId: local.packageId,
     builtIn: local.builtIn,
-    root: mergePluginFolder(local.root, remote.root),
+    nodes: mergePluginNodes(local.nodes, remote.nodes),
   };
 }
 

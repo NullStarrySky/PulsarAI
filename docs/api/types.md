@@ -2,7 +2,7 @@
 
 权限系统的公开基础类型位于 `src/features/Capabilities/domain/capability.ts`。以下代码由 VitePress 直接引用源码，不维护副本。
 
-<<< ../../src/features/Capabilities/domain/capability.ts
+
 
 ## Sandbox 位置
 

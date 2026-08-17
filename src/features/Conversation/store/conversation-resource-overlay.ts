@@ -8,9 +8,7 @@ import type {
 import type { ContextDataValue } from "@/features/Plugin/editors/chat/plugin-chat";
 import {
   findPluginTreeNode,
-  findPluginTreeParent,
   type Plugin,
-  type PluginFolder,
   type PluginTreeNode,
 } from "@/features/Plugin/tree/plugin-types";
 
@@ -58,6 +56,22 @@ export function appendConversationResourceOperations(
   };
 }
 
+function joinPath(parentPath: string, name: string) {
+  return parentPath ? `${parentPath}/${name}` : name;
+}
+
+function renumberDescendantPaths(
+  plugin: Plugin,
+  oldPrefix: string,
+  nextPath: string,
+) {
+  for (const other of plugin.nodes) {
+    if (other.path.startsWith(oldPrefix)) {
+      other.path = `${nextPath}${other.path.slice(oldPrefix.length - 1)}`;
+    }
+  }
+}
+
 export function applyConversationResourceOperation(
   overlay: ConversationResourceOverlay,
   operation: ConversationResourceOperation,
@@ -68,53 +82,85 @@ export function applyConversationResourceOperation(
   }
   if (operation.type === "create") {
     const plugin = requirePlugin(overlay.plugins, operation.pluginId);
-    const parent = requireFolder(plugin, operation.parentId);
-    if (findPluginTreeNode(plugin.root, operation.node.id)) {
+    if (findPluginTreeNode(plugin, operation.node.id)) {
       throw new Error(`资源覆盖创建冲突：${operation.pluginId}/${operation.node.id}`);
     }
-    parent.children.push(snapshotToNode(operation.node));
+    const node = snapshotToNode(operation.node);
+    if (plugin.nodes.some((candidate) => candidate.path === node.path)) {
+      throw new Error(`资源覆盖路径冲突：${operation.pluginId}/${node.path}`);
+    }
+    plugin.nodes.push(node);
     return;
   }
   if (operation.type === "move") {
     const sourcePlugin = requirePlugin(overlay.plugins, operation.pluginId);
-    const sourceParent = findPluginTreeParent(sourcePlugin.root, operation.resourceId);
-    const node = findPluginTreeNode(sourcePlugin.root, operation.resourceId);
-    if (!sourceParent || !node || node.id === sourcePlugin.root.id) {
+    const node = findPluginTreeNode(sourcePlugin, operation.resourceId);
+    if (!node) {
       throw new Error(`资源覆盖移动源不存在：${operation.pluginId}/${operation.resourceId}`);
     }
     const targetPlugin = requirePlugin(overlay.plugins, operation.targetPluginId);
-    const targetParent = requireFolder(targetPlugin, operation.parentId);
+    const nextPath = joinPath(operation.targetParentPath, operation.name);
     if (
       node.kind === "folder"
-      && findPluginTreeNode(node, targetParent.id)
+      && (operation.targetParentPath === node.path
+        || operation.targetParentPath.startsWith(`${node.path}/`))
     ) {
       throw new Error("资源覆盖不能把文件夹移动到自身或其后代中。");
     }
-    sourceParent.children.splice(sourceParent.children.findIndex((item) => item.id === node.id), 1);
+    if (
+      targetPlugin.nodes.some(
+        (candidate) => candidate.path === nextPath && candidate.id !== node.id,
+      )
+    ) {
+      throw new Error(`资源覆盖路径冲突：${operation.targetPluginId}/${nextPath}`);
+    }
+    const oldPrefix = `${node.path}/`;
     node.name = operation.name;
-    targetParent.children.push(node);
+    if (sourcePlugin === targetPlugin) {
+      node.path = nextPath;
+      if (node.kind === "folder") {
+        renumberDescendantPaths(targetPlugin, oldPrefix, nextPath);
+      }
+      return;
+    }
+    const descendants = sourcePlugin.nodes.filter(
+      (candidate) => candidate.path.startsWith(oldPrefix),
+    );
+    sourcePlugin.nodes = sourcePlugin.nodes.filter(
+      (candidate) => candidate.id !== node.id && !candidate.path.startsWith(oldPrefix),
+    );
+    node.path = nextPath;
+    for (const descendant of descendants) {
+      descendant.path = `${nextPath}${descendant.path.slice(oldPrefix.length - 1)}`;
+    }
+    targetPlugin.nodes.push(node, ...descendants);
     return;
   }
   if (operation.type === "remove") {
     const plugin = requirePlugin(overlay.plugins, operation.target.pluginId);
-    const parent = findPluginTreeParent(plugin.root, operation.target.resourceId);
-    if (!parent) throw new Error(`资源覆盖删除目标不存在：${operation.target.resourceId}`);
-    parent.children.splice(parent.children.findIndex((item) => item.id === operation.target.resourceId), 1);
+    const node = findPluginTreeNode(plugin, operation.target.resourceId);
+    if (!node) throw new Error(`资源覆盖删除目标不存在：${operation.target.resourceId}`);
+    const prefix = `${node.path}/`;
+    plugin.nodes = plugin.nodes.filter(
+      (candidate) => candidate.id !== node.id && !candidate.path.startsWith(prefix),
+    );
     return;
   }
   if (operation.type === "edit" && operation.target.kind === "plugin-node") {
     const plugin = requirePlugin(overlay.plugins, operation.target.pluginId);
-    const node = findPluginTreeNode(plugin.root, operation.target.resourceId);
+    const node = findPluginTreeNode(plugin, operation.target.resourceId);
     if (!node) throw new Error(`资源覆盖替换目标不存在：${operation.target.resourceId}`);
     const next = snapshotToNode(operation.value as ConversationResourceNodeSnapshot);
     if (node.kind !== next.kind) throw new Error("资源覆盖不能改变节点类型。");
+    const previousPath = node.path;
     Object.assign(node, next);
+    if (node.kind === "folder" && previousPath !== node.path) {
+      renumberDescendantPaths(plugin, `${previousPath}/`, node.path);
+    }
   }
 }
 
-export function pluginNodeSnapshot(node: PluginTreeNode): ConversationResourceNodeSnapshot {
-  return safeClone(node) as ConversationResourceNodeSnapshot;
-}
+
 
 function requirePlugin(plugins: Plugin[], pluginId: string) {
   const plugin = plugins.find((item) => item.id === pluginId);
@@ -122,27 +168,20 @@ function requirePlugin(plugins: Plugin[], pluginId: string) {
   return plugin;
 }
 
-function requireFolder(plugin: Plugin, resourceId: string): PluginFolder {
-  const node = findPluginTreeNode(plugin.root, resourceId);
-  if (!node || node.kind !== "folder") {
-    throw new Error(`资源覆盖父文件夹不存在：${plugin.id}/${resourceId}`);
-  }
-  return node;
-}
-
 function snapshotToNode(snapshot: ConversationResourceNodeSnapshot): PluginTreeNode {
   if (snapshot.kind === "folder") {
     return {
       id: snapshot.id,
+      path: snapshot.path,
       name: snapshot.name,
       icon: snapshot.icon,
       treeOrder: snapshot.treeOrder,
       kind: "folder",
-      children: (snapshot.children ?? []).map(snapshotToNode),
     };
   }
   return {
     id: snapshot.id,
+    path: snapshot.path,
     name: snapshot.name,
     icon: snapshot.icon,
     treeOrder: snapshot.treeOrder,
@@ -159,7 +198,7 @@ function cloneJsonValue(value: unknown): ContextDataValue {
   return cloned as ContextDataValue;
 }
 
-export function assertJsonValue(value: unknown, path = "value"): void {
+function assertJsonValue(value: unknown, path = "value"): void {
   if (
     value === null
     || typeof value === "string"

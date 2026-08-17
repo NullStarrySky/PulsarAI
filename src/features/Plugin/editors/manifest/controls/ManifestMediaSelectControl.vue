@@ -10,9 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  flattenPluginFiles,
   pluginFileType,
-  pluginNodePath,
+  pluginFiles,
   type Plugin,
 } from "@/features/Plugin/tree/plugin-types";
 
@@ -28,13 +27,13 @@ const emit = defineEmits<{
 }>();
 
 const groups = computed(() => props.plugins.flatMap((plugin) => {
-  const options = flattenPluginFiles(plugin.root).flatMap((file) =>
+  const options = pluginFiles(plugin).flatMap((file) =>
     pluginFileType(file.name) === "media"
       ? [{
-          label: pluginNodePath(plugin.root, file.id).join("/"),
+          label: file.path,
           value: JSON.stringify({
             pluginId: plugin.id,
-            path: pluginNodePath(plugin.root, file.id).join("/"),
+            path: file.path,
           }),
         }]
       : []

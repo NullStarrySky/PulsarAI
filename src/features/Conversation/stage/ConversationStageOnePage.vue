@@ -1,17 +1,18 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
-import { onPluginConfigChange } from "@/features/Plugin/editors/manifest/plugin-config-events";
 import type { Plugin, PluginFile } from "@/features/Plugin/tree/plugin-types";
-import PluginAssetTreePanel from "@/features/Plugin/PluginAssetTreePanel.vue";
-import PluginFileEditorDialog from "@/features/Plugin/PluginFileEditorDialog.vue";
-import PluginManagerPanel from "@/features/Plugin/tree/PluginManagerPanel.vue";
+import PluginAssetTreePanel from "@/features/Plugin/tree/PluginAssetTreePanel.vue";
+import PluginFileEditorDialog from "@/features/Plugin/tree/PluginFileEditorDialog.vue";
+import PluginManagerPanel from "@/features/Plugin/PluginManagerPanel.vue";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
-import ConversationStageHeader from "@/features/Conversation/stage/ConversationStageHeader.vue";
+import ConversationStageHeader from "@/features/Conversation/header/ConversationStageHeader.vue";
 import ConversationStageThread from "@/features/Conversation/stage/ConversationStageThread.vue";
-import ConversationStageComposer from "@/features/Conversation/stage/ConversationStageComposer.vue";
+import ConversationStageComposer from "@/features/Conversation/composer/ConversationStageComposer.vue";
 import { pluginMediaSource, pluginMediaType } from "@/features/Plugin/editors/media/plugin-media";
+
+import { useContainerStore } from "@/features/Plugin/tree/container-store";
 
 interface SelectedPluginFile {
   plugin: Plugin;
@@ -21,6 +22,7 @@ interface SelectedPluginFile {
 
 const conversation = useConversationStore();
 const plugin = usePluginStore();
+const containerStore = useContainerStore();
 const appearance = useAppearanceStore();
 const assetPanelPluginId = ref<string | null>(null);
 const assetPanelOpen = computed({
@@ -38,16 +40,8 @@ const fileEditorOpen = computed({
 });
 const activeEditor = computed(() => plugin.activeEditorState);
 const initializationError = ref("");
-const backgroundRevision = ref(0);
 const backgroundReady = computed(() => conversation.loaded && plugin.loaded);
-const activeBackground = computed(() => {
-  backgroundRevision.value;
-  return plugin.activeBackgroundResourceForPackage(
-    conversation.activePackageId,
-    conversation.activePackage?.enabledGlobalPluginIds,
-    conversation.activePackage?.mainPluginId,
-  );
-});
+const activeBackground = computed(() => containerStore.activeBackgroundResource);
 const activeBackgroundSource = computed(() => pluginMediaSource(activeBackground.value?.content));
 const activeBackgroundType = computed(() => pluginMediaType(
   activeBackground.value?.content,
@@ -67,18 +61,6 @@ onMounted(async () => {
     initializationError.value = error instanceof Error ? error.message : "资源数据库初始化失败";
   }
 });
-
-const stopBackgroundConfigListener = onPluginConfigChange((change) => {
-  if (
-    change.pluginId === "builtin-core-plugin"
-    && change.groupId === "appearance"
-    && change.contentId === "background"
-  ) {
-    backgroundRevision.value += 1;
-  }
-});
-
-onBeforeUnmount(stopBackgroundConfigListener);
 
 function openPluginFile(value: SelectedPluginFile) {
   plugin.openFileEditor(value.plugin, value.file, value.path);

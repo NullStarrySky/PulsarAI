@@ -15,7 +15,7 @@ export interface CodeActFailure {
 
 export type CodeActResult = CodeActSuccess | CodeActFailure;
 
-export function validateCodeActFunction(source: string) {
+function validateCodeActFunction(source: string) {
   const code = source.trim();
   const isFunction =
     /^(async\s+)?function(?:\s+[A-Za-z_$][\w$]*)?\s*\([^)]*\)\s*\{[\s\S]*\}\s*$/.test(
@@ -87,7 +87,7 @@ function normalizeCodeActValue(
   );
 }
 
-export function maskCodeActLiteralsAndComments(source: string) {
+function maskCodeActLiteralsAndComments(source: string) {
   let result = "";
   let index = 0;
   let mode: "code" | "line" | "block" | "single" | "double" | "template" =

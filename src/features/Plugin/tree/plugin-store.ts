@@ -1,5 +1,19 @@
-import { defineStore } from "pinia";
 import { isTauri } from "@tauri-apps/api/core";
+import { defineStore } from "pinia";
+import {
+  type PluginManifestValue,
+  parsePluginManifest,
+  pluginManifestFixedValue,
+  setManifestValue,
+  setPluginManifestFixedValue,
+} from "@/features/Plugin/editors/manifest/plugin-manifest";
+import { createBuiltinPlugins } from "@/features/Plugin/tree/builtin-plugins";
+import {
+  type PluginContainerDeclaration,
+  parsePluginContainerDefinitions,
+  useContainerStore,
+} from "@/features/Plugin/tree/container-store";
+import { backgroundPathSelectionOptions } from "@/features/Plugin/tree/plugin-path-selection";
 import {
   deletePersistedPlugin,
   loadPersistedPlugins,
@@ -8,39 +22,24 @@ import {
 } from "@/features/Plugin/tree/plugin-persistence";
 import {
   findPluginNodeByPath,
-  findPluginChildByName,
   findPluginTreeNode,
-  findPluginTreeParent,
-  flattenPluginFiles,
-  pluginConventions,
-  pluginFileType,
-  sortPluginTreeNodes,
   type Plugin,
   type PluginFile,
   type PluginFolder,
+  type PluginNodeBase,
   type PluginTreeNode,
-  type PluginTreeNodeBase,
+  pluginChildNodes,
+  pluginConventions,
+  pluginFiles,
+  pluginFileType,
+  pluginParentPath,
   type ResolvedPluginAction,
+  sortPluginTreeNodes,
 } from "@/features/Plugin/tree/plugin-types";
-import {
-  parsePluginContainerDefinitions,
-  type PluginContainerDeclaration,
-} from "@/features/Plugin/runtime/plugin-reference";
-import {
-  manifestValueAt,
-  pluginManifestFixedValue,
-  parsePluginManifest,
-  setManifestValue,
-  setPluginManifestFixedValue,
-  type PluginManifestValue,
-} from "@/features/Plugin/editors/manifest/plugin-manifest";
-import { createBuiltinPlugins } from "@/features/Plugin/tree/builtin-plugins";
-import { emitPluginConfigChange } from "@/features/Plugin/editors/manifest/plugin-config-events";
-import { createPluginReferenceResolver } from "@/features/Plugin/runtime/plugin-reference-resolver";
-import { backgroundPathSelectionOptions } from "@/features/Plugin/tree/plugin-path-selection";
 
 export const builtinCorePluginId = "builtin-core-plugin";
 export const builtinBlankPluginId = "builtin-blank-plugin";
+export const builtinDefaultPluginId = "builtin-default-plugin";
 const obsoleteBuiltinManifestFields = new Set(["generation/reasoningEffort"]);
 let initializePromise: Promise<void> | null = null;
 
@@ -59,28 +58,24 @@ function clonePlain<T>(value: T): T {
   }
 }
 
-function createNodeBase(
-  name: string,
-  input: Partial<PluginTreeNodeBase> = {},
-): PluginTreeNodeBase {
-  return {
-    id: input.id ?? crypto.randomUUID(),
-    name,
-    icon: input.icon ?? "",
-    treeOrder: input.treeOrder ?? 0,
-  };
+function joinPluginPath(parentPath: string, name: string) {
+  return parentPath ? `${parentPath}/${name}` : name;
 }
 
-function createFile(
-  name: string,
+function createFileNode(
+  path: string,
   content: unknown = "",
-  input: Partial<PluginTreeNodeBase> & {
+  input: Partial<PluginNodeBase> & {
     order?: number;
     insertion?: PluginFile["insertion"];
   } = {},
 ): PluginFile {
   return {
-    ...createNodeBase(name, input),
+    id: input.id ?? crypto.randomUUID(),
+    path,
+    name: path.slice(path.lastIndexOf("/") + 1),
+    icon: input.icon ?? "",
+    treeOrder: input.treeOrder ?? 0,
     kind: "file",
     order: input.order ?? 100,
     ...(input.insertion ? { insertion: clonePlain(input.insertion) } : {}),
@@ -88,138 +83,144 @@ function createFile(
   };
 }
 
-function createFolder(
-  name: string,
-  children: PluginTreeNode[] = [],
-  input: Partial<PluginTreeNodeBase> = {},
+function createFolderNode(
+  path: string,
+  input: Partial<PluginNodeBase> = {},
 ): PluginFolder {
   return {
-    ...createNodeBase(name, input),
+    id: input.id ?? crypto.randomUUID(),
+    path,
+    name: path.slice(path.lastIndexOf("/") + 1),
+    icon: input.icon ?? "",
+    treeOrder: input.treeOrder ?? 0,
     kind: "folder",
-    children,
     collapsed: false,
   };
 }
 
-function createStarterRoot(): PluginFolder {
-  return createFolder(
-    "/",
-    [
-      createFile(
-        pluginConventions.manifest,
-        [
-          {
-            group: { id: "runtime", title: "运行" },
-            content: [
-              {
-                id: "generatePath",
-                title: "生成流程",
-                description: "主插件执行的 JavaScript 文件路径。",
-                component: "Input",
-                value: "generate.js",
+function ensureParentFolders(
+  plugin: Plugin,
+  parentPath: string,
+): PluginFolder | null {
+  const normalized = parentPath.trim().replace(/^\/+|\/+$/g, "");
+  if (!normalized) return null;
+  const segments = normalized.split("/").filter(Boolean);
+  let currentPath = "";
+  let lastFolder: PluginFolder | null = null;
+  for (const segment of segments) {
+    currentPath = currentPath ? `${currentPath}/${segment}` : segment;
+    let existing = findPluginNodeByPath(plugin, currentPath);
+    if (!existing) {
+      const parentOfCurrent = pluginParentPath(currentPath);
+      const siblings = pluginChildNodes(plugin, parentOfCurrent);
+      existing = createFolderNode(currentPath, {
+        treeOrder:
+          Math.max(-1, ...siblings.map((child) => child.treeOrder ?? -1)) + 1,
+      });
+      plugin.nodes.push(existing);
+    } else if (existing.kind !== "folder") {
+      return null;
+    }
+    lastFolder = existing as PluginFolder;
+  }
+  return lastFolder;
+}
+
+function createStarterNodes(): PluginTreeNode[] {
+  return [
+    createFileNode(
+      pluginConventions.manifest,
+      [
+        {
+          group: { id: "generation", title: "生成" },
+          content: [
+            {
+              id: "model",
+              title: "模型",
+              description: "留空时继承全局默认模型；引用可附带思考强度。",
+              component: "ModelSelect",
+              value: null,
+            },
+          ],
+        },
+        {
+          group: { id: "appearance", title: "外观" },
+          content: [
+            {
+              id: "background",
+              title: "会话背景",
+              description: "从 background 容器选择扩展名无关的路径 ID。",
+              component: "PathSelect",
+              props: {
+                allowEmpty: true,
+                containerId: "background",
+                pathRegex:
+                  "^background/.+\\.(?:png|jpe?g|gif|webp|avif|svg|mp4|webm)$",
               },
-            ],
-          },
-          {
-            group: { id: "generation", title: "生成" },
-            content: [
-              {
-                id: "model",
-                title: "模型",
-                description: "留空时继承全局默认模型；引用可附带思考强度。",
-                component: "ModelSelect",
-                value: null,
-              },
-            ],
-          },
-          {
-            group: { id: "appearance", title: "外观" },
-            content: [
-              {
-                id: "background",
-                title: "会话背景",
-                description: "从 background 容器选择扩展名无关的路径 ID。",
-                component: "PathSelect",
-                props: {
-                  allowEmpty: true,
-                  containerId: "background",
-                  pathRegex:
-                    "^background/.+\\.(?:png|jpe?g|gif|webp|avif|svg|mp4|webm)$",
-                },
-                value: "background/classroom",
-              },
-            ],
-          },
-        ],
-        { treeOrder: 0 },
-      ),
-      createContainerDefinitionsFile(
-        [
-          {
-            id: "context",
-            title: "会话上下文",
-            scope: "local",
-            description: "角色设定与会话生成所需的共享上下文。",
-            contentSuffixes: ["md", "chat.json"],
-          },
-          {
-            id: "Skill",
-            title: "Skill",
-            scope: "local",
-            description: "按名称按需读取的能力说明与操作指南。",
-            contentSuffixes: ["md"],
-          },
-        ],
-        { treeOrder: 2 },
-      ),
-      createFile(pluginConventions.regex, [], {
-        treeOrder: 3,
-        insertion: { target: "REGEX" },
-      }),
-      createFile("default.chat.json", createDefaultContextDocument(), {
-        treeOrder: 4,
-      }),
-      createFolder(
-        "instruction",
-        [
-          createFile(
-            "default.md",
-            [
-              "You are Pulsar's conversation agent.",
-              "Use the single codeAct tool for API work and keep the final answer grounded in the referenced context.",
-              "Every codeAct call must be one function with an explicit return.",
-              "Read the custom tool documentation block and call plugin functions through ctx.tools when relevant.",
-              "Inspect pure Plugin containers through ctx.containers and keep selection, transformation, and templates in explicit resources.",
-              "When a real user decision is required, call agent.askUser(...) or api.askUser(...) inside codeAct and continue from its result.",
-            ].join("\n"),
-            { treeOrder: 0 },
-          ),
-        ],
-        { treeOrder: 5 },
-      ),
-      createFile("generate.js", createDefaultGenerateSource(), {
-        treeOrder: 6,
-      }),
-      createFolder(pluginConventions.componentsFolder, [], { treeOrder: 7 }),
-      createFolder(pluginConventions.backgroundFolder, [], { treeOrder: 8 }),
-      createFolder(pluginConventions.cacheFolder, [], { treeOrder: 8.5 }),
-      createFolder(pluginConventions.tempFolder, [], { treeOrder: 8.6 }),
-      createFolder(pluginConventions.skillFolder, [], { treeOrder: 8.7 }),
-      createFolder(
-        "character",
-        [
-          createFile("default.md", "保持清晰、可靠，并尊重当前对话上下文。", {
-            treeOrder: 0,
-            insertion: { target: "context" },
-          }),
-        ],
-        { treeOrder: 9 },
-      ),
-      createFolder(pluginConventions.toolsFolder, [], { treeOrder: 10 }),
-      createFolder(pluginConventions.actionFolder, [], { treeOrder: 11 }),
-    ],
-    { id: crypto.randomUUID() },
-  );
+              value: "background/classroom",
+            },
+          ],
+        },
+      ],
+      { treeOrder: 0 },
+    ),
+    createContainerDefinitionsNode(
+      [
+        {
+          id: "generatePath",
+          title: "生成入口",
+          scope: "global",
+          description: "注册生成流程入口脚本。",
+          contentSuffixes: ["js"],
+          selectionMode: "single",
+          overrideStrategy: "override",
+        },
+        {
+          id: "context",
+          title: "会话上下文",
+          scope: "local",
+          description: "角色设定与会话生成所需的共享上下文。",
+          contentSuffixes: ["md", "chat.json"],
+        },
+      ],
+      { treeOrder: 2 },
+    ),
+    createFileNode(pluginConventions.regex, [], {
+      treeOrder: 3,
+      insertion: { target: "REGEX" },
+    }),
+    createFileNode("default.chat.json", createDefaultContextDocument(), {
+      treeOrder: 4,
+    }),
+    createFileNode(
+      "instruction/default.md",
+      [
+        "You are Pulsar's conversation agent.",
+        "Use the single codeAct tool for API work and keep the final answer grounded in the referenced context.",
+        "Every codeAct call must be one function with an explicit return.",
+        "Inspect pure Plugin containers through ctx.containers and keep selection, transformation, and templates in explicit resources.",
+        "When a real user decision is required, call agent.askUser(...) or api.askUser(...) inside codeAct and continue from its result.",
+      ].join("\n"),
+      { treeOrder: 0 },
+    ),
+    createFileNode("generate.js", createDefaultGenerateSource(), {
+      treeOrder: 6,
+      insertion: { target: "generatePath" },
+    }),
+    createFileNode(
+      "character/default.md",
+      "保持清晰、可靠，并尊重当前对话上下文。",
+      { treeOrder: 0, insertion: { target: "context" } },
+    ),
+    createFolderNode(pluginConventions.componentsFolder, { treeOrder: 7 }),
+    createFolderNode(pluginConventions.backgroundFolder, { treeOrder: 8 }),
+    createFolderNode(pluginConventions.cacheFolder, { treeOrder: 8.5 }),
+    createFolderNode(pluginConventions.tempFolder, { treeOrder: 8.6 }),
+    createFolderNode("character", { treeOrder: 9 }),
+    createFolderNode("instruction", { treeOrder: 5 }),
+    createFolderNode(pluginConventions.toolsFolder, { treeOrder: 10 }),
+    createFolderNode(pluginConventions.actionFolder, { treeOrder: 11 }),
+  ];
 }
 
 function createDefaultContextDocument() {
@@ -236,11 +237,11 @@ function createDefaultGenerateSource() {
   ].join("\n");
 }
 
-function createContainerDefinitionsFile(
+function createContainerDefinitionsNode(
   containers: PluginContainerDeclaration[] = [],
-  input: Partial<PluginTreeNodeBase> = {},
+  input: Partial<PluginNodeBase> = {},
 ) {
-  return createFile(
+  return createFileNode(
     pluginConventions.containers,
     { containers: structuredClone(containers) },
     input,
@@ -264,12 +265,49 @@ function assertPluginId(id: string) {
   }
 }
 
+export function isVisiblePlugin(plugin: Plugin): boolean {
+  return !(plugin as any).hidden && plugin.id !== builtinDefaultPluginId;
+}
+
+function cloneStarterNodes(nodes: PluginTreeNode[]): PluginTreeNode[] {
+  return nodes.map((node) => {
+    if (node.kind === "folder") {
+      return {
+        id: crypto.randomUUID(),
+        path: node.path,
+        name: node.name,
+        icon: node.icon,
+        treeOrder: node.treeOrder,
+        kind: "folder",
+        collapsed: node.collapsed,
+      };
+    }
+    return {
+      id: crypto.randomUUID(),
+      path: node.path,
+      name: node.name,
+      icon: node.icon,
+      treeOrder: node.treeOrder,
+      kind: "file",
+      content: structuredClone(node.content),
+      order: node.order,
+      ...(node.insertion ? { insertion: structuredClone(node.insertion) } : {}),
+    };
+  });
+}
+
 function createStarterPlugin(
   packageId: string | null,
   global = false,
   existingPlugins: Plugin[] = [],
 ): Plugin {
   const name = global ? "新全局插件" : "新插件";
+  const defaultTemplate =
+    existingPlugins.find((item) => item.id === builtinDefaultPluginId) ??
+    createBuiltinPlugins().find((item) => item.id === builtinDefaultPluginId);
+  const starterNodes = defaultTemplate
+    ? cloneStarterNodes(defaultTemplate.nodes)
+    : createStarterNodes();
   return {
     id: availablePluginId(
       existingPlugins,
@@ -279,7 +317,7 @@ function createStarterPlugin(
     name,
     icon: "",
     shortDescription: "",
-    root: createStarterRoot(),
+    nodes: starterNodes,
     enabled: true,
     builtIn: false,
   };
@@ -289,12 +327,14 @@ function comparePlugins(a: Plugin, b: Plugin) {
   return a.name.localeCompare(b.name, "zh-Hans") || a.id.localeCompare(b.id);
 }
 
+function manifestNode(plugin: Plugin) {
+  const node = findPluginNodeByPath(plugin, pluginConventions.manifest);
+  return node?.kind === "file" ? node : null;
+}
+
 function configuredBackground(plugin: Plugin) {
-  const manifest = findPluginNodeByPath(
-    plugin.root,
-    pluginConventions.manifest,
-  );
-  if (manifest?.kind !== "file") return null;
+  const manifest = manifestNode(plugin);
+  if (!manifest) return null;
   const parsed = parsePluginManifest(manifest.content);
   let value: unknown;
   try {
@@ -306,11 +346,8 @@ function configuredBackground(plugin: Plugin) {
 }
 
 function clearConfiguredBackground(plugin: Plugin) {
-  const manifest = findPluginNodeByPath(
-    plugin.root,
-    pluginConventions.manifest,
-  );
-  if (manifest?.kind !== "file") return false;
+  const manifest = manifestNode(plugin);
+  if (!manifest) return false;
   const parsed = parsePluginManifest(manifest.content);
   try {
     setPluginManifestFixedValue(parsed.manifest, "background", null);
@@ -321,41 +358,42 @@ function clearConfiguredBackground(plugin: Plugin) {
   }
 }
 
-function normalizeTreeNode(
-  value: unknown,
-  treeOrder = 0,
-): PluginTreeNode | null {
+function normalizePluginNode(value: unknown): PluginTreeNode | null {
   if (!value || typeof value !== "object") return null;
   const source = value as Partial<PluginTreeNode> & {
-    children?: unknown;
-    content?: unknown;
     insertion?: unknown;
     order?: unknown;
   };
-  const name =
+  const rawPath = typeof source.path === "string" ? source.path.trim() : "";
+  const rawName =
     typeof source.name === "string" && source.name.trim()
       ? source.name.trim()
-      : source.kind === "folder"
-        ? "新文件夹"
-        : "untitled.md";
-  const base = createNodeBase(name, {
-    id: typeof source.id === "string" ? source.id : crypto.randomUUID(),
+      : rawPath.slice(rawPath.lastIndexOf("/") + 1);
+  if (!rawPath || !rawName) return null;
+  const path = rawPath
+    .split("/")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join("/");
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const base = {
+    id:
+      typeof source.id === "string" && source.id
+        ? source.id
+        : crypto.randomUUID(),
+    path,
+    name,
     icon: typeof source.icon === "string" ? source.icon : "",
     treeOrder:
-      typeof source.treeOrder === "number" ? source.treeOrder : treeOrder,
-  });
+      typeof source.treeOrder === "number" && Number.isFinite(source.treeOrder)
+        ? source.treeOrder
+        : 0,
+  };
 
   if (source.kind === "folder") {
-    const children = Array.isArray(source.children)
-      ? source.children.flatMap((child, index) => {
-          const normalized = normalizeTreeNode(child, index);
-          return normalized ? [normalized] : [];
-        })
-      : [];
     return {
       ...base,
       kind: "folder",
-      children,
       collapsed: source.collapsed === true,
     };
   }
@@ -407,16 +445,23 @@ function isPluginRecord(value: unknown): value is Plugin {
   return (
     typeof source.id === "string" &&
     typeof source.name === "string" &&
-    source.root?.kind === "folder" &&
-    Array.isArray(source.root.children)
+    Array.isArray(source.nodes)
   );
 }
 
 function normalizePlugin(value: Plugin): Plugin {
-  const root = normalizeTreeNode(value.root);
-  if (!root || root.kind !== "folder") {
+  const seenPaths = new Set<string>();
+  const nodes: PluginTreeNode[] = [];
+  for (const raw of value.nodes) {
+    const node = normalizePluginNode(raw);
+    if (!node || seenPaths.has(node.path)) continue;
+    seenPaths.add(node.path);
+    nodes.push(node);
+  }
+  if (!nodes.length) {
     throw new Error("插件根目录无效");
   }
+  nodes.sort((left, right) => left.path.localeCompare(right.path));
   return {
     id: value.id,
     packageId: value.packageId ?? null,
@@ -424,7 +469,7 @@ function normalizePlugin(value: Plugin): Plugin {
     icon: typeof value.icon === "string" ? value.icon : "",
     shortDescription:
       typeof value.shortDescription === "string" ? value.shortDescription : "",
-    root,
+    nodes,
     enabled: value.enabled !== false,
     builtIn: value.builtIn === true,
   };
@@ -622,11 +667,8 @@ function mergeBuiltinManifest(source: unknown, persisted: unknown) {
 
 function removeObsoleteBuiltinManifestFields(plugin: Plugin) {
   if (!plugin.builtIn) return false;
-  const manifest = findPluginNodeByPath(
-    plugin.root,
-    pluginConventions.manifest,
-  );
-  if (manifest?.kind !== "file") return false;
+  const manifest = manifestNode(plugin);
+  if (!manifest) return false;
   const parsed = parsePluginManifest(manifest.content);
   let changed = false;
   for (const group of parsed.manifest) {
@@ -642,76 +684,61 @@ function removeObsoleteBuiltinManifestFields(plugin: Plugin) {
 }
 
 function mergeBuiltinPlugin(bundled: Plugin, persisted: Plugin): Plugin {
-  const mergeNode = (
-    source: PluginTreeNode,
-    saved?: PluginTreeNode,
-  ): PluginTreeNode => {
-    if (!saved || saved.kind !== source.kind) return clonePlain(source);
-    if (source.kind === "folder" && saved.kind === "folder") {
-      const savedByName = new Map(
-        saved.children.map((item) => [item.name, item]),
-      );
-      const sourceNames = new Set(source.children.map((item) => item.name));
-      return {
-        ...clonePlain(source),
-        ...clonePlain(saved),
-        children: [
-          ...source.children.map((item) =>
-            mergeNode(item, savedByName.get(item.name)),
-          ),
-          ...saved.children
-            .filter((item) => !sourceNames.has(item.name))
-            .map((item) => clonePlain(item)),
-        ],
-      };
-    }
-    if (source.kind === "file" && saved.kind === "file") {
-      let content = clonePlain(saved.content);
-      if (source.name === pluginConventions.containers) {
-        content = mergeBuiltinContainerDefinitions(
-          source.content,
-          saved.content,
-        );
-      } else if (source.name === pluginConventions.manifest) {
-        content = mergeBuiltinManifest(source.content, saved.content);
-      } else if (
-        source.name === "default.chat.json" &&
-        isLegacyBuiltinDefaultChat(saved.content)
-      ) {
-        content = clonePlain(source.content);
-      } else if (
-        source.name === "process.js" &&
-        isKnownInvalidBuiltinProcessScript(saved.content)
-      ) {
-        content = clonePlain(source.content);
-      } else if (pluginFileType(source.name) === "media") {
-        content = clonePlain(source.content);
+  const savedByPath = new Map(persisted.nodes.map((node) => [node.path, node]));
+  const bundledPaths = new Set(bundled.nodes.map((node) => node.path));
+  const nodes: PluginTreeNode[] = [
+    ...bundled.nodes.map((node) => {
+      const saved = savedByPath.get(node.path);
+      if (!saved || saved.kind !== node.kind) return clonePlain(node);
+      if (node.kind === "file" && saved.kind === "file") {
+        let content = clonePlain(saved.content);
+        if (node.path === pluginConventions.containers) {
+          content = mergeBuiltinContainerDefinitions(
+            node.content,
+            saved.content,
+          );
+        } else if (node.path === pluginConventions.manifest) {
+          content = mergeBuiltinManifest(node.content, saved.content);
+        } else if (
+          node.path === "default.chat.json" &&
+          isLegacyBuiltinDefaultChat(saved.content)
+        ) {
+          content = clonePlain(node.content);
+        } else if (
+          node.path === "action/process.js" &&
+          isKnownInvalidBuiltinProcessScript(saved.content)
+        ) {
+          content = clonePlain(node.content);
+        } else if (pluginFileType(node.name) === "media") {
+          content = clonePlain(node.content);
+        }
+        return { ...clonePlain(node), ...clonePlain(saved), content };
       }
-      return { ...clonePlain(source), ...clonePlain(saved), content };
-    }
-    return clonePlain(source);
-  };
-  const root = mergeNode(bundled.root, persisted.root);
-  if (root.kind !== "folder") return bundled;
+      return { ...clonePlain(node), ...clonePlain(saved) };
+    }),
+    ...persisted.nodes
+      .filter((node) => !bundledPaths.has(node.path))
+      .map((node) => clonePlain(node)),
+  ];
   return {
     ...clonePlain(bundled),
     ...clonePlain(persisted),
     id: bundled.id,
     packageId: null,
     builtIn: true,
-    root,
+    nodes,
   };
 }
 
 function removeCancelledOverride(plugin: Plugin) {
-  const before = plugin.root.children.length;
-  plugin.root.children = plugin.root.children.filter(
-    (node) => node.name.trim().toLocaleLowerCase() !== "override.vue",
+  const before = plugin.nodes.length;
+  plugin.nodes = plugin.nodes.filter(
+    (node) => node.path.trim().toLocaleLowerCase() !== "override.vue",
   );
-  let changed = plugin.root.children.length !== before;
+  let changed = plugin.nodes.length !== before;
   if (plugin.builtIn) {
     const containers = findPluginNodeByPath(
-      plugin.root,
+      plugin,
       pluginConventions.containers,
     );
     if (
@@ -737,14 +764,15 @@ function removeCancelledOverride(plugin: Plugin) {
   return changed;
 }
 
-function isFixedConventionNode(plugin: Plugin, nodeId: string) {
-  return [
+function isFixedConventionPath(path: string) {
+  const fixed: string[] = [
     pluginConventions.manifest,
     pluginConventions.containers,
     pluginConventions.regex,
     pluginConventions.componentsFolder,
     pluginConventions.toolsFolder,
-  ].some((path) => findPluginNodeByPath(plugin.root, path)?.id === nodeId);
+  ];
+  return fixed.includes(path);
 }
 
 function normalizeImportedGlobalPlugin(value: unknown): Plugin {
@@ -761,15 +789,36 @@ function normalizeImportedGlobalPlugin(value: unknown): Plugin {
 }
 
 function pluginNamespaceNames(plugin: Plugin) {
-  const tools = findPluginNodeByPath(
-    plugin.root,
-    pluginConventions.toolsFolder,
-  );
-  const containers = findPluginNodeByPath(
-    plugin.root,
-    pluginConventions.containers,
-  );
-  const actionNames = flattenPluginFiles(plugin.root)
+  const toolsPrefix = `${pluginConventions.toolsFolder}/`;
+  const toolNames = [
+    ...new Set(
+      plugin.nodes
+        .filter(
+          (node) =>
+            node.kind === "file" &&
+            node.path.startsWith(toolsPrefix) &&
+            node.path.slice(toolsPrefix.length).includes("/"),
+        )
+        .map((node) => pluginParentPath(node.path)),
+    ),
+  ]
+    .filter((toolPath) => {
+      const entry = `${toolPath}/${pluginConventions.toolEntry}`;
+      const prompt = `${toolPath}/${pluginConventions.toolPrompt}`;
+      return (
+        plugin.nodes.some(
+          (node) => node.path === entry && node.kind === "file",
+        ) &&
+        plugin.nodes.some(
+          (node) => node.path === prompt && node.kind === "file",
+        )
+      );
+    })
+    .map((toolPath) =>
+      toolPath.slice(toolsPrefix.length).trim().toLocaleLowerCase(),
+    );
+  const containers = findPluginNodeByPath(plugin, pluginConventions.containers);
+  const actionNames = pluginFiles(plugin)
     .filter(
       (file) =>
         file.insertion?.target === "COMMAND" &&
@@ -784,18 +833,6 @@ function pluginNamespaceNames(plugin: Plugin) {
         .toLocaleLowerCase(),
     )
     .filter(Boolean);
-  const toolNames =
-    tools?.kind === "folder"
-      ? tools.children.flatMap((child) =>
-          child.kind === "folder" &&
-          findPluginChildByName(child, pluginConventions.toolEntry)?.kind ===
-            "file" &&
-          findPluginChildByName(child, pluginConventions.toolPrompt)?.kind ===
-            "file"
-            ? [child.name.trim().toLocaleLowerCase()]
-            : [],
-        )
-      : [];
   const parsedContainers =
     containers?.kind === "file"
       ? parsePluginContainerDefinitions(containers.content)
@@ -888,16 +925,22 @@ export const usePluginStore = defineStore("plugin-resource", {
   getters: {
     sortedPlugins(state): Plugin[] {
       const local = pluginStateItems(state)
-        .filter((plugin) => plugin.packageId !== null)
+        .filter(
+          (plugin) => plugin.packageId !== null && isVisiblePlugin(plugin),
+        )
         .sort(comparePlugins);
       const global = pluginStateItems(state)
-        .filter((plugin) => plugin.packageId === null)
+        .filter(
+          (plugin) => plugin.packageId === null && isVisiblePlugin(plugin),
+        )
         .sort(comparePlugins);
       return [...local, ...global];
     },
     globalPlugins(state): Plugin[] {
       return pluginStateItems(state)
-        .filter((plugin) => plugin.packageId === null)
+        .filter(
+          (plugin) => plugin.packageId === null && isVisiblePlugin(plugin),
+        )
         .sort(comparePlugins);
     },
     sortedPluginsForPackage:
@@ -981,17 +1024,22 @@ export const usePluginStore = defineStore("plugin-resource", {
           enabledGlobalPluginIds,
           mainPluginId,
         );
-        const resolver = createPluginReferenceResolver(enabled);
-        const bgContainer = resolver
-          .listContainers()
-          .find((item) => item.name === "background");
-        if (!bgContainer) return null;
-        const readResult = resolver.readContainer(bgContainer.id);
-        const firstResource = readResult.resources[0];
-        if (!firstResource) return null;
-        const targetPlugin = enabled.find((p) => p.id === firstResource.pluginId);
+        const containerStore = useContainerStore();
+        const bgContainer = containerStore.getContainer(
+          "background",
+          "global",
+          enabled,
+        );
+        if (!bgContainer || !bgContainer.resources.length) return null;
+        const firstResource = bgContainer.resources[0]!;
+        const targetPlugin = enabled.find(
+          (p) => p.id === firstResource.pluginId,
+        );
         if (!targetPlugin) return null;
-        const node = findPluginNodeByPath(targetPlugin.root, firstResource.path.replace(/^\//, ""));
+        const node = findPluginNodeByPath(
+          targetPlugin,
+          firstResource.path.replace(/^\//, ""),
+        );
         return node?.kind === "file" ? node : null;
       };
     },
@@ -1012,21 +1060,18 @@ export const usePluginStore = defineStore("plugin-resource", {
           enabledGlobalPluginIds,
           mainPluginId,
         );
-        const resolver = createPluginReferenceResolver(enabledPlugins);
-        const command = resolver
-          .listContainers()
-          .find((item) => item.name === "COMMAND" && item.scope === "global");
-        const commandContainer = command
-          ? resolver.getContainer(command.id)
-          : null;
-        for (const entry of commandContainer?.contents ?? []) {
+        const containerStore = useContainerStore();
+        const commandContainer = containerStore.getContainer(
+          "COMMAND",
+          "global",
+          enabledPlugins,
+        );
+        for (const entry of commandContainer?.resources ?? []) {
           const plugin = enabledPlugins.find(
             (item) => item.id === entry.pluginId,
           );
           const resource = plugin
-            ? flattenPluginFiles(plugin.root).find(
-                (item) => item.id === entry.id,
-              )
+            ? pluginFiles(plugin).find((item) => item.id === entry.id)
             : undefined;
           if (!plugin || !resource) continue;
           const commandName = resource.name
@@ -1210,7 +1255,7 @@ export const usePluginStore = defineStore("plugin-resource", {
     },
     async updatePlugin(
       pluginId: string,
-      patch: Partial<Omit<Plugin, "id" | "root" | "builtIn">>,
+      patch: Partial<Omit<Plugin, "id" | "nodes" | "builtIn">>,
     ) {
       const plugin = pluginStateItems(this).find(
         (item) => item.id === pluginId,
@@ -1228,37 +1273,23 @@ export const usePluginStore = defineStore("plugin-resource", {
       const plugin = pluginStateItems(this).find(
         (item) => item.id === pluginId,
       );
-      const manifestNode = plugin
-        ? findPluginNodeByPath(plugin.root, pluginConventions.manifest)
-        : null;
-      if (!plugin || manifestNode?.kind !== "file") {
+      const manifest = plugin ? manifestNode(plugin) : null;
+      if (!plugin || !manifest) {
         throw new Error("插件 manifest.json 不存在。");
       }
-      const parsed = parsePluginManifest(manifestNode.content);
+      const parsed = parsePluginManifest(manifest.content);
       if (parsed.diagnostics.length) {
         throw new Error(
           `manifest.json 无法更新：${parsed.diagnostics[0]!.message}`,
         );
       }
-      const previousContent = clonePlain(manifestNode.content);
-      const previousValue = manifestValueAt(
-        parsed.manifest,
-        groupId,
-        contentId,
-      );
+      const previousContent = clonePlain(manifest.content);
       setManifestValue(parsed.manifest, groupId, contentId, value);
-      manifestNode.content = parsed.manifest;
-      emitPluginConfigChange({ pluginId, groupId, contentId, value });
+      manifest.content = parsed.manifest;
       try {
         await this.persistPlugin(plugin);
       } catch (error) {
-        manifestNode.content = previousContent;
-        emitPluginConfigChange({
-          pluginId,
-          groupId,
-          contentId,
-          value: previousValue,
-        });
+        manifest.content = previousContent;
         throw error;
       }
     },
@@ -1412,11 +1443,11 @@ export const usePluginStore = defineStore("plugin-resource", {
       const plugin = pluginStateItems(this).find(
         (item) => item.id === pluginId,
       );
-      return plugin ? findPluginTreeNode(plugin.root, nodeId) : null;
+      return plugin ? findPluginTreeNode(plugin, nodeId) : null;
     },
     async createFile(
       pluginId: string,
-      parentFolderId: string,
+      parentPath: string,
       input: {
         name?: string;
         content?: unknown;
@@ -1427,113 +1458,112 @@ export const usePluginStore = defineStore("plugin-resource", {
       const plugin = pluginStateItems(this).find(
         (item) => item.id === pluginId,
       );
-      const parent = plugin
-        ? findPluginTreeNode(plugin.root, parentFolderId)
+      if (!plugin) return null;
+      const name = input.name?.trim() || "untitled.md";
+      const parent = parentPath
+        ? (findPluginNodeByPath(plugin, parentPath) ??
+          ensureParentFolders(plugin, parentPath))
         : null;
-      if (!plugin || parent?.kind !== "folder") return null;
-      const previousRoot = clonePlain(plugin.root);
+      if (parentPath && parent?.kind !== "folder") return null;
+      const path = joinPluginPath(parentPath, name);
       if (
-        parent.id === plugin.root.id &&
+        !parentPath &&
         [
           pluginConventions.manifest,
           pluginConventions.containers,
           pluginConventions.regex,
         ].some(
-          (name) =>
-            input.name?.trim().toLocaleLowerCase() === name.toLocaleLowerCase(),
+          (fixed) => name.toLocaleLowerCase() === fixed.toLocaleLowerCase(),
         )
       ) {
-        const existing = findPluginNodeByPath(
-          plugin.root,
-          input.name?.trim() ?? "",
-        );
+        const existing = findPluginNodeByPath(plugin, path);
         if (existing?.kind === "file") return existing;
       }
-      const file = createFile(
-        input.name?.trim() || "untitled.md",
-        input.content ?? "",
-        {
-          treeOrder:
-            Math.max(
-              -1,
-              ...parent.children.map((child) => child.treeOrder ?? -1),
-            ) + 1,
-          order:
-            typeof input.order === "number" && Number.isFinite(input.order)
-              ? Math.round(input.order)
-              : 100,
-          insertion:
-            input.insertion ??
-            (parent.name.trim().toLocaleLowerCase() ===
-              pluginConventions.actionFolder &&
-            ["javascript", "markdown", "component"].includes(
-              pluginFileType(input.name?.trim() || ""),
-            )
-              ? { target: "COMMAND" }
-              : undefined),
-        },
-      );
-      parent.children.push(file);
-      parent.collapsed = false;
+      const siblings = pluginChildNodes(plugin, parentPath);
+      const file = createFileNode(path, input.content ?? "", {
+        treeOrder:
+          Math.max(-1, ...siblings.map((child) => child.treeOrder ?? -1)) + 1,
+        order:
+          typeof input.order === "number" && Number.isFinite(input.order)
+            ? Math.round(input.order)
+            : 100,
+        insertion:
+          input.insertion ??
+          (parentPath === pluginConventions.actionFolder &&
+          ["javascript", "markdown", "component"].includes(pluginFileType(name))
+            ? { target: "COMMAND" }
+            : undefined),
+      });
+      const previousNodes = clonePlain(plugin.nodes);
+      plugin.nodes.push(file);
+      if (parent?.kind === "folder") parent.collapsed = false;
       try {
         assertPluginNamespaceCompatibility(pluginStateItems(this));
         await this.persistPlugin(plugin);
       } catch (error) {
-        plugin.root = previousRoot;
+        plugin.nodes = previousNodes;
         throw error;
       }
       return file;
     },
     async createFolder(
       pluginId: string,
-      parentFolderId: string,
+      parentPath: string,
       name = "新文件夹",
     ) {
       const plugin = pluginStateItems(this).find(
         (item) => item.id === pluginId,
       );
-      const parent = plugin
-        ? findPluginTreeNode(plugin.root, parentFolderId)
+      if (!plugin) return null;
+      const trimmed = name.trim();
+      const parent = parentPath
+        ? (findPluginNodeByPath(plugin, parentPath) ??
+          ensureParentFolders(plugin, parentPath))
         : null;
-      if (!plugin || parent?.kind !== "folder") return null;
+      if (parentPath && parent?.kind !== "folder") return null;
+      const path = joinPluginPath(parentPath, trimmed);
       if (
-        parent.id === plugin.root.id &&
+        !parentPath &&
         [
           pluginConventions.componentsFolder,
           pluginConventions.toolsFolder,
         ].some(
-          (folderName) =>
-            name.trim().toLocaleLowerCase() === folderName.toLocaleLowerCase(),
+          (fixed) => trimmed.toLocaleLowerCase() === fixed.toLocaleLowerCase(),
         )
       ) {
-        const existing = findPluginNodeByPath(plugin.root, name.trim());
+        const existing = findPluginNodeByPath(plugin, path);
         if (existing?.kind === "folder") return existing;
       }
-      const folder = createFolder(name, [], {
+      const siblings = pluginChildNodes(plugin, parentPath);
+      const folder = createFolderNode(path, {
         treeOrder:
-          Math.max(
-            -1,
-            ...parent.children.map((child) => child.treeOrder ?? -1),
-          ) + 1,
+          Math.max(-1, ...siblings.map((child) => child.treeOrder ?? -1)) + 1,
       });
-      parent.children.push(folder);
-      parent.collapsed = false;
-      await this.persistPlugin(plugin);
+      const previousNodes = clonePlain(plugin.nodes);
+      plugin.nodes.push(folder);
+      if (parent?.kind === "folder") parent.collapsed = false;
+      try {
+        assertPluginNamespaceCompatibility(pluginStateItems(this));
+        await this.persistPlugin(plugin);
+      } catch (error) {
+        plugin.nodes = previousNodes;
+        throw error;
+      }
       return folder;
     },
     async importFile(
       pluginId: string,
-      parentFolderId: string,
+      parentPath: string,
       name: string,
       content: unknown,
     ) {
-      return this.createFile(pluginId, parentFolderId, { name, content });
+      return this.createFile(pluginId, parentPath, { name, content });
     },
     async updateNode(
       pluginId: string,
       nodeId: string,
       patch: Partial<
-        PluginTreeNodeBase & {
+        PluginNodeBase & {
           content: unknown;
           collapsed: boolean;
           order: number;
@@ -1544,15 +1574,27 @@ export const usePluginStore = defineStore("plugin-resource", {
       const plugin = pluginStateItems(this).find(
         (item) => item.id === pluginId,
       );
-      const node = plugin ? findPluginTreeNode(plugin.root, nodeId) : null;
+      const node = plugin ? findPluginTreeNode(plugin, nodeId) : null;
       if (!plugin || !node) return;
-      const previousRoot = clonePlain(plugin.root);
+      const previousNodes = clonePlain(plugin.nodes);
       if (
-        !isFixedConventionNode(plugin, nodeId) &&
+        !isFixedConventionPath(node.path) &&
         typeof patch.name === "string" &&
         patch.name.trim()
       ) {
-        node.name = patch.name.trim();
+        const nextName = patch.name.trim();
+        const parentPath = pluginParentPath(node.path);
+        const nextPath = joinPluginPath(parentPath, nextName);
+        if (node.kind === "folder") {
+          const prefix = `${node.path}/`;
+          for (const other of plugin.nodes) {
+            if (other.path.startsWith(prefix)) {
+              other.path = `${nextPath}${other.path.slice(node.path.length)}`;
+            }
+          }
+        }
+        node.path = nextPath;
+        node.name = nextName;
       }
       if (typeof patch.icon === "string") node.icon = patch.icon;
       if (
@@ -1585,7 +1627,7 @@ export const usePluginStore = defineStore("plugin-resource", {
         assertPluginNamespaceCompatibility(pluginStateItems(this));
         await this.persistPlugin(plugin);
       } catch (error) {
-        plugin.root = previousRoot;
+        plugin.nodes = previousNodes;
         throw error;
       }
       await this.pruneInvalidBackgroundSelections();
@@ -1595,60 +1637,75 @@ export const usePluginStore = defineStore("plugin-resource", {
       const plugin = pluginStateItems(this).find(
         (item) => item.id === pluginId,
       );
-      const parent = plugin ? findPluginTreeParent(plugin.root, nodeId) : null;
-      if (!plugin || !parent || isFixedConventionNode(plugin, nodeId)) return;
-      parent.children = parent.children.filter((child) => child.id !== nodeId);
+      const node = plugin ? findPluginTreeNode(plugin, nodeId) : null;
+      if (!plugin || !node || isFixedConventionPath(node.path)) return;
+      const prefix = `${node.path}/`;
+      plugin.nodes = plugin.nodes.filter(
+        (candidate) =>
+          candidate.id !== nodeId && !candidate.path.startsWith(prefix),
+      );
       await this.persistPlugin(plugin);
       await this.pruneInvalidBackgroundSelections();
     },
     async moveNode(
       pluginId: string,
       nodeId: string,
-      targetFolderId: string,
+      targetFolderPath: string,
       beforeNodeId?: string,
     ) {
       const plugin = pluginStateItems(this).find(
         (item) => item.id === pluginId,
       );
-      const sourceParent = plugin
-        ? findPluginTreeParent(plugin.root, nodeId)
+      const node = plugin ? findPluginTreeNode(plugin, nodeId) : null;
+      const target = targetFolderPath
+        ? findPluginNodeByPath(plugin!, targetFolderPath)
         : null;
-      const target = plugin
-        ? findPluginTreeNode(plugin.root, targetFolderId)
-        : null;
-      const node = plugin ? findPluginTreeNode(plugin.root, nodeId) : null;
       if (
         !plugin ||
-        !sourceParent ||
-        target?.kind !== "folder" ||
         !node ||
-        isFixedConventionNode(plugin, nodeId) ||
-        node.id === target.id ||
-        (node.kind === "folder" && findPluginTreeNode(node, target.id))
+        (targetFolderPath && target?.kind !== "folder") ||
+        isFixedConventionPath(node.path) ||
+        (node.kind === "folder" && targetFolderPath.startsWith(`${node.path}/`))
       ) {
         return;
       }
-      const previousRoot = clonePlain(plugin.root);
-      sourceParent.children = sourceParent.children.filter(
-        (child) => child.id !== node.id,
-      );
-      const ordered = sortPluginTreeNodes(
-        target.children.filter((child) => child.id !== node.id),
+      const previousNodes = clonePlain(plugin.nodes);
+      const oldPrefix = `${node.path}/`;
+      const nextPath = joinPluginPath(targetFolderPath, node.name);
+      if (
+        plugin.nodes.some(
+          (candidate) =>
+            candidate.path === nextPath && candidate.id !== node.id,
+        )
+      ) {
+        return;
+      }
+      node.path = nextPath;
+      if (node.kind === "folder") {
+        for (const other of plugin.nodes) {
+          if (other.path.startsWith(oldPrefix)) {
+            other.path = `${nextPath}${other.path.slice(oldPrefix.length - 1)}`;
+          }
+        }
+      }
+      const siblings = sortPluginTreeNodes(
+        pluginChildNodes(plugin, targetFolderPath).filter(
+          (child) => child.id !== node.id,
+        ),
       );
       const beforeIndex = beforeNodeId
-        ? ordered.findIndex((child) => child.id === beforeNodeId)
+        ? siblings.findIndex((child) => child.id === beforeNodeId)
         : -1;
-      ordered.splice(beforeIndex < 0 ? ordered.length : beforeIndex, 0, node);
-      ordered.forEach((child, index) => {
+      siblings.splice(beforeIndex < 0 ? siblings.length : beforeIndex, 0, node);
+      siblings.forEach((child, index) => {
         child.treeOrder = index;
       });
-      target.children = ordered;
-      target.collapsed = false;
+      if (target?.kind === "folder") target.collapsed = false;
       try {
         assertPluginNamespaceCompatibility(pluginStateItems(this));
         await this.persistPlugin(plugin);
       } catch (error) {
-        plugin.root = previousRoot;
+        plugin.nodes = previousNodes;
         throw error;
       }
       await this.pruneInvalidBackgroundSelections();

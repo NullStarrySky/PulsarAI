@@ -1,0 +1,31 @@
+[
+  {
+    "group": { "id": "generation", "title": "生成" },
+    "content": [
+      {
+        "id": "model",
+        "title": "模型",
+        "description": "留空时继承全局默认模型；引用可附带思考强度。",
+        "component": "ModelSelect",
+        "value": null
+      }
+    ]
+  },
+  {
+    "group": { "id": "appearance", "title": "外观" },
+    "content": [
+      {
+        "id": "background",
+        "title": "会话背景",
+        "description": "从 background 容器选择扩展名无关的路径 ID。",
+        "component": "PathSelect",
+        "props": {
+          "allowEmpty": true,
+          "containerId": "background",
+          "pathRegex": "^background/.+\\.(?:png|jpe?g|gif|webp|avif|svg|mp4|webm)$"
+        },
+        "value": null
+      }
+    ]
+  }
+]

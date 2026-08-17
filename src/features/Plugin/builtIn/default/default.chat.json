@@ -1,0 +1,8 @@
+{
+  "message": [
+    {
+      "role": "system",
+      "content": "[[ chat ]]"
+    }
+  ]
+}

@@ -3,8 +3,8 @@ import { Crepe, CrepeFeature } from "@milkdown/crepe";
 import { replaceAll } from "@milkdown/kit/utils";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/vue";
 import { computed, defineComponent, h, ref, watch } from "vue";
-import { conversationCrepeFeatureConfigs, conversationCrepeFeatures } from "@/features/Conversation/stage/conversation-crepe";
-import { conversationMacroHighlightPlugin } from "@/features/Conversation/stage/conversation-plugin-macro-highlight";
+import { conversationCrepeFeatureConfigs, conversationCrepeFeatures } from "@/features/Conversation/stage/milkdown/conversation-crepe";
+import { conversationMacroHighlightPlugin } from "@/features/Conversation/stage/milkdown/conversation-plugin-macro-highlight";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
 import { normalizeMarkdownLineBreaks } from "@/features/Plugin/shared/markdown";
 

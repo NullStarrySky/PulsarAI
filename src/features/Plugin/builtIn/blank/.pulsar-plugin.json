@@ -13,6 +13,6 @@
   "nodes": {
     "/": { "id": "builtin-blank-root", "icon": "", "treeOrder": 0 },
     "manifest.json": { "id": "builtin-blank-manifest", "icon": "", "treeOrder": 0, "order": 100 },
-    "generate.js": { "id": "builtin-blank-generate", "icon": "", "treeOrder": 1, "order": 100 }
+    "generate.js": { "id": "builtin-blank-generate", "icon": "", "treeOrder": 1, "order": 100, "insertion": { "target": "generatePath" } }
   }
 }

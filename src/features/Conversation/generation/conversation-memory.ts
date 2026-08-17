@@ -132,7 +132,7 @@ export async function deleteConversationMemory(conversationId: string) {
   await Promise.all(segments.map((segment) => remove(memoryTable, segment.id)));
 }
 
-export function createConversationDataFacades(
+function createConversationDataFacades(
   definitions: ContextDataDefinition[],
   state: Record<string, ContextDataValue>,
   onReplace?: (definition: ContextDataDefinition, value: ContextDataValue) => void,

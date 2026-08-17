@@ -1,7 +1,6 @@
 import {
-  flattenPluginFiles,
   pluginFileType,
-  pluginNodePath,
+  pluginFiles,
   type Plugin,
   type PluginFile,
 } from "@/features/Plugin/tree/plugin-types";
@@ -19,7 +18,7 @@ export function pluginPathSelectionValue(path: string) {
   return path.replace(/\\/g, "/").replace(/(?:\.chat|\.data)?\.[^./]+$/i, "");
 }
 
-export function pluginFileContainerId(file: PluginFile) {
+function pluginFileContainerId(file: PluginFile) {
   const target = file.insertion?.target.trim();
   if (!target) return null;
   const segments = target.replace(/\\/g, "/").split("/").filter(Boolean);
@@ -32,8 +31,8 @@ export function listPluginPathSelectionOptions(
 ) {
   const pattern = compilePathRegex(options.pathRegex);
   const candidates = prioritizedPlugins(plugins).flatMap((plugin) =>
-    flattenPluginFiles(plugin.root).flatMap((file): PluginPathSelectionOption[] => {
-      const path = pluginNodePath(plugin.root, file.id).join("/");
+    pluginFiles(plugin).flatMap((file): PluginPathSelectionOption[] => {
+      const path = file.path;
       pattern.lastIndex = 0;
       if (!pattern.test(path)) return [];
       if (options.containerId && pluginFileContainerId(file) !== options.containerId) return [];
@@ -53,15 +52,6 @@ export function listPluginPathSelectionOptions(
     if (!unique.has(candidate.value)) unique.set(candidate.value, candidate);
   }
   return [...unique.values()];
-}
-
-export function resolvePluginPathSelection(
-  plugins: Plugin[],
-  value: string,
-  options: { pathRegex?: string; containerId?: string } = {},
-) {
-  return listPluginPathSelectionOptions(plugins, options)
-    .find((candidate) => candidate.value === value)?.file ?? null;
 }
 
 export function backgroundPathSelectionOptions(plugins: Plugin[]) {

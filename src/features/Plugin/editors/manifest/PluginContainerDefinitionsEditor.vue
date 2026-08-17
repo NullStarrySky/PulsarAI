@@ -20,17 +20,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { PluginContainerDetailsQuery } from "@/features/Plugin/runtime/plugin-reference-resolver";
 import {
   parsePluginContainerDefinitions,
   serializePluginContainerDefinitions,
+  type ContainerQueryResult,
   type PluginContainerDeclaration,
-} from "@/features/Plugin/runtime/plugin-reference";
+} from "@/features/Plugin/tree/container-store";
 
 const props = defineProps<{
   modelValue: string;
   definitionId: string;
-  containerDetails: PluginContainerDetailsQuery[];
+  containerDetails: ContainerQueryResult[];
 }>();
 
 const emit = defineEmits<{
@@ -153,7 +153,7 @@ function isSelectedGlobally(containerName: string, path: string) {
   const globalQuery = globalContainerQueries.value.find((g) => g.name === containerName);
   if (!globalQuery) return false;
   const norm = normPath(path);
-  return (globalQuery.selectedPaths ?? []).some((p) => {
+  return (globalQuery.selectedPaths ?? []).some((p: string) => {
     const np = normPath(p);
     return np === norm || norm.endsWith(`/${np}`) || np.endsWith(`/${norm}`);
   });

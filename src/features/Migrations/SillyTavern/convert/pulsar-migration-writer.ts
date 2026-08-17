@@ -5,9 +5,9 @@ import { useModelConnectionStore } from "@/features/ModelConnection/services/mod
 import {
   findPluginNodeByPath,
   pluginConventions,
+  pluginParentPath,
   type Plugin,
   type PluginFile,
-  type PluginFolder,
 } from "@/features/Plugin/tree/plugin-types";
 import {
   parsePluginManifest,
@@ -200,12 +200,13 @@ export class PulsarSillyTavernMigrationWriter {
     const plugins = usePluginStore(this.pinia);
     const plugin = plugins.plugins.find((item) => item.id === placement.id);
     if (!plugin) throw new Error(`目标内置插件不存在：${placement.id}`);
-    const entryFolder = ensureFolder(plugin.root, "entry");
+    const entryFolder = ensureFolder(plugin, "", "entry");
     for (const preset of placement.presets ?? []) {
-      const folder = ensureFolder(entryFolder, safeName(preset.name));
-      upsertFile(folder, `${safeName(preset.name)}.chat.json`, { message: preset.messages });
+      const folder = ensureFolder(plugin, entryFolder, safeName(preset.name));
+      upsertFile(plugin, folder, `${safeName(preset.name)}.chat.json`, { message: preset.messages });
       for (const [index, document] of preset.depthDocuments.entries()) {
         upsertFile(
+          plugin,
           folder,
           `depth-${document.depth}-${String(index + 1).padStart(3, "0")}-${safeName(document.name)}.md`,
           document.content,
@@ -215,15 +216,15 @@ export class PulsarSillyTavernMigrationWriter {
           },
         );
       }
-      upsertFile(folder, `${safeName(preset.name)}.regex.json`, preset.regexRules);
-      upsertFile(folder, "configuration.json", preset.rawConfiguration);
+      upsertFile(plugin, folder, `${safeName(preset.name)}.regex.json`, preset.regexRules);
+      upsertFile(plugin, folder, "configuration.json", preset.rawConfiguration);
     }
-    const backgroundFolder = ensureFolder(plugin.root, pluginConventions.backgroundFolder);
+    const backgroundFolder = ensureFolder(plugin, "", pluginConventions.backgroundFolder);
     let selectedBackground: string | null = null;
     for (const background of placement.backgrounds ?? []) {
       const dataUrl = await this.readDataUrl(background.path);
       const name = safeName(background.name);
-      upsertFile(backgroundFolder, name, {
+      upsertFile(plugin, backgroundFolder, name, {
         kind: "media",
         url: dataUrl,
         mediaType: dataUrl.startsWith("data:video/") ? "video" : "image",
@@ -234,26 +235,27 @@ export class PulsarSillyTavernMigrationWriter {
         selectedBackground = pluginPathSelectionValue(`${pluginConventions.backgroundFolder}/${name}`);
       }
     }
-    const actionsFolder = ensureFolder(plugin.root, pluginConventions.actionFolder);
-    const quickRepliesFolder = ensureFolder(actionsFolder, "quick-replies");
+    const actionsFolder = ensureFolder(plugin, "", pluginConventions.actionFolder);
+    const quickRepliesFolder = ensureFolder(plugin, actionsFolder, "quick-replies");
     for (const quickReply of placement.quickReplies ?? []) {
       upsertFile(
+        plugin,
         quickRepliesFolder,
-        uniqueFileName(quickRepliesFolder, safeName(quickReply.name), "md"),
+        uniqueFileName(plugin, quickRepliesFolder, safeName(quickReply.name), "md"),
         quickReply.content,
         { insertion: { target: "COMMAND" } },
       );
     }
     if (selectedBackground) {
-      const manifest = findPluginNodeByPath(plugin.root, pluginConventions.manifest);
+      const manifest = findPluginNodeByPath(plugin, pluginConventions.manifest);
       if (manifest?.kind === "file") {
         const parsed = parsePluginManifest(manifest.content);
         setPluginManifestFixedValue(parsed.manifest, "background", selectedBackground);
         manifest.content = parsed.manifest;
       }
     }
-    const migrationFolder = ensureFolder(plugin.root, "migration");
-    upsertFile(migrationFolder, `sillytavern-public-${Date.now()}.json`, {
+    const migrationFolder = ensureFolder(plugin, "", "migration");
+    upsertFile(plugin, migrationFolder, `sillytavern-public-${Date.now()}.json`, {
       source: "SillyTavern",
       presets: placement.presets?.map((item) => ({
         name: item.name,
@@ -278,33 +280,32 @@ export class PulsarSillyTavernMigrationWriter {
 }
 
 function configureLocalPlugin(plugin: Plugin, placement: CharacterPackagePlacement) {
-  const root = plugin.root;
-  const characterFolder = ensureFolder(root, "character");
-  upsertFile(characterFolder, "main.md", placement.artifact.characterMarkdown, {
+  const characterFolder = ensureFolder(plugin, "", "character");
+  upsertFile(plugin, characterFolder, "main.md", placement.artifact.characterMarkdown, {
     insertion: { target: "context" },
   });
-  const userFolder = ensureFolder(characterFolder, "user");
+  const userFolder = ensureFolder(plugin, characterFolder, "user");
   for (const persona of placement.personas) {
-    upsertFile(userFolder, `${safeName(persona.name)}.md`, persona.markdown || `# ${persona.name}`, {
+    upsertFile(plugin, userFolder, `${safeName(persona.name)}.md`, persona.markdown || `# ${persona.name}`, {
       insertion: { target: "user" },
     });
   }
-  const lorebooksFolder = ensureFolder(root, "lorebooks");
-  const embeddedFolder = ensureFolder(lorebooksFolder, "embedded");
-  writeLorebookEntries(embeddedFolder, placement.artifact.name, placement.artifact.embeddedLorebooks);
+  const lorebooksFolder = ensureFolder(plugin, "", "lorebooks");
+  const embeddedFolder = ensureFolder(plugin, lorebooksFolder, "embedded");
+  writeLorebookEntries(plugin, embeddedFolder, placement.artifact.name, placement.artifact.embeddedLorebooks);
   for (const worldbook of placement.claimedWorldbooks) {
-    writeLorebookEntries(lorebooksFolder, worldbook.name, worldbook.entries);
+    writeLorebookEntries(plugin, lorebooksFolder, worldbook.name, worldbook.entries);
   }
-  const regexFile = findPluginNodeByPath(root, pluginConventions.regex);
+  const regexFile = findPluginNodeByPath(plugin, pluginConventions.regex);
   if (regexFile?.kind === "file") regexFile.content = placement.artifact.regexRules;
-  const defaultChat = findPluginNodeByPath(root, "default.chat.json");
+  const defaultChat = findPluginNodeByPath(plugin, "default.chat.json");
   if (defaultChat?.kind === "file") {
     defaultChat.content = { message: [{ role: "system", content: "[[ chat ]]" }] };
   }
-  const generate = findPluginNodeByPath(root, "generate.js");
+  const generate = findPluginNodeByPath(plugin, "generate.js");
   if (generate?.kind === "file") generate.content = sillyTavernGenerateSource();
-  const migrationFolder = ensureFolder(root, "migration");
-  upsertFile(migrationFolder, "sillytavern-import-report.json", {
+  const migrationFolder = ensureFolder(plugin, "", "migration");
+  upsertFile(plugin, migrationFolder, "sillytavern-import-report.json", {
     source: placement.artifact.source,
     character: {
       name: placement.artifact.name,
@@ -320,7 +321,7 @@ function configureLocalPlugin(plugin: Plugin, placement: CharacterPackagePlaceme
 }
 
 function configureGlobalPlugin(plugin: Plugin, placement: GlobalPluginPlacement) {
-  const containers = findPluginNodeByPath(plugin.root, pluginConventions.containers);
+  const containers = findPluginNodeByPath(plugin, pluginConventions.containers);
   if (containers?.kind === "file") {
     containers.content = {
       containers: [{
@@ -332,22 +333,22 @@ function configureGlobalPlugin(plugin: Plugin, placement: GlobalPluginPlacement)
       }],
     };
   }
-  const lorebooks = ensureFolder(plugin.root, "lorebooks");
+  const lorebooks = ensureFolder(plugin, "", "lorebooks");
   if (placement.worldbook) {
-    writeLorebookEntries(lorebooks, placement.worldbook.name, placement.worldbook.entries);
+    writeLorebookEntries(plugin, lorebooks, placement.worldbook.name, placement.worldbook.entries);
   }
-  const migrationFolder = ensureFolder(plugin.root, "migration");
-  upsertFile(migrationFolder, "sillytavern-import-report.json", {
+  const migrationFolder = ensureFolder(plugin, "", "migration");
+  upsertFile(plugin, migrationFolder, "sillytavern-import-report.json", {
     source: placement.worldbook?.source,
     unconsumedFields: placement.worldbook?.unconsumedFields ?? [],
     diagnostics: placement.worldbook?.diagnostics ?? [],
   });
 }
 
-function writeLorebookEntries(parent: PluginFolder, bookName: string, entries: MigratedLorebookEntry[]) {
-  const folder = ensureFolder(parent, safeName(bookName));
+function writeLorebookEntries(plugin: Plugin, parentPath: string, bookName: string, entries: MigratedLorebookEntry[]) {
+  const folder = ensureFolder(plugin, parentPath, safeName(bookName));
   for (const [index, entry] of entries.entries()) {
-    upsertFile(folder, `${String(index + 1).padStart(3, "0")}-${safeName(entry.name)}.md`, entry.content, {
+    upsertFile(plugin, folder, `${String(index + 1).padStart(3, "0")}-${safeName(entry.name)}.md`, entry.content, {
       order: entry.order,
       ...(entry.enabled
         ? { insertion: { target: entry.insertionTarget, ...(entry.condition ? { condition: entry.condition } : {}) } }
@@ -417,32 +418,38 @@ async function writeConversation(
   if (template) await store.updateConversation(conversation.id, { isTemplate: true });
 }
 
-function ensureFolder(parent: PluginFolder, name: string): PluginFolder {
-  const existing = parent.children.find(
-    (item) => item.kind === "folder" && item.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+function siblingCount(plugin: Plugin, parentPath: string) {
+  return plugin.nodes.filter((node) => pluginParentPath(node.path) === parentPath).length;
+}
+
+function ensureFolder(plugin: Plugin, parentPath: string, name: string): string {
+  const path = parentPath ? `${parentPath}/${name}` : name;
+  const existing = plugin.nodes.find(
+    (node) => node.kind === "folder" && node.path === path,
   );
-  if (existing?.kind === "folder") return existing;
-  const folder: PluginFolder = {
+  if (existing) return path;
+  plugin.nodes.push({
     id: crypto.randomUUID(),
+    path,
     name,
     icon: "",
-    treeOrder: parent.children.length,
+    treeOrder: siblingCount(plugin, parentPath),
     kind: "folder",
-    children: [],
     collapsed: false,
-  };
-  parent.children.push(folder);
-  return folder;
+  });
+  return path;
 }
 
 function upsertFile(
-  parent: PluginFolder,
+  plugin: Plugin,
+  parentPath: string,
   name: string,
   content: unknown,
   input: Pick<PluginFile, "order" | "insertion"> | { order?: number; insertion?: PluginFile["insertion"] } = {},
 ) {
-  const existing = parent.children.find(
-    (item) => item.kind === "file" && item.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+  const path = parentPath ? `${parentPath}/${name}` : name;
+  const existing = plugin.nodes.find(
+    (node) => node.kind === "file" && node.path === path,
   );
   if (existing?.kind === "file") {
     existing.content = structuredClone(content);
@@ -453,15 +460,16 @@ function upsertFile(
   }
   const file: PluginFile = {
     id: crypto.randomUUID(),
+    path,
     name,
     icon: "",
-    treeOrder: parent.children.length,
+    treeOrder: siblingCount(plugin, parentPath),
     kind: "file",
     content: structuredClone(content),
     order: input.order ?? 100,
     ...(input.insertion ? { insertion: structuredClone(input.insertion) } : {}),
   };
-  parent.children.push(file);
+  plugin.nodes.push(file);
   return file;
 }
 
@@ -470,10 +478,10 @@ function safeName(value: string) {
   return normalized || "untitled";
 }
 
-function uniqueFileName(parent: PluginFolder, base: string, extension: string) {
-  const existing = new Set(parent.children
-    .filter((item) => item.kind === "file")
-    .map((item) => item.name.toLocaleLowerCase()));
+function uniqueFileName(plugin: Plugin, parentPath: string, base: string, extension: string) {
+  const existing = new Set(plugin.nodes
+    .filter((node) => node.kind === "file" && pluginParentPath(node.path) === parentPath)
+    .map((node) => node.name.toLocaleLowerCase()));
   for (let index = 1; ; index += 1) {
     const suffix = index === 1 ? "" : `-${index}`;
     const candidate = `${base}${suffix}.${extension}`;

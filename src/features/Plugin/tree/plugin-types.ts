@@ -1,11 +1,14 @@
-export interface PluginTreeNodeBase {
+export interface PluginNodeBase {
   id: string;
+  /** Plugin-relative path; its last segment always equals `name`. */
+  path: string;
   name: string;
   icon: string;
+  /** Sibling ordering within the parent directory. */
   treeOrder: number;
 }
 
-export interface PluginFile extends PluginTreeNodeBase {
+export interface PluginFile extends PluginNodeBase {
   kind: "file";
   content: unknown;
   order: number;
@@ -17,9 +20,9 @@ export interface PluginFile extends PluginTreeNodeBase {
   };
 }
 
-export interface PluginFolder extends PluginTreeNodeBase {
+export interface PluginFolder extends PluginNodeBase {
   kind: "folder";
-  children: PluginTreeNode[];
+  /** Presentation-only collapse state; stripped before database persistence. */
   collapsed?: boolean;
 }
 
@@ -34,7 +37,8 @@ export interface Plugin {
   name: string;
   icon: string;
   shortDescription: string;
-  root: PluginFolder;
+  /** Flat path-keyed node list; folder rows exist for explicit and empty folders. */
+  nodes: PluginTreeNode[];
   enabled: boolean;
   builtIn: boolean;
 }
@@ -108,6 +112,12 @@ export function pluginFileType(name: string): PluginFileType {
   return "text";
 }
 
+/** Parent directory path of a plugin-relative path; `""` means plugin root. */
+export function pluginParentPath(path: string) {
+  const index = path.lastIndexOf("/");
+  return index < 0 ? "" : path.slice(0, index);
+}
+
 export function sortPluginTreeNodes(nodes: PluginTreeNode[]) {
   return [...nodes].sort(
     (a, b) =>
@@ -118,76 +128,38 @@ export function sortPluginTreeNodes(nodes: PluginTreeNode[]) {
   );
 }
 
-export function findPluginTreeNode(
-  root: PluginFolder,
-  nodeId: string,
-): PluginTreeNode | null {
-  if (root.id === nodeId) return root;
-  for (const child of root.children) {
-    if (child.id === nodeId) return child;
-    if (child.kind === "folder") {
-      const match = findPluginTreeNode(child, nodeId);
-      if (match) return match;
-    }
-  }
-  return null;
-}
-
-export function findPluginTreeParent(
-  root: PluginFolder,
-  nodeId: string,
-): PluginFolder | null {
-  for (const child of root.children) {
-    if (child.id === nodeId) return root;
-    if (child.kind === "folder") {
-      const match = findPluginTreeParent(child, nodeId);
-      if (match) return match;
-    }
-  }
-  return null;
-}
-
-export function findPluginChildByName(
-  folder: PluginFolder,
-  name: string,
-): PluginTreeNode | null {
-  const normalized = name.trim().toLocaleLowerCase();
-  return folder.children.find(
-    (child) => child.name.trim().toLocaleLowerCase() === normalized,
-  ) ?? null;
+function normalizeNodePath(path: string | string[]) {
+  const joined = Array.isArray(path) ? path.join("/") : path;
+  return joined.split("/").map((part) => part.trim()).filter(Boolean).join("/");
 }
 
 export function findPluginNodeByPath(
-  root: PluginFolder,
+  plugin: Plugin,
   path: string | string[],
 ): PluginTreeNode | null {
-  const parts = Array.isArray(path)
-    ? path
-    : path.split("/").map((part) => part.trim()).filter(Boolean);
-  let current: PluginTreeNode = root;
-  for (const part of parts) {
-    if (current.kind !== "folder") return null;
-    const child = findPluginChildByName(current, part);
-    if (!child) return null;
-    current = child;
-  }
-  return current;
+  const normalized = normalizeNodePath(path);
+  if (!normalized) return null;
+  return plugin.nodes.find((node) => node.path === normalized) ?? null;
 }
 
-export function flattenPluginFiles(folder: PluginFolder): PluginFile[] {
-  return sortPluginTreeNodes(folder.children).flatMap((child) =>
-    child.kind === "file" ? [child] : flattenPluginFiles(child),
+export function findPluginTreeNode(
+  plugin: Plugin,
+  nodeId: string,
+): PluginTreeNode | null {
+  return plugin.nodes.find((node) => node.id === nodeId) ?? null;
+}
+
+/** Sorted child nodes of one directory; `folderPath === ""` selects plugin root. */
+export function pluginChildNodes(
+  plugin: Plugin,
+  folderPath: string,
+): PluginTreeNode[] {
+  const normalized = normalizeNodePath(folderPath);
+  return sortPluginTreeNodes(
+    plugin.nodes.filter((node) => pluginParentPath(node.path) === normalized),
   );
 }
 
-export function pluginNodePath(root: PluginFolder, nodeId: string): string[] {
-  if (root.id === nodeId) return [];
-  for (const child of root.children) {
-    if (child.id === nodeId) return [child.name];
-    if (child.kind === "folder") {
-      const nested = pluginNodePath(child, nodeId);
-      if (nested.length) return [child.name, ...nested];
-    }
-  }
-  return [];
+export function pluginFiles(plugin: Plugin): PluginFile[] {
+  return plugin.nodes.filter((node): node is PluginFile => node.kind === "file");
 }

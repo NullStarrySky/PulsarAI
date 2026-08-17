@@ -25,7 +25,7 @@ export interface PluginManifestGroupContent {
 
 export type PluginManifest = PluginManifestGroupContent[];
 
-export const pluginManifestFixedSettings = {
+const pluginManifestFixedSettings = {
   model: {
     groupId: "generation",
     groupTitle: "生成",
@@ -153,41 +153,7 @@ export function parsePluginManifest(value: unknown): {
   return { manifest, diagnostics };
 }
 
-export function parsePluginManifestReference(rawReference: string): PluginManifestReference {
-  const reference = rawReference.trim();
-  const local = /^config:local\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)$/.exec(reference);
-  if (local) {
-    return {
-      scope: "local",
-      groupId: local[1]!,
-      contentId: local[2]!,
-    };
-  }
-  const global = /^config:global\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)$/.exec(reference);
-  if (global) {
-    return {
-      scope: "global",
-      pluginId: global[1]!,
-      groupId: global[2]!,
-      contentId: global[3]!,
-    };
-  }
-  throw new Error(
-    `配置引用格式无效：${rawReference}；应使用 config:local/group/content 或 config:global/pluginId/group/content。`,
-  );
-}
 
-export function manifestValueAt(
-  manifest: PluginManifest,
-  groupId: string,
-  contentId: string,
-): PluginManifestValue {
-  const content = manifest
-    .find((item) => item.group.id === groupId)
-    ?.content.find((item) => item.id === contentId);
-  if (!content) throw new Error(`Manifest 配置不存在：${groupId}/${contentId}`);
-  return cloneJsonValue(content.value);
-}
 
 export function pluginManifestFixedValue(
   manifest: PluginManifest,
@@ -230,11 +196,6 @@ export function setPluginManifestFixedValue(
   return manifest;
 }
 
-export function pluginGeneratePath(manifest: PluginManifest) {
-  const value = manifestValueAt(manifest, "runtime", "generatePath");
-  if (typeof value !== "string" || !value.trim()) return null;
-  return value.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
-}
 
 export function setManifestValue(
   manifest: PluginManifest,
@@ -251,7 +212,7 @@ export function setManifestValue(
   return manifest;
 }
 
-export function isJsonValue(value: unknown): value is PluginManifestValue {
+function isJsonValue(value: unknown): value is PluginManifestValue {
   if (
     value === null
     || typeof value === "string"

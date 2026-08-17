@@ -16,8 +16,8 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import ConversationMarkdown from "@/features/Conversation/stage/ConversationMarkdown.vue";
-import type { TraceLogEntry } from "@/features/Plugin/runtime/plugin-test";
+import ConversationMarkdown from "@/features/Conversation/stage/markstream/ConversationMarkdown.vue";
+import type { TraceLogEntry } from "@/features/Plugin/runtime/trace-logger";
 
 const props = defineProps<{
   logs: TraceLogEntry[] | null;

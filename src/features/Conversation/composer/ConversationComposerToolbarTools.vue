@@ -22,15 +22,11 @@ import type { ComposerToolId } from "@/features/Conversation/composer/composer-t
 
 defineProps<{
 	toolIds: ComposerToolId[];
-	prompt?: string;
 }>();
 
 const emit = defineEmits<{
-	attach: [];
-	whiteboard: [];
 	map: [];
 	fullscreen: [];
-	"update:prompt": [value: string];
 }>();
 
 const defaults = useDefaultConfigStore();
@@ -46,7 +42,7 @@ const mainPlugin = computed(
 const mainManifestFile = computed(() => {
 	const plugin = mainPlugin.value;
 	if (!plugin) return null;
-	const file = findPluginNodeByPath(plugin.root, pluginConventions.manifest);
+	const file = findPluginNodeByPath(plugin, pluginConventions.manifest);
 	return file?.kind === "file" ? file : null;
 });
 

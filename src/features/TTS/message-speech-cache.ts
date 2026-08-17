@@ -4,7 +4,7 @@ import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import {
   findPluginNodeByPath,
   type PluginFile,
-  type PluginFolder,
+  type Plugin,
 } from "@/features/Plugin/tree/plugin-types";
 import {
   createPluginMediaContent,
@@ -30,15 +30,15 @@ async function cacheKey(messageId: string, text: string, model: string, voice: s
   return Array.from(new Uint8Array(hash), (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-async function tempFolder(pluginId: string, root: PluginFolder) {
+async function tempFolder(pluginId: string, plugin: Plugin) {
   const store = usePluginStore();
-  const existing = findPluginNodeByPath(root, "temp");
+  const existing = findPluginNodeByPath(plugin, "temp");
   if (existing?.kind === "folder") return existing;
-  return store.createFolder(pluginId, root.id, "temp");
+  return store.createFolder(pluginId, "", "temp");
 }
 
-function cachedFile(root: PluginFolder, filename: string) {
-  const node = findPluginNodeByPath(root, `temp/${filename}`);
+function cachedFile(plugin: Plugin, filename: string) {
+  const node = findPluginNodeByPath(plugin, `temp/${filename}`);
   return node?.kind === "file" ? node : null;
 }
 
@@ -70,7 +70,7 @@ export async function playMessageSpeech(messageId: string, text: string, voice =
   const model = String(await getSpeechModel() ?? "default");
   const extension = model.startsWith(`${PIPER_TTS_PROVIDER_ID}/`) ? "wav" : "mp3";
   const filename = `tts-${await cacheKey(messageId, trimmed, model, voice)}.${extension}`;
-  const hit = cachedFile(packagePlugin.root, filename);
+  const hit = cachedFile(packagePlugin, filename);
   const source = hit ? pluginMediaSource(hit.content) : "";
   if (source) {
     await startPlayback(source);
@@ -80,10 +80,10 @@ export async function playMessageSpeech(messageId: string, text: string, voice =
   const result = await generateSpeech({ text: trimmed, ...(voice ? { voice } : {}) });
   const bytes = result.audio.uint8Array;
   const mediaType = result.audio.mediaType || "audio/mpeg";
-  const folder = await tempFolder(packagePlugin.id, packagePlugin.root);
+  const folder = await tempFolder(packagePlugin.id, packagePlugin);
   if (!folder) throw new Error("无法创建 temp/ 缓存目录。");
   const content = createPluginMediaContent(`data:${mediaType};base64,${base64(bytes)}`);
-  const file = await pluginStore.createFile(packagePlugin.id, folder.id, {
+  const file = await pluginStore.createFile(packagePlugin.id, "temp", {
     name: filename,
     content,
   }) as PluginFile | null;

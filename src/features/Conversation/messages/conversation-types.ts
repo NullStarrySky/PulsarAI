@@ -110,12 +110,6 @@ export interface FilePart {
   size?: number;
 }
 
-export interface ComponentPart {
-  type: "component";
-  componentId: string;
-  props?: Record<string, unknown>;
-}
-
 export interface ActionPart {
   type: "action";
   actionId: string;
@@ -125,10 +119,12 @@ export interface ActionPart {
   description: string;
 }
 
-export type AdditionalParts = TextPart | ImagePart | FilePart | ComponentPart | ActionPart;
+export type AdditionalParts = TextPart | ImagePart | FilePart | ActionPart;
 
 export interface ConversationResourceNodeSnapshot {
   id: string;
+  /** Plugin-relative path; the last segment always equals `name`. */
+  path: string;
   name: string;
   icon: string;
   treeOrder: number;
@@ -140,7 +136,6 @@ export interface ConversationResourceNodeSnapshot {
     condition?: string;
     conditionPath?: string;
   };
-  children?: ConversationResourceNodeSnapshot[];
 }
 
 export type ConversationResourceOperation =
@@ -167,7 +162,8 @@ export type ConversationResourceOperation =
   | {
       type: "create";
       pluginId: string;
-      parentId: string;
+      /** Parent directory path; `""` means plugin root. */
+      parentPath: string;
       node: ConversationResourceNodeSnapshot;
     }
   | {
@@ -175,7 +171,8 @@ export type ConversationResourceOperation =
       pluginId: string;
       resourceId: string;
       targetPluginId: string;
-      parentId: string;
+      /** Target parent directory path; `""` means plugin root. */
+      targetParentPath: string;
       name: string;
     }
   | {

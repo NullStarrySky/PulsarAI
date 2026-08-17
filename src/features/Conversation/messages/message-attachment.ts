@@ -10,7 +10,7 @@ export async function fileToMessagePart(file: File): Promise<FilePart> {
   };
 }
 
-export function attachmentDataUrl(part: FilePart) {
+function attachmentDataUrl(part: FilePart) {
   if (part.data instanceof URL) {
     return part.data.toString();
   }

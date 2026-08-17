@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -10,37 +11,55 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { parsePluginChatContext } from "@/features/Plugin/editors/chat/plugin-chat";
+import { Switch } from "@/components/ui/switch";
+import {
+  parsePluginChatContext,
+  type PluginChatMessage,
+} from "@/features/Plugin/editors/chat/plugin-chat";
 
 const props = defineProps<{ modelValue: string }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
+
+const editorDescription
+  = "按顺序编辑带角色消息，可命名或停用单条；停用的消息不会进入生成上下文。content 支持 imports、{{ }} 与 [[ ]]。";
 
 const parsed = computed(() => {
   try {
     return { value: parsePluginChatContext(props.modelValue), error: "" };
   } catch (error) {
     return {
-      value: { message: [] as Array<{ role: "system" | "user" | "assistant"; content: string }> },
+      value: { message: [] as PluginChatMessage[] },
       error: error instanceof Error ? error.message : String(error),
     };
   }
 });
 
-function update(index: number, patch: Partial<{ role: "system" | "user" | "assistant"; content: string }>) {
+function serialize(message: PluginChatMessage[]) {
+  return JSON.stringify({
+    message: message.map(({ name, enabled, ...item }) => ({
+      ...item,
+      ...(name?.trim() ? { name: name.trim() } : {}),
+      ...(enabled === false ? { enabled } : {}),
+    })),
+  }, null, 2);
+}
+
+function update(index: number, patch: Partial<PluginChatMessage>) {
   const message = structuredClone(parsed.value.value.message);
   message[index] = { ...message[index]!, ...patch };
-  emit("update:modelValue", JSON.stringify({ message }, null, 2));
+  emit("update:modelValue", serialize(message));
 }
 
 function add() {
-  emit("update:modelValue", JSON.stringify({
-    message: [...parsed.value.value.message, { role: "system", content: "" }],
-  }, null, 2));
+  emit("update:modelValue", serialize([
+    ...parsed.value.value.message,
+    { role: "system", content: "" },
+  ]));
 }
 
 function remove(index: number) {
   const message = parsed.value.value.message.filter((_, itemIndex) => itemIndex !== index);
-  emit("update:modelValue", JSON.stringify({ message }, null, 2));
+  emit("update:modelValue", serialize(message));
 }
 
 function move(index: number, delta: number) {
@@ -48,7 +67,7 @@ function move(index: number, delta: number) {
   const message = structuredClone(parsed.value.value.message);
   if (target < 0 || target >= message.length) return;
   [message[index], message[target]] = [message[target]!, message[index]!];
-  emit("update:modelValue", JSON.stringify({ message }, null, 2));
+  emit("update:modelValue", serialize(message));
 }
 </script>
 
@@ -57,7 +76,7 @@ function move(index: number, delta: number) {
     <div class="flex items-center justify-between border-b px-5 py-4 bg-muted/10">
       <div>
         <div class="text-sm font-semibold tracking-tight text-foreground/90">对话上下文</div>
-        <p class="mt-0.5 text-xs text-muted-foreground">按顺序编辑带角色消息；content 支持 imports、{{ }} 与 [[ ]]。</p>
+        <p class="mt-0.5 text-xs text-muted-foreground">{{ editorDescription }}</p>
       </div>
       <Button size="sm" variant="outline" class="h-8 rounded-lg shadow-sm hover:bg-muted" @click="add">
         <Plus class="mr-1 size-3.5" />
@@ -74,19 +93,39 @@ function move(index: number, delta: number) {
         <div
           v-for="(message, index) in parsed.value.message"
           :key="index"
-          class="rounded-xl border border-border/60 bg-card shadow-sm hover:border-border/85 transition-all duration-200"
+          class="rounded-xl border border-border/60 bg-card shadow-sm transition-all duration-200"
+          :class="message.enabled === false ? 'opacity-55 saturate-50' : 'hover:border-border/85'"
         >
           <div class="flex items-center gap-2 border-b border-border/40 px-3.5 py-2.5 bg-muted/5">
             <Select :model-value="message.role" @update:model-value="update(index, { role: $event as never })">
-              <SelectTrigger class="h-8 w-32 text-xs rounded-lg"><SelectValue /></SelectTrigger>
+              <SelectTrigger class="h-8 w-28 shrink-0 text-xs rounded-lg"><SelectValue /></SelectTrigger>
               <SelectContent class="rounded-xl">
                 <SelectItem value="system">system</SelectItem>
                 <SelectItem value="user">user</SelectItem>
                 <SelectItem value="assistant">assistant</SelectItem>
               </SelectContent>
             </Select>
-            <span class="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1.5 py-0.5 bg-muted/40 rounded">#{{ index + 1 }}</span>
-            <div class="ml-auto flex items-center gap-0.5">
+            <Input
+              :value="message.name"
+              placeholder="命名（可选）"
+              class="h-8 min-w-0 flex-1 rounded-lg border-border/40 bg-background/60 text-xs"
+              @input="update(index, { name: ($event.target as HTMLInputElement).value })"
+            />
+            <span
+              v-if="message.enabled === false"
+              class="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground"
+            >
+              已停用
+            </span>
+            <span v-else class="shrink-0 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1.5 py-0.5 bg-muted/40 rounded">
+              #{{ index + 1 }}
+            </span>
+            <Switch
+              :model-value="message.enabled !== false"
+              class="shrink-0 scale-75"
+              @update:model-value="update(index, { enabled: $event })"
+            />
+            <div class="ml-auto flex shrink-0 items-center gap-0.5">
               <Button size="icon" variant="ghost" class="size-7 rounded-lg" :disabled="index === 0" @click="move(index, -1)">
                 <ArrowUp class="size-3.5" />
               </Button>

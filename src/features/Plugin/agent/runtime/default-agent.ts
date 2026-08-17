@@ -88,7 +88,6 @@ const codeActInstructions = [
   "Return plain serializable data. Preserve resource `id` and `path` when later calls may need to follow the result.",
   "For a blocking user decision, call `await agent.askUser({ question, options })` or `await api.askUser(...)` inside the function.",
   "To delegate a bounded task, call `await generate({ plugin?, environment?, prompt })` inside the function. It returns the child agent's final text; the default plugin is the blank no-template process and an omitted environment uses an in-memory temporary conversation.",
-  "Registered Skill and MCP extensions are context APIs: inspect with `agent.listExtensions(...)` and call with `agent.callExtension(source, name, input)`.",
   "Plugin custom functions documented under `# 自定义工具` are context functions: call them with `await ctx.tools[name](...args)`.",
   "Inspect pure Plugin containers with `ctx.containers.list()` / `get()` and read selected members with `ctx.containers.read(containerId, resourceIds)`.",
   "Plugin write/edit/mkdir/move/remove/config.set and writable .data wrapper operations update the current Conversation resource overlay. They are committed atomically only when the codeAct call succeeds.",
@@ -128,7 +127,7 @@ function createCodeActTool(
   };
 }
 
-export async function createDefaultAgentResources(
+async function createDefaultAgentResources(
   input: CreateDefaultAgentResourcesInput,
 ): Promise<DefaultAgentResources> {
   const modelName = input.modelName || (await getDefaultChatModel());

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const askUserOptionSchema = z.object({
+const askUserOptionSchema = z.object({
   label: z.string().min(1).describe("Short option label shown to the user."),
   description: z.string().min(1).optional().describe("Optional one-line explanation of the option."),
   value: z.string().min(1).optional().describe("Value returned when this option is selected. Defaults to the label."),
@@ -8,26 +8,34 @@ export const askUserOptionSchema = z.object({
 
 export type AskUserOption = z.infer<typeof askUserOptionSchema>;
 
-export const askUserQuestionItemSchema = z.object({
+const askUserQuestionItemSchema = z.object({
   q: z.string().min(1).optional(),
   question: z.string().min(1).optional(),
-  type: z.enum(["radio", "check", "checkbox"]).optional().default("radio"),
+  type: z.enum(["radio", "check", "checkbox", "confirm"]).optional().default("radio"),
   options: z.array(z.union([askUserOptionSchema, z.string()]))
     .min(1)
-    .describe("Predefined answers for this question."),
+    .optional()
+    .describe("Predefined answers for this question; omit for confirm questions."),
 }).transform((item) => {
   const qText = item.question || item.q || "";
-  const normalizedOptions: AskUserOption[] = item.options.map((opt) =>
+  const type = item.type === "checkbox" ? ("check" as const) : item.type;
+  const normalizedOptions: AskUserOption[] = (item.options ?? []).map((opt) =>
     typeof opt === "string" ? { label: opt, value: opt } : opt
   );
   return {
     question: qText,
-    type: item.type === "checkbox" ? ("check" as const) : item.type,
+    type,
     options: normalizedOptions,
   };
 });
 
 export type AskUserQuestionItem = z.infer<typeof askUserQuestionItemSchema>;
+
+function normalizeQuestionOptions(options?: Array<AskUserOption | string>) {
+  return (options ?? []).map((opt) =>
+    typeof opt === "string" ? { label: opt, value: opt } : opt
+  );
+}
 
 export const askUserInputSchema = z.union([
   z.object({
@@ -35,24 +43,20 @@ export const askUserInputSchema = z.union([
   }),
   z.object({
     question: z.string().min(1).describe("A concise, self-contained question for the user."),
-    type: z.enum(["radio", "check", "checkbox"]).optional().default("radio"),
+    type: z.enum(["radio", "check", "checkbox", "confirm"]).optional().default("radio"),
     options: z.array(z.union([askUserOptionSchema, z.string()]))
       .min(1)
-      .describe("Predefined answers."),
-  }).transform((item) => {
-    const normalizedOptions: AskUserOption[] = item.options.map((opt) =>
-      typeof opt === "string" ? { label: opt, value: opt } : opt
-    );
-    return {
-      questions: [
-        {
-          question: item.question,
-          type: item.type === "checkbox" ? ("check" as const) : item.type,
-          options: normalizedOptions,
-        },
-      ],
-    };
-  }),
+      .optional()
+      .describe("Predefined answers; omit for a confirm question."),
+  }).transform((item) => ({
+    questions: [
+      {
+        question: item.question,
+        type: item.type === "checkbox" ? ("check" as const) : item.type,
+        options: normalizeQuestionOptions(item.options),
+      },
+    ],
+  })),
 ]);
 
 export type AskUserInput = z.infer<typeof askUserInputSchema>;
@@ -70,6 +74,8 @@ export interface QuestionAnswerDetail {
   selectedIndices: number[];
   selectedOptions: string[];
   customAnswer?: string;
+  /** Present for `confirm` questions instead of selections. */
+  approved?: boolean;
 }
 
 export interface MultiAskUserAnswer {
@@ -78,12 +84,27 @@ export interface MultiAskUserAnswer {
   cancelled?: false;
 }
 
+export interface AskUserApproval {
+  approved: boolean;
+  cancelled?: false;
+}
+
 export interface AskUserCancelled {
   cancelled: true;
 }
 
 export type AskUserAnswer = SingleAskUserAnswer | MultiAskUserAnswer;
-export type AskUserResult = AskUserAnswer | AskUserCancelled;
+export type AskUserResult = AskUserAnswer | AskUserApproval | AskUserCancelled;
+
+function summarizeAnswerDetail(detail: QuestionAnswerDetail) {
+  if (typeof detail.approved === "boolean") {
+    return detail.approved ? "已批准" : "已拒绝";
+  }
+  return [
+    ...detail.selectedOptions,
+    ...(detail.customAnswer ? [`custom: "${detail.customAnswer}"`] : []),
+  ].join(", ");
+}
 
 export function normalizeAskUserResult(value: unknown): AskUserResult {
   if (!value || typeof value !== "object") {
@@ -96,14 +117,14 @@ export function normalizeAskUserResult(value: unknown): AskUserResult {
     return { cancelled: true };
   }
 
+  if (typeof res.approved === "boolean") {
+    return { approved: res.approved };
+  }
+
   if (Array.isArray(res.answers)) {
     const answers = res.answers as QuestionAnswerDetail[];
     const summaryParts = answers.map(
-      (a) =>
-        `Q${a.questionIndex + 1} (${a.question}): ${[
-          ...a.selectedOptions,
-          ...(a.customAnswer ? [`custom: "${a.customAnswer}"`] : []),
-        ].join(", ")}`
+      (a) => `Q${a.questionIndex + 1} (${a.question}): ${summarizeAnswerDetail(a)}`
     );
     return {
       answers,
@@ -124,4 +145,3 @@ export function normalizeAskUserResult(value: unknown): AskUserResult {
       : {}),
   };
 }
-

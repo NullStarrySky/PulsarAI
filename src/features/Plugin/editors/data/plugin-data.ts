@@ -124,69 +124,9 @@ export function parsePluginDataDefinition(
   };
 }
 
-export function pluginDataInstanceKey(
-  dataId: string,
-  isolation: PluginDataIsolation,
-  resourceId: string,
-) {
-  const normalizedDataId = dataId.trim();
-  if (!normalizedDataId) throw new Error("Data 资源 ID 不能为空。");
-  if (isolation === "conversation") return `data:${normalizedDataId}`;
-  const normalizedResourceId = resourceId.trim();
-  if (!normalizedResourceId) {
-    throw new Error(`Data ${normalizedDataId} 按资源隔离，必须提供资源 ID。`);
-  }
-  return `data:${normalizedDataId}:resource:${normalizedResourceId}`;
-}
 
-export function serializePluginDataDefinition(
-  definition: PluginDataDefinition,
-): string {
-  return JSON.stringify(definition, null, 2);
-}
 
-export function createPluginDataContainer(input: {
-  dataId: string;
-  definition: PluginDataDefinition;
-  runtime: PluginDataRuntimeBinding;
-}): PluginDataContainer {
-  const dataId = input.dataId.trim();
-  if (!dataId) throw new Error("Data 资源 ID 不能为空。");
-  const definition = structuredClone(input.definition);
 
-  const addressFor = (resourceId: string): PluginDataInstanceAddress => {
-    if (definition.isolation === "conversation") return { dataId };
-    const normalizedResourceId = resourceId.trim();
-    if (!normalizedResourceId) {
-      throw new Error(`Data ${dataId} 按资源隔离，必须提供资源 ID。`);
-    }
-    return { dataId, resourceId: normalizedResourceId };
-  };
-
-  return {
-    dataId,
-    definition,
-    readForResource(resourceId: string) {
-      const value = input.runtime.read(addressFor(resourceId));
-      return structuredClone(value ?? definition.initialValue);
-    },
-    writeForResource(resourceId: string, value: PluginDataValue) {
-      input.runtime.write(
-        addressFor(resourceId),
-        structuredClone(assertPluginDataValue(value)),
-      );
-    },
-  };
-}
-
-export function assertPluginDataValue(value: unknown): PluginDataValue {
-  const diagnostics: PluginDataDiagnostic[] = [];
-  const normalized = normalizeValue(value, "$", diagnostics);
-  if (diagnostics.length) {
-    throw new Error(diagnostics.map((item) => item.message).join(" "));
-  }
-  return normalized;
-}
 
 function parseSource(
   input: unknown,

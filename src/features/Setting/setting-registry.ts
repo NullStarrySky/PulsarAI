@@ -11,7 +11,7 @@ import BackupSettingsPage from "@/features/Backup/BackupSettingsPage.vue";
 import StatisticSettingsPage from "@/features/Statistic/StatisticSettingsPage.vue";
 import TranslateSettingsPage from "@/features/Translate/TranslateSettingsPage.vue";
 import RuntimeSettingsPage from "@/features/Misc/RuntimeSettingsPage.vue";
-import ConversationFavoriteSettingsPage from "@/features/Conversation/pages/ConversationFavoriteSettingsPage.vue";
+import ConversationFavoriteSettingsPage from "./components/pages/ConversationFavoriteSettingsPage.vue";
 import TtsSettingsPage from "@/features/TTS/TtsSettingsPage.vue";
 import SttSettingsPage from "@/features/STT/SttSettingsPage.vue";
 import ImageGenerationSettingsPage from "@/features/ImageGeneration/ImageGenerationSettingsPage.vue";

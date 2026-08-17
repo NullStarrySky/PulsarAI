@@ -8,14 +8,22 @@ import {
   usePluginStore,
 } from "@/features/Plugin/tree/plugin-store";
 import type { Plugin } from "@/features/Plugin/tree/plugin-types";
-import { pluginGenerateFile } from "@/features/Plugin/runtime/plugin-generate-path";
-import {
-  runConversationGeneration,
-  type GenerateSubAgentRequest,
-  type GenerateSubAgentResult,
-} from "@/features/Conversation/generation/conversation-generation";
-import { buildConversationResourceContext } from "@/features/Conversation/store/conversation-resource-context";
+import { pluginGenerateFile } from "@/features/Plugin/runtime/environment";
+import { executeConversationGeneration } from "@/features/Conversation/generation/conversation-generation";
 import { deleteConversationMemory } from "@/features/Conversation/generation/conversation-memory";
+
+export interface GenerateSubAgentRequest {
+  prompt: string;
+  plugin?: string;
+  environment?: string;
+}
+
+export interface GenerateSubAgentResult {
+  content: string;
+  conversationId: string;
+  pluginId?: string;
+  ephemeral?: boolean;
+}
 import type {
   CharacterPackage,
   ActionPart,
@@ -1400,42 +1408,18 @@ export const useConversationStore = defineStore("conversation", {
         (container) => this.currentMessage(container)?.type !== "error",
       );
       const childChat = modelMessagesFromPath(activePath);
-      await runConversationGeneration({
-        plugins,
+      await executeConversationGeneration({
+        plugins: plugins as any,
         packageId: childConversation.packageId,
         mainPluginId,
         conversationId: childConversation.id,
-        conversation: childConversation,
         activePath,
         chat: childChat,
+        bootstrapMessages: [],
         emptyContainer: assistantContainer,
         emptyMessage: assistantMessage,
+        containerId: assistantContainer.id,
         prompt,
-        resourceContext: buildConversationResourceContext(
-          childConversation,
-          pluginItems(pluginStore),
-          this.packages,
-          this.conversations,
-          this.containers,
-        ),
-        onChatPush: async (message, merge) => {
-          const last = childChat[childChat.length - 1];
-          if (merge && last?.role === message.role && typeof last.content === "string") {
-            last.content = last.content && message.content
-              ? `${last.content}\n${message.content}`
-              : last.content || message.content;
-          } else {
-            Array.prototype.push.call(childChat, {
-              role: message.role,
-              content: message.content,
-            });
-          }
-          return null;
-        },
-        generateSubAgent: (nested) => this.runSubAgent(nested, {
-          conversation: childConversation,
-          depth: depth + 1,
-        }),
       });
       if (assistantMessage.type === "error") {
         throw new Error(assistantMessage.content);
@@ -1585,12 +1569,11 @@ export const useConversationStore = defineStore("conversation", {
         const actionPart = command?.action ?? promptMessage?.parts?.find(
           (part): part is ActionPart => part.type === "action",
         );
-        await runConversationGeneration({
-          plugins: enabledPlugins,
+        await executeConversationGeneration({
+          plugins: enabledPlugins as any,
           packageId: conversation.packageId,
           mainPluginId,
           conversationId: container.conversationid,
-          conversation,
           activePath: generationPath,
           chat: [
             ...this.modelMessagesBefore(container),
@@ -1598,8 +1581,11 @@ export const useConversationStore = defineStore("conversation", {
               ? [{ role: "user" as const, content: generation.prompt }]
               : []),
           ],
+          bootstrapMessages: [],
           emptyContainer: container,
           emptyMessage: message,
+          beforeGenerationMessage,
+          containerId: container.id,
           action: actionPart
             ? {
                 pluginId: actionPart.pluginId,
@@ -1608,20 +1594,6 @@ export const useConversationStore = defineStore("conversation", {
               }
             : undefined,
           prompt: command?.prompt ?? promptMessage?.content ?? "",
-          resourceContext: buildConversationResourceContext(
-            conversation,
-            pluginItems(pluginStore),
-            this.packages,
-            this.conversations,
-            this.containers,
-          ),
-          clearBeforeGeneration: generation?.clearBeforeGeneration ?? false,
-          beforeGenerationMessage,
-          onChatPush: (chatMessage, merge) =>
-            this.pushChatMessage(chatMessage, merge, container.conversationid),
-          generateSubAgent: (request) => this.runSubAgent(request, {
-            conversation,
-          }),
           onReplyChange: async () => {
             await mutate?.(message, container);
             await persistReplyThrottled();

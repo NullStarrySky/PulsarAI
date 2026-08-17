@@ -11,6 +11,7 @@ import {
   Languages,
   MoreHorizontal,
   Pencil,
+  Play,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -58,13 +59,11 @@ import { startWindowDragFromBackground } from "@/features/UI/window-drag";
 import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import type { ActionPart, ChatMessage, ChatMessageContainer, FilePart } from "@/features/Conversation/messages/conversation-types";
 import ConversationComposerEditor from "@/features/Conversation/composer/ConversationComposerEditor.vue";
-import ConversationMarkdown from "@/features/Conversation/stage/ConversationMarkdown.vue";
-import ConversationMessageContent from "@/features/Conversation/stage/ConversationMessageContent.vue";
-import type { ConversationMarkdownSelection } from "@/features/Conversation/stage/ConversationMarkdown.vue";
-import MessageActionBadge from "@/features/Conversation/stage/MessageActionBadge.vue";
+import ConversationMarkdown from "@/features/Conversation/stage/markstream/ConversationMarkdown.vue";
+import ConversationMessageContent from "@/features/Conversation/stage/markstream/ConversationMessageContent.vue";
+import type { ConversationMarkdownSelection } from "@/features/Conversation/stage/markstream/ConversationMarkdown.vue";
 import MessageAttachmentStrip from "@/features/Conversation/stage/MessageAttachmentStrip.vue";
-import ThinkingStepsComponent, { type StepRow } from "@/features/Plugin/agent/components/ThinkingStepsComponent.vue";
-import { getGenerationComponent } from "@/features/Conversation/generation-components/generation-component-registry";
+import ThinkingStepsComponent, { type StepRow } from "@/features/Conversation/components/ThinkingStepsComponent.vue";
 import { playMessageSpeech } from "@/features/TTS/message-speech-cache";
 
 const conversation = useConversationStore();
@@ -116,13 +115,6 @@ function fileParts(message?: ChatMessage | null): FilePart[] {
 
 function actionPart(message?: ChatMessage | null) {
   return message?.parts?.find((part): part is ActionPart => part.type === "action") ?? null;
-}
-
-function componentParts(message?: ChatMessage | null) {
-  return (message?.parts ?? []).filter(
-    (part): part is { type: "component"; componentId: string; props?: Record<string, unknown> } =>
-      part.type === "component"
-  );
 }
 
 function mapStepsToRows(steps: ReturnType<typeof agentSteps>): StepRow[] {
@@ -428,15 +420,19 @@ function dragImmersiveConversationBackground(event: MouseEvent) {
                             <MarkerIcon><CircleAlert /></MarkerIcon>
                             <MarkerContent>运行错误</MarkerContent>
                           </Marker>
-                          <MessageActionBadge v-if="actionPart(messageOf(container))" :action="actionPart(messageOf(container))!" class="mb-2" />
+                          <div
+                            v-if="actionPart(messageOf(container))"
+                            class="mb-2 flex justify-start"
+                          >
+                            <div class="flex max-w-full items-center gap-2 rounded-md border bg-muted/45 px-2.5 py-1 text-xs">
+                              <Play class="size-3.5 shrink-0 text-primary" />
+                              <span class="shrink-0 font-mono font-medium">/{{ actionPart(messageOf(container))!.name }}</span>
+                              <span v-if="actionPart(messageOf(container))!.description" class="truncate text-muted-foreground">
+                                {{ actionPart(messageOf(container))!.description }}
+                              </span>
+                            </div>
+                          </div>
                           <MessageAttachmentStrip v-if="fileParts(messageOf(container)).length" :attachments="fileParts(messageOf(container))" class="mb-2" />
-                          <template v-for="part in componentParts(messageOf(container))" :key="part.componentId">
-                            <component
-                              :is="getGenerationComponent(part.componentId)"
-                              v-bind="part.props"
-                              class="mb-2"
-                            />
-                          </template>
                           <ConversationComposerEditor
                             v-if="isEditing(container)"
                             v-model="editing.content"

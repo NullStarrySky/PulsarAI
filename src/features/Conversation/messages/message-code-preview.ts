@@ -11,7 +11,7 @@ export type MessageContentSegment =
 
 const fencedCodePattern = /```([^\r\n]*)\r?\n([\s\S]*?)```/g;
 
-export function isInteractiveCode(content: string) {
+function isInteractiveCode(content: string) {
   const normalized = content.toLocaleLowerCase();
   return (
     normalized.includes("<html")

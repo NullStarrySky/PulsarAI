@@ -2,7 +2,6 @@ import { createNotivue } from "notivue";
 import { createPinia } from "pinia";
 import { createApp } from "vue";
 import App from "./App.vue";
-import "@/features/Plugin/agent/components/register-agent-generation-components";
 import "./styles/globals.css";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";

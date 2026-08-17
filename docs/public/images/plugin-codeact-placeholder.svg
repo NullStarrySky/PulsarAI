@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560">
-  <rect width="1200" height="560" fill="#f4f4f5"/>
-  <rect x="24" y="24" width="1152" height="512" rx="18" fill="none" stroke="#a1a1aa" stroke-width="2" stroke-dasharray="10 10"/>
-  <text x="600" y="260" text-anchor="middle" font-family="sans-serif" font-size="28" fill="#52525b">图片占位：CodeAct 执行流程</text>
-  <text x="600" y="310" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#71717a">展示模型生成带 return 的函数、Sandbox 调用 API、返回值或错误回到模型</text>
-</svg>
