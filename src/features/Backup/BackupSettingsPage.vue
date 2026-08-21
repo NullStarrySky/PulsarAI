@@ -1,25 +1,29 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
 import {
-  ArchiveRestore,
-  Check,
-  ChevronsUpDown,
-  DatabaseBackup,
-  Download,
-  RefreshCw,
-  Search,
-  ShieldCheck,
-  Upload,
+	ArchiveRestore,
+	Check,
+	ChevronsUpDown,
+	DatabaseBackup,
+	Download,
+	RefreshCw,
+	Search,
+	ShieldCheck,
+	Upload,
 } from "lucide-vue-next";
+import { computed, onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useConversationStore } from "@/features/Conversation/store/conversation-store";
@@ -28,15 +32,15 @@ import type { Plugin } from "@/features/Plugin/tree/plugin-types";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingItem from "@/features/Setting/components/SettingItem.vue";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
-import {
-  backupIntervalOptions,
-  backupLimitOptions,
-  type BackupInterval,
-  type BackupLimit,
-  type ResourceImportMode,
-  useBackupStore,
-} from "./backup-store";
 import BackupResourceRestoreDialog from "./BackupResourceRestoreDialog.vue";
+import {
+	type BackupInterval,
+	type BackupLimit,
+	backupIntervalOptions,
+	backupLimitOptions,
+	type ResourceImportMode,
+	useBackupStore,
+} from "./backup-store";
 
 const backup = useBackupStore();
 const conversation = useConversationStore();
@@ -48,74 +52,77 @@ const resourceImportMode = ref<ResourceImportMode>("copy");
 const syncScopeOpen = ref(false);
 const syncScopeSearch = ref("");
 const backupOptions = computed(() =>
-  backup.backups.map((item) => ({ value: item.id, label: item.name })),
+	backup.backups.map((item) => ({ value: item.id, label: item.name })),
 );
 const syncHistory = computed(() =>
-  Object.entries(backup.lastSyncByDevice).sort((a, b) => b[1].localeCompare(a[1])),
+	Object.entries(backup.lastSyncByDevice).sort((a, b) =>
+		b[1].localeCompare(a[1]),
+	),
 );
 const selectedSyncPackageCount = computed(
-  () => conversation.packages.filter((item) => item.syncEnabled !== false).length,
+	() =>
+		conversation.packages.filter((item) => item.syncEnabled !== false).length,
 );
 const filteredSyncPackages = computed(() => {
-  const keyword = syncScopeSearch.value.trim().toLocaleLowerCase();
-  return conversation.packages
-    .filter(
-      (item) => !keyword || item.name.toLocaleLowerCase().includes(keyword),
-    )
-    .sort((a, b) => a.name.localeCompare(b.name, "zh-Hans"));
+	const keyword = syncScopeSearch.value.trim().toLocaleLowerCase();
+	return conversation.packages
+		.filter(
+			(item) => !keyword || item.name.toLocaleLowerCase().includes(keyword),
+		)
+		.sort((a, b) => a.name.localeCompare(b.name, "zh-Hans"));
 });
 const exportResourceOptions = computed(() => [
-  ...conversation.packages.map((item) => ({
-    value: `package:${item.id}`,
-    label: `角色包 · ${item.name}`,
-  })),
-  ...conversation.conversations.map((item) => ({
-    value: `conversation:${item.id}`,
-    label: `会话 · ${item.title}`,
-  })),
-  ...pluginItems()
-    .filter((item) => !item.builtIn)
-    .map((item) => ({
-      value: `plugin:${item.id}`,
-      label: `插件 · ${item.name}`,
-    })),
+	...conversation.packages.map((item) => ({
+		value: `package:${item.id}`,
+		label: `角色包 · ${item.name}`,
+	})),
+	...conversation.conversations.map((item) => ({
+		value: `conversation:${item.id}`,
+		label: `会话 · ${item.title}`,
+	})),
+	...pluginItems()
+		.filter((item) => !item.builtIn)
+		.map((item) => ({
+			value: `plugin:${item.id}`,
+			label: `插件 · ${item.name}`,
+		})),
 ]);
 
 onMounted(async () => {
-  await Promise.all([
-    backup.initialize(),
-    conversation.initialize(),
-    plugin.initialize(),
-  ]);
+	await Promise.all([
+		backup.initialize(),
+		conversation.initialize(),
+		plugin.initialize(),
+	]);
 });
 
 async function openResourceRestore() {
-  if (await backup.loadBackupResources()) {
-    restoreDialogOpen.value = true;
-  }
+	if (await backup.loadBackupResources()) {
+		restoreDialogOpen.value = true;
+	}
 }
 
 function formatSyncTime(value: string) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+	return new Intl.DateTimeFormat("zh-CN", {
+		dateStyle: "medium",
+		timeStyle: "short",
+	}).format(new Date(value));
 }
 
 async function exportSelectedResource() {
-  try {
-    await backup.exportResource(selectedExportResource.value);
-  } catch (error) {
-    backup.status = `导出失败：${String(error)}`;
-  }
+	try {
+		await backup.exportResource(selectedExportResource.value);
+	} catch (error) {
+		backup.status = `导出失败：${String(error)}`;
+	}
 }
 
 async function importResourceArchive() {
-  try {
-    await backup.importResourceArchive(resourceImportMode.value);
-  } catch (error) {
-    backup.status = `导入失败：${String(error)}`;
-  }
+	try {
+		await backup.importResourceArchive(resourceImportMode.value);
+	} catch (error) {
+		backup.status = `导入失败：${String(error)}`;
+	}
 }
 </script>
 

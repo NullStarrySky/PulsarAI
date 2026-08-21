@@ -1,28 +1,33 @@
 <script setup lang="ts">
+import {
+	ArchiveRestore,
+	Box,
+	MessageSquareText,
+	PlugZap,
+} from "lucide-vue-next";
 import { computed, ref } from "vue";
-import { ArchiveRestore, Box, MessageSquareText, PlugZap } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogScrollContent,
-  DialogTitle,
+	Dialog,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogScrollContent,
+	DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
 } from "@/components/ui/select";
 import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import {
-  useBackupStore,
-  type ResourceImportMode,
-  type RestorableResource,
+	type ResourceImportMode,
+	type RestorableResource,
+	useBackupStore,
 } from "./backup-store";
 
 const open = defineModel<boolean>("open", { default: false });
@@ -31,46 +36,48 @@ const conversation = useConversationStore();
 const restoreMode = ref<ResourceImportMode>("copy");
 
 const packages = computed(() =>
-  (backup.backupResources?.packages ?? []).map((item) => ({
-    ...item,
-    conversations: backup.restorableResources.filter(
-      (resource) => resource.type === "conversation" && resource.packageId === item.id,
-    ),
-    plugins: backup.restorableResources.filter(
-      (resource) => resource.type === "plugin" && resource.packageId === item.id,
-    ),
-  })),
+	(backup.backupResources?.packages ?? []).map((item) => ({
+		...item,
+		conversations: backup.restorableResources.filter(
+			(resource) =>
+				resource.type === "conversation" && resource.packageId === item.id,
+		),
+		plugins: backup.restorableResources.filter(
+			(resource) =>
+				resource.type === "plugin" && resource.packageId === item.id,
+		),
+	})),
 );
 
 const globalPlugins = computed(() =>
-  backup.restorableResources.filter(
-    (resource) => resource.type === "plugin" && resource.packageId === null,
-  ),
+	backup.restorableResources.filter(
+		(resource) => resource.type === "plugin" && resource.packageId === null,
+	),
 );
 
 function isSelected(key: string) {
-  return backup.selectedResourceKeys.includes(key);
+	return backup.selectedResourceKeys.includes(key);
 }
 
 function packageAvailable(packageId: string) {
-  return (
-    conversation.packages.some((item) => item.id === packageId)
-    || isSelected(`package:${packageId}`)
-  );
+	return (
+		conversation.packages.some((item) => item.id === packageId) ||
+		isSelected(`package:${packageId}`)
+	);
 }
 
 function toggle(resource: RestorableResource, value: boolean) {
-  backup.toggleResource(resource.key, value);
+	backup.toggleResource(resource.key, value);
 }
 
 async function restore() {
-  try {
-    if (await backup.restoreSelectedResources(restoreMode.value)) {
-      open.value = false;
-    }
-  } catch (error) {
-    backup.status = `恢复失败：${String(error)}`;
-  }
+	try {
+		if (await backup.restoreSelectedResources(restoreMode.value)) {
+			open.value = false;
+		}
+	} catch (error) {
+		backup.status = `恢复失败：${String(error)}`;
+	}
 }
 </script>
 

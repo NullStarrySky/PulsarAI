@@ -1,9 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { defineStore } from "pinia";
+import type {
+  CharacterPackage,
+  ChatMessage,
+  ChatMessageContainer,
+  Conversation,
+} from "@/features/Conversation/messages/conversation-types";
+import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import { remove } from "@/features/Database/database-service";
 import {
   compareVersionVectors,
+  type EntitySyncMeta,
   getLocalDeviceId,
   markLocalDatabaseChange,
   mergeEntitySyncMeta,
@@ -11,20 +19,12 @@ import {
   syncEntityKey,
   withRemoteDatabaseWrites,
   writeSyncMetadata,
-  type EntitySyncMeta,
 } from "@/features/Database/sync-metadata";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
-import type {
-  CharacterPackage,
-  ChatMessage,
-  ChatMessageContainer,
-  Conversation,
-} from "@/features/Conversation/messages/conversation-types";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import {
-  pluginParentPath,
   type Plugin,
   type PluginTreeNode,
+  pluginParentPath,
 } from "@/features/Plugin/tree/plugin-types";
 
 export type BackupInterval = "off" | "10m" | "30m" | "1h" | "6h" | "1d" | "1w";
@@ -139,8 +139,13 @@ function pluginItems(store: ReturnType<typeof usePluginStore>) {
   return (store as unknown as { plugins: Plugin[] }).plugins;
 }
 
-function setBackupResources(target: unknown, snapshot: BackupResourceSnapshot | null) {
-  (target as { backupResources: BackupResourceSnapshot | null }).backupResources = snapshot;
+function setBackupResources(
+  target: unknown,
+  snapshot: BackupResourceSnapshot | null,
+) {
+  (
+    target as { backupResources: BackupResourceSnapshot | null }
+  ).backupResources = snapshot;
 }
 
 function valuesEqual(a: unknown, b: unknown) {
@@ -178,7 +183,10 @@ function unionIds(local: string[] = [], remote: string[] = []) {
   return [...new Set([...local, ...remote])];
 }
 
-function mergeById<T extends { id: string }>(local: T[] = [], remote: T[] = []) {
+function mergeById<T extends { id: string }>(
+  local: T[] = [],
+  remote: T[] = [],
+) {
   const merged = local.map(clonePlain);
   for (const remoteItem of remote) {
     const index = merged.findIndex((item) => item.id === remoteItem.id);
@@ -207,7 +215,12 @@ function countDiffPaths(
       const localMap = new Map(local.map((item) => [item.id, item]));
       const remoteMap = new Map(remote.map((item) => [item.id, item]));
       for (const id of new Set([...localMap.keys(), ...remoteMap.keys()])) {
-        countDiffPaths(localMap.get(id), remoteMap.get(id), `${path}[id=${id}]`, output);
+        countDiffPaths(
+          localMap.get(id),
+          remoteMap.get(id),
+          `${path}[id=${id}]`,
+          output,
+        );
       }
       return output;
     }
@@ -215,7 +228,10 @@ function countDiffPaths(
     return output;
   }
   if (isPlainRecord(local) && isPlainRecord(remote)) {
-    for (const key of new Set([...Object.keys(local), ...Object.keys(remote)])) {
+    for (const key of new Set([
+      ...Object.keys(local),
+      ...Object.keys(remote),
+    ])) {
       countDiffPaths(local[key], remote[key], `${path}.${key}`, output);
     }
     return output;
@@ -258,7 +274,9 @@ function entityRelation(
   remoteMeta?: EntitySyncMeta,
 ) {
   const relation = compareVersionVectors(localMeta?.vector, remoteMeta?.vector);
-  return relation === "equal" && !valuesEqual(local, remote) ? "concurrent" : relation;
+  return relation === "equal" && !valuesEqual(local, remote)
+    ? "concurrent"
+    : relation;
 }
 
 function mergeMessageVersions(local: ChatMessage[], remote: ChatMessage[]) {
@@ -273,7 +291,8 @@ function mergeMessageVersions(local: ChatMessage[], remote: ChatMessage[]) {
           message as unknown as Record<string, unknown>,
           remoteMessage as unknown as Record<string, unknown>,
           ["id"],
-        ));
+        ),
+      );
       if (alreadyPreserved) {
         continue;
       }
@@ -286,7 +305,10 @@ function mergeMessageVersions(local: ChatMessage[], remote: ChatMessage[]) {
   return result;
 }
 
-function mergeContainer(local: ChatMessageContainer, remote: ChatMessageContainer) {
+function mergeContainer(
+  local: ChatMessageContainer,
+  remote: ChatMessageContainer,
+) {
   return {
     ...clonePlain(local),
     content: mergeMessageVersions(local.content, remote.content),
@@ -321,16 +343,17 @@ function mergePluginNodes(
         id: crypto.randomUUID(),
         path,
         name,
-        treeOrder: Math.max(existing.treeOrder ?? 0, remoteNode.treeOrder ?? 0) + 1,
+        treeOrder:
+          Math.max(existing.treeOrder ?? 0, remoteNode.treeOrder ?? 0) + 1,
       });
       continue;
     }
     if (existing.kind === "file" && remoteNode.kind === "file") {
       const alreadyPreserved = result.some(
         (node) =>
-          node.kind === "file"
-          && node.path !== remoteNode.path
-          && valuesEqualWithoutKeys(
+          node.kind === "file" &&
+          node.path !== remoteNode.path &&
+          valuesEqualWithoutKeys(
             node as unknown as Record<string, unknown>,
             remoteNode as unknown as Record<string, unknown>,
             ["id", "name", "treeOrder", "path"],
@@ -350,7 +373,8 @@ function mergePluginNodes(
         id: crypto.randomUUID(),
         path,
         name,
-        treeOrder: Math.max(existing.treeOrder ?? 0, remoteNode.treeOrder ?? 0) + 1,
+        treeOrder:
+          Math.max(existing.treeOrder ?? 0, remoteNode.treeOrder ?? 0) + 1,
       });
     }
     // Matching folder rows carry no content; keep the local one.
@@ -384,21 +408,33 @@ function syncableSnapshot(
       .filter((item) => item.syncEnabled !== false)
       .map((item) => item.id),
   );
-  const conversations = conversation.conversations.filter((item) => packageIds.has(item.packageId));
+  const conversations = conversation.conversations.filter((item) =>
+    packageIds.has(item.packageId),
+  );
   const conversationIds = new Set(conversations.map((item) => item.id));
   const containers = conversation.containers.filter((item) =>
     conversationIds.has(item.conversationid),
   );
   const plugins = pluginItems(plugin).filter(
-    (item) => !item.builtIn && (item.packageId === null || packageIds.has(item.packageId)),
+    (item) =>
+      !item.builtIn &&
+      (item.packageId === null || packageIds.has(item.packageId)),
   );
   const currentMetadata = readSyncMetadata().entities;
   const entities = [
     ...conversation.packages
       .filter((item) => packageIds.has(item.id))
       .map((value) => ({ table: packageTable, id: value.id, value })),
-    ...conversations.map((value) => ({ table: conversationTable, id: value.id, value })),
-    ...containers.map((value) => ({ table: containerTable, id: value.id, value })),
+    ...conversations.map((value) => ({
+      table: conversationTable,
+      id: value.id,
+      value,
+    })),
+    ...containers.map((value) => ({
+      table: containerTable,
+      id: value.id,
+      value,
+    })),
     ...plugins.map((value) => ({ table: pluginTable, id: value.id, value })),
   ];
   for (const entity of entities) {
@@ -419,7 +455,9 @@ function syncableSnapshot(
     deviceId: getLocalDeviceId(),
     deviceName,
     createdAt: new Date().toISOString(),
-    packages: conversation.packages.filter((item) => packageIds.has(item.id)).map(clonePlain),
+    packages: conversation.packages
+      .filter((item) => packageIds.has(item.id))
+      .map(clonePlain),
     conversations: conversations.map(clonePlain),
     containers: containers.map(clonePlain),
     plugins: plugins.map(clonePlain),
@@ -435,11 +473,13 @@ function syncableSnapshot(
           return true;
         }
         return (
-          value.scopePackageId === null
-          || Boolean(value.scopePackageId && packageIds.has(value.scopePackageId))
-          || Boolean(
-            value.parentConversationId
-            && includedConversationIds.has(value.parentConversationId),
+          value.scopePackageId === null ||
+          Boolean(
+            value.scopePackageId && packageIds.has(value.scopePackageId),
+          ) ||
+          Boolean(
+            value.parentConversationId &&
+            includedConversationIds.has(value.parentConversationId),
           )
         );
       }),
@@ -462,7 +502,10 @@ async function persistMergedSnapshot(
         continue;
       }
       const localMeta = metadata.entities[key];
-      const relation = compareVersionVectors(localMeta?.vector, remoteMeta.vector);
+      const relation = compareVersionVectors(
+        localMeta?.vector,
+        remoteMeta.vector,
+      );
       if (relation !== "remote-newer") {
         metadata.entities[key] = mergeEntitySyncMeta(localMeta, remoteMeta);
         continue;
@@ -470,22 +513,27 @@ async function persistMergedSnapshot(
       const separator = key.indexOf(":");
       const table = key.slice(0, separator);
       const id = key.slice(separator + 1);
-      if (table === packageTable && conversation.packages.some((item) => item.id === id)) {
+      if (
+        table === packageTable &&
+        conversation.packages.some((item) => item.id === id)
+      ) {
         await conversation.deletePackage(id);
       } else if (
-        table === conversationTable
-        && conversation.conversations.some((item) => item.id === id)
+        table === conversationTable &&
+        conversation.conversations.some((item) => item.id === id)
       ) {
         await conversation.deleteConversation(id);
       } else if (
-        table === containerTable
-        && conversation.containers.some((item) => item.id === id)
+        table === containerTable &&
+        conversation.containers.some((item) => item.id === id)
       ) {
-        conversation.containers = conversation.containers.filter((item) => item.id !== id);
+        conversation.containers = conversation.containers.filter(
+          (item) => item.id !== id,
+        );
         await remove(containerTable, id);
       } else if (
-        table === pluginTable
-        && pluginItems(pluginStore).some((item) => item.id === id && !item.builtIn)
+        table === pluginTable &&
+        pluginItems(pluginStore).some((item) => item.id === id && !item.builtIn)
       ) {
         await pluginStore.deletePlugin(id);
       }
@@ -494,7 +542,9 @@ async function persistMergedSnapshot(
     }
 
     for (const remotePackage of remote.packages) {
-      const local = conversation.packages.find((item) => item.id === remotePackage.id);
+      const local = conversation.packages.find(
+        (item) => item.id === remotePackage.id,
+      );
       const key = syncEntityKey(packageTable, remotePackage.id);
       const relation = entityRelation(
         local,
@@ -503,14 +553,22 @@ async function persistMergedSnapshot(
         remote.metadata[key],
       );
       if (!local) {
-        conversation.packages.push({ ...clonePlain(remotePackage), syncEnabled: true });
+        conversation.packages.push({
+          ...clonePlain(remotePackage),
+          syncEnabled: true,
+        });
         await conversation.persistPackage(remotePackage);
         copied += 1;
       } else if (relation === "remote-newer") {
-        Object.assign(local, clonePlain(remotePackage), { syncEnabled: local.syncEnabled ?? true });
+        Object.assign(local, clonePlain(remotePackage), {
+          syncEnabled: local.syncEnabled ?? true,
+        });
         await conversation.persistPackage(local);
         copied += 1;
-      } else if (relation === "concurrent" && !valuesEqual(local, remotePackage)) {
+      } else if (
+        relation === "concurrent" &&
+        !valuesEqual(local, remotePackage)
+      ) {
         local.conversations = [
           ...local.conversations,
           ...remotePackage.conversations.filter(
@@ -533,10 +591,16 @@ async function persistMergedSnapshot(
     }
 
     for (const remoteConversation of remote.conversations) {
-      if (!conversation.packages.some((item) => item.id === remoteConversation.packageId)) {
+      if (
+        !conversation.packages.some(
+          (item) => item.id === remoteConversation.packageId,
+        )
+      ) {
         continue;
       }
-      const local = conversation.conversations.find((item) => item.id === remoteConversation.id);
+      const local = conversation.conversations.find(
+        (item) => item.id === remoteConversation.id,
+      );
       const key = syncEntityKey(conversationTable, remoteConversation.id);
       const relation = entityRelation(
         local,
@@ -550,7 +614,12 @@ async function persistMergedSnapshot(
         const parent = conversation.packages.find(
           (item) => item.id === remoteConversation.packageId,
         );
-        if (parent && !parent.conversations.some((link) => link.id === remoteConversation.id)) {
+        if (
+          parent &&
+          !parent.conversations.some(
+            (link) => link.id === remoteConversation.id,
+          )
+        ) {
           parent.conversations.push({
             id: remoteConversation.id,
             lastContainerid: remoteConversation.lastContainerId ?? "",
@@ -563,7 +632,10 @@ async function persistMergedSnapshot(
         Object.assign(local, clonePlain(remoteConversation));
         await conversation.persistConversation(local);
         copied += 1;
-      } else if (relation === "concurrent" && !valuesEqual(local, remoteConversation)) {
+      } else if (
+        relation === "concurrent" &&
+        !valuesEqual(local, remoteConversation)
+      ) {
         if (remoteConversation.updatedAt > local.updatedAt) {
           Object.assign(local, clonePlain(remoteConversation));
         }
@@ -577,10 +649,16 @@ async function persistMergedSnapshot(
     }
 
     for (const remoteContainer of remote.containers) {
-      if (!conversation.conversations.some((item) => item.id === remoteContainer.conversationid)) {
+      if (
+        !conversation.conversations.some(
+          (item) => item.id === remoteContainer.conversationid,
+        )
+      ) {
         continue;
       }
-      const local = conversation.containers.find((item) => item.id === remoteContainer.id);
+      const local = conversation.containers.find(
+        (item) => item.id === remoteContainer.id,
+      );
       const key = syncEntityKey(containerTable, remoteContainer.id);
       const relation = entityRelation(
         local,
@@ -596,7 +674,10 @@ async function persistMergedSnapshot(
         Object.assign(local, clonePlain(remoteContainer));
         await conversation.persistContainer(local);
         copied += 1;
-      } else if (relation === "concurrent" && !valuesEqual(local, remoteContainer)) {
+      } else if (
+        relation === "concurrent" &&
+        !valuesEqual(local, remoteContainer)
+      ) {
         Object.assign(local, mergeContainer(local, remoteContainer));
         await conversation.persistContainer(local);
         merged += 1;
@@ -609,12 +690,16 @@ async function persistMergedSnapshot(
 
     for (const remotePlugin of remote.plugins) {
       if (
-        remotePlugin.packageId !== null
-        && !conversation.packages.some((item) => item.id === remotePlugin.packageId)
+        remotePlugin.packageId !== null &&
+        !conversation.packages.some(
+          (item) => item.id === remotePlugin.packageId,
+        )
       ) {
         continue;
       }
-      const local = pluginItems(pluginStore).find((item) => item.id === remotePlugin.id);
+      const local = pluginItems(pluginStore).find(
+        (item) => item.id === remotePlugin.id,
+      );
       const key = syncEntityKey(pluginTable, remotePlugin.id);
       const relation = entityRelation(
         local,
@@ -630,7 +715,10 @@ async function persistMergedSnapshot(
         Object.assign(local, clonePlain(remotePlugin));
         await pluginStore.persistPlugin(local);
         copied += 1;
-      } else if (relation === "concurrent" && !valuesEqual(local, remotePlugin)) {
+      } else if (
+        relation === "concurrent" &&
+        !valuesEqual(local, remotePlugin)
+      ) {
         Object.assign(local, mergePlugin(local, remotePlugin));
         await pluginStore.persistPlugin(local);
         merged += 1;
@@ -685,7 +773,8 @@ export const useBackupStore = defineStore("backup", {
       if (!state.backupResources) {
         return [];
       }
-      const snapshot = state.backupResources as unknown as BackupResourceSnapshot;
+      const snapshot =
+        state.backupResources as unknown as BackupResourceSnapshot;
       const resources: RestorableResource[] = [];
       for (const item of snapshot.packages) {
         resources.push({
@@ -737,7 +826,11 @@ export const useBackupStore = defineStore("backup", {
     persist() {
       localStorage.setItem(
         storageKey,
-        JSON.stringify({ local: this.local, remote: this.remote, lan: this.lan }),
+        JSON.stringify({
+          local: this.local,
+          remote: this.remote,
+          lan: this.lan,
+        }),
       );
     },
     updateLocal(patch: Partial<BackupEndpointSettings>) {
@@ -802,24 +895,24 @@ export const useBackupStore = defineStore("backup", {
         const root = conversation.conversations.find((item) => item.id === id);
         if (!root) throw new Error("会话不存在");
         name = root.title;
-        const parent = conversation.packages.find((item) => item.id === root.packageId);
-        packages = parent
-          ? [{ ...clonePlain(parent), conversations: [] }]
-          : [];
+        const parent = conversation.packages.find(
+          (item) => item.id === root.packageId,
+        );
+        packages = parent ? [{ ...clonePlain(parent), conversations: [] }] : [];
         conversations = [clonePlain(root)];
         containers = conversation.containers
           .filter((item) => item.conversationid === id)
           .map(clonePlain);
       } else {
-        const root = pluginItems(pluginStore).find((item) => item.id === id && !item.builtIn);
+        const root = pluginItems(pluginStore).find(
+          (item) => item.id === id && !item.builtIn,
+        );
         if (!root) throw new Error("插件不存在或不可导出");
         name = root.name;
         const parent = root.packageId
           ? conversation.packages.find((item) => item.id === root.packageId)
           : null;
-        packages = parent
-          ? [{ ...clonePlain(parent), conversations: [] }]
-          : [];
+        packages = parent ? [{ ...clonePlain(parent), conversations: [] }] : [];
         plugins = [clonePlain(root)];
       }
 
@@ -844,9 +937,12 @@ export const useBackupStore = defineStore("backup", {
         filters: [{ name: "Pulsar 资源归档", extensions: ["zst"] }],
       });
       if (typeof selected !== "string") return false;
-      const payload = await invoke<ResourceArchivePayload>("resource_archive_read", {
-        path: selected,
-      });
+      const payload = await invoke<ResourceArchivePayload>(
+        "resource_archive_read",
+        {
+          path: selected,
+        },
+      );
       if (!["package", "conversation", "plugin"].includes(payload.rootType)) {
         throw new Error("资源归档的根类型不受支持");
       }
@@ -859,9 +955,9 @@ export const useBackupStore = defineStore("backup", {
         (item) => item.key === `${payload.rootType}:${payload.rootId}`,
       );
       if (
-        root?.type !== "package"
-        && root?.packageId
-        && !conversation.packages.some((item) => item.id === root.packageId)
+        root?.type !== "package" &&
+        root?.packageId &&
+        !conversation.packages.some((item) => item.id === root.packageId)
       ) {
         this.selectedResourceKeys.push(`package:${root.packageId}`);
       }
@@ -901,10 +997,13 @@ export const useBackupStore = defineStore("backup", {
       this.loadingResources = true;
       try {
         this.status = "";
-        const snapshot = await invoke<BackupResourceSnapshot>("backup_read_resources", {
-          directory: String(this.local.directory || ""),
-          backupId: String(this.local.selectedBackup),
-        });
+        const snapshot = await invoke<BackupResourceSnapshot>(
+          "backup_read_resources",
+          {
+            directory: String(this.local.directory || ""),
+            backupId: String(this.local.selectedBackup),
+          },
+        );
         setBackupResources(this, snapshot);
         this.selectedResourceKeys = [];
         return true;
@@ -929,7 +1028,8 @@ export const useBackupStore = defineStore("backup", {
       mode: ResourceImportMode = "copy",
       resourceArchivePath = "",
     ) {
-      const source = this.backupResources as unknown as BackupResourceSnapshot | null;
+      const source = this
+        .backupResources as unknown as BackupResourceSnapshot | null;
       if (!source || this.selectedResourceKeys.length === 0) {
         this.status = "请选择要恢复的资源";
         return false;
@@ -949,11 +1049,13 @@ export const useBackupStore = defineStore("backup", {
       );
       for (const item of this.restorableResources) {
         if (
-          item.type !== "package"
-          && selected.has(item.key)
-          && item.packageId
-          && !selectedPackageIds.has(item.packageId)
-          && !conversation.packages.some((current) => current.id === item.packageId)
+          item.type !== "package" &&
+          selected.has(item.key) &&
+          item.packageId &&
+          !selectedPackageIds.has(item.packageId) &&
+          !conversation.packages.some(
+            (current) => current.id === item.packageId,
+          )
         ) {
           this.status = `无法单独恢复“${item.name}”：当前不存在它所属的角色包`;
           return false;
@@ -965,11 +1067,10 @@ export const useBackupStore = defineStore("backup", {
       const containerIdMap = new Map<string, string>();
       const pluginsToRestore = source.plugins.filter(
         (item) =>
-          !item.builtIn
-          && (
-            (item.packageId !== null && selectedPackageIds.has(item.packageId))
-            || selected.has(`plugin:${item.id}`)
-          ),
+          !item.builtIn &&
+          ((item.packageId !== null &&
+            selectedPackageIds.has(item.packageId)) ||
+            selected.has(`plugin:${item.id}`)),
       );
       const pluginIdMap = new Map(
         pluginsToRestore.map((item) => [
@@ -981,8 +1082,12 @@ export const useBackupStore = defineStore("backup", {
       );
       let restored = 0;
 
-      for (const sourcePackage of source.packages.filter((item) => selectedPackageIds.has(item.id))) {
-        const collision = conversation.packages.some((item) => item.id === sourcePackage.id);
+      for (const sourcePackage of source.packages.filter((item) =>
+        selectedPackageIds.has(item.id),
+      )) {
+        const collision = conversation.packages.some(
+          (item) => item.id === sourcePackage.id,
+        );
         const id = collision ? crypto.randomUUID() : sourcePackage.id;
         const item: CharacterPackage = {
           ...clonePlain(sourcePackage),
@@ -999,13 +1104,20 @@ export const useBackupStore = defineStore("backup", {
             ? sourcePackage.categoryId
             : null,
           conversations: [],
-          pluginId: pluginIdMap.get(sourcePackage.pluginId) ?? sourcePackage.pluginId,
-          mainPluginId: pluginIdMap.get(sourcePackage.mainPluginId)
-            ?? sourcePackage.mainPluginId,
-          enabledGlobalPluginIds: sourcePackage.enabledGlobalPluginIds
-            .map((pluginId) => pluginIdMap.get(pluginId) ?? pluginId),
+          pluginId:
+            pluginIdMap.get(sourcePackage.pluginId) ?? sourcePackage.pluginId,
+          mainPluginId:
+            pluginIdMap.get(sourcePackage.mainPluginId) ??
+            sourcePackage.mainPluginId,
+          enabledGlobalPluginIds: sourcePackage.enabledGlobalPluginIds.map(
+            (pluginId) => pluginIdMap.get(pluginId) ?? pluginId,
+          ),
           syncEnabled: sourcePackage.syncEnabled ?? true,
-          order: Math.max(-1, ...conversation.packages.map((value) => value.order ?? -1)) + 1,
+          order:
+            Math.max(
+              -1,
+              ...conversation.packages.map((value) => value.order ?? -1),
+            ) + 1,
         };
         packageIdMap.set(sourcePackage.id, id);
         conversation.packages.push(item);
@@ -1015,15 +1127,19 @@ export const useBackupStore = defineStore("backup", {
 
       const conversationsToRestore = source.conversations.filter(
         (item) =>
-          selectedPackageIds.has(item.packageId)
-          || selected.has(`conversation:${item.id}`),
+          selectedPackageIds.has(item.packageId) ||
+          selected.has(`conversation:${item.id}`),
       );
       for (const sourceConversation of conversationsToRestore) {
-        const packageId = packageIdMap.get(sourceConversation.packageId) ?? sourceConversation.packageId;
+        const packageId =
+          packageIdMap.get(sourceConversation.packageId) ??
+          sourceConversation.packageId;
         if (!conversation.packages.some((item) => item.id === packageId)) {
           continue;
         }
-        const collision = conversation.conversations.some((item) => item.id === sourceConversation.id);
+        const collision = conversation.conversations.some(
+          (item) => item.id === sourceConversation.id,
+        );
         const id = collision ? crypto.randomUUID() : sourceConversation.id;
         conversationIdMap.set(sourceConversation.id, id);
         const item: Conversation = {
@@ -1034,13 +1150,13 @@ export const useBackupStore = defineStore("backup", {
             ? {
                 ...clonePlain(sourceConversation.binding),
                 pluginId: sourceConversation.binding.pluginId
-                  ? pluginIdMap.get(sourceConversation.binding.pluginId)
-                    ?? sourceConversation.binding.pluginId
+                  ? (pluginIdMap.get(sourceConversation.binding.pluginId) ??
+                    sourceConversation.binding.pluginId)
                   : undefined,
                 resourceId:
-                  pluginIdMap.get(sourceConversation.binding.resourceId)
-                  ?? packageIdMap.get(sourceConversation.binding.resourceId)
-                  ?? sourceConversation.binding.resourceId,
+                  pluginIdMap.get(sourceConversation.binding.resourceId) ??
+                  packageIdMap.get(sourceConversation.binding.resourceId) ??
+                  sourceConversation.binding.resourceId,
               }
             : undefined,
           title: collision
@@ -1058,8 +1174,12 @@ export const useBackupStore = defineStore("backup", {
         restored += 1;
       }
 
-      const sourceConversationIds = new Set(conversationsToRestore.map((item) => item.id));
-      for (const container of source.containers.filter((item) => sourceConversationIds.has(item.conversationid))) {
+      const sourceConversationIds = new Set(
+        conversationsToRestore.map((item) => item.id),
+      );
+      for (const container of source.containers.filter((item) =>
+        sourceConversationIds.has(item.conversationid),
+      )) {
         containerIdMap.set(
           container.id,
           conversation.containers.some((item) => item.id === container.id)
@@ -1067,17 +1187,20 @@ export const useBackupStore = defineStore("backup", {
             : container.id,
         );
       }
-      for (const sourceContainer of source.containers.filter((item) => sourceConversationIds.has(item.conversationid))) {
+      for (const sourceContainer of source.containers.filter((item) =>
+        sourceConversationIds.has(item.conversationid),
+      )) {
         const item: ChatMessageContainer = {
           ...clonePlain(sourceContainer),
           id: containerIdMap.get(sourceContainer.id) ?? sourceContainer.id,
           conversationid:
-            conversationIdMap.get(sourceContainer.conversationid) ?? sourceContainer.conversationid,
+            conversationIdMap.get(sourceContainer.conversationid) ??
+            sourceContainer.conversationid,
           previousContainer: sourceContainer.previousContainer
-            ? containerIdMap.get(sourceContainer.previousContainer) ?? null
+            ? (containerIdMap.get(sourceContainer.previousContainer) ?? null)
             : null,
           activeNextContainer: sourceContainer.activeNextContainer
-            ? containerIdMap.get(sourceContainer.activeNextContainer) ?? null
+            ? (containerIdMap.get(sourceContainer.activeNextContainer) ?? null)
             : null,
           content: sourceContainer.content.map((message) => ({
             ...clonePlain(message),
@@ -1087,7 +1210,8 @@ export const useBackupStore = defineStore("backup", {
                     ...clonePlain(part),
                     pluginId: pluginIdMap.get(part.pluginId) ?? part.pluginId,
                   }
-                : clonePlain(part)),
+                : clonePlain(part),
+            ),
           })),
         };
         conversation.containers.push(item);
@@ -1095,20 +1219,28 @@ export const useBackupStore = defineStore("backup", {
       }
 
       for (const sourceConversation of conversationsToRestore) {
-        const id = conversationIdMap.get(sourceConversation.id) ?? sourceConversation.id;
-        const item = conversation.conversations.find((value) => value.id === id);
+        const id =
+          conversationIdMap.get(sourceConversation.id) ?? sourceConversation.id;
+        const item = conversation.conversations.find(
+          (value) => value.id === id,
+        );
         if (!item) {
           continue;
         }
         item.rootContainerId = sourceConversation.rootContainerId
-          ? containerIdMap.get(sourceConversation.rootContainerId) ?? null
+          ? (containerIdMap.get(sourceConversation.rootContainerId) ?? null)
           : null;
         item.lastContainerId = sourceConversation.lastContainerId
-          ? containerIdMap.get(sourceConversation.lastContainerId) ?? null
+          ? (containerIdMap.get(sourceConversation.lastContainerId) ?? null)
           : null;
         await conversation.persistConversation(item);
-        const parent = conversation.packages.find((value) => value.id === item.packageId);
-        if (parent && !parent.conversations.some((link) => link.id === item.id)) {
+        const parent = conversation.packages.find(
+          (value) => value.id === item.packageId,
+        );
+        if (
+          parent &&
+          !parent.conversations.some((link) => link.id === item.id)
+        ) {
           parent.conversations.push({
             id: item.id,
             lastContainerid: item.lastContainerId ?? "",
@@ -1120,9 +1252,12 @@ export const useBackupStore = defineStore("backup", {
 
       for (const sourcePlugin of pluginsToRestore) {
         const packageId = sourcePlugin.packageId
-          ? packageIdMap.get(sourcePlugin.packageId) ?? sourcePlugin.packageId
+          ? (packageIdMap.get(sourcePlugin.packageId) ?? sourcePlugin.packageId)
           : null;
-        if (packageId && !conversation.packages.some((item) => item.id === packageId)) {
+        if (
+          packageId &&
+          !conversation.packages.some((item) => item.id === packageId)
+        ) {
           continue;
         }
         const id = pluginIdMap.get(sourcePlugin.id) ?? sourcePlugin.id;
@@ -1169,7 +1304,8 @@ export const useBackupStore = defineStore("backup", {
       return true;
     },
     async updateSelectedResources(resourceArchivePath = "") {
-      const source = this.backupResources as unknown as BackupResourceSnapshot | null;
+      const source = this
+        .backupResources as unknown as BackupResourceSnapshot | null;
       if (!source || this.selectedResourceKeys.length === 0) {
         this.status = "请选择要更新的资源";
         return false;
@@ -1187,10 +1323,12 @@ export const useBackupStore = defineStore("backup", {
       let updated = 0;
       let resolvedDiffs = 0;
 
-      for (const incoming of source.packages.filter(
-        (item) => selectedPackageIds.has(item.id),
+      for (const incoming of source.packages.filter((item) =>
+        selectedPackageIds.has(item.id),
       )) {
-        const local = conversation.packages.find((item) => item.id === incoming.id);
+        const local = conversation.packages.find(
+          (item) => item.id === incoming.id,
+        );
         if (!local) {
           const item = {
             ...clonePlain(incoming),
@@ -1220,15 +1358,19 @@ export const useBackupStore = defineStore("backup", {
 
       const conversationsToUpdate = source.conversations.filter(
         (item) =>
-          selectedPackageIds.has(item.packageId)
-          || selected.has(`conversation:${item.id}`),
+          selectedPackageIds.has(item.packageId) ||
+          selected.has(`conversation:${item.id}`),
       );
       for (const incoming of conversationsToUpdate) {
-        if (!conversation.packages.some((item) => item.id === incoming.packageId)) {
+        if (
+          !conversation.packages.some((item) => item.id === incoming.packageId)
+        ) {
           this.status = `无法更新“${incoming.title}”：当前不存在它所属的角色包`;
           return false;
         }
-        const local = conversation.conversations.find((item) => item.id === incoming.id);
+        const local = conversation.conversations.find(
+          (item) => item.id === incoming.id,
+        );
         if (!local) {
           const item = {
             ...clonePlain(incoming),
@@ -1253,7 +1395,9 @@ export const useBackupStore = defineStore("backup", {
       for (const incoming of source.containers.filter((item) =>
         updatedConversationIds.has(item.conversationid),
       )) {
-        const local = conversation.containers.find((item) => item.id === incoming.id);
+        const local = conversation.containers.find(
+          (item) => item.id === incoming.id,
+        );
         if (!local) {
           const item = clonePlain(incoming);
           conversation.containers.push(item);
@@ -1274,7 +1418,9 @@ export const useBackupStore = defineStore("backup", {
           (item) => item.id === current?.packageId,
         );
         if (!parent || !current) continue;
-        const link = parent.conversations.find((item) => item.id === current.id);
+        const link = parent.conversations.find(
+          (item) => item.id === current.id,
+        );
         const nextLink = {
           id: current.id,
           lastContainerid: current.lastContainerId ?? "",
@@ -1290,21 +1436,22 @@ export const useBackupStore = defineStore("backup", {
 
       const pluginsToUpdate = source.plugins.filter(
         (item) =>
-          !item.builtIn
-          && (
-            (item.packageId !== null && selectedPackageIds.has(item.packageId))
-            || selected.has(`plugin:${item.id}`)
-          ),
+          !item.builtIn &&
+          ((item.packageId !== null &&
+            selectedPackageIds.has(item.packageId)) ||
+            selected.has(`plugin:${item.id}`)),
       );
       for (const incoming of pluginsToUpdate) {
         if (
-          incoming.packageId
-          && !conversation.packages.some((item) => item.id === incoming.packageId)
+          incoming.packageId &&
+          !conversation.packages.some((item) => item.id === incoming.packageId)
         ) {
           this.status = `无法更新“${incoming.name}”：当前不存在它所属的角色包`;
           return false;
         }
-        const local = pluginItems(pluginStore).find((item) => item.id === incoming.id);
+        const local = pluginItems(pluginStore).find(
+          (item) => item.id === incoming.id,
+        );
         let current: Plugin;
         if (!local) {
           const item = { ...clonePlain(incoming), builtIn: false };
@@ -1410,7 +1557,9 @@ export const useBackupStore = defineStore("backup", {
       }
     },
     async publishSnapshot() {
-      await invoke("lan_sync_publish", { snapshot: await this.buildSyncSnapshot() });
+      await invoke("lan_sync_publish", {
+        snapshot: await this.buildSyncSnapshot(),
+      });
     },
     async syncWithPeer() {
       if (!this.lan.peerAddress.trim()) {
@@ -1429,7 +1578,11 @@ export const useBackupStore = defineStore("backup", {
         const conversation = useConversationStore();
         const plugin = usePluginStore();
         await Promise.all([conversation.initialize(), plugin.initialize()]);
-        const result = await persistMergedSnapshot(remote, conversation, plugin);
+        const result = await persistMergedSnapshot(
+          remote,
+          conversation,
+          plugin,
+        );
         const mergedSnapshot = await this.buildSyncSnapshot();
         await invoke("lan_sync_push", {
           address: this.lan.peerAddress.trim(),
@@ -1437,7 +1590,10 @@ export const useBackupStore = defineStore("backup", {
           snapshot: mergedSnapshot,
         });
         this.lastSyncByDevice[remote.deviceId] = new Date().toISOString();
-        localStorage.setItem(syncHistoryKey, JSON.stringify(this.lastSyncByDevice));
+        localStorage.setItem(
+          syncHistoryKey,
+          JSON.stringify(this.lastSyncByDevice),
+        );
         this.status = `已与 ${remote.deviceName || "对端设备"} 同步：复制 ${result.copied} 项，合并 ${result.merged} 项`;
       } catch (error) {
         this.status = `同步失败：${String(error)}`;
@@ -1457,7 +1613,9 @@ export const useBackupStore = defineStore("backup", {
       if (!this.serverRunning || this.syncing) {
         return;
       }
-      const snapshots = await invoke<LanSyncSnapshot[]>("lan_sync_take_pending");
+      const snapshots = await invoke<LanSyncSnapshot[]>(
+        "lan_sync_take_pending",
+      );
       if (snapshots.length === 0) {
         await this.publishSnapshot();
         return;
@@ -1469,7 +1627,10 @@ export const useBackupStore = defineStore("backup", {
         await persistMergedSnapshot(snapshot, conversation, plugin);
         this.lastSyncByDevice[snapshot.deviceId] = new Date().toISOString();
       }
-      localStorage.setItem(syncHistoryKey, JSON.stringify(this.lastSyncByDevice));
+      localStorage.setItem(
+        syncHistoryKey,
+        JSON.stringify(this.lastSyncByDevice),
+      );
       await this.publishSnapshot();
       this.status = `已接收 ${snapshots.length} 个局域网同步快照`;
     },
@@ -1505,7 +1666,8 @@ function defaultSettings() {
 
 function readSettings() {
   const fallback = defaultSettings();
-  const raw = localStorage.getItem(storageKey) ?? localStorage.getItem(legacyStorageKey);
+  const raw =
+    localStorage.getItem(storageKey) ?? localStorage.getItem(legacyStorageKey);
   if (!raw) {
     return fallback;
   }
@@ -1523,7 +1685,10 @@ function readSettings() {
 
 function readSyncHistory() {
   try {
-    return JSON.parse(localStorage.getItem(syncHistoryKey) ?? "{}") as Record<string, string>;
+    return JSON.parse(localStorage.getItem(syncHistoryKey) ?? "{}") as Record<
+      string,
+      string
+    >;
   } catch {
     return {};
   }
