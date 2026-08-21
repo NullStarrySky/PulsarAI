@@ -7,37 +7,11 @@ export function formatChatMessageError(content: unknown) {
   return normalized.startsWith("[ERROR]") ? normalized : `[ERROR] ${normalized}`;
 }
 
-export interface CharacterPackageConversationLink {
-  id: string;
-  lastContainerid: string;
-  title: string;
-}
-
-export interface CharacterPackage {
-  id: string;
-  name: string;
-  /** Stable source-facing alias such as an imported character-card filename. */
-  nickname?: string;
-  icon: string;
-  description?: string;
-  categoryId?: string | null;
-  order: number;
-  pinned?: boolean;
-  conversations: CharacterPackageConversationLink[];
-  /** The package-owned resource plugin. Exactly one plugin may own this package. */
-  pluginId: string;
-  /** The enabled plugin whose manifest owns the selected generatePath. */
-  mainPluginId: string;
-  /** Package-local activation set for optional global plugins. Ordering is not semantic. */
-  enabledGlobalPluginIds: string[];
-  syncEnabled?: boolean;
-}
-
-export interface PackageCategory {
-  id: string;
-  name: string;
-  order: number;
-}
+export type {
+  CharacterPackage,
+  CharacterPackageConversationLink,
+  PackageCategory,
+} from "@/features/Package/package-types";
 
 export type ConversationRendererId = "chat" | "novel";
 
@@ -66,6 +40,8 @@ export interface Conversation {
   lastContainerId: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Unsent composer text. It is user content, but never part of chat history. */
+  composerDraft?: string;
 }
 
 export interface ToolCallResult {

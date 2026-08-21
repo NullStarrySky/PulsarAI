@@ -1237,6 +1237,29 @@ async fn database_select_all(
 }
 
 #[tauri::command]
+async fn database_select_by_field(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    table: String,
+    field: String,
+    value: String,
+) -> Result<Vec<DatabaseRecord>, String> {
+    let db = app_db(&app, &state).await?;
+    let table = normalize_table_name(&table)?;
+    let field = match field.as_str() {
+        "packageId" | "conversationid" => field,
+        _ => return Err("unsupported resource field".to_owned()),
+    };
+    let sql = format!("SELECT resource_key, value FROM {table} WHERE value.{field} = $value ORDER BY resource_key");
+    let mut result = db
+        .query(sql)
+        .bind(("value", value))
+        .await
+        .map_err(|error| error.to_string())?;
+    result.take(0).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 async fn database_select_one(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -2207,6 +2230,7 @@ pub fn run() {
             config_set,
             config_delete,
             database_select_all,
+            database_select_by_field,
             database_select_one,
             database_upsert,
             database_delete,

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
+import { usePackageStore } from "@/features/Package/package-store";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import type { Plugin } from "@/features/Plugin/tree/plugin-types";
 
@@ -13,31 +13,33 @@ const emit = defineEmits<{
   select: [plugin: Plugin];
   close: [];
 }>();
+const props = defineProps<{ packageId: string }>();
 
-const conversation = useConversationStore();
+const packages = usePackageStore();
 const pluginStore = usePluginStore();
 const renamingPluginId = ref("");
 const nameDraft = ref("");
 const localError = ref("");
 
 const localPlugins = computed(() => pluginStore.sortedPlugins.filter(
-  (plugin) => plugin.packageId === conversation.activePackageId,
+  (plugin) => plugin.packageId === props.packageId,
 ));
 const globalPlugins = computed(() => pluginStore.globalPlugins);
+const currentPackage = computed(() => packages.packages.find((item) => item.id === props.packageId) ?? null);
 
 function pluginIsActive(plugin: Plugin) {
-  if (plugin.id === conversation.activePackage?.mainPluginId) return true;
+  if (plugin.id === currentPackage.value?.mainPluginId) return true;
   if (plugin.packageId !== null) return plugin.enabled;
-  return plugin.enabled && (conversation.activePackage?.enabledGlobalPluginIds.includes(plugin.id) ?? false);
+  return plugin.enabled && (currentPackage.value?.enabledGlobalPluginIds.includes(plugin.id) ?? false);
 }
 
 async function togglePlugin(plugin: Plugin) {
-  if (plugin.id === conversation.activePackage?.mainPluginId) return;
+  if (plugin.id === currentPackage.value?.mainPluginId) return;
   if (plugin.packageId !== null) {
     await pluginStore.updatePlugin(plugin.id, { enabled: !plugin.enabled });
     return;
   }
-  const item = conversation.activePackage;
+  const item = currentPackage.value;
   if (!item) return;
   const enabled = new Set(item.enabledGlobalPluginIds);
   if (pluginIsActive(plugin)) enabled.delete(plugin.id);
@@ -45,15 +47,15 @@ async function togglePlugin(plugin: Plugin) {
     if (!plugin.enabled) await pluginStore.updatePlugin(plugin.id, { enabled: true });
     enabled.add(plugin.id);
   }
-  await conversation.updatePackage(item.id, { enabledGlobalPluginIds: [...enabled] });
+  await packages.update(item.id, { enabledGlobalPluginIds: [...enabled] });
 }
 
 async function setMainPlugin(plugin: Plugin) {
-  const item = conversation.activePackage;
+  const item = currentPackage.value;
   if (!item || item.mainPluginId === plugin.id) return;
   localError.value = "";
   try {
-    await conversation.updatePackage(item.id, { mainPluginId: plugin.id });
+    await packages.update(item.id, { mainPluginId: plugin.id });
   } catch (error) {
     localError.value = error instanceof Error ? error.message : "无法设为主要插件";
   }
@@ -90,9 +92,9 @@ async function confirmRename(plugin: Plugin) {
                 <Badge v-if="item.packageId !== null && renamingPluginId !== item.id" variant="secondary" class="shrink-0 text-[10px] font-normal">本地</Badge>
               </button>
               <Input v-if="renamingPluginId === item.id" v-model="nameDraft" autofocus class="h-7 min-w-0 flex-1 px-2 text-xs" @click.stop @keydown.enter.prevent="confirmRename(item)" @keydown.esc.prevent="renamingPluginId = ''" @blur="confirmRename(item)" />
-              <Crown v-if="item.id === conversation.activePackage?.mainPluginId" class="size-4 shrink-0 fill-current text-amber-500" title="主要插件" />
+              <Crown v-if="item.id === currentPackage?.mainPluginId" class="size-4 shrink-0 fill-current text-amber-500" title="主要插件" />
               <Button v-else variant="ghost" size="icon-sm" class="size-7 shrink-0" title="设为主要插件" @click="setMainPlugin(item)"><Crown class="size-4" /></Button>
-              <Button variant="ghost" size="icon-sm" class="size-7 shrink-0" :class="pluginIsActive(item) ? 'text-emerald-500' : 'text-muted-foreground/45'" :disabled="item.id === conversation.activePackage?.mainPluginId" :title="item.id === conversation.activePackage?.mainPluginId ? '主插件保持启用' : pluginIsActive(item) ? '关闭插件' : '启用插件'" @click="togglePlugin(item)"><Power class="size-4" /></Button>
+              <Button variant="ghost" size="icon-sm" class="size-7 shrink-0" :class="pluginIsActive(item) ? 'text-emerald-500' : 'text-muted-foreground/45'" :disabled="item.id === currentPackage?.mainPluginId" :title="item.id === currentPackage?.mainPluginId ? '主插件保持启用' : pluginIsActive(item) ? '关闭插件' : '启用插件'" @click="togglePlugin(item)"><Power class="size-4" /></Button>
               <Button variant="ghost" size="icon-sm" class="size-7 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 mobile:opacity-100" title="重命名插件" @click="startRename(item)"><Pencil class="size-4" /></Button>
             </div>
             <p v-if="section.plugins.length === 0" class="px-2 py-2 text-xs text-muted-foreground">暂无插件</p>

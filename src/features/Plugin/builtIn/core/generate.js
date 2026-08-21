@@ -1,5 +1,6 @@
-const threshold = Number(config.get("generation", "compressionThreshold")) || 0;
-const useStreamText = Boolean(config.get("generation", "useStreamText"));
+const config = await imports("@/config.json");
+const threshold = Number(config.compressionThreshold?.value) || 0;
+const useStreamText = Boolean(config.useStreamText?.value);
 const history = (await memory.prepare({ compressionThreshold: threshold })).messages;
 const messages = [
   ...bootstrapMessages,

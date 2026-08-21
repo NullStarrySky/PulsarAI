@@ -28,8 +28,8 @@ const unsupportedEjsRuntime = new Map<string, string>([
   ["include", "EJS include 没有可验证的模板根路径；应改用 import() 显式引用。"],
   ["SillyTavern", "不向 PulsarAI 执行层注入 SillyTavern API 兼容对象。"],
   ["TavernHelper", "不向 PulsarAI 执行层注入 TavernHelper API。"],
-  ["getwi", "世界书读取必须改用来源作用域内的 import() / container.import()。"],
-  ["getWorldInfo", "世界书读取必须改用来源作用域内的 import() / container.import()。"],
+  ["getwi", "世界书读取必须改用来源作用域内的 imports() / slot.import()。"],
+  ["getWorldInfo", "世界书读取必须改用来源作用域内的 imports() / slot.import()。"],
   ["getchat", "聊天访问应使用当前 Sandbox 的 chat/activePath，无法保持原扩展调用契约。"],
   ["getChatMessages", "聊天访问应使用当前 Sandbox 的 chat/activePath，无法保持原扩展调用契约。"],
   ["getchar", "角色资源查询缺少与原扩展相同的角色数据库和模板契约。"],
@@ -221,7 +221,7 @@ function macroExpression(nameInput: string, args: string[], context: ExternalTem
     case "reverse": return `Array.from(String(${arg(0)})).reverse().join("")`;
     case "trim": return `String(${arg(0)}).replace(/^\\n+|\\n+$/g, "")`;
     case "input": return `String(prompt ?? "")`;
-    case "model": return `String(config.get("generation", "model") ?? "")`;
+    case "model": return `""`;
     case "ismobile": return `String(/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent))`;
     case "time": return `new Date(now()).toLocaleTimeString()`;
     case "date": return `new Date(now()).toLocaleDateString()`;

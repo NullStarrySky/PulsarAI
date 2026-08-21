@@ -151,9 +151,9 @@ await about.checkEnvironment()
 
 API 对象：`environment.agent`
 
-在 CodeAct 上下文中查询并调用 Agent 扩展、询问用户及提示建议卡片。
+在 CodeAct 上下文中查询并调用 Agent 扩展及提示建议卡片。
 
-ToolLoopAgent 只向模型暴露一个 codeAct 工具。Skill 与 MCP 扩展保留在 Agent 注册表中，并通过这里的普通上下文函数由 codeAct 调用。`agent.askUser` 和 `agent.askSuggestion` 可直接触发卡片组件并等待用户交互。
+ToolLoopAgent 只向模型暴露一个 codeAct 工具。Skill 与 MCP 扩展保留在 Agent 注册表中，并通过这里的普通上下文函数由 codeAct 调用。`agent.askSuggestion` 可触发建议卡片并等待用户交互。
 
 <a id="feature-agent-notes"></a>
 ### 使用说明
@@ -161,7 +161,6 @@ ToolLoopAgent 只向模型暴露一个 codeAct 工具。Skill 与 MCP 扩展保�
 - 扩展不再作为独立模型工具出现，因此不会扩大模型工具列表。
 - 省略 source 时会合并全部已注册扩展来源。
 - callExtension 只调用已经注册且提供本地 execute 实现的扩展。
-- askUser 支持单问题与 Approval Card 多问题排版。
 - askSuggestion 用于展示 Recommendation Card 推荐与备选方案。
 
 <a id="feature-agent-types"></a>
@@ -218,16 +217,6 @@ agent.listExtensions('skill')
 
 ```js
 await agent.callExtension('mcp', 'search', { query: 'PulsarAI' })
-```
-
-##### `agent.askUser(input: AskUserInput): Promise<AskUserResult>`
-
-在 Approval Card 中弹出单问题或多问题表单并等待用户选择与输入。
-
-**示例：**
-
-```js
-await agent.askUser({ questions: [{ question: '发布多少种口味？', options: ['3种', '5种'] }] })
 ```
 
 ##### `agent.askSuggestion(input: AskSuggestionInput): Promise<AskSuggestionResult>`
@@ -373,9 +362,7 @@ type DefaultConfigKey =
   | "embeddingModel"
   | "imageModel"
   | "speechModel"
-  | "transcriptionModel"
-  | "promptOptimizationModel"
-  | "promptOptimizationPrompt";
+  | "transcriptionModel";
 ```
 
 <a id="feature-defaultConfigs-api"></a>

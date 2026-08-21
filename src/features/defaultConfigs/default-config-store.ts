@@ -5,8 +5,6 @@ import {
   getEmbeddingModel,
   getFastModel,
   getImageModel,
-  getPromptOptimizationModel,
-  getPromptOptimizationPrompt,
   getSpeechModel,
   getSttAutoPolish,
   getSttLanguage,
@@ -17,8 +15,6 @@ import {
   setEmbeddingModel,
   setFastModel,
   setImageModel,
-  setPromptOptimizationModel,
-  setPromptOptimizationPrompt,
   setSpeechModel,
   setSttAutoPolish,
   setSttLanguage,
@@ -35,8 +31,6 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
     imageModel: fallbackDefaultConfigs.imageModel,
     speechModel: fallbackDefaultConfigs.speechModel,
     transcriptionModel: fallbackDefaultConfigs.transcriptionModel,
-    promptOptimizationModel: fallbackDefaultConfigs.promptOptimizationModel,
-    promptOptimizationPrompt: fallbackDefaultConfigs.promptOptimizationPrompt,
     sttLanguage: fallbackDefaultConfigs.sttLanguage,
     sttAutoPolish: fallbackDefaultConfigs.sttAutoPolish,
     sttPolishModel: fallbackDefaultConfigs.sttPolishModel,
@@ -52,8 +46,6 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
         imageModel,
         speechModel,
         transcriptionModel,
-        promptOptimizationModel,
-        promptOptimizationPrompt,
         sttLanguage,
         sttAutoPolish,
         sttPolishModel,
@@ -65,8 +57,6 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
         getImageModel(),
         getSpeechModel(),
         getTranscriptionModel(),
-        getPromptOptimizationModel(),
-        getPromptOptimizationPrompt(),
         getSttLanguage(),
         getSttAutoPolish(),
         getSttPolishModel(),
@@ -78,8 +68,6 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
       this.imageModel = migrateModelRef(imageModel);
       this.speechModel = migrateModelRef(speechModel);
       this.transcriptionModel = migrateModelRef(transcriptionModel);
-      this.promptOptimizationModel = migrateModelRef(promptOptimizationModel);
-      this.promptOptimizationPrompt = promptOptimizationPrompt;
       this.sttLanguage = sttLanguage;
       this.sttAutoPolish = sttAutoPolish;
       this.sttPolishModel = migrateModelRef(sttPolishModel || defaultChatModel);
@@ -91,7 +79,6 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
         this.imageModel !== imageModel ? setImageModel(this.imageModel) : Promise.resolve(),
         this.speechModel !== speechModel ? setSpeechModel(this.speechModel) : Promise.resolve(),
         this.transcriptionModel !== transcriptionModel ? setTranscriptionModel(this.transcriptionModel) : Promise.resolve(),
-        this.promptOptimizationModel !== promptOptimizationModel ? setPromptOptimizationModel(this.promptOptimizationModel) : Promise.resolve(),
         this.sttPolishModel !== sttPolishModel ? setSttPolishModel(this.sttPolishModel) : Promise.resolve(),
       ]);
       this.loaded = true;
@@ -119,14 +106,6 @@ export const useDefaultConfigStore = defineStore("defaultConfigs", {
     async setTranscriptionModel(model: string) {
       this.transcriptionModel = model;
       await setTranscriptionModel(model);
-    },
-    async setPromptOptimizationModel(model: string) {
-      this.promptOptimizationModel = model;
-      await setPromptOptimizationModel(model);
-    },
-    async setPromptOptimizationPrompt(prompt: string) {
-      this.promptOptimizationPrompt = prompt;
-      await setPromptOptimizationPrompt(prompt);
     },
     async setSttLanguage(language: string) {
       this.sttLanguage = language;

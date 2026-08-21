@@ -8,11 +8,6 @@ import {
   type ThemeMode,
 } from "./theme-registry";
 import {
-  defaultComposerToolbarLayout,
-  normalizeComposerToolbarLayout,
-  type ComposerToolbarLayout,
-} from "@/features/Conversation/composer/composer-toolbar";
-import {
   syncMobileNavigationBar,
   type MobileNavigationBarMode,
 } from "@/features/Misc/mobile-navigation-bar";
@@ -26,7 +21,6 @@ interface AppearanceSnapshot {
   customFonts: FontDefinition[];
   fontSize: number;
   uiScale: number;
-  composerToolbar: ComposerToolbarLayout;
   composerSendWithEnter: boolean;
   interactiveCodePreview: boolean;
   mobileNavigationBarMode: MobileNavigationBarMode;
@@ -52,7 +46,6 @@ export const useAppearanceStore = defineStore("appearance", () => {
   const customFonts = ref<FontDefinition[]>(snapshot.customFonts);
   const fontSize = ref(snapshot.fontSize);
   const uiScale = ref(snapshot.uiScale);
-  const composerToolbar = ref(snapshot.composerToolbar);
   const composerSendWithEnter = ref(snapshot.composerSendWithEnter);
   const interactiveCodePreview = ref(snapshot.interactiveCodePreview);
   const mobileNavigationBarMode = ref(snapshot.mobileNavigationBarMode);
@@ -87,7 +80,6 @@ export const useAppearanceStore = defineStore("appearance", () => {
       customFonts,
       fontSize,
       uiScale,
-      composerToolbar,
       composerSendWithEnter,
       interactiveCodePreview,
       mobileNavigationBarMode,
@@ -107,7 +99,6 @@ export const useAppearanceStore = defineStore("appearance", () => {
         customFonts: customFonts.value,
         fontSize: fontSize.value,
         uiScale: uiScale.value,
-        composerToolbar: composerToolbar.value,
         composerSendWithEnter: composerSendWithEnter.value,
         interactiveCodePreview: interactiveCodePreview.value,
         mobileNavigationBarMode: mobileNavigationBarMode.value,
@@ -144,9 +135,6 @@ export const useAppearanceStore = defineStore("appearance", () => {
     fontId.value = font.id;
   }
 
-  function setComposerToolbar(layout: ComposerToolbarLayout) {
-    composerToolbar.value = normalizeComposerToolbarLayout(layout);
-  }
 
   function applyAppearance() {
     if (typeof document === "undefined") {
@@ -182,7 +170,6 @@ export const useAppearanceStore = defineStore("appearance", () => {
     customFonts,
     customCss,
     customThemes,
-    composerToolbar,
     composerSendWithEnter,
     interactiveCodePreview,
     fontId,
@@ -203,7 +190,6 @@ export const useAppearanceStore = defineStore("appearance", () => {
     importThemeCss,
     importThemeFile,
     initialize,
-    setComposerToolbar,
   };
 });
 
@@ -306,7 +292,6 @@ function readSnapshot(): AppearanceSnapshot {
     customFonts: [],
     fontSize: 16,
     uiScale: 100,
-    composerToolbar: structuredClone(defaultComposerToolbarLayout),
     composerSendWithEnter: true,
     interactiveCodePreview: false,
     mobileNavigationBarMode: "topbar",
@@ -329,7 +314,6 @@ function readSnapshot(): AppearanceSnapshot {
       ...fallback,
       ...parsed,
       customCss: typeof parsed.customCss === "string" ? parsed.customCss : "",
-      composerToolbar: normalizeComposerToolbarLayout(parsed.composerToolbar),
       composerSendWithEnter:
         typeof parsed.composerSendWithEnter === "boolean"
           ? parsed.composerSendWithEnter

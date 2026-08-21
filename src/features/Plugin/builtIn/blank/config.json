@@ -1,0 +1,5 @@
+{
+  "generatePath": { "renderer": { "name": "Input", "title": "生成流程", "description": "用于验证流程执行，不注册任何 slot。" }, "value": "generate.js" },
+  "useMock": { "renderer": { "name": "Switch", "title": "使用 Mock 测试数据", "description": "开启时使用内置的 Markdown 模拟流式回复，关闭时调用真实 AI 模型。" }, "value": true },
+  "useStreamText": { "renderer": { "name": "Switch", "title": "使用 streamText 模式", "description": "开启时使用单次 streamText 生成正文，关闭时使用 ToolLoopAgent 支持多步工具循环。" }, "value": false }
+}

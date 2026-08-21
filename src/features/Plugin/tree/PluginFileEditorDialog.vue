@@ -22,18 +22,13 @@ import {
   NumberFieldInput,
 } from "@/components/ui/number-field";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
+import { usePackageStore } from "@/features/Package/package-store";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
-import { useContainerStore } from "@/features/Plugin/tree/container-store";
-import { createPluginSelfApi } from "@/features/Plugin/runtime/self-api";
-import type { TraceLogEntry } from "@/features/Plugin/runtime/trace-logger";
-import { pluginFileMatchesContainerSuffix } from "@/features/Plugin/tree/container-store";
+import { useSlotStore, pluginFileMatchesSlotSuffix } from "@/features/Plugin/tree/slot-store";
 import { pluginMediaSource, pluginMediaType } from "@/features/Plugin/editors/media/plugin-media";
-import type { PluginManifestValue } from "@/features/Plugin/editors/manifest/plugin-manifest";
 import { pluginConventions, pluginFileType, type Plugin, type PluginFile } from "@/features/Plugin/tree/plugin-types";
 import PluginFileEditorSurface from "@/features/Plugin/editors/PluginFileEditorSurface.vue";
-import PluginInsertionConditionEditor from "@/features/Plugin/shared/PluginInsertionConditionEditor.vue";
-import PluginParseResultTree from "@/features/Plugin/editors/PluginParseResultTree.vue";
+import PluginInsertionConditionEditor from "@/features/Plugin/tree/PluginInsertionConditionEditor.vue";
 
 const AUTO_SAVE_INTERVAL = 800;
 
@@ -44,11 +39,12 @@ const props = defineProps<{
   path: string;
   panelOpen: boolean;
   initialMode?: "preview" | "source";
+  packageId?: string;
 }>();
 
 const emit = defineEmits<{ "update:open": [value: boolean] }>();
 const pluginStore = usePluginStore();
-const conversation = useConversationStore();
+const packages = usePackageStore();
 const responsive = useResponsiveStore();
 const { isMobileLayout } = storeToRefs(responsive);
 
@@ -67,52 +63,19 @@ const resourceOrder = ref(100);
 const errorMessage = ref("");
 const lastSavedAt = ref("");
 const conditionOpen = ref(false);
-const parseTreeOpen = ref(false);
-const testLogs = ref<TraceLogEntry[] | null>(null);
-const testValue = ref<unknown>(undefined);
-const testError = ref<string | null>(null);
 const dialog = ref<HTMLElement | null>(null);
 const frame = ref({ x: 0, y: 0, width: 680, height: 720 });
 let restoring = false;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let dialogInteractable: ReturnType<typeof interact> | null = null;
 
-async function runTestParse() {
-  const plugin = props.plugin;
-  if (!plugin || !props.path) return;
-  try {
-    if (!(await saveNow())) {
-      testLogs.value = [];
-      testValue.value = undefined;
-      testError.value = errorMessage.value || "保存当前草稿后才能测试解析。";
-      return;
-    }
-    const api = createPluginSelfApi(plugin.id);
-    const res = await api.test(props.path, conversation.activeConversationId || undefined);
-    testLogs.value = res.logs ?? [];
-    testValue.value = res.value;
-    testError.value = res.error ?? null;
-  } catch (err) {
-    testLogs.value = [];
-    testError.value = err instanceof Error ? err.message : String(err);
-  }
-}
-
-watch(parseTreeOpen, (isOpen) => {
-  if (isOpen) {
-    void runTestParse();
-  }
-});
 
 const fileType = computed(() => props.file ? pluginFileType(props.file.name) : "text");
 const normalizedPath = computed(() => props.path.toLocaleLowerCase());
-const sourcePath = computed(() => props.plugin
-  ? `@${props.plugin.id}/${props.path.replace(/^\//, "")}`
-  : props.path);
 const previewAvailable = computed(() => (
   ["markdown", "chat", "component", "media"].includes(fileType.value)
-  || normalizedPath.value === pluginConventions.manifest.toLocaleLowerCase()
-  || normalizedPath.value === pluginConventions.containers.toLocaleLowerCase()
+  || normalizedPath.value === pluginConventions.config.toLocaleLowerCase()
+  || normalizedPath.value === pluginConventions.slots.toLocaleLowerCase()
   || normalizedPath.value === pluginConventions.regex.toLocaleLowerCase()
 ));
 const isMedia = computed(() => fileType.value === "media");
@@ -130,30 +93,30 @@ const editorStats = computed(() => ({
   lines: draft.value ? draft.value.split(/\r?\n/).length : 0,
 }));
 const visiblePlugins = computed(() => pluginStore.sortedPluginsForPackage(
-  conversation.activePackageId,
-  conversation.activePackage?.enabledGlobalPluginIds,
-  conversation.activePackage?.mainPluginId,
+  props.packageId ?? props.plugin?.packageId ?? "",
+  packages.packages.find((item) => item.id === (props.packageId ?? props.plugin?.packageId))?.enabledGlobalPluginIds,
+  packages.packages.find((item) => item.id === (props.packageId ?? props.plugin?.packageId))?.mainPluginId,
 ));
-const containerStore = useContainerStore();
-const containerOptions = computed(() => {
+const slotStore = useSlotStore();
+const slotOptions = computed(() => {
   const plugin = props.plugin;
   const file = props.file;
   if (!plugin || !file) return [];
   const plugins = visiblePlugins.value.some((item: Plugin) => item.id === plugin.id)
     ? visiblePlugins.value
     : [plugin, ...visiblePlugins.value];
-  return containerStore.listContainers(plugins).flatMap((container) => {
-    if (!pluginFileMatchesContainerSuffix(file.name, container.contentSuffixes)) return [];
-    if (container.scope !== "global" && container.pluginId !== plugin.id) return [];
+  return slotStore.listSlots(plugins).flatMap((slot) => {
+    if (!pluginFileMatchesSlotSuffix(file.name, slot.contentSuffixes)) return [];
+    if (slot.scope !== "global" && slot.pluginId !== plugin.id) return [];
     return [{
-      value: `container:${container.scope}/${container.id}`,
-      title: container.title,
-      description: container.description || "无说明",
+      value: `slot:${slot.scope}/${slot.id}`,
+      title: slot.title,
+      description: slot.description || "无说明",
     }];
   });
 });
-const selectedContainerTitle = computed(() => containerOptions.value.find(
-  (container) => container.value === insertionTarget.value,
+const selectedSlotTitle = computed(() => slotOptions.value.find(
+  (slot) => slot.value === insertionTarget.value,
 )?.title ?? "不插入");
 const dialogStyle = computed(() => ({
   width: `${frame.value.width}px`,
@@ -173,7 +136,7 @@ function serializeContent(file: PluginFile | null) {
 function restoreDraft() {
   restoring = true;
   draft.value = serializeContent(props.file);
-  insertionTarget.value = props.file?.insertion?.target ?? "none";
+  insertionTarget.value = props.file?.insertion?.slot ?? "none";
   insertionCondition.value = props.file?.insertion?.condition ?? "";
   insertionConditionPath.value = props.file?.insertion?.conditionPath ?? "";
   resourceOrder.value = props.file?.order ?? 100;
@@ -268,7 +231,7 @@ async function saveNow() {
       insertion: insertionTarget.value === "none"
         ? undefined
         : {
-            target: insertionTarget.value,
+            slot: insertionTarget.value.replace(/^slot:[^/]+\//, ""),
             condition: insertionCondition.value.trim() || undefined,
             conditionPath: insertionConditionPath.value.trim() || undefined,
           },
@@ -285,21 +248,6 @@ function scheduleSave() {
   if (restoring || !props.open) return;
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => { void saveNow(); }, AUTO_SAVE_INTERVAL);
-}
-
-async function updateConfig(change: { groupId: string; contentId: string; value: PluginManifestValue }) {
-  const plugin = props.plugin;
-  if (!plugin) return;
-  try {
-    await pluginStore.setConfigValue(plugin.id, change.groupId, change.contentId, change.value);
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-    }
-    lastSavedAt.value = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "配置保存失败";
-  }
 }
 
 function updateInsertion(value: unknown) {
@@ -379,15 +327,15 @@ onBeforeUnmount(() => {
             <div class="plugin-file-control contents">
               <Select :model-value="insertionTarget" @update:model-value="updateInsertion">
                 <SelectTrigger class="h-8 w-fit max-w-40 text-xs" aria-label="插入位置">
-                  <SelectValue placeholder="不插入">{{ selectedContainerTitle }}</SelectValue>
+                  <SelectValue placeholder="不插入">{{ selectedSlotTitle }}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
                     <SelectItem value="none">不插入</SelectItem>
-                    <SelectItem v-for="container in containerOptions" :key="container.value" :value="container.value" :text-value="container.title">
+                    <SelectItem v-for="slot in slotOptions" :key="slot.value" :value="slot.value" :text-value="slot.title">
                       <span class="flex min-w-0 flex-col gap-0.5">
-                        <span class="truncate text-xs">{{ container.title }}</span>
-                        <span class="truncate text-[10px] text-muted-foreground">{{ container.description }}</span>
+                        <span class="truncate text-xs">{{ slot.title }}</span>
+                        <span class="truncate text-[10px] text-muted-foreground">{{ slot.description }}</span>
                       </span>
                     </SelectItem>
                   </SelectGroup>
@@ -428,33 +376,6 @@ onBeforeUnmount(() => {
                 </NumberField>
               </template>
 
-              <Popover v-model:open="parseTreeOpen">
-                <PopoverTrigger as-child>
-                  <Button variant="outline" size="sm" class="h-8 gap-1 text-xs" title="查看解析结果与依赖 AST 追踪">
-                    <Braces class="w-3.5 h-3.5 text-amber-500" />
-                    解析结果
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent align="end" class="w-[min(38rem,calc(100vw-1rem))] p-3 max-h-[80vh] overflow-y-auto" data-no-window-drag>
-                  <div class="flex items-center justify-between border-b pb-2 mb-2">
-                    <h3 class="font-semibold text-xs flex items-center gap-1.5">
-                      <Braces class="w-4 h-4 text-amber-500" />
-                      解析调试追踪树 (AST Parts & Sources)
-                    </h3>
-                    <Button variant="ghost" size="icon-sm" title="重新运行测试解析" @click="runTestParse">
-                      <span class="text-xs">刷新</span>
-                    </Button>
-                  </div>
-                  <PluginParseResultTree
-                    :logs="testLogs"
-                    :value="testValue"
-                    :error="testError"
-                    :source-path="sourcePath"
-                    :source-content="draft"
-                  />
-                </PopoverContent>
-              </Popover>
-
               <div v-if="previewAvailable && !isMedia" class="flex rounded-lg border bg-muted/20 p-0.5" data-no-window-drag>
                 <Button :variant="editorMode === 'preview' ? 'secondary' : 'ghost'" size="icon-sm" title="组件视图" @click="editorMode = 'preview'"><Eye /></Button>
                 <Button :variant="editorMode === 'source' ? 'secondary' : 'ghost'" size="icon-sm" title="源码视图" @click="editorMode = 'source'"><Code2 /></Button>
@@ -472,7 +393,6 @@ onBeforeUnmount(() => {
                 :model-value="draft"
                 :mode="editorMode"
                 @update:model-value="draft = $event"
-                @config-change="updateConfig"
               />
             </div>
           </div>

@@ -1,23 +1,11 @@
 import {
-  Copy,
-  FilePlus2,
   Mic,
-  Pencil,
-  RefreshCw,
   Search,
   Settings,
   SquareMinus,
-  Trash2,
 } from "lucide-vue-next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCommandStore, type CommandDefinition } from "@/features/Hotkey/command-store";
-import {
-  copyLastMessageAction,
-  createConversationAction,
-  editLastMessageAction,
-  regenerateLastMessageAction,
-  resetCharacterDataAction,
-} from "@/features/Conversation/actions";
 import { toggleSttRecordingAction } from "@/features/STT/actions";
 import { useLayoutStore } from "./layout-store";
 
@@ -59,45 +47,6 @@ function createCoreCommands(): CommandDefinition[] {
       category: "窗口",
       icon: SquareMinus,
       run: () => getCurrentWindow().minimize(),
-    },
-    {
-      id: "conversation.create",
-      title: "新建对话",
-      category: "对话",
-      defaultHotkey: "Ctrl+N",
-      icon: FilePlus2,
-      run: createConversationAction,
-    },
-    {
-      id: "conversation.edit-last-message",
-      title: "编辑最后一条消息",
-      category: "对话",
-      icon: Pencil,
-      run: editLastMessageAction,
-    },
-    {
-      id: "conversation.regenerate-last-message",
-      title: "重生成最后一条消息",
-      category: "对话",
-      defaultHotkey: "Ctrl+Shift+G",
-      icon: RefreshCw,
-      run: regenerateLastMessageAction,
-    },
-    {
-      id: "conversation.reset-character-data",
-      title: "清空全部角色数据",
-      description: "清空角色包、对话、插件和本地资源，然后恢复初始角色包",
-      category: "对话",
-      defaultHotkey: "Ctrl+Shift+R",
-      icon: Trash2,
-      run: resetCharacterDataAction,
-    },
-    {
-      id: "conversation.copy-last-message",
-      title: "复制最后一条消息",
-      category: "对话",
-      icon: Copy,
-      run: copyLastMessageAction,
     },
     {
       id: "stt.toggle-recording",

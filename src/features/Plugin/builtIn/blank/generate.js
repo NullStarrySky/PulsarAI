@@ -1,5 +1,6 @@
-const useMock = config.get("generation", "useMock") !== false;
-const useStreamText = Boolean(config.get("generation", "useStreamText"));
+const config = await imports("@/config.json");
+const useMock = config.useMock?.value !== false;
+const useStreamText = Boolean(config.useStreamText?.value);
 
 if (useMock) {
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

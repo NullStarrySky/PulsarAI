@@ -1,16 +1,13 @@
 import type { ModelMessage } from "ai";
-import { buildConversationResourceContext } from "@/features/Conversation/store/conversation-resource-context";
-import {
-  modelMessagesFromPath,
-  useConversationStore,
-} from "@/features/Conversation/store/conversation-store";
-import {
-  type PluginManifestFixedSetting,
-  parsePluginManifest,
-  pluginManifestFixedValue,
-} from "@/features/Plugin/editors/manifest/plugin-manifest";
+import { useChatStore } from "@/features/Conversation/chats/chat-store";
+import { modelMessagesFromPath, useMessageStore } from "@/features/Conversation/messages/message-store";
+import { usePackageStore } from "@/features/Package/package-store";
+import { createComposerApi } from "@/features/Conversation/composer/composer-api";
+import type { PluginConfig } from "@/features/Plugin/editors/config/plugin-config";
 import { createPluginSelfApi } from "@/features/Plugin/runtime/self-api";
-import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
+import { PluginLogger } from "@/features/Plugin/environment/logger";
+import { environmentTools } from "@/features/Plugin/environment/tools";
+import { createAgentResourceProvider } from "@/features/Plugin/agent/runtime/default-agent";
 import {
   findPluginNodeByPath,
   type Plugin,
@@ -114,7 +111,7 @@ export function pluginGenerateFile(plugin: Plugin) {
   const file = plugin.nodes.find(
     (node) =>
       node.kind === "file" &&
-      node.insertion?.target?.toLocaleLowerCase() === "generatepath" &&
+      node.insertion?.slot?.toLocaleLowerCase() === "generatepath" &&
       pluginFileType(node.name) === "javascript" &&
       typeof node.content === "string" &&
       node.content.trim(),
@@ -122,15 +119,10 @@ export function pluginGenerateFile(plugin: Plugin) {
   return file?.kind === "file" ? file : null;
 }
 
-export function pluginFixedSettingValue(
-  plugin: Plugin,
-  setting: PluginManifestFixedSetting,
-) {
-  const manifest = findPluginNodeByPath(plugin, pluginConventions.manifest);
-  if (manifest?.kind !== "file") return null;
-  const parsed = parsePluginManifest(manifest.content);
-  if (parsed.diagnostics.length) return null;
-  return pluginManifestFixedValue(parsed.manifest, setting);
+export function pluginConfigValue(plugin: Plugin, key: string) {
+  const config = findPluginNodeByPath(plugin, pluginConventions.config);
+  if (config?.kind !== "file" || !config.content || typeof config.content !== "object") return null;
+  return (config.content as PluginConfig)[key]?.value ?? null;
 }
 
 /* ============================================================================
@@ -142,24 +134,13 @@ export function resolveEnvironment(
 ): Record<string, unknown> {
   if (!envInput) return {};
   if (typeof envInput === "string") {
-    const conversationStore = useConversationStore() as any;
-    const pluginStore = usePluginStore() as any;
-    const conv = conversationStore.conversations?.find(
-      (c: any) => c.id === envInput,
-    );
+    const chatStore = useChatStore();
+    const packageStore = usePackageStore();
+    const messageStore = useMessageStore();
+    const conv = chatStore.chats.find((chat) => chat.id === envInput);
     if (!conv) return { conversationId: envInput, chat: [] };
-
-    const chat = modelMessagesFromPath(
-      conversationStore.containerPathForConversation(conv),
-    );
-
-    const resourceContext = buildConversationResourceContext(
-      conv,
-      pluginStore.plugins || [],
-      conversationStore.packages || [],
-      conversationStore.conversations || [],
-      conversationStore.containers || [],
-    );
+    const activePath = messageStore.pathFor(conv.lastContainerId ?? conv.rootContainerId);
+    const chat = modelMessagesFromPath(activePath);
 
     return {
       conversationId: conv.id,
@@ -167,8 +148,9 @@ export function resolveEnvironment(
       chat,
       CHAT: chat,
       packageId: conv.packageId ?? conv.binding?.packageId ?? "",
-      resourceContext,
-      PROJECT_AGENT_PROMPT: resourceContext,
+      package: packageStore.packages.find((item) => item.id === conv.packageId) ?? null,
+      activePath,
+      input: createComposerApi(conv.id),
     };
   }
   return envInput;
@@ -208,6 +190,7 @@ export interface PluginGenerationEnvironment {
   processPlugin: Plugin | null;
   generatePath: string | null;
   selfApi: ReturnType<typeof createPluginSelfApi>;
+  logger: PluginLogger;
 }
 
 export async function buildPluginGenerationEnvironment(
@@ -223,6 +206,7 @@ export async function buildPluginGenerationEnvironment(
   const selfApi = createPluginSelfApi(input.mainPluginId, {
     plugins: enabledPlugins,
   });
+  const logger = selfApi.logger;
 
   const environment: SandboxEnvironment = {
     ...(input.baseEnvironment ?? {}),
@@ -236,11 +220,25 @@ export async function buildPluginGenerationEnvironment(
     action: input.action?.name ?? "",
     prompt: input.prompt,
     now: input.now ?? (() => new Date().toISOString()),
+    utils: environmentTools,
     imports: selfApi.import,
-    container: selfApi.container,
-    config: selfApi.config,
     compileChat: selfApi.import,
+    fs: selfApi,
+    read: selfApi.read,
+    write: selfApi.write,
+    edit: selfApi.edit,
+    ls: selfApi.ls,
+    exists: selfApi.exists,
+    mkdir: selfApi.mkdir,
+    move: selfApi.move,
+    remove: selfApi.remove,
+    slot: selfApi.slot,
+    logger,
+    input: createComposerApi(input.conversationId),
   };
+  // Agent stays an opt-in environment capability.  It is not a parallel
+  // generation path: a plugin explicitly constructs and runs it.
+  environment.agent = createAgentResourceProvider({ environment });
 
   const processPlugin =
     enabledPlugins.find((plugin) => plugin.id === input.mainPluginId) ?? null;
@@ -250,7 +248,7 @@ export async function buildPluginGenerationEnvironment(
   const generateFile = pluginGenerateFile(processPlugin);
   if (!generateFile) {
     throw new Error(
-      `主要插件 ${processPlugin.name} 缺少带有 insertion.target: "generatePath" 的 JS 入口脚本。`,
+      `主要插件 ${processPlugin.name} 缺少插入到 generatePath slot 的 JS 入口脚本。`,
     );
   }
 
@@ -260,5 +258,6 @@ export async function buildPluginGenerationEnvironment(
     processPlugin,
     generatePath: `@${processPlugin.id}/${generateFile.path}`,
     selfApi,
+    logger,
   };
 }

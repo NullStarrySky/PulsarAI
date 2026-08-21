@@ -11,6 +11,7 @@ export interface SandboxExecutionResult {
 export type ResolveTextOptions = {
   keepArraySet2StrDefault?: boolean;
   maxDepth?: number;
+  logger?: { append(message: string, depth?: number, type?: string, path?: string): void };
 };
 
 const defaultMaxDepth = 30;
@@ -144,6 +145,54 @@ export function resolveSandboxMessages(
   return current;
 }
 
+/** Async counterpart used by Plugin imports.  It shares the exact `{{ }}` / `[[ ]]`
+ * semantics with the synchronous helper, but permits nested async imports. */
+export async function resolveSandboxTextAsync(
+  text: string,
+  environments: SandboxEnvironment[] = [],
+  options: ResolveTextOptions = {},
+): Promise<string> {
+  let current = text;
+  const seen = new Set<string>();
+  const maxDepth = options.maxDepth ?? defaultMaxDepth;
+  for (let depth = 0; depth < maxDepth; depth += 1) {
+    if (seen.has(current)) {
+      options.logger?.append("检测到宏展开循环，保留最后一次结果。", depth, "error");
+      return current;
+    }
+    seen.add(current);
+    const next = await replaceInlineExpressionsAsync(current, environments, options);
+    options.logger?.append(`宏展开第 ${depth + 1} 轮。`, depth, "sandbox");
+    if (next === current) return next;
+    current = next;
+  }
+  options.logger?.append(`宏展开达到 ${maxDepth} 轮上限。`, maxDepth, "error");
+  return current;
+}
+
+export async function resolveSandboxMessagesAsync(
+  messages: ModelMessage[],
+  environments: SandboxEnvironment[] = [],
+  options: ResolveTextOptions = {},
+): Promise<ModelMessage[]> {
+  let current = messages.map((message) => ({ ...message }));
+  const seen = new Set<string>();
+  const maxDepth = options.maxDepth ?? defaultMaxDepth;
+  for (let depth = 0; depth < maxDepth; depth += 1) {
+    const serialized = JSON.stringify(current);
+    if (seen.has(serialized)) {
+      options.logger?.append("检测到消息宏展开循环，保留最后一次结果。", depth, "error");
+      return current;
+    }
+    seen.add(serialized);
+    const next = (await Promise.all(current.map((message) => resolveMessageOnceAsync(message, environments, options)))).flat();
+    if (JSON.stringify(next) === serialized) return next;
+    current = next;
+  }
+  options.logger?.append(`消息宏展开达到 ${maxDepth} 轮上限。`, maxDepth, "error");
+  return current;
+}
+
 function resolveMessageOnce(
   message: ModelMessage,
   environments: SandboxEnvironment[],
@@ -213,6 +262,41 @@ function replaceInlineExpressions(
   return text.replace(inlinePattern, (_match, _whole, inlineCode, spliceCode) =>
     stringifySandboxValue(executeSandboxCode(inlineCode ?? spliceCode ?? "", environments), options),
   );
+}
+
+async function replaceInlineExpressionsAsync(
+  text: string,
+  environments: SandboxEnvironment[],
+  options: ResolveTextOptions,
+) {
+  const parts = splitInlineExpressions(text);
+  let output = "";
+  for (const part of parts) {
+    output += part.kind === "text"
+      ? part.value
+      : stringifySandboxValue(await executeSandboxCodeAsync(part.value, environments), options);
+  }
+  return output;
+}
+
+async function resolveMessageOnceAsync(
+  message: ModelMessage,
+  environments: SandboxEnvironment[],
+  options: ResolveTextOptions,
+): Promise<ModelMessage[]> {
+  if (message.role === "tool" || typeof message.content !== "string") return [message];
+  const create = (content: string): ModelMessage => ({ ...message, content } as ModelMessage);
+  const output: ModelMessage[] = [create("")];
+  for (const part of splitInlineExpressions(message.content)) {
+    const last = output[output.length - 1]!;
+    if (part.kind === "text") { (last.content as string) += part.value; continue; }
+    const value = await executeSandboxCodeAsync(part.value, environments);
+    if (part.kind === "inline") { (last.content as string) += stringifySandboxValue(value, options); continue; }
+    if (isModelMessageArray(value)) { output.push(...value, create("")); continue; }
+    if (isStringArrayLike(value)) { output.push(...Array.from(value, (content) => create(String(content))), create("")); continue; }
+    (last.content as string) += stringifySandboxValue(value, options);
+  }
+  return output.filter((item) => typeof item.content !== "string" || item.content.length > 0);
 }
 
 function splitInlineExpressions(text: string) {

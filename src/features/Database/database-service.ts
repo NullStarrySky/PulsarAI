@@ -10,6 +10,14 @@ export async function selectAll<T>(table: string): Promise<Array<DatabaseRecord<
   return invoke<Array<DatabaseRecord<T>>>("database_select_all", { table });
 }
 
+export async function selectByField<T>(
+  table: string,
+  field: "packageId" | "conversationid",
+  value: string,
+): Promise<Array<DatabaseRecord<T>>> {
+  return invoke<Array<DatabaseRecord<T>>>("database_select_by_field", { table, field, value });
+}
+
 export async function selectOne<T>(table: string, id: string): Promise<T | null> {
   return invoke<T | null>("database_select_one", { table, id });
 }

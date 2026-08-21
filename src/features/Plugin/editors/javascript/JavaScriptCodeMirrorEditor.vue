@@ -88,28 +88,22 @@ function pluginSyntaxDecorations() {
 
 function pluginSyntaxCompletions(context: CompletionContext) {
   const importCall = context.matchBefore(
-    /\b(?:import|container|config)(?:\s*\.\s*[A-Za-z_$][\w$]*){0,2}(?:\s*\(\s*["'][^"'\r\n]*)?$/,
+    /\b(?:imports|slot)(?:\s*\.\s*[A-Za-z_$][\w$]*){0,2}(?:\s*\(\s*["'][^"'\r\n]*)?$/,
   );
   if (importCall) {
     return {
       from: importCall.from,
       options: [
         {
-          label: "import(path)",
-          apply: 'import("./resource.md")',
+          label: "imports(path)",
+          apply: 'imports("./resource.md")',
           detail: "导入并展开资源内容",
           type: "function",
         },
         {
-          label: "container.import(name)",
-          apply: 'container.import("容器名")',
-          detail: "读取并展开容器内容",
-          type: "function",
-        },
-        {
-          label: "config.get(group, content)",
-          apply: 'config.get("group", "content")',
-          detail: "读取插件配置项",
+          label: "slot.import(name)",
+          apply: 'slot.import("slot 名")',
+          detail: "读取并展开 slot 内容",
           type: "function",
         },
         ...(props.importSuggestions ?? []).map((item) => ({

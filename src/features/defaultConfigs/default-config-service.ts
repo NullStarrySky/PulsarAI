@@ -65,28 +65,6 @@ export function setTranscriptionModel(model: string) {
   return setDefaultConfig(defaultConfigKeys.transcriptionModel, model);
 }
 
-export function getPromptOptimizationModel() {
-  return getDefaultConfig(
-    defaultConfigKeys.promptOptimizationModel,
-    fallbackDefaultConfigs.promptOptimizationModel,
-  );
-}
-
-export function setPromptOptimizationModel(model: string) {
-  return setDefaultConfig(defaultConfigKeys.promptOptimizationModel, model);
-}
-
-export function getPromptOptimizationPrompt() {
-  return getDefaultConfig(
-    defaultConfigKeys.promptOptimizationPrompt,
-    fallbackDefaultConfigs.promptOptimizationPrompt,
-  );
-}
-
-export function setPromptOptimizationPrompt(prompt: string) {
-  return setDefaultConfig(defaultConfigKeys.promptOptimizationPrompt, prompt);
-}
-
 export function getSttLanguage() {
   return getDefaultConfig(defaultConfigKeys.sttLanguage, fallbackDefaultConfigs.sttLanguage);
 }

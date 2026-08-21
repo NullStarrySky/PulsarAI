@@ -1,18 +1,9 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { defineStore } from "pinia";
-import {
-  type PluginManifestValue,
-  parsePluginManifest,
-  pluginManifestFixedValue,
-  setManifestValue,
-  setPluginManifestFixedValue,
-} from "@/features/Plugin/editors/manifest/plugin-manifest";
+import { usePackageStore } from "@/features/Package/package-store";
+import type { PluginConfig, PluginConfigValue } from "@/features/Plugin/editors/config/plugin-config";
 import { createBuiltinPlugins } from "@/features/Plugin/tree/builtin-plugins";
-import {
-  type PluginContainerDeclaration,
-  parsePluginContainerDefinitions,
-  useContainerStore,
-} from "@/features/Plugin/tree/container-store";
+import { parsePluginSlots, type PluginSlot, useSlotStore } from "@/features/Plugin/tree/slot-store";
 import { backgroundPathSelectionOptions } from "@/features/Plugin/tree/plugin-path-selection";
 import {
   deletePersistedPlugin,
@@ -40,7 +31,6 @@ import {
 export const builtinCorePluginId = "builtin-core-plugin";
 export const builtinBlankPluginId = "builtin-blank-plugin";
 export const builtinDefaultPluginId = "builtin-default-plugin";
-const obsoleteBuiltinManifestFields = new Set(["generation/reasoningEffort"]);
 let initializePromise: Promise<void> | null = null;
 
 export interface ActivePluginFileEditorState {
@@ -129,42 +119,30 @@ function ensureParentFolders(
 function createStarterNodes(): PluginTreeNode[] {
   return [
     createFileNode(
-      pluginConventions.manifest,
-      [
-        {
-          group: { id: "generation", title: "生成" },
-          content: [
-            {
-              id: "model",
-              title: "模型",
-              description: "留空时继承全局默认模型；引用可附带思考强度。",
-              component: "ModelSelect",
-              value: null,
-            },
-          ],
+      pluginConventions.config,
+      {
+        model: {
+          renderer: {
+            name: "ModelSelect",
+            title: "模型",
+            description: "留空时继承全局默认模型；引用可附带思考强度。",
+          },
+          value: null,
         },
-        {
-          group: { id: "appearance", title: "外观" },
-          content: [
-            {
-              id: "background",
-              title: "会话背景",
-              description: "从 background 容器选择扩展名无关的路径 ID。",
-              component: "PathSelect",
-              props: {
-                allowEmpty: true,
-                containerId: "background",
-                pathRegex:
-                  "^background/.+\\.(?:png|jpe?g|gif|webp|avif|svg|mp4|webm)$",
-              },
-              value: "background/classroom",
-            },
-          ],
+        background: {
+          renderer: {
+            name: "PathSelect",
+            title: "会话背景",
+            description: "从 background slot 选择扩展名无关的路径 ID。",
+            slotId: "background",
+            allowEmpty: true,
+          },
+          value: "background/classroom",
         },
-      ],
+      },
       { treeOrder: 0 },
     ),
-    createContainerDefinitionsNode(
+    createSlotDefinitionsNode(
       [
         {
           id: "generatePath",
@@ -181,13 +159,15 @@ function createStarterNodes(): PluginTreeNode[] {
           scope: "local",
           description: "角色设定与会话生成所需的共享上下文。",
           contentSuffixes: ["md", "chat.json"],
+          selectionMode: "none",
+          overrideStrategy: "override",
         },
       ],
       { treeOrder: 2 },
     ),
     createFileNode(pluginConventions.regex, [], {
       treeOrder: 3,
-      insertion: { target: "REGEX" },
+      insertion: { slot: "REGEX" },
     }),
     createFileNode("default.chat.json", createDefaultContextDocument(), {
       treeOrder: 4,
@@ -198,19 +178,18 @@ function createStarterNodes(): PluginTreeNode[] {
         "You are Pulsar's conversation agent.",
         "Use the single codeAct tool for API work and keep the final answer grounded in the referenced context.",
         "Every codeAct call must be one function with an explicit return.",
-        "Inspect pure Plugin containers through ctx.containers and keep selection, transformation, and templates in explicit resources.",
-        "When a real user decision is required, call agent.askUser(...) or api.askUser(...) inside codeAct and continue from its result.",
+        "Inspect Plugin slots through slot and keep selection, transformation, and templates in explicit resources.",
       ].join("\n"),
       { treeOrder: 0 },
     ),
     createFileNode("generate.js", createDefaultGenerateSource(), {
       treeOrder: 6,
-      insertion: { target: "generatePath" },
+      insertion: { slot: "generatePath" },
     }),
     createFileNode(
       "character/default.md",
       "保持清晰、可靠，并尊重当前对话上下文。",
-      { treeOrder: 0, insertion: { target: "context" } },
+      { treeOrder: 0, insertion: { slot: "context" } },
     ),
     createFolderNode(pluginConventions.componentsFolder, { treeOrder: 7 }),
     createFolderNode(pluginConventions.backgroundFolder, { treeOrder: 8 }),
@@ -237,13 +216,13 @@ function createDefaultGenerateSource() {
   ].join("\n");
 }
 
-function createContainerDefinitionsNode(
-  containers: PluginContainerDeclaration[] = [],
+function createSlotDefinitionsNode(
+  slots: PluginSlot[] = [],
   input: Partial<PluginNodeBase> = {},
 ) {
   return createFileNode(
-    pluginConventions.containers,
-    { containers: structuredClone(containers) },
+    pluginConventions.slots,
+    { slots: structuredClone(slots) },
     input,
   );
 }
@@ -327,35 +306,26 @@ function comparePlugins(a: Plugin, b: Plugin) {
   return a.name.localeCompare(b.name, "zh-Hans") || a.id.localeCompare(b.id);
 }
 
-function manifestNode(plugin: Plugin) {
-  const node = findPluginNodeByPath(plugin, pluginConventions.manifest);
+function configNode(plugin: Plugin) {
+  const node = findPluginNodeByPath(plugin, pluginConventions.config);
   return node?.kind === "file" ? node : null;
 }
 
 function configuredBackground(plugin: Plugin) {
-  const manifest = manifestNode(plugin);
-  if (!manifest) return null;
-  const parsed = parsePluginManifest(manifest.content);
-  let value: unknown;
-  try {
-    value = pluginManifestFixedValue(parsed.manifest, "background");
-  } catch {
-    return null;
-  }
+  const config = configNode(plugin);
+  const value = config?.content && typeof config.content === "object"
+    ? (config.content as PluginConfig).background?.value
+    : null;
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function clearConfiguredBackground(plugin: Plugin) {
-  const manifest = manifestNode(plugin);
-  if (!manifest) return false;
-  const parsed = parsePluginManifest(manifest.content);
-  try {
-    setPluginManifestFixedValue(parsed.manifest, "background", null);
-    manifest.content = parsed.manifest;
-    return true;
-  } catch {
-    return false;
-  }
+  const config = configNode(plugin);
+  if (!config?.content || typeof config.content !== "object") return false;
+  const entry = (config.content as PluginConfig).background;
+  if (!entry) return false;
+  entry.value = null;
+  return true;
 }
 
 function normalizePluginNode(value: unknown): PluginTreeNode | null {
@@ -409,11 +379,11 @@ function normalizePluginNode(value: unknown): PluginTreeNode | null {
     ...(source.insertion &&
     typeof source.insertion === "object" &&
     !Array.isArray(source.insertion) &&
-    typeof (source.insertion as { target?: unknown }).target === "string" &&
-    (source.insertion as { target: string }).target.trim()
+    typeof (source.insertion as { slot?: unknown }).slot === "string" &&
+    (source.insertion as { slot: string }).slot.trim()
       ? {
           insertion: {
-            target: (source.insertion as { target: string }).target.trim(),
+            slot: (source.insertion as { slot: string }).slot.trim(),
             ...(typeof (source.insertion as { condition?: unknown })
               .condition === "string" &&
             (source.insertion as { condition: string }).condition.trim()
@@ -479,34 +449,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function mergeBuiltinContainerDefinitions(source: unknown, persisted: unknown) {
+function mergeBuiltinSlots(source: unknown, persisted: unknown) {
   if (!isRecord(source) || !isRecord(persisted)) return clonePlain(persisted);
-  const sourceContainers = Array.isArray(source.containers)
-    ? source.containers
+  const sourceSlots = Array.isArray(source.slots)
+    ? source.slots
     : [];
-  const persistedContainers = Array.isArray(persisted.containers)
-    ? persisted.containers
+  const persistedSlots = Array.isArray(persisted.slots)
+    ? persisted.slots
     : [];
   const persistedById = new Map(
-    persistedContainers.flatMap((item) =>
+    persistedSlots.flatMap((item) =>
       isRecord(item) && typeof item.id === "string"
         ? [[item.id, item] as const]
         : [],
     ),
   );
-  const merged = sourceContainers.map((item) => {
+  const merged = sourceSlots.map((item) => {
     const id = isRecord(item) && typeof item.id === "string" ? item.id : "";
     return clonePlain(
       id && persistedById.has(id) ? persistedById.get(id)! : item,
     );
   });
   const sourceIds = new Set(
-    sourceContainers.flatMap((item) =>
+    sourceSlots.flatMap((item) =>
       isRecord(item) && typeof item.id === "string" ? [item.id] : [],
     ),
   );
   merged.push(
-    ...persistedContainers
+    ...persistedSlots
       .filter(
         (item) =>
           !isRecord(item) ||
@@ -518,7 +488,7 @@ function mergeBuiltinContainerDefinitions(source: unknown, persisted: unknown) {
   return {
     ...clonePlain(source),
     ...clonePlain(persisted),
-    containers: merged,
+    slots: merged,
   };
 }
 
@@ -574,115 +544,6 @@ function isKnownInvalidBuiltinProcessScript(content: unknown) {
   return content.replace(/\r\n/g, "\n").trim() === legacySource;
 }
 
-function mergeBuiltinCompressionThresholdSetting(
-  source: unknown,
-  saved: unknown,
-) {
-  if (!isRecord(source) || !isRecord(saved)) return clonePlain(source);
-  return {
-    ...clonePlain(source),
-    ...(typeof saved.value === "number" ? { value: saved.value } : {}),
-  };
-}
-
-function mergeBuiltinManifest(source: unknown, persisted: unknown) {
-  if (!Array.isArray(source) || !Array.isArray(persisted))
-    return clonePlain(persisted);
-  const persistedByGroupId = new Map(
-    persisted.flatMap((group) =>
-      isRecord(group) &&
-      isRecord(group.group) &&
-      typeof group.group.id === "string"
-        ? [[group.group.id, group] as const]
-        : [],
-    ),
-  );
-  const sourceGroupIds = new Set<string>();
-  const merged = source.map((sourceGroup) => {
-    if (
-      !isRecord(sourceGroup) ||
-      !isRecord(sourceGroup.group) ||
-      typeof sourceGroup.group.id !== "string"
-    ) {
-      return clonePlain(sourceGroup);
-    }
-    const groupId = sourceGroup.group.id;
-    sourceGroupIds.add(groupId);
-    const persistedGroup = persistedByGroupId.get(groupId);
-    if (
-      !isRecord(persistedGroup) ||
-      !Array.isArray(sourceGroup.content) ||
-      !Array.isArray(persistedGroup.content)
-    ) {
-      return clonePlain(persistedGroup ?? sourceGroup);
-    }
-    const persistedContentById = new Map(
-      persistedGroup.content.flatMap((item) =>
-        isRecord(item) && typeof item.id === "string"
-          ? [[item.id, item] as const]
-          : [],
-      ),
-    );
-    const sourceContentIds = new Set(
-      sourceGroup.content.flatMap((item) =>
-        isRecord(item) && typeof item.id === "string" ? [item.id] : [],
-      ),
-    );
-    return {
-      ...clonePlain(sourceGroup),
-      ...clonePlain(persistedGroup),
-      content: [
-        ...sourceGroup.content.map((item) => {
-          const id =
-            isRecord(item) && typeof item.id === "string" ? item.id : "";
-          const saved = id ? persistedContentById.get(id) : undefined;
-          return groupId === "generation" && id === "compressionThreshold"
-            ? mergeBuiltinCompressionThresholdSetting(item, saved)
-            : clonePlain(saved ?? item);
-        }),
-        ...persistedGroup.content
-          .filter((item) => {
-            if (!isRecord(item) || typeof item.id !== "string") return true;
-            if (obsoleteBuiltinManifestFields.has(`${groupId}/${item.id}`))
-              return false;
-            return !sourceContentIds.has(item.id);
-          })
-          .map((item) => clonePlain(item)),
-      ],
-    };
-  });
-  merged.push(
-    ...persisted
-      .filter(
-        (group) =>
-          !isRecord(group) ||
-          !isRecord(group.group) ||
-          typeof group.group.id !== "string" ||
-          !sourceGroupIds.has(group.group.id),
-      )
-      .map((group) => clonePlain(group)),
-  );
-  return merged;
-}
-
-function removeObsoleteBuiltinManifestFields(plugin: Plugin) {
-  if (!plugin.builtIn) return false;
-  const manifest = manifestNode(plugin);
-  if (!manifest) return false;
-  const parsed = parsePluginManifest(manifest.content);
-  let changed = false;
-  for (const group of parsed.manifest) {
-    const originalLength = group.content.length;
-    group.content = group.content.filter(
-      (item) =>
-        !obsoleteBuiltinManifestFields.has(`${group.group.id}/${item.id}`),
-    );
-    changed ||= group.content.length !== originalLength;
-  }
-  if (changed) manifest.content = parsed.manifest;
-  return changed;
-}
-
 function mergeBuiltinPlugin(bundled: Plugin, persisted: Plugin): Plugin {
   const savedByPath = new Map(persisted.nodes.map((node) => [node.path, node]));
   const bundledPaths = new Set(bundled.nodes.map((node) => node.path));
@@ -692,13 +553,11 @@ function mergeBuiltinPlugin(bundled: Plugin, persisted: Plugin): Plugin {
       if (!saved || saved.kind !== node.kind) return clonePlain(node);
       if (node.kind === "file" && saved.kind === "file") {
         let content = clonePlain(saved.content);
-        if (node.path === pluginConventions.containers) {
-          content = mergeBuiltinContainerDefinitions(
+        if (node.path === pluginConventions.slots) {
+          content = mergeBuiltinSlots(
             node.content,
             saved.content,
           );
-        } else if (node.path === pluginConventions.manifest) {
-          content = mergeBuiltinManifest(node.content, saved.content);
         } else if (
           node.path === "default.chat.json" &&
           isLegacyBuiltinDefaultChat(saved.content)
@@ -737,25 +596,25 @@ function removeCancelledOverride(plugin: Plugin) {
   );
   let changed = plugin.nodes.length !== before;
   if (plugin.builtIn) {
-    const containers = findPluginNodeByPath(
+    const slots = findPluginNodeByPath(
       plugin,
-      pluginConventions.containers,
+      pluginConventions.slots,
     );
     if (
-      containers?.kind === "file" &&
-      containers.content &&
-      typeof containers.content === "object"
+      slots?.kind === "file" &&
+      slots.content &&
+      typeof slots.content === "object"
     ) {
-      const content = containers.content as { containers?: unknown };
-      if (Array.isArray(content.containers)) {
-        const filtered = content.containers.filter(
+      const content = slots.content as { slots?: unknown };
+      if (Array.isArray(content.slots)) {
+        const filtered = content.slots.filter(
           (item) =>
             !item ||
             typeof item !== "object" ||
             (item as { id?: unknown }).id !== "OVERRIDE",
         );
-        if (filtered.length !== content.containers.length) {
-          content.containers = filtered;
+        if (filtered.length !== content.slots.length) {
+          content.slots = filtered;
           changed = true;
         }
       }
@@ -766,8 +625,8 @@ function removeCancelledOverride(plugin: Plugin) {
 
 function isFixedConventionPath(path: string) {
   const fixed: string[] = [
-    pluginConventions.manifest,
-    pluginConventions.containers,
+    pluginConventions.config,
+    pluginConventions.slots,
     pluginConventions.regex,
     pluginConventions.componentsFolder,
     pluginConventions.toolsFolder,
@@ -817,11 +676,11 @@ function pluginNamespaceNames(plugin: Plugin) {
     .map((toolPath) =>
       toolPath.slice(toolsPrefix.length).trim().toLocaleLowerCase(),
     );
-  const containers = findPluginNodeByPath(plugin, pluginConventions.containers);
+  const slots = findPluginNodeByPath(plugin, pluginConventions.slots);
   const actionNames = pluginFiles(plugin)
     .filter(
       (file) =>
-        file.insertion?.target === "COMMAND" &&
+        file.insertion?.slot === "COMMAND" &&
         ["javascript", "markdown", "component"].includes(
           pluginFileType(file.name),
         ),
@@ -833,23 +692,13 @@ function pluginNamespaceNames(plugin: Plugin) {
         .toLocaleLowerCase(),
     )
     .filter(Boolean);
-  const parsedContainers =
-    containers?.kind === "file"
-      ? parsePluginContainerDefinitions(containers.content)
-      : { containers: [], diagnostics: [] };
-  if (parsedContainers.diagnostics.length) {
-    const diagnostic = parsedContainers.diagnostics[0]!;
-    throw new Error(
-      `containers.json 无效：${diagnostic.path}：${diagnostic.message}（${plugin.name}）`,
-    );
-  }
-  const globalContainerNames = parsedContainers.containers
-    .filter((container) => container.scope === "global")
-    .map((container) => container.id.trim().toLocaleLowerCase());
+  const globalSlotNames = (slots?.kind === "file" ? parsePluginSlots(slots.content) : [])
+    .filter((slot) => slot.scope === "global")
+    .map((slot) => slot.id.trim().toLocaleLowerCase());
   for (const [label, names] of [
     ["Action", actionNames],
     ["自定义工具", toolNames],
-    ["全局容器", globalContainerNames],
+    ["全局 Slot", globalSlotNames],
   ] as const) {
     const seen = new Set<string>();
     const duplicate = names.find((name) => {
@@ -864,7 +713,7 @@ function pluginNamespaceNames(plugin: Plugin) {
   return {
     actions: new Set(actionNames),
     tools: new Set(toolNames),
-    globalContainers: new Set(globalContainerNames),
+    globalContainers: new Set(globalSlotNames),
   };
 }
 
@@ -1024,14 +873,14 @@ export const usePluginStore = defineStore("plugin-resource", {
           enabledGlobalPluginIds,
           mainPluginId,
         );
-        const containerStore = useContainerStore();
-        const bgContainer = containerStore.getContainer(
+        const slotStore = useSlotStore();
+        const bgSlot = slotStore.getSlot(
           "background",
           "global",
           enabled,
         );
-        if (!bgContainer || !bgContainer.resources.length) return null;
-        const firstResource = bgContainer.resources[0]!;
+        if (!bgSlot || !bgSlot.resources.length) return null;
+        const firstResource = bgSlot.resources[0]!;
         const targetPlugin = enabled.find(
           (p) => p.id === firstResource.pluginId,
         );
@@ -1060,13 +909,13 @@ export const usePluginStore = defineStore("plugin-resource", {
           enabledGlobalPluginIds,
           mainPluginId,
         );
-        const containerStore = useContainerStore();
-        const commandContainer = containerStore.getContainer(
+        const slotStore = useSlotStore();
+        const commandSlot = slotStore.getSlot(
           "COMMAND",
           "global",
           enabledPlugins,
         );
-        for (const entry of commandContainer?.resources ?? []) {
+        for (const entry of commandSlot?.resources ?? []) {
           const plugin = enabledPlugins.find(
             (item) => item.id === entry.pluginId,
           );
@@ -1115,10 +964,6 @@ export const usePluginStore = defineStore("plugin-resource", {
   actions: {
     async initialize() {
       if (this.loaded) {
-        for (const plugin of pluginStateItems(this)) {
-          if (removeObsoleteBuiltinManifestFields(plugin))
-            await this.persistPlugin(plugin);
-        }
         return;
       }
       if (initializePromise) {
@@ -1180,7 +1025,6 @@ export const usePluginStore = defineStore("plugin-resource", {
       for (const plugin of pluginStateItems(this)) {
         if (
           removeCancelledOverride(plugin) ||
-          removeObsoleteBuiltinManifestFields(plugin) ||
           refreshedBuiltinIds.has(plugin.id)
         ) {
           await this.persistPlugin(plugin);
@@ -1264,32 +1108,22 @@ export const usePluginStore = defineStore("plugin-resource", {
       Object.assign(plugin, patch);
       await this.persistPlugin(plugin);
     },
-    async setConfigValue(
-      pluginId: string,
-      groupId: string,
-      contentId: string,
-      value: PluginManifestValue,
-    ) {
+    async setConfigValue(pluginId: string, key: string, value: PluginConfigValue) {
       const plugin = pluginStateItems(this).find(
         (item) => item.id === pluginId,
       );
-      const manifest = plugin ? manifestNode(plugin) : null;
-      if (!plugin || !manifest) {
-        throw new Error("插件 manifest.json 不存在。");
+      const config = plugin ? configNode(plugin) : null;
+      if (!plugin || !config || !config.content || typeof config.content !== "object") {
+        throw new Error("插件 config.json 不存在。");
       }
-      const parsed = parsePluginManifest(manifest.content);
-      if (parsed.diagnostics.length) {
-        throw new Error(
-          `manifest.json 无法更新：${parsed.diagnostics[0]!.message}`,
-        );
-      }
-      const previousContent = clonePlain(manifest.content);
-      setManifestValue(parsed.manifest, groupId, contentId, value);
-      manifest.content = parsed.manifest;
+      const entry = (config.content as PluginConfig)[key];
+      if (!entry) throw new Error(`config.json 不存在键：${key}`);
+      const previousContent = clonePlain(config.content);
+      entry.value = value;
       try {
         await this.persistPlugin(plugin);
       } catch (error) {
-        manifest.content = previousContent;
+        config.content = previousContent;
         throw error;
       }
     },
@@ -1314,13 +1148,10 @@ export const usePluginStore = defineStore("plugin-resource", {
 
       const previous = clonePlain(plugin);
       plugin.id = nextId;
-      const { useConversationStore } =
-        await import("@/features/Conversation/store/conversation-store");
-      const conversation = useConversationStore();
-      await conversation.initialize();
+      const packages = usePackageStore();
       try {
         await this.persistPlugin(plugin);
-        for (const item of conversation.packages) {
+        for (const item of packages.packages) {
           let changed = false;
           if (item.pluginId === pluginId) {
             item.pluginId = nextId;
@@ -1336,40 +1167,7 @@ export const usePluginStore = defineStore("plugin-resource", {
             );
             changed = true;
           }
-          if (changed) await conversation.persistPackage(item);
-        }
-        for (const item of conversation.conversations) {
-          const binding = item.binding;
-          if (!binding) continue;
-          let changed = false;
-          if (binding.pluginId === pluginId) {
-            binding.pluginId = nextId;
-            changed = true;
-          }
-          if (
-            binding.resourceType === "plugin" &&
-            binding.resourceId === pluginId
-          ) {
-            binding.resourceId = nextId;
-            changed = true;
-          }
-          if (changed) await conversation.persistConversation(item);
-        }
-        for (const container of conversation.containers) {
-          let changed = false;
-          for (const message of container.content) {
-            if (message.meta.environmentInfo?.pluginId === pluginId) {
-              message.meta.environmentInfo.pluginId = nextId;
-              changed = true;
-            }
-            for (const part of message.parts ?? []) {
-              if (part.type === "action" && part.pluginId === pluginId) {
-                part.pluginId = nextId;
-                changed = true;
-              }
-            }
-          }
-          if (changed) await conversation.persistContainer(container);
+          if (changed) await packages.persist(item);
         }
         await deletePersistedPlugin(previous);
       } catch (error) {
@@ -1400,36 +1198,22 @@ export const usePluginStore = defineStore("plugin-resource", {
         (item) => item.id === pluginId,
       );
       if (!plugin || plugin.builtIn) return;
-      const { useConversationStore } =
-        await import("@/features/Conversation/store/conversation-store");
-      const conversation = useConversationStore();
-      await conversation.initialize();
+      const packages = usePackageStore();
       if (
         plugin.packageId === null &&
-        conversation.packages.some((item) => item.mainPluginId === pluginId)
+        packages.packages.some((item) => item.mainPluginId === pluginId)
       ) {
         throw new Error("该全局插件仍是角色包的主要插件，不能删除。");
       }
       if (plugin.packageId === null) {
-        for (const packageItem of conversation.packages) {
+        for (const packageItem of packages.packages) {
           if (!packageItem.enabledGlobalPluginIds.includes(pluginId)) continue;
-          await conversation.updatePackage(packageItem.id, {
+          await packages.update(packageItem.id, {
             enabledGlobalPluginIds: packageItem.enabledGlobalPluginIds.filter(
               (id) => id !== pluginId,
             ),
           });
         }
-      }
-      for (const item of conversation.conversations.filter(
-        (candidate) =>
-          candidate.kind === "test" &&
-          (candidate.binding?.pluginId === pluginId ||
-            (candidate.binding?.resourceType === "plugin" &&
-              candidate.binding.resourceId === pluginId)),
-      )) {
-        await conversation.deleteConversation(item.id, {
-          activateFallback: false,
-        });
       }
       setPluginStateItems(
         this,
@@ -1469,8 +1253,8 @@ export const usePluginStore = defineStore("plugin-resource", {
       if (
         !parentPath &&
         [
-          pluginConventions.manifest,
-          pluginConventions.containers,
+          pluginConventions.config,
+          pluginConventions.slots,
           pluginConventions.regex,
         ].some(
           (fixed) => name.toLocaleLowerCase() === fixed.toLocaleLowerCase(),
@@ -1491,7 +1275,7 @@ export const usePluginStore = defineStore("plugin-resource", {
           input.insertion ??
           (parentPath === pluginConventions.actionFolder &&
           ["javascript", "markdown", "component"].includes(pluginFileType(name))
-            ? { target: "COMMAND" }
+            ? { slot: "COMMAND" }
             : undefined),
       });
       const previousNodes = clonePlain(plugin.nodes);
@@ -1725,8 +1509,6 @@ export const usePluginStore = defineStore("plugin-resource", {
         this.activeEditorState = null;
         return;
       }
-      if (removeObsoleteBuiltinManifestFields(plugin))
-        void this.persistPlugin(plugin);
       this.activeEditorState = { plugin, file, path, editorMode: mode };
     },
     closeFileEditor() {

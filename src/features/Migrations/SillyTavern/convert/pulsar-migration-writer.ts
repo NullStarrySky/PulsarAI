@@ -9,10 +9,7 @@ import {
   type Plugin,
   type PluginFile,
 } from "@/features/Plugin/tree/plugin-types";
-import {
-  parsePluginManifest,
-  setPluginManifestFixedValue,
-} from "@/features/Plugin/editors/manifest/plugin-manifest";
+import type { PluginConfig } from "@/features/Plugin/editors/config/plugin-config";
 import { pluginPathSelectionValue } from "@/features/Plugin/tree/plugin-path-selection";
 import type {
   ConversationMigrationArtifact,
@@ -212,7 +209,7 @@ export class PulsarSillyTavernMigrationWriter {
           document.content,
           {
             order: document.order,
-            insertion: { target: `depth:${document.depth}`, condition: "false" },
+            insertion: { slot: `depth:${document.depth}`, condition: "false" },
           },
         );
       }
@@ -229,7 +226,7 @@ export class PulsarSillyTavernMigrationWriter {
         url: dataUrl,
         mediaType: dataUrl.startsWith("data:video/") ? "video" : "image",
       }, {
-        insertion: { target: "background" },
+        insertion: { slot: "background" },
       });
       if (background.selected) {
         selectedBackground = pluginPathSelectionValue(`${pluginConventions.backgroundFolder}/${name}`);
@@ -243,15 +240,14 @@ export class PulsarSillyTavernMigrationWriter {
         quickRepliesFolder,
         uniqueFileName(plugin, quickRepliesFolder, safeName(quickReply.name), "md"),
         quickReply.content,
-        { insertion: { target: "COMMAND" } },
+        { insertion: { slot: "COMMAND" } },
       );
     }
     if (selectedBackground) {
-      const manifest = findPluginNodeByPath(plugin, pluginConventions.manifest);
-      if (manifest?.kind === "file") {
-        const parsed = parsePluginManifest(manifest.content);
-        setPluginManifestFixedValue(parsed.manifest, "background", selectedBackground);
-        manifest.content = parsed.manifest;
+      const config = findPluginNodeByPath(plugin, pluginConventions.config);
+      if (config?.kind === "file" && config.content && typeof config.content === "object") {
+        const entry = (config.content as PluginConfig).background;
+        if (entry) entry.value = selectedBackground;
       }
     }
     const migrationFolder = ensureFolder(plugin, "", "migration");
@@ -282,12 +278,12 @@ export class PulsarSillyTavernMigrationWriter {
 function configureLocalPlugin(plugin: Plugin, placement: CharacterPackagePlacement) {
   const characterFolder = ensureFolder(plugin, "", "character");
   upsertFile(plugin, characterFolder, "main.md", placement.artifact.characterMarkdown, {
-    insertion: { target: "context" },
+    insertion: { slot: "context" },
   });
   const userFolder = ensureFolder(plugin, characterFolder, "user");
   for (const persona of placement.personas) {
     upsertFile(plugin, userFolder, `${safeName(persona.name)}.md`, persona.markdown || `# ${persona.name}`, {
-      insertion: { target: "user" },
+      insertion: { slot: "user" },
     });
   }
   const lorebooksFolder = ensureFolder(plugin, "", "lorebooks");
@@ -321,15 +317,17 @@ function configureLocalPlugin(plugin: Plugin, placement: CharacterPackagePlaceme
 }
 
 function configureGlobalPlugin(plugin: Plugin, placement: GlobalPluginPlacement) {
-  const containers = findPluginNodeByPath(plugin, pluginConventions.containers);
-  if (containers?.kind === "file") {
-    containers.content = {
-      containers: [{
+  const slots = findPluginNodeByPath(plugin, pluginConventions.slots);
+  if (slots?.kind === "file") {
+    slots.content = {
+      slots: [{
         id: "context",
         title: "世界书上下文",
         scope: "global",
         description: "从 SillyTavern 世界书导入的上下文条目。",
         contentSuffixes: ["md"],
+        selectionMode: "none",
+        overrideStrategy: "override",
       }],
     };
   }
@@ -351,7 +349,7 @@ function writeLorebookEntries(plugin: Plugin, parentPath: string, bookName: stri
     upsertFile(plugin, folder, `${String(index + 1).padStart(3, "0")}-${safeName(entry.name)}.md`, entry.content, {
       order: entry.order,
       ...(entry.enabled
-        ? { insertion: { target: entry.insertionTarget, ...(entry.condition ? { condition: entry.condition } : {}) } }
+        ? { insertion: { slot: entry.insertionTarget, ...(entry.condition ? { condition: entry.condition } : {}) } }
         : {}),
     });
   }
@@ -491,17 +489,16 @@ function uniqueFileName(plugin: Plugin, parentPath: string, base: string, extens
 
 function sillyTavernGenerateSource() {
   const source = [
-    "const readContainer = (containerItem) => container.read(containerItem.id);",
-    'const localContext = container.read("context", "local");',
-    'const globalContext = container.list({ scope: "global", pattern: "context" }).flatMap(readContainer);',
-    'const depth0 = container.list({ scope: "global", pattern: "depth:0" }).flatMap(readContainer);',
-    'const depth1 = container.list({ scope: "global", pattern: "depth:1" }).flatMap(readContainer);',
-    'const depth2 = container.list({ scope: "global", pattern: "depth:2" }).flatMap(readContainer);',
-    'const depth3 = container.list({ scope: "global", pattern: "depth:3" }).flatMap(readContainer);',
-    'const depth4 = container.list({ scope: "global", pattern: "depth:4" }).flatMap(readContainer);',
-    'const depth5 = container.list({ scope: "global", pattern: "depth:5" }).flatMap(readContainer);',
-    'const depth6 = container.list({ scope: "global", pattern: "depth:6" }).flatMap(readContainer);',
-    'const regexRules = container.list({ scope: "global", pattern: "REGEX" }).flatMap(readContainer).flatMap((value) => Array.isArray(value) ? value : []);',
+    'const localContext = await slot.import("context", "local");',
+    'const globalContext = await slot.import("context", "global");',
+    'const depth0 = await slot.import("depth:0", "global");',
+    'const depth1 = await slot.import("depth:1", "global");',
+    'const depth2 = await slot.import("depth:2", "global");',
+    'const depth3 = await slot.import("depth:3", "global");',
+    'const depth4 = await slot.import("depth:4", "global");',
+    'const depth5 = await slot.import("depth:5", "global");',
+    'const depth6 = await slot.import("depth:6", "global");',
+    'const regexRules = await slot.import("REGEX", "global").then((items) => items.flatMap((value) => Array.isArray(value) ? value : []));',
     "const applyRules = (text, role, depth) => regexRules.reduce((current, rule) => {",
     "  if (!rule || rule.applyOnRending) return current;",
     '  if (rule.range !== "all" && !(rule.range === "user_input" && role === "user") && !(rule.range === "ai_output" && role === "assistant")) return current;',
@@ -510,12 +507,13 @@ function sillyTavernGenerateSource() {
     "  if (depth < Math.min(min, max) || depth > Math.max(min, max)) return current;",
     "  try { const match = /^\\/(.*)\\/([a-z]*)$/.exec(rule.find_regex); return current.replace(match ? new RegExp(match[1], match[2]) : new RegExp(rule.find_regex, 'g'), rule.replace_regex || ''); } catch { return current; }",
     "}, text);",
-    "const prepared = (await memory.prepare({ compressionThreshold: Number(config.get('generation', 'compressionThreshold')) || 0 })).messages.map((message, index, all) => ({ ...message, content: typeof message.content === 'string' ? applyRules(message.content, message.role, all.length - index) : message.content }));",
+    'const config = await imports("@/config.json");',
+    "const prepared = (await memory.prepare({ compressionThreshold: Number(config.compressionThreshold?.value) || 0 })).messages.map((message, index, all) => ({ ...message, content: typeof message.content === 'string' ? applyRules(message.content, message.role, all.length - index) : message.content }));",
     "const history = [...prepared];",
     "const depthBlocks = [depth0, depth1, depth2, depth3, depth4, depth5, depth6];",
     "depthBlocks.forEach((blocks, depth) => { if (blocks.length) history.splice(Math.max(0, history.length - depth), 0, { role: 'system', content: blocks.map(String).join('\\n\\n') }); });",
     "const context = [...localContext, ...globalContext].filter(Boolean).map(String).join('\\n\\n');",
-    "const messages = [...bootstrapMessages, ...(context ? [{ role: 'system', content: context }] : []), ...compileChat(import('./default.chat.json'), { chat: history, CHAT: history })];",
+    "const messages = [...bootstrapMessages, ...(context ? [{ role: 'system', content: context }] : []), ...compileChat(await imports('./default.chat.json'), { chat: history, CHAT: history })];",
     "const runner = new agent.ToolLoopAgent({ container: reply });",
     "await runner.stream({ messages });",
     "  const complete = reply.read().message.content;",

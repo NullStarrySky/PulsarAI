@@ -13,10 +13,10 @@
   "ignore": [".pulsar-plugin.json"],
   "nodes": {
     "/": { "id": "builtin-default-root", "icon": "", "treeOrder": 0 },
-    "manifest.json": { "id": "builtin-default-manifest", "icon": "", "treeOrder": 0, "order": 100 },
-    "containers.json": { "id": "builtin-default-containers", "icon": "", "treeOrder": 1, "order": 100 },
-    "generate.js": { "id": "builtin-default-generate", "icon": "", "treeOrder": 2, "order": 100, "insertion": { "target": "generatePath" } },
+    "config.json": { "id": "builtin-default-config", "icon": "", "treeOrder": 0, "order": 100 },
+    "slots.json": { "id": "builtin-default-slots", "icon": "", "treeOrder": 1, "order": 100 },
+    "generate.js": { "id": "builtin-default-generate", "icon": "", "treeOrder": 2, "order": 100, "insertion": { "slot": "generatePath" } },
     "prompt.md": { "id": "builtin-default-prompt", "icon": "", "treeOrder": 3, "order": 100 },
-    "default.chat.json": { "id": "builtin-default-chat", "icon": "", "treeOrder": 4, "order": 100, "insertion": { "target": "chat" } }
+    "default.chat.json": { "id": "builtin-default-chat", "icon": "", "treeOrder": 4, "order": 100, "insertion": { "slot": "chat" } }
   }
 }

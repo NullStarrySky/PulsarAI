@@ -1,0 +1,20 @@
+{
+  "slots": [
+    {
+      "id": "generatePath",
+      "title": "生成入口",
+      "scope": "global",
+      "description": "注册生成流程入口脚本。",
+      "contentSuffixes": ["js"],
+      "selectionMode": "single",
+      "overrideStrategy": "override"
+    },
+    {
+      "id": "context",
+      "title": "会话上下文",
+      "scope": "local",
+      "description": "角色设定与会话生成所需的共享上下文。",
+      "contentSuffixes": ["md", "chat.json"]
+    }
+  ]
+}

@@ -18,16 +18,16 @@ export function pluginPathSelectionValue(path: string) {
   return path.replace(/\\/g, "/").replace(/(?:\.chat|\.data)?\.[^./]+$/i, "");
 }
 
-function pluginFileContainerId(file: PluginFile) {
-  const target = file.insertion?.target.trim();
-  if (!target) return null;
-  const segments = target.replace(/\\/g, "/").split("/").filter(Boolean);
+function pluginFileSlotId(file: PluginFile) {
+  const slot = file.insertion?.slot.trim();
+  if (!slot) return null;
+  const segments = slot.replace(/\\/g, "/").split("/").filter(Boolean);
   return segments[segments.length - 1] ?? null;
 }
 
 export function listPluginPathSelectionOptions(
   plugins: Plugin[],
-  options: { pathRegex?: string; containerId?: string } = {},
+  options: { pathRegex?: string; slotId?: string } = {},
 ) {
   const pattern = compilePathRegex(options.pathRegex);
   const candidates = prioritizedPlugins(plugins).flatMap((plugin) =>
@@ -35,7 +35,7 @@ export function listPluginPathSelectionOptions(
       const path = file.path;
       pattern.lastIndex = 0;
       if (!pattern.test(path)) return [];
-      if (options.containerId && pluginFileContainerId(file) !== options.containerId) return [];
+      if (options.slotId && pluginFileSlotId(file) !== options.slotId) return [];
       const value = pluginPathSelectionValue(path);
       return [{
         value,
@@ -56,7 +56,7 @@ export function listPluginPathSelectionOptions(
 
 export function backgroundPathSelectionOptions(plugins: Plugin[]) {
   return listPluginPathSelectionOptions(plugins, {
-    containerId: "background",
+    slotId: "background",
     pathRegex: "^background/.+\\.(?:png|jpe?g|gif|webp|avif|svg|mp4|webm)$",
   }).filter((candidate) => pluginFileType(candidate.file.name) === "media");
 }

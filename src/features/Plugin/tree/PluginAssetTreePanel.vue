@@ -39,7 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
+import { createPluginResourceContent } from "@/features/Plugin/editors/resource-defaults";
 import { createPluginMediaContent } from "@/features/Plugin/editors/media/plugin-media";
 import {
   pluginFileType,
@@ -93,7 +93,6 @@ const emit = defineEmits<{
 }>();
 
 const pluginStore = usePluginStore();
-const conversation = useConversationStore();
 const importInput = ref<HTMLInputElement | null>(null);
 const expandedIds = ref(new Set<string>());
 const selectedKey = ref("");
@@ -228,17 +227,14 @@ function chooseImport(plugin?: Plugin, folderPath = "") {
 
 function newFileTemplate(type: NewPluginFileType) {
   if (type === "agents") return { name: "AGENTS.md", content: "# Plugin Instructions\n\n" };
-  if (type === "data") return {
-    name: "untitled.data.json",
-    content: { version: 1, isolation: "resource", description: "", initialValue: {}, enableUpdater: false, wrapperSource: "" },
-  };
-  if (type === "chat") return { name: "untitled.chat.json", content: { message: [] } };
-  if (type === "javascript") return { name: "untitled.js", content: "" };
-  if (type === "json") return { name: "untitled.json", content: {} };
-  if (type === "media") return { name: "untitled.png", content: createPluginMediaContent("") };
-  if (type === "component") return { name: "untitled.vue", content: "<template>\n  <div />\n</template>\n" };
-  if (type === "text") return { name: "untitled.txt", content: "" };
-  return { name: "untitled.md", content: "" };
+  if (type === "data") return { name: "untitled.data.json", content: createPluginResourceContent("data") };
+  if (type === "chat") return { name: "untitled.chat.json", content: createPluginResourceContent("chat") };
+  if (type === "javascript") return { name: "untitled.js", content: createPluginResourceContent("javascript") };
+  if (type === "json") return { name: "untitled.json", content: createPluginResourceContent("json") };
+  if (type === "media") return { name: "untitled.png", content: createPluginResourceContent("media") };
+  if (type === "component") return { name: "untitled.vue", content: createPluginResourceContent("component") };
+  if (type === "text") return { name: "untitled.txt", content: createPluginResourceContent("text") };
+  return { name: "untitled.md", content: createPluginResourceContent("markdown") };
 }
 
 async function createFile(plugin: Plugin, folderPath: string, type: NewPluginFileType) {
@@ -325,8 +321,8 @@ function isFixedConventionRow(row: TreeRow) {
   if (row.root) return true;
   const path = row.path.toLocaleLowerCase();
   return [
-    pluginConventions.manifest,
-    pluginConventions.containers,
+    pluginConventions.config,
+    pluginConventions.slots,
     pluginConventions.regex,
     pluginConventions.componentsFolder,
     pluginConventions.toolsFolder,
@@ -386,9 +382,8 @@ async function dropOnRow(row: TreeRow) {
 }
 
 function insertionLabel(node: PluginTreeNode | null) {
-  if (!node || node.kind !== "file" || !node.insertion?.target) return "";
-  return /^container:(?:local|global)\/(.+)$/.exec(node.insertion.target)?.[1]
-    ?? node.insertion.target;
+  if (!node || node.kind !== "file" || !node.insertion?.slot) return "";
+  return node.insertion.slot;
 }
 
 async function importFiles(event: Event) {
@@ -445,7 +440,7 @@ function readFileAsDataUrl(file: File) {
 
 onMounted(async () => {
   try {
-    await Promise.all([pluginStore.initialize(), conversation.initialize()]);
+    await pluginStore.initialize();
     const first = packagePlugins.value[0];
     if (!first) return;
     focusedPluginId.value = first.id;

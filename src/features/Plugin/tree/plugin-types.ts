@@ -13,7 +13,7 @@ export interface PluginFile extends PluginNodeBase {
   content: unknown;
   order: number;
   insertion?: {
-    target: string;
+    slot: string;
     condition?: string;
     /** A synchronous JavaScript resource, resolved from this file, returning a boolean. */
     conditionPath?: string;
@@ -61,8 +61,8 @@ export type PluginFileType =
   | "text";
 
 export const pluginConventions = {
-  manifest: "manifest.json",
-  containers: "containers.json",
+  config: "config.json",
+  slots: "slots.json",
   regex: "regex.json",
   actionFolder: "action",
   toolsFolder: "tools",

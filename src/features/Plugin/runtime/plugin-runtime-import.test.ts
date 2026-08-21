@@ -51,7 +51,7 @@ describe("Simplified Runtime importResource", () => {
       userInput: "Hi",
     })) as any;
 
-    expect(result.message).toEqual([
+    expect(result).toEqual([
       { role: "system", content: "System: Be helpful" },
       { role: "user", content: "User: Hi" },
     ]);
@@ -72,5 +72,28 @@ describe("Simplified Runtime importResource", () => {
 
     const failResult = await api.import("conditional.md", { featureActive: false });
     expect(failResult).toBeNull();
+  });
+
+  it("reads wrapped content by default and raw content with noWrapper", async () => {
+    const plugin = createMockPlugin("test-plugin", [
+      { path: "conditional.md", content: "Hello {{ name }}", insertion: { condition: "false" } },
+    ]);
+    const api = createPluginSelfApi("test-plugin", { plugins: [plugin] });
+
+    await expect(api.read("conditional.md", { environment: { name: "Pulsar" } })).resolves.toBe("Hello Pulsar");
+    await expect(api.read("conditional.md", { noWrapper: true })).resolves.toBe("Hello {{ name }}");
+  });
+
+  it("resolves one extensionless file path and rejects ambiguity", async () => {
+    const api = createPluginSelfApi("test-plugin", {
+      plugins: [createMockPlugin("test-plugin", [
+        { path: "notes/greeting.md", content: "hello" },
+        { path: "notes/duplicate.txt", content: "one" },
+        { path: "notes/duplicate.md", content: "two" },
+      ])],
+    });
+
+    await expect(api.read("notes/greeting", { noWrapper: true })).resolves.toBe("hello");
+    await expect(api.read("notes/duplicate", { noWrapper: true })).rejects.toThrow("无后缀路径不唯一");
   });
 });

@@ -16,33 +16,18 @@ import ModelSelect from "@/features/ModelConnection/components/ModelSelect.vue";
 import { useDefaultConfigStore } from "./default-config-store";
 
 const defaults = useDefaultConfigStore();
-const optimizationPromptDraft = ref("");
 const sttPolishPromptDraft = ref("");
 
 onMounted(async () => {
   await defaults.load();
-  optimizationPromptDraft.value = defaults.promptOptimizationPrompt;
   sttPolishPromptDraft.value = defaults.sttPolishPrompt;
 });
 
 onBeforeUnmount(() => {
-  if (optimizationPromptDraft.value !== defaults.promptOptimizationPrompt) {
-    void defaults.setPromptOptimizationPrompt(optimizationPromptDraft.value);
-  }
   if (sttPolishPromptDraft.value !== defaults.sttPolishPrompt) {
     void defaults.setSttPolishPrompt(sttPolishPromptDraft.value);
   }
 });
-
-function updateOptimizationPromptDraft(value: string | number) {
-  optimizationPromptDraft.value = String(value);
-}
-
-function saveOptimizationPrompt() {
-  if (optimizationPromptDraft.value !== defaults.promptOptimizationPrompt) {
-    void defaults.setPromptOptimizationPrompt(optimizationPromptDraft.value);
-  }
-}
 
 function updateSttPolishPromptDraft(value: string | number) {
   sttPolishPromptDraft.value = String(value);
@@ -104,30 +89,6 @@ function saveSttPolishPrompt() {
           button-class="w-full justify-between sm:w-80"
           @update:model-value="defaults.setTranscriptionModel"
         />
-      </SettingItem>
-    </SettingGroup>
-
-    <SettingGroup title="提示词优化">
-      <SettingItem title="优化模型" description="执行提示词优化时使用的文本模型。">
-        <ModelSelect
-          :model-value="defaults.promptOptimizationModel"
-          button-class="w-full justify-between sm:w-80"
-          @update:model-value="defaults.setPromptOptimizationModel"
-        />
-      </SettingItem>
-      <SettingItem
-        title="优化提示词"
-        :description="'定义如何改写输入内容；使用 {{prompt}} 表示当前输入。'"
-      >
-        <template #bottom>
-          <Textarea
-            :model-value="optimizationPromptDraft"
-            class="min-h-36 resize-y"
-            placeholder="输入提示词优化模板"
-            @update:model-value="updateOptimizationPromptDraft"
-            @blur="saveOptimizationPrompt"
-          />
-        </template>
       </SettingItem>
     </SettingGroup>
 

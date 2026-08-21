@@ -6,7 +6,7 @@ import { computed, defineComponent, h, ref, watch } from "vue";
 import { conversationCrepeFeatureConfigs, conversationCrepeFeatures } from "@/features/Conversation/stage/milkdown/conversation-crepe";
 import { conversationMacroHighlightPlugin } from "@/features/Conversation/stage/milkdown/conversation-plugin-macro-highlight";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
-import { normalizeMarkdownLineBreaks } from "@/features/Plugin/shared/markdown";
+import { normalizeMarkdownLineBreaks } from "@/features/Misc/markdown";
 
 const props = withDefaults(
   defineProps<{

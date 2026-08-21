@@ -22,6 +22,7 @@ import type {
   ToolCallStep,
 } from "@/features/Conversation/messages/conversation-types";
 import { executeCodeAct } from "./code-act";
+import { askUser } from "./ask-user";
 
 export interface CreateDefaultAgentResourcesInput {
   environment?: SandboxEnvironment;
@@ -69,6 +70,7 @@ export interface AgentResourceProvider {
     container: AgentOutputContainer;
     messages: ModelMessage[];
   }) => Promise<void>;
+  askUser: typeof askUser;
 }
 
 const jsInputSchema = z.object({
@@ -86,10 +88,9 @@ const codeActInstructions = [
   "Submit one JavaScript function in the form `async function () { ... return value; }`.",
   "The function must contain an explicit return. Use only APIs documented in the current context.",
   "Return plain serializable data. Preserve resource `id` and `path` when later calls may need to follow the result.",
-  "For a blocking user decision, call `await agent.askUser({ question, options })` or `await api.askUser(...)` inside the function.",
   "To delegate a bounded task, call `await generate({ plugin?, environment?, prompt })` inside the function. It returns the child agent's final text; the default plugin is the blank no-template process and an omitted environment uses an in-memory temporary conversation.",
   "Plugin custom functions documented under `# 自定义工具` are context functions: call them with `await ctx.tools[name](...args)`.",
-  "Inspect pure Plugin containers with `ctx.containers.list()` / `get()` and read selected members with `ctx.containers.read(containerId, resourceIds)`.",
+  "Inspect Plugin slots with `slot.list()` / `get()` and import selected members with `slot.import(slotId)`.",
   "Plugin write/edit/mkdir/move/remove/config.set and writable .data wrapper operations update the current Conversation resource overlay. They are committed atomically only when the codeAct call succeeds.",
   "Read and update .data through its documented wrapper facade when possible, or use data.readForResource(resourceId, dataId) and data.writeForResource(resourceId, dataId, value). Persisted data values must remain pure JSON.",
   "The tool result contains either `{ ok: true, value }` or `{ ok: false, error }`; inspect errors and correct the next function.",
@@ -282,6 +283,7 @@ export function createAgentResourceProvider(
   return {
     ToolLoopAgent: ContainerBoundToolLoopAgent,
     streamText: streamTextFn,
+    askUser,
   };
 }
 export async function generateAuxiliaryText(messages: ModelMessage[]) {
