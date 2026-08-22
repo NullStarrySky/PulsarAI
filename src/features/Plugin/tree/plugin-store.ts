@@ -2,8 +2,12 @@ import { isTauri } from "@tauri-apps/api/core";
 import { defineStore } from "pinia";
 import { usePackageStore } from "@/features/Package/package-store";
 import type { PluginConfig, PluginConfigValue } from "@/features/Plugin/editors/config/plugin-config";
+import {
+  createPluginSlotDefinitions,
+  type PluginSlot,
+} from "@/features/Plugin/editors/slot/plugin-slot";
 import { createBuiltinPlugins } from "@/features/Plugin/tree/builtin-plugins";
-import { parsePluginSlots, type PluginSlot, useSlotStore } from "@/features/Plugin/tree/slot-store";
+import { useSlotStore } from "@/features/Plugin/tree/slot-store";
 import { backgroundPathSelectionOptions } from "@/features/Plugin/tree/plugin-path-selection";
 import {
   deletePersistedPlugin,
@@ -121,7 +125,7 @@ function createStarterNodes(): PluginTreeNode[] {
     createFileNode(
       pluginConventions.config,
       {
-        model: {
+        "generation/model": {
           renderer: {
             name: "ModelSelect",
             title: "模型",
@@ -129,7 +133,7 @@ function createStarterNodes(): PluginTreeNode[] {
           },
           value: null,
         },
-        background: {
+        "appearance/background": {
           renderer: {
             name: "PathSelect",
             title: "会话背景",
@@ -210,7 +214,7 @@ function createDefaultContextDocument() {
 
 function createDefaultGenerateSource() {
   return [
-    'const messages = [...bootstrapMessages, ...compileChat(imports("./default.chat.json"))];',
+    'const messages = [...bootstrapMessages, ...await imports("./default.chat.json")];',
     "const runner = new agent.ToolLoopAgent({ container: reply });",
     "await runner.stream({ messages });",
   ].join("\n");
@@ -222,7 +226,7 @@ function createSlotDefinitionsNode(
 ) {
   return createFileNode(
     pluginConventions.slots,
-    { slots: structuredClone(slots) },
+    createPluginSlotDefinitions(slots),
     input,
   );
 }
@@ -314,7 +318,7 @@ function configNode(plugin: Plugin) {
 function configuredBackground(plugin: Plugin) {
   const config = configNode(plugin);
   const value = config?.content && typeof config.content === "object"
-    ? (config.content as PluginConfig).background?.value
+    ? (config.content as PluginConfig)["appearance/background"]?.value
     : null;
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -322,7 +326,7 @@ function configuredBackground(plugin: Plugin) {
 function clearConfiguredBackground(plugin: Plugin) {
   const config = configNode(plugin);
   if (!config?.content || typeof config.content !== "object") return false;
-  const entry = (config.content as PluginConfig).background;
+  const entry = (config.content as PluginConfig)["appearance/background"];
   if (!entry) return false;
   entry.value = null;
   return true;
@@ -544,9 +548,17 @@ function isKnownInvalidBuiltinProcessScript(content: unknown) {
   return content.replace(/\r\n/g, "\n").trim() === legacySource;
 }
 
+function isKnownInvalidBuiltinGenerateScript(content: unknown) {
+  return typeof content === "string"
+    && content.includes('compileChat(imports("./default.chat.json")');
+}
+
 function mergeBuiltinPlugin(bundled: Plugin, persisted: Plugin): Plugin {
   const savedByPath = new Map(persisted.nodes.map((node) => [node.path, node]));
   const bundledPaths = new Set(bundled.nodes.map((node) => node.path));
+  const retiredPaths = bundled.id === builtinDefaultPluginId
+    ? new Set(["generate.js"])
+    : new Set<string>();
   const nodes: PluginTreeNode[] = [
     ...bundled.nodes.map((node) => {
       const saved = savedByPath.get(node.path);
@@ -568,6 +580,11 @@ function mergeBuiltinPlugin(bundled: Plugin, persisted: Plugin): Plugin {
           isKnownInvalidBuiltinProcessScript(saved.content)
         ) {
           content = clonePlain(node.content);
+        } else if (
+          node.path === "generate.js" &&
+          isKnownInvalidBuiltinGenerateScript(saved.content)
+        ) {
+          content = clonePlain(node.content);
         } else if (pluginFileType(node.name) === "media") {
           content = clonePlain(node.content);
         }
@@ -576,7 +593,7 @@ function mergeBuiltinPlugin(bundled: Plugin, persisted: Plugin): Plugin {
       return { ...clonePlain(node), ...clonePlain(saved) };
     }),
     ...persisted.nodes
-      .filter((node) => !bundledPaths.has(node.path))
+      .filter((node) => !bundledPaths.has(node.path) && !retiredPaths.has(node.path))
       .map((node) => clonePlain(node)),
   ];
   return {
@@ -584,6 +601,7 @@ function mergeBuiltinPlugin(bundled: Plugin, persisted: Plugin): Plugin {
     ...clonePlain(persisted),
     id: bundled.id,
     packageId: null,
+    ...(bundled.id === builtinDefaultPluginId ? { enabled: false } : {}),
     builtIn: true,
     nodes,
   };
@@ -676,7 +694,6 @@ function pluginNamespaceNames(plugin: Plugin) {
     .map((toolPath) =>
       toolPath.slice(toolsPrefix.length).trim().toLocaleLowerCase(),
     );
-  const slots = findPluginNodeByPath(plugin, pluginConventions.slots);
   const actionNames = pluginFiles(plugin)
     .filter(
       (file) =>
@@ -692,13 +709,9 @@ function pluginNamespaceNames(plugin: Plugin) {
         .toLocaleLowerCase(),
     )
     .filter(Boolean);
-  const globalSlotNames = (slots?.kind === "file" ? parsePluginSlots(slots.content) : [])
-    .filter((slot) => slot.scope === "global")
-    .map((slot) => slot.id.trim().toLocaleLowerCase());
   for (const [label, names] of [
     ["Action", actionNames],
     ["自定义工具", toolNames],
-    ["全局 Slot", globalSlotNames],
   ] as const) {
     const seen = new Set<string>();
     const duplicate = names.find((name) => {
@@ -713,45 +726,14 @@ function pluginNamespaceNames(plugin: Plugin) {
   return {
     actions: new Set(actionNames),
     tools: new Set(toolNames),
-    globalContainers: new Set(globalSlotNames),
   };
 }
 
 function assertPluginNamespaceCompatibility(plugins: Plugin[]) {
-  const indexed = plugins.map((plugin) => ({
-    plugin,
-    names: pluginNamespaceNames(plugin),
-  }));
-  for (let leftIndex = 0; leftIndex < indexed.length; leftIndex += 1) {
-    for (
-      let rightIndex = leftIndex + 1;
-      rightIndex < indexed.length;
-      rightIndex += 1
-    ) {
-      const left = indexed[leftIndex]!;
-      const right = indexed[rightIndex]!;
-      if (
-        left.plugin.packageId !== null &&
-        right.plugin.packageId !== null &&
-        left.plugin.packageId !== right.plugin.packageId
-      )
-        continue;
-      for (const [label, key] of [
-        ["Action", "actions"],
-        ["自定义工具", "tools"],
-        ["全局容器", "globalContainers"],
-      ] as const) {
-        const collision = [...left.names[key]].find((name) =>
-          right.names[key].has(name),
-        );
-        if (collision) {
-          throw new Error(
-            `${label} 名称冲突：${collision}（${left.plugin.name} / ${right.plugin.name}）`,
-          );
-        }
-      }
-    }
-  }
+  // Enablement is package-bound. A persistence-time cross-plugin collision
+  // check cannot know the active package, so it must not reject inactive or
+  // template resources. Runtime resolves the concrete enabled set instead.
+  for (const plugin of plugins) pluginNamespaceNames(plugin);
 }
 
 function pluginStateItems(state: unknown) {

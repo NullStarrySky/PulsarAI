@@ -199,9 +199,8 @@ export async function buildPluginGenerationEnvironment(
 ): Promise<PluginGenerationEnvironment> {
   const enabledPlugins = plugins.filter(
     (plugin) =>
-      plugin.enabled ||
-      plugin.id === input.mainPluginId ||
-      plugin.packageId === input.packageId,
+      plugin.id !== "builtin-default-plugin" &&
+      (plugin.enabled || plugin.id === input.mainPluginId),
   );
   const selfApi = createPluginSelfApi(input.mainPluginId, {
     plugins: enabledPlugins,

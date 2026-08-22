@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { toRaw } from "vue";
 import { remove, selectByField, selectOne, upsert } from "@/features/Database/database-service";
 import type { Conversation, ConversationKind, ConversationResourceBinding } from "../messages/conversation-types";
 import { createContainer, useMessageStore } from "../messages/message-store";
@@ -35,12 +36,12 @@ export const useChatStore = defineStore("conversation-chats", {
       if (!this.loadedPackageIds.includes(normalized.packageId)) this.loadedPackageIds.push(normalized.packageId);
       return normalized;
     },
-    async persist(chat: Conversation) { await upsert(chatTable, chat.id, structuredClone(chat)); },
+    async persist(chat: Conversation) { await upsert(chatTable, chat.id, structuredClone(toRaw(chat))); },
     async create(input: { packageId: string; title?: string; kind?: ConversationKind; binding?: ConversationResourceBinding; activate?: boolean }) {
       const packages = usePackageStore();
       const packageId = input.packageId;
       if (!packageId) throw new Error("请先选择角色包。");
-      const chat: Conversation = { id: crypto.randomUUID(), packageId, kind: input.kind ?? "chat", binding: input.binding ? structuredClone(input.binding) : undefined, title: input.title?.trim() || "新对话", rendererId: "chat", rootContainerId: null, lastContainerId: null, composerDraft: "", createdAt: now(), updatedAt: now() };
+      const chat: Conversation = { id: crypto.randomUUID(), packageId, kind: input.kind ?? "chat", binding: input.binding ? structuredClone(toRaw(input.binding)) : undefined, title: input.title?.trim() || "新对话", rendererId: "chat", rootContainerId: null, lastContainerId: null, composerDraft: "", createdAt: now(), updatedAt: now() };
       const root = createContainer({ conversationId: chat.id, role: "system", content: "" });
       chat.rootContainerId = root.id;
       chat.lastContainerId = root.id;
@@ -51,7 +52,7 @@ export const useChatStore = defineStore("conversation-chats", {
       await Promise.all([this.persist(chat), useMessageStore().persist(root), ...(packageItem ? [packages.persist(packageItem)] : [])]);
       return chat;
     },
-    async update(chatId: string, patch: Partial<Pick<Conversation, "title" | "pinned" | "rendererId" | "composerDraft">>) {
+    async update(chatId: string, patch: Partial<Pick<Conversation, "title" | "pinned" | "isTemplate" | "isEphemeral" | "rendererId" | "composerDraft">>) {
       const chat = this.chats.find((item) => item.id === chatId);
       if (!chat) return;
       Object.assign(chat, patch, { updatedAt: now() });

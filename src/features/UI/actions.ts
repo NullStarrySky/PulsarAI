@@ -3,9 +3,11 @@ import {
   Search,
   Settings,
   SquareMinus,
+  Trash2,
 } from "lucide-vue-next";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCommandStore, type CommandDefinition } from "@/features/Hotkey/command-store";
+import { resetCharacterDataAction } from "@/features/Conversation/actions";
 import { toggleSttRecordingAction } from "@/features/STT/actions";
 import { useLayoutStore } from "./layout-store";
 
@@ -47,6 +49,15 @@ function createCoreCommands(): CommandDefinition[] {
       category: "窗口",
       icon: SquareMinus,
       run: () => getCurrentWindow().minimize(),
+    },
+    {
+      id: "conversation.reset-character-data",
+      title: "清空全部角色数据",
+      description: "清空角色包、对话、插件和本地资源；设置、模型和密钥会保留。",
+      category: "对话",
+      defaultHotkey: "Ctrl+Shift+R",
+      icon: Trash2,
+      run: resetCharacterDataAction,
     },
     {
       id: "stt.toggle-recording",

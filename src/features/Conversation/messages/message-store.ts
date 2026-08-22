@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import { toRaw } from "vue";
 import { remove, selectByField, upsert } from "@/features/Database/database-service";
 import type { AdditionalParts, ChatMessage, ChatMessageContainer, ChatMessageType, FilePart, Role } from "./conversation-types";
 import { formatChatMessageError } from "./conversation-types";
@@ -27,7 +28,7 @@ export function createContainer(input: {
   parts?: AdditionalParts[];
 }): ChatMessageContainer {
   const message = createMessage(input.content);
-  if (input.parts?.length) message.parts = structuredClone(input.parts);
+  if (input.parts?.length) message.parts = structuredClone(toRaw(input.parts));
   return {
     id: crypto.randomUUID(),
     role: input.role,
@@ -80,7 +81,7 @@ export const useMessageStore = defineStore("conversation-messages", {
     },
 
     async persist(container: ChatMessageContainer) {
-      await upsert(messageContainerTable, container.id, structuredClone(container));
+      await upsert(messageContainerTable, container.id, structuredClone(toRaw(container)));
     },
     pathFor(containerId: string | null): ChatMessageContainer[] {
       const path: ChatMessageContainer[] = [];
@@ -115,6 +116,18 @@ export const useMessageStore = defineStore("conversation-messages", {
       ]);
       return container;
     },
+    /** Create the persisted reply target before a generation plugin is allowed to write. */
+    async requestAssistantContainer(input: {
+      conversationId: string;
+      previousContainer?: string | null;
+    }) {
+      return this.append({
+        conversationId: input.conversationId,
+        role: "assistant",
+        content: "",
+        previousContainer: input.previousContainer,
+      });
+    },
     async setMessageContent(containerId: string, content: string) {
       const container = this.containers.find((item) => item.id === containerId);
       const message = container ? this.currentMessage(container) : null;
@@ -140,7 +153,7 @@ export const useMessageStore = defineStore("conversation-messages", {
       const container = this.containers.find((item) => item.id === containerId);
       const message = container ? this.currentMessage(container) : null;
       if (!container || !message || files.length === 0) return;
-      message.parts = [...(message.parts ?? []), ...structuredClone(files)];
+      message.parts = [...(message.parts ?? []), ...structuredClone(toRaw(files))];
       await this.persist(container);
     },
     async deleteContainer(containerId: string) {
@@ -149,9 +162,16 @@ export const useMessageStore = defineStore("conversation-messages", {
       const [container] = this.containers.splice(index, 1);
       if (!container) return;
       const previous = container.previousContainer ? this.containers.find((item) => item.id === container.previousContainer) : null;
+      const nextContainers = this.containers.filter((item) => item.previousContainer === containerId);
+      for (const next of nextContainers) {
+        next.previousContainer = container.previousContainer;
+        await this.persist(next);
+      }
       if (previous) {
-        previous.availableNextContainer = previous.availableNextContainer.filter((id) => id !== containerId);
-        if (previous.activeNextContainer === containerId) previous.activeNextContainer = previous.availableNextContainer[0] ?? null;
+        previous.availableNextContainer = previous.availableNextContainer
+          .filter((id) => id !== containerId)
+          .concat(nextContainers.map((item) => item.id));
+        if (previous.activeNextContainer === containerId) previous.activeNextContainer = nextContainers[0]?.id ?? null;
         await this.persist(previous);
       }
       await remove(messageContainerTable, containerId);

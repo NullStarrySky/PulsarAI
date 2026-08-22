@@ -47,7 +47,8 @@ export type PluginConfigRenderer =
     })
   | (PluginConfigRendererBase & {
       /** A plugin-provided renderer name; props remain plain JSON. */
-      name: string;
+      name: "Custom";
+      component: string;
       props?: Record<string, PluginConfigValue>;
     });
 
@@ -60,7 +61,7 @@ export type PluginConfig = Record<string, PluginConfigEntry>;
 
 export function createPluginConfig(): PluginConfig {
   return {
-    model: {
+    "generation/model": {
       renderer: {
         name: "ModelSelect",
         title: "模型",
@@ -68,7 +69,7 @@ export function createPluginConfig(): PluginConfig {
       },
       value: null,
     },
-    background: {
+    "appearance/background": {
       renderer: {
         name: "PathSelect",
         title: "会话背景",

@@ -1,4 +1,4 @@
 {
-  "model": { "renderer": { "name": "ModelSelect", "title": "模型", "description": "留空时继承全局默认模型；引用可附带思考强度。" }, "value": null },
-  "background": { "renderer": { "name": "PathSelect", "title": "会话背景", "description": "从 background slot 选择扩展名无关的路径 ID。", "allowEmpty": true, "slotId": "background", "pathRegex": "^background/.+\\.(?:png|jpe?g|gif|webp|avif|svg|mp4|webm)$" }, "value": null }
+  "generation/model": { "renderer": { "name": "ModelSelect", "title": "模型", "description": "留空时继承全局默认模型；引用可附带思考强度。" }, "value": null },
+  "appearance/background": { "renderer": { "name": "PathSelect", "title": "会话背景", "description": "从 background slot 选择扩展名无关的路径 ID。", "allowEmpty": true, "slotId": "background", "pathRegex": "^background/.+\\.(?:png|jpe?g|gif|webp|avif|svg|mp4|webm)$" }, "value": null }
 }

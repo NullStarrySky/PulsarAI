@@ -15,6 +15,7 @@ docs/.vitepress/dist
 src-tauri/target
 *.local
 .prompt_history
+/.playwright-cli/
 .vscode
 apikeys
 todo.todo

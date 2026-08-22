@@ -1,24 +1,15 @@
 import { defineStore } from "pinia";
-import { push } from "notivue";
-import { z } from "zod";
+import {
+  parsePluginSlots,
+  type PluginSlot,
+} from "@/features/Plugin/editors/slot/plugin-slot";
 import { usePluginStore } from "./plugin-store";
 import { findPluginNodeByPath, pluginFileType, type Plugin } from "./plugin-types";
 import coreSlots from "@/features/Plugin/builtIn/core/slots.json";
-import defaultSlots from "@/features/Plugin/builtIn/default/slots.json";
 
-const slotSchema = z.object({ id: z.string().min(1), title: z.string().min(1), scope: z.enum(["local", "global"]), description: z.string().default(""), contentSuffixes: z.array(z.string()).default([]), selectionMode: z.enum(["single", "multiple", "none"]).default("none"), overrideStrategy: z.enum(["override", "merge", "intersection"]).default("override"), selectedPaths: z.array(z.string()).optional() });
-const slotsSchema = z.object({ slots: z.array(slotSchema).default([]) });
-export type PluginSlot = z.infer<typeof slotSchema>;
+export { parsePluginSlots, type PluginSlot };
 export type SlotResource = { id: string; pluginId: string; pluginName: string; name: string; type: string; path: string; order: number; condition?: string; conditionPath?: string };
 export type SlotQuery = PluginSlot & { pluginId: string; pluginName?: string; resources: SlotResource[]; contents: SlotResource[]; contentCount: number };
-
-export function parsePluginSlots(source: unknown) {
-  let value = source;
-  if (typeof source === "string") try { value = JSON.parse(source); } catch { value = null; }
-  const parsed = slotsSchema.safeParse(value);
-  if (!parsed.success) { push.warning("slots.json 类型无效，已忽略。"); return [] as PluginSlot[]; }
-  return parsed.data.slots;
-}
 
 export function pluginFileMatchesSlotSuffix(name: string, suffixes: string[]) {
   const normalized = name.trim().toLowerCase();
@@ -32,7 +23,7 @@ export const useSlotStore = defineStore("plugin-slots", {
   actions: {
     listSlots(plugins: Plugin[] = usePluginStore().sortedPlugins): SlotQuery[] {
       const definitions: Array<{ slot: PluginSlot; pluginId: string }> = [];
-      for (const [pluginId, source] of [["builtin-core-plugin", coreSlots], ["builtin-default-plugin", defaultSlots]] as const) for (const slot of parsePluginSlots(source)) if (!definitions.some((item) => item.slot.id === slot.id)) definitions.push({ slot, pluginId });
+      for (const slot of parsePluginSlots(coreSlots)) if (!definitions.some((item) => item.slot.id === slot.id)) definitions.push({ slot, pluginId: "builtin-core-plugin" });
       for (const plugin of plugins) {
         const node = findPluginNodeByPath(plugin, "slots.json");
         if (node?.kind !== "file") continue;

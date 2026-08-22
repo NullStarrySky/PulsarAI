@@ -7,5 +7,31 @@ const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 </script>
 
 <template>
-  <PluginResourceRenderer :file="file" :model-value="modelValue" :preview="mode === 'preview'" @update:model-value="emit('update:modelValue', $event)" />
+  <div class="h-full min-h-0 overflow-hidden bg-transparent">
+    <PluginResourceRenderer :file="file" :model-value="modelValue" :preview="mode === 'preview'" @update:model-value="emit('update:modelValue', $event)" />
+  </div>
 </template>
+
+<style scoped>
+:deep(.conversation-composer-editor),
+:deep(.conversation-composer-editor > div),
+:deep(.milkdown) {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  background: transparent !important;
+}
+
+:deep(.milkdown) {
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.milkdown .ProseMirror) {
+  min-height: 0 !important;
+  max-height: none !important;
+  flex: 1 1 0;
+  overflow-y: auto;
+  padding: 1rem;
+}
+</style>

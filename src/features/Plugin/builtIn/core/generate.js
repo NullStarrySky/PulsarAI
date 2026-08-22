@@ -1,10 +1,8 @@
 const config = await imports("@/config.json");
-const threshold = Number(config.compressionThreshold?.value) || 0;
 const useStreamText = Boolean(config.useStreamText?.value);
-const history = (await memory.prepare({ compressionThreshold: threshold })).messages;
 const messages = [
   ...bootstrapMessages,
-  ...compileChat(imports("./default.chat.json"), { chat: history, CHAT: history }),
+  ...await imports("./default.chat.json"),
 ];
 
 if (useStreamText) {
