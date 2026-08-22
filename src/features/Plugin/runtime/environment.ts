@@ -5,6 +5,7 @@ import { usePackageStore } from "@/features/Package/package-store";
 import { createComposerApi } from "@/features/Conversation/composer/composer-api";
 import type { PluginConfig } from "@/features/Plugin/editors/config/plugin-config";
 import { createPluginSelfApi } from "@/features/Plugin/runtime/self-api";
+import type { PluginSelfApiMutation } from "@/features/Plugin/runtime/self-api";
 import { PluginLogger } from "@/features/Plugin/environment/logger";
 import { environmentTools } from "@/features/Plugin/environment/tools";
 import { createAgentResourceProvider } from "@/features/Plugin/agent/runtime/default-agent";
@@ -182,6 +183,8 @@ export interface GenerationPathEnvironmentInput {
   prompt: string;
   now?: () => string;
   baseEnvironment?: SandboxEnvironment;
+  /** Conversation injects its versioned Overlay here during generation. */
+  resourceMutation?: PluginSelfApiMutation;
 }
 
 export interface PluginGenerationEnvironment {
@@ -204,6 +207,7 @@ export async function buildPluginGenerationEnvironment(
   );
   const selfApi = createPluginSelfApi(input.mainPluginId, {
     plugins: enabledPlugins,
+    mutation: input.resourceMutation,
   });
   const logger = selfApi.logger;
 
@@ -231,6 +235,9 @@ export async function buildPluginGenerationEnvironment(
     mkdir: selfApi.mkdir,
     move: selfApi.move,
     remove: selfApi.remove,
+    open: selfApi.open,
+    close: selfApi.close,
+    toggle: selfApi.toggle,
     slot: selfApi.slot,
     logger,
     input: createComposerApi(input.conversationId),

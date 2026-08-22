@@ -92,6 +92,7 @@ const codeActInstructions = [
   "Plugin custom functions documented under `# 自定义工具` are context functions: call them with `await ctx.tools[name](...args)`.",
   "Inspect Plugin slots with `slot.list()` / `get()` and import selected members with `slot.import(slotId)`.",
   "Plugin write/edit/mkdir/move/remove/config.set and writable .data wrapper operations update the current Conversation resource overlay. They are committed atomically only when the codeAct call succeeds.",
+  "Use open(path), close(path), or toggle(path) to operate a Plugin resource editor. `@/` and `@pluginId/` operate that Plugin's asset panel; a file path such as `@/notes.md` operates its editor. Each returns whether the target is open plus its stable IDs.",
   "Read and update .data through its documented wrapper facade when possible, or use data.readForResource(resourceId, dataId) and data.writeForResource(resourceId, dataId, value). Persisted data values must remain pure JSON.",
   "The tool result contains either `{ ok: true, value }` or `{ ok: false, error }`; inspect errors and correct the next function.",
 ].join("\n");

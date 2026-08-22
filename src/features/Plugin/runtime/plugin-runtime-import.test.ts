@@ -1,5 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createPinia, setActivePinia } from "pinia";
+
+vi.hoisted(() => {
+  Object.assign(globalThis, {
+    window: { pulsarHost: { invoke: async () => null, listen: async () => () => {} } },
+  });
+});
+
 import { createPluginSelfApi } from "@/features/Plugin/runtime/self-api";
+import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import type { Plugin } from "@/features/Plugin/tree/plugin-types";
 
 function createMockPlugin(id: string, files: Array<{ path: string; content: unknown; insertion?: any }>): Plugin {
@@ -26,6 +35,7 @@ function createMockPlugin(id: string, files: Array<{ path: string; content: unkn
 }
 
 describe("Simplified Runtime importResource", () => {
+  beforeEach(() => { setActivePinia(createPinia()); });
   it("imports and evaluates markdown macros via sandbox natively", async () => {
     const plugin = createMockPlugin("test-plugin", [
       { path: "greeting.md", content: "Hello {{ name }}!" },
@@ -95,5 +105,19 @@ describe("Simplified Runtime importResource", () => {
 
     await expect(api.read("notes/greeting", { noWrapper: true })).resolves.toBe("hello");
     await expect(api.read("notes/duplicate", { noWrapper: true })).rejects.toThrow("无后缀路径不唯一");
+  });
+
+  it("opens, closes, and toggles Plugin panels or resource editors", () => {
+    const plugin = createMockPlugin("test-plugin", [{ path: "notes.md", content: "hello" }]);
+    const store = usePluginStore();
+    store.plugins = [plugin];
+    const api = createPluginSelfApi("test-plugin", { plugins: [plugin] });
+
+    expect(api.open("@/")).toMatchObject({ open: true, kind: "panel", pluginId: "test-plugin" });
+    expect(store.assetPanelPluginId).toBe("test-plugin");
+    expect(api.toggle("@/")).toMatchObject({ open: false, kind: "panel" });
+    expect(api.open("@/notes.md")).toMatchObject({ open: true, kind: "resource", path: "notes.md" });
+    expect(store.activeEditorState?.file.path).toBe("notes.md");
+    expect(api.close("@/notes.md")).toMatchObject({ open: false, kind: "resource" });
   });
 });

@@ -748,6 +748,7 @@ export const usePluginStore = defineStore("plugin-resource", {
     loaded: false,
     loadError: "",
     activePluginId: "",
+    assetPanelPluginId: null as string | null,
     search: "",
     plugins: [] as Plugin[],
     activeEditorState: null as ActivePluginFileEditorState | null,
@@ -1034,6 +1035,22 @@ export const usePluginStore = defineStore("plugin-resource", {
       if (pluginStateItems(this).some((plugin) => plugin.id === pluginId)) {
         this.activePluginId = pluginId;
       }
+    },
+    openAssetPanel(pluginId: string) {
+      if (!pluginStateItems(this).some((plugin) => plugin.id === pluginId)) {
+        throw new Error(`插件不存在：${pluginId}`);
+      }
+      this.activePluginId = pluginId;
+      this.assetPanelPluginId = pluginId;
+    },
+    closeAssetPanel(pluginId?: string) {
+      if (!pluginId || this.assetPanelPluginId === pluginId) {
+        this.assetPanelPluginId = null;
+      }
+    },
+    toggleAssetPanel(pluginId: string) {
+      if (this.assetPanelPluginId === pluginId) this.assetPanelPluginId = null;
+      else this.openAssetPanel(pluginId);
     },
     async createPlugin(packageId: string) {
       if (pluginStateItems(this).some((item) => item.packageId === packageId)) {
@@ -1485,6 +1502,29 @@ export const usePluginStore = defineStore("plugin-resource", {
         return;
       }
       this.activeEditorState = { plugin, file, path, editorMode: mode };
+    },
+    showFileEditor(
+      plugin: Plugin,
+      file: PluginFile,
+      path: string,
+      mode: "preview" | "source" = "preview",
+    ) {
+      this.activeEditorState = { plugin, file, path, editorMode: mode };
+    },
+    toggleFileEditor(
+      plugin: Plugin,
+      file: PluginFile,
+      path: string,
+      mode: "preview" | "source" = "preview",
+    ) {
+      if (
+        this.activeEditorState?.plugin.id === plugin.id
+        && (this.activeEditorState.file.id === file.id || this.activeEditorState.path === path)
+      ) {
+        this.activeEditorState = null;
+      } else {
+        this.activeEditorState = { plugin, file, path, editorMode: mode };
+      }
     },
     closeFileEditor() {
       this.activeEditorState = null;

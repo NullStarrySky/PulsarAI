@@ -108,7 +108,7 @@ export interface ConversationResourceNodeSnapshot {
   content?: unknown;
   order?: number;
   insertion?: {
-    target: string;
+    slot: string;
     condition?: string;
     conditionPath?: string;
   };
@@ -163,6 +163,23 @@ export type ConversationResourceOperation =
 export interface ConversationResourceUpdate {
   operations: ConversationResourceOperation[];
   createdAt: string;
+  stats: ConversationResourceOperationStats;
+}
+
+/** Final, message-version-local result of all CodeAct resource work. */
+export interface ConversationResourceOperationStats {
+  total: number;
+  edit: number;
+  create: number;
+  move: number;
+  remove: number;
+  codeAct: {
+    attempted: number;
+    committed: number;
+    rolledBack: number;
+  };
+  /** Number of Sandbox/Plugin log entries emitted by the completed run. */
+  logCount: number;
 }
 
 export type ChatMessageMeta = {

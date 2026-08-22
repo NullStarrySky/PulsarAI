@@ -3,6 +3,7 @@ import { pluginConfigValue, buildPluginGenerationEnvironment } from "@/features/
 import { builtinCorePluginId, usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import { usePackageStore } from "@/features/Package/package-store";
 import { formatChatMessageError, type ChatMessageContainer } from "./conversation-types";
+import { ConversationResourceOverlay } from "./conversation-resource-overlay";
 import { modelMessagesFromPath, useMessageStore } from "./message-store";
 import { useChatStore } from "../chats/chat-store";
 import { toRaw } from "vue";
@@ -58,6 +59,8 @@ export async function generateRequestedAssistantReply(input: {
     fail: async (reason: string) => { message.type = "error"; message.content = formatChatMessageError(reason); await persistReply(); },
   });
 
+  let overlay: ConversationResourceOverlay | null = null;
+
   try {
     await plugins.initialize();
     const packageItem = packages.packages.find((item) => item.id === chat.packageId);
@@ -67,7 +70,15 @@ export async function generateRequestedAssistantReply(input: {
       packageItem?.enabledGlobalPluginIds,
       mainPluginId,
     );
-    const generation = await buildPluginGenerationEnvironment(enabledPlugins, {
+    overlay = new ConversationResourceOverlay({
+      plugins: enabledPlugins,
+      activePath: input.activePath,
+      onUpdate: async (update) => {
+        message.meta.resourceUpdate = update;
+        await persistReply();
+      },
+    });
+    const generation = await buildPluginGenerationEnvironment(overlay.plugins, {
       activePath: input.activePath,
       chat: modelMessagesFromPath(input.activePath),
       conversationId: chat.id,
@@ -76,7 +87,9 @@ export async function generateRequestedAssistantReply(input: {
       mainPluginId,
       containerId: container.id,
       prompt: input.prompt,
+      resourceMutation: overlay,
     });
+    overlay.setLogger(generation.logger);
     const processPlugin = generation.processPlugin;
     if (!processPlugin) throw new Error("主要插件不存在或未启用。");
     const modelOverride = pluginConfigValue(processPlugin, "generation/model");
@@ -84,6 +97,7 @@ export async function generateRequestedAssistantReply(input: {
     environment.agent = createAgentResourceProvider({
       environment,
       ...(typeof modelOverride === "string" && modelOverride.trim() ? { modelName: modelOverride } : {}),
+      resourceTransaction: overlay,
     });
     environment.AGENT = environment.agent;
     Object.assign(environment, {
@@ -97,6 +111,7 @@ export async function generateRequestedAssistantReply(input: {
     message.type = "error";
     message.content = formatChatMessageError(error);
   } finally {
+    await overlay?.finalize();
     message.meta.generateInfo!.timeUsed = Date.now() - startedAt;
     await persistReply();
     await persistQueue;
