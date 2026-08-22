@@ -71,4 +71,19 @@ describe("ConversationResourceOverlay", () => {
       stats: { total: 1, edit: 1, codeAct: { attempted: 2, committed: 1, rolledBack: 1 } },
     });
   });
+
+  it("records a file-editor save as a replayable Overlay edit", () => {
+    const initial = new ConversationResourceOverlay({ plugins: [plugin()], activePath: [] });
+    initial.updateFile("test-plugin", "note", { content: "edited in chat", order: 42, insertion: { slot: "context" } });
+    const update = initial.resourceUpdate();
+
+    const replayed = new ConversationResourceOverlay({ plugins: [plugin()], activePath: pathWith(update) });
+    expect(replayed.plugins[0]?.nodes[0]).toMatchObject({
+      content: "edited in chat",
+      order: 42,
+      insertion: { slot: "context" },
+    });
+    expect(update.operations).toHaveLength(1);
+    expect(update.stats).toMatchObject({ total: 1, edit: 1 });
+  });
 });

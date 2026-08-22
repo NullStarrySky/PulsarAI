@@ -20,6 +20,7 @@ export interface PluginSelfApiOptions {
   plugins?: Plugin[];
   logger?: PluginLogger;
   mutation?: PluginSelfApiMutation;
+  conversationId?: string;
 }
 export interface PluginReadOptions { noWrapper?: boolean; environment?: ResourceImportEnvironment; }
 type ResolvedFile = { plugin: Plugin; file: PluginFile; path: string };
@@ -52,10 +53,7 @@ export function createPluginSelfApi(pluginId: string, options: PluginSelfApiOpti
     const target = resolve(request, true);
     if (!target.path) return { kind: "panel", plugin: target.plugin, path: "" };
     if (target.node?.kind !== "file") throw new Error(`只能操作资源文件或插件面板：${request}`);
-    const persistedPlugin = store().plugins.find((plugin) => plugin.id === target.plugin.id);
-    const persistedFile = persistedPlugin?.nodes.find((node): node is PluginFile => node.id === target.node?.id && node.kind === "file");
-    if (!persistedPlugin || !persistedFile) throw new Error(`资源只存在于当前 Overlay，无法直接打开编辑器：${request}`);
-    return { kind: "resource", plugin: persistedPlugin, file: persistedFile, path: target.path };
+    return { kind: "resource", plugin: target.plugin, file: target.node, path: target.path };
   };
   const show = (request: string, action: "open" | "close" | "toggle") => {
     const target = resolveUiTarget(request);
@@ -66,11 +64,12 @@ export function createPluginSelfApi(pluginId: string, options: PluginSelfApiOpti
       logger.append(`${action} 插件面板`, 0, "api", `@${target.plugin.id}/`);
       return { open: store().assetPanelPluginId === target.plugin.id, kind: "panel" as const, pluginId: target.plugin.id, path: "" };
     }
-    if (action === "open") store().showFileEditor(target.plugin, target.file, target.path);
+    const context = { conversationId: options.conversationId, overlayPlugins: list() };
+    if (action === "open") store().showFileEditor(target.plugin, target.file, target.path, "preview", context);
     else if (action === "close") {
       const active = store().activeEditorState;
       if (active?.plugin.id === target.plugin.id && (active.file.id === target.file.id || active.path === target.path)) store().closeFileEditor();
-    } else store().toggleFileEditor(target.plugin, target.file, target.path);
+    } else store().toggleFileEditor(target.plugin, target.file, target.path, "preview", context);
     const active = store().activeEditorState;
     logger.append(`${action} 资源`, 0, "api", `@${target.plugin.id}/${target.path}`);
     return { open: Boolean(active && active.plugin.id === target.plugin.id && (active.file.id === target.file.id || active.path === target.path)), kind: "resource" as const, pluginId: target.plugin.id, path: target.path, resourceId: target.file.id };

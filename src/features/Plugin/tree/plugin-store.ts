@@ -41,6 +41,8 @@ export interface ActivePluginFileEditorState {
   file: PluginFile;
   path: string;
   editorMode: "preview" | "source";
+  conversationId?: string;
+  overlayPlugins?: Plugin[];
 }
 
 function clonePlain<T>(value: T): T {
@@ -1491,6 +1493,7 @@ export const usePluginStore = defineStore("plugin-resource", {
       file: PluginFile,
       path: string,
       mode: "preview" | "source" = "preview",
+      context: Pick<ActivePluginFileEditorState, "conversationId" | "overlayPlugins"> = {},
     ) {
       if (
         this.activeEditorState &&
@@ -1501,21 +1504,23 @@ export const usePluginStore = defineStore("plugin-resource", {
         this.activeEditorState = null;
         return;
       }
-      this.activeEditorState = { plugin, file, path, editorMode: mode };
+      this.activeEditorState = { plugin, file, path, editorMode: mode, ...context };
     },
     showFileEditor(
       plugin: Plugin,
       file: PluginFile,
       path: string,
       mode: "preview" | "source" = "preview",
+      context: Pick<ActivePluginFileEditorState, "conversationId" | "overlayPlugins"> = {},
     ) {
-      this.activeEditorState = { plugin, file, path, editorMode: mode };
+      this.activeEditorState = { plugin, file, path, editorMode: mode, ...context };
     },
     toggleFileEditor(
       plugin: Plugin,
       file: PluginFile,
       path: string,
       mode: "preview" | "source" = "preview",
+      context: Pick<ActivePluginFileEditorState, "conversationId" | "overlayPlugins"> = {},
     ) {
       if (
         this.activeEditorState?.plugin.id === plugin.id
@@ -1523,7 +1528,7 @@ export const usePluginStore = defineStore("plugin-resource", {
       ) {
         this.activeEditorState = null;
       } else {
-        this.activeEditorState = { plugin, file, path, editorMode: mode };
+        this.activeEditorState = { plugin, file, path, editorMode: mode, ...context };
       }
     },
     closeFileEditor() {

@@ -10,6 +10,7 @@ Conversation 只负责持久化的会话树、消息版本、生成请求和它�
 4. 生成器以活动路径构造模型上下文，并把主插件的生成入口运行在 Sandbox 环境中。`reply` 是唯一可写的消息目标。
 5. 生成中的插件文件修改不接触 Plugin Store：`ConversationResourceOverlay` 从基础插件和活动消息版本上的 `resourceUpdate.operations` 重建当前视图。每次 `codeAct` 都有独立事务；成功时操作绑定到当前消息版本，失败时恢复该调用开始前的 Overlay 快照。
 6. 当前消息的 `resourceUpdate.stats` 记录最终资源操作数量、CodeAct 成功/回滚次数及本轮 Plugin/Sandbox 日志数量；消息底栏可以展开查看明细。切换分支或助手版本时，下一次生成自然重放另一条活动路径。
+7. 资源面板和文件编辑器读取当前 chat 活动路径物化出的 Overlay，而不是原始 Plugin。编辑文件会新增一条隐藏、空内容的系统容器，并把该次 edit 操作写入其中；它不进入模型消息，但成为下次发送前的因果节点并参与 Overlay 重放。
 
 ## 文件树
 

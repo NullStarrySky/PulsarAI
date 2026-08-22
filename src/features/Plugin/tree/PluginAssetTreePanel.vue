@@ -85,6 +85,8 @@ const newFileTypes: Array<{ id: NewPluginFileType; label: string; extension: str
 
 const props = defineProps<{
   pluginId: string;
+  /** A conversation Overlay view takes precedence over the persisted Plugin. */
+  plugin?: Plugin | null;
 }>();
 
 const emit = defineEmits<{
@@ -136,7 +138,9 @@ function stopPanelDrag() {
   window.removeEventListener("mouseup", stopPanelDrag);
 }
 
-const packagePlugins = computed(() => pluginStore.sortedPlugins.filter((plugin) => plugin.id === props.pluginId));
+const packagePlugins = computed(() => props.plugin?.id === props.pluginId
+  ? [props.plugin]
+  : pluginStore.sortedPlugins.filter((plugin) => plugin.id === props.pluginId));
 const selectedPlugin = computed(() => packagePlugins.value[0] ?? null);
 const selectedPluginLabel = computed(() => selectedPlugin.value?.packageId !== null ? "本地" : selectedPlugin.value?.name ?? "插件");
 

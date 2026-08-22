@@ -24,6 +24,7 @@ import {
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
 import { usePackageStore } from "@/features/Package/package-store";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
+import { persistConversationOverlayFileEdit } from "@/features/Conversation/messages/conversation-resource-overlay-service";
 import { useSlotStore, pluginFileMatchesSlotSuffix } from "@/features/Plugin/tree/slot-store";
 import { pluginMediaSource, pluginMediaType } from "@/features/Plugin/editors/media/plugin-media";
 import { pluginConventions, pluginFileType, type Plugin, type PluginFile } from "@/features/Plugin/tree/plugin-types";
@@ -40,6 +41,8 @@ const props = defineProps<{
   panelOpen: boolean;
   initialMode?: "preview" | "source";
   packageId?: string;
+  conversationId?: string;
+  overlayPlugins?: Plugin[];
 }>();
 
 const emit = defineEmits<{ "update:open": [value: boolean] }>();
@@ -93,7 +96,7 @@ const editorStats = computed(() => ({
   characters: draft.value.length,
   lines: draft.value ? draft.value.split(/\r?\n/).length : 0,
 }));
-const visiblePlugins = computed(() => pluginStore.sortedPluginsForPackage(
+const visiblePlugins = computed(() => props.overlayPlugins ?? pluginStore.sortedPluginsForPackage(
   props.packageId ?? props.plugin?.packageId ?? "",
   packages.packages.find((item) => item.id === (props.packageId ?? props.plugin?.packageId))?.enabledGlobalPluginIds,
   packages.packages.find((item) => item.id === (props.packageId ?? props.plugin?.packageId))?.mainPluginId,
@@ -226,7 +229,7 @@ async function saveNow() {
     if (!isMedia.value && ["json", "chat", "data"].includes(fileType.value)) {
       content = JSON.parse(draft.value) as unknown;
     }
-    await pluginStore.updateNode(plugin.id, file.id, {
+    const patch = {
       content,
       order: Number(resourceOrder.value),
       insertion: insertionTarget.value === "none"
@@ -236,7 +239,21 @@ async function saveNow() {
             condition: insertionCondition.value.trim() || undefined,
             conditionPath: insertionConditionPath.value.trim() || undefined,
           },
-    });
+    };
+    if (props.conversationId) {
+      const saved = await persistConversationOverlayFileEdit({
+        chatId: props.conversationId,
+        pluginId: plugin.id,
+        resourceId: file.id,
+        patch,
+      });
+      pluginStore.showFileEditor(saved.plugin, saved.file, props.path, editorMode.value, {
+        conversationId: props.conversationId,
+        overlayPlugins: saved.plugins,
+      });
+    } else {
+      await pluginStore.updateNode(plugin.id, file.id, patch);
+    }
     lastSavedAt.value = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
     return true;
   } catch (error) {

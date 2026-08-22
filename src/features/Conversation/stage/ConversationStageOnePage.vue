@@ -12,6 +12,7 @@ import PluginFileEditorDialog from "@/features/Plugin/tree/PluginFileEditorDialo
 import PluginManagerPanel from "@/features/Plugin/PluginManagerPanel.vue";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import type { Plugin, PluginFile } from "@/features/Plugin/tree/plugin-types";
+import { conversationOverlayPlugins } from "@/features/Conversation/messages/conversation-resource-overlay-service";
 
 const props = defineProps<{ chatId?: string }>();
 const emit = defineEmits<{ "update:chatId": [chatId: string] }>();
@@ -24,6 +25,8 @@ const plugins = usePluginStore();
 const assetPluginId = computed(() => plugins.assetPanelPluginId);
 const pluginPanelOpen = ref(false);
 const activeEditor = computed(() => plugins.activeEditorState);
+const overlayPlugins = computed(() => chatId.value ? conversationOverlayPlugins(chatId.value) : []);
+const assetPlugin = computed(() => overlayPlugins.value.find((plugin) => plugin.id === assetPluginId.value) ?? null);
 const fileEditorOpen = computed({ get: () => Boolean(activeEditor.value), set: (open: boolean) => { if (!open) plugins.closeFileEditor(); } });
 const chatId = computed({
   get: () => props.chatId ?? localChatId.value,
@@ -78,15 +81,20 @@ function toggleAssets() {
 }
 function togglePluginPanel() { pluginPanelOpen.value = !pluginPanelOpen.value; if (pluginPanelOpen.value) plugins.closeAssetPanel(); }
 function openPluginAssets(plugin: Plugin) { pluginPanelOpen.value = false; plugins.openAssetPanel(plugin.id); }
-function openPluginFile(value: { plugin: Plugin; file: PluginFile; path: string }) { plugins.openFileEditor(value.plugin, value.file, value.path); }
+function openPluginFile(value: { plugin: Plugin; file: PluginFile; path: string }) {
+  plugins.openFileEditor(value.plugin, value.file, value.path, "preview", {
+    conversationId: chatId.value,
+    overlayPlugins: overlayPlugins.value,
+  });
+}
 </script>
 
 <template>
   <section class="relative flex h-full min-h-0 flex-col bg-background">
     <ConversationHeader v-if="ready && packageId && chatId" :package-id="packageId" v-model:chat-id="chatId" :asset-open="Boolean(assetPluginId)" :plugin-open="pluginPanelOpen" @update:package-id="selectPackage" @toggle-assets="toggleAssets" @toggle-plugin="togglePluginPanel" />
-    <main v-if="ready && chatId" class="relative min-h-0 flex-1"><ChatThread :key="chatId" :chat-id="chatId" /><ChatComposer :key="chatId" :chat-id="chatId" /><Transition name="asset-panel"><PluginAssetTreePanel v-if="assetPluginId" :plugin-id="assetPluginId" @select="openPluginFile" @close="plugins.closeAssetPanel(assetPluginId ?? undefined)" /></Transition><Transition name="asset-panel"><PluginManagerPanel v-if="pluginPanelOpen" :package-id="packageId" @select="openPluginAssets" @close="pluginPanelOpen = false" /></Transition></main>
+    <main v-if="ready && chatId" class="relative min-h-0 flex-1"><ChatThread :key="chatId" :chat-id="chatId" /><ChatComposer :key="chatId" :chat-id="chatId" /><Transition name="asset-panel"><PluginAssetTreePanel v-if="assetPluginId" :plugin-id="assetPluginId" :plugin="assetPlugin" @select="openPluginFile" @close="plugins.closeAssetPanel(assetPluginId ?? undefined)" /></Transition><Transition name="asset-panel"><PluginManagerPanel v-if="pluginPanelOpen" :package-id="packageId" @select="openPluginAssets" @close="pluginPanelOpen = false" /></Transition></main>
     <AskUserComponent />
-    <PluginFileEditorDialog :open="fileEditorOpen" :plugin="activeEditor?.plugin ?? null" :file="activeEditor?.file ?? null" :path="activeEditor?.path ?? ''" :initial-mode="activeEditor?.editorMode" :panel-open="Boolean(assetPluginId)" :package-id="packageId" @update:open="fileEditorOpen = $event" />
+    <PluginFileEditorDialog :open="fileEditorOpen" :plugin="activeEditor?.plugin ?? null" :file="activeEditor?.file ?? null" :path="activeEditor?.path ?? ''" :initial-mode="activeEditor?.editorMode" :panel-open="Boolean(assetPluginId)" :package-id="packageId" :conversation-id="activeEditor?.conversationId" :overlay-plugins="activeEditor?.overlayPlugins" @update:open="fileEditorOpen = $event" />
   </section>
 </template>
 

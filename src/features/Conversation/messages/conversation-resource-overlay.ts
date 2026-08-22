@@ -258,6 +258,26 @@ export class ConversationResourceOverlay {
     this.record({ type: "edit", target: { kind: "plugin-node", pluginId, resourceId: node.id }, value: snapshotNode(node) });
   }
 
+  /** Applies an editor save to this conversation-local view and records it for replay. */
+  updateFile(
+    pluginId: string,
+    resourceId: string,
+    patch: Pick<PluginFile, "content" | "order" | "insertion">,
+  ) {
+    const plugin = findPlugin(this.plugins, pluginId);
+    const node = findNode(plugin, resourceId);
+    if (node.kind !== "file") throw new Error("只能编辑插件文件。");
+    if ("content" in patch) {
+      node.content = patch.content instanceof ArrayBuffer ? patch.content.slice(0) : clone(patch.content);
+    }
+    if ("order" in patch && patch.order !== undefined) node.order = patch.order;
+    if ("insertion" in patch) {
+      node.insertion = patch.insertion ? clone(patch.insertion) : undefined;
+    }
+    this.record({ type: "edit", target: { kind: "plugin-node", pluginId, resourceId: node.id }, value: snapshotNode(node) });
+    return node;
+  }
+
   async mkdir(pluginId: string, path: string) {
     const plugin = findPlugin(this.plugins, pluginId);
     const normalizedPath = normalizePath(path);
@@ -295,6 +315,10 @@ export class ConversationResourceOverlay {
 
   stats() { return statsFor(this.operations, this.codeAct, this.logger?.logs.length ?? 0); }
 
+  resourceUpdate(): ConversationResourceUpdate {
+    return { operations: clone(this.operations), createdAt: this.createdAt, stats: this.stats() };
+  }
+
   async finalize() {
     if (this.codeAct.attempted > 0 || this.operations.length > 0) await this.publish();
   }
@@ -306,7 +330,7 @@ export class ConversationResourceOverlay {
 
   private async publish() {
     if (!this.onUpdate) return;
-    await this.onUpdate({ operations: clone(this.operations), createdAt: this.createdAt, stats: this.stats() });
+    await this.onUpdate(this.resourceUpdate());
   }
 
   private apply(operation: ConversationResourceOperation) {

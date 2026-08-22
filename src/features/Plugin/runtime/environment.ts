@@ -208,6 +208,7 @@ export async function buildPluginGenerationEnvironment(
   const selfApi = createPluginSelfApi(input.mainPluginId, {
     plugins: enabledPlugins,
     mutation: input.resourceMutation,
+    conversationId: input.conversationId,
   });
   const logger = selfApi.logger;
 
