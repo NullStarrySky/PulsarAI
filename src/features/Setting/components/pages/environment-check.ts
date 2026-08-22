@@ -1,4 +1,4 @@
-import { Command } from "@tauri-apps/plugin-shell";
+import { host } from "@/host";
 import { getRuntimePlatform } from "@/features/Misc/platform";
 
 export type EnvironmentToolId = "nodejs" | "git";
@@ -57,7 +57,8 @@ async function detectTool(id: EnvironmentToolId): Promise<EnvironmentToolStatus>
 }
 
 async function executeCommand(commandName: string) {
-  const output = await Command.create(commandName).execute();
+  if (!host.desktop) throw new Error("环境检测仅在桌面端可用。");
+  const output = await host.desktop.executeEnvironmentCommand(commandName);
   if (output.code !== 0) {
     throw new Error(output.stderr || `Command exited with ${output.code}`);
   }

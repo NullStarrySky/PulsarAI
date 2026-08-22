@@ -10,7 +10,9 @@
     "moduleResolution": "bundler",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@/host": ["./host/index.ts"],
+      "@host-target": ["./host/desktop-electron/index.ts"]
     },
     "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
@@ -24,7 +26,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "host/**/*.ts"],
   "exclude": ["src/features/Plugin/builtIn/**/*"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

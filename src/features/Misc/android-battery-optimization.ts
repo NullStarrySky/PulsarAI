@@ -1,17 +1,13 @@
-import {
-  checkBatteryOptimizationStatus,
-  openBatterySettings,
-  requestBatteryOptimizationExemption,
-  type BatteryStatus,
-} from "tauri-plugin-android-battery-optimization-api";
-import { isAndroidPlatform } from "./platform";
+import { host } from "@/host";
 
-export type AndroidBatteryOptimizationStatus = BatteryStatus & {
+export type AndroidBatteryOptimizationStatus = {
   available: boolean;
+  isOptimized: boolean;
+  isIgnoringOptimizations: boolean;
 };
 
 export async function getAndroidBatteryOptimizationStatus(): Promise<AndroidBatteryOptimizationStatus> {
-  if (!isAndroidPlatform()) {
+  if (!host.mobile) {
     return {
       available: false,
       isOptimized: false,
@@ -19,20 +15,13 @@ export async function getAndroidBatteryOptimizationStatus(): Promise<AndroidBatt
     };
   }
 
-  return {
-    available: true,
-    ...(await checkBatteryOptimizationStatus()),
-  };
+  return host.mobile.battery.getStatus();
 }
 
 export async function requestAndroidBatteryOptimizationExemption() {
-  if (isAndroidPlatform()) {
-    await requestBatteryOptimizationExemption();
-  }
+  await host.mobile?.battery.requestExemption();
 }
 
 export async function openAndroidBatteryOptimizationSettings() {
-  if (isAndroidPlatform()) {
-    await openBatterySettings();
-  }
+  await host.mobile?.battery.openSettings();
 }

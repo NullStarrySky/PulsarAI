@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { open } from "@tauri-apps/plugin-dialog";
+import { host } from "@/host";
 import { getActivePinia } from "pinia";
 import { AlertCircle, CheckCircle2, FolderOpen, LoaderCircle, ScanSearch, Upload } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
@@ -19,11 +19,11 @@ import SettingFormField from "@/features/Setting/components/SettingFormField.vue
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
 import { SillyTavernImporter, type SillyTavernMigrationPreview } from "./convert/sillytavern-importer";
-import { tauriSillyTavernReaderTransport } from "./convert/tauri-migration-source";
+import { hostSillyTavernReaderTransport } from "./convert/tauri-migration-source";
 
 const pinia = getActivePinia();
 if (!pinia) throw new Error("SillyTavern migration requires an active Pinia instance.");
-const importer = new SillyTavernImporter(pinia, tauriSillyTavernReaderTransport);
+const importer = new SillyTavernImporter(pinia, hostSillyTavernReaderTransport);
 const sourcePath = ref("");
 const preview = ref<SillyTavernMigrationPreview | null>(null);
 const busy = ref(false);
@@ -42,7 +42,7 @@ const warningCount = computed(
 );
 
 async function chooseDirectory() {
-  const selected = await open({ directory: true, multiple: false });
+  const selected = await host.dialog.open({ directory: true, multiple: false });
   if (typeof selected === "string") sourcePath.value = selected;
 }
 

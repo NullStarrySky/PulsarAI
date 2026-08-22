@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { host } from "@/host";
 
 export const WHISPER_CANDLE_PROVIDER_ID = "whisper-candle";
 
@@ -21,15 +21,15 @@ export interface WhisperTranscription {
 }
 
 export function listWhisperModels() {
-  return invoke<WhisperModelPack[]>("stt_whisper_candle_models");
+  return host.local.invoke<WhisperModelPack[]>("stt", "whisper_candle_models");
 }
 
 export function downloadWhisperModel(pack: WhisperModelDownloadPack, url: string) {
-  return invoke<WhisperModelPack>("stt_whisper_candle_download", { request: { pack, url } });
+  return host.local.invoke<WhisperModelPack>("stt", "whisper_candle_download", { request: { pack, url } });
 }
 
 export function deleteWhisperModel(id: string) {
-  return invoke<void>("stt_whisper_candle_delete", { id });
+  return host.local.invoke<void>("stt", "whisper_candle_delete", { id });
 }
 
 export function transcribeWithWhisper(
@@ -37,7 +37,7 @@ export function transcribeWithWhisper(
   audio: Uint8Array,
   language?: string,
 ) {
-  return invoke<WhisperTranscription>("stt_transcribe", {
+  return host.local.invoke<WhisperTranscription>("stt", "transcribe", {
     request: { modelId, audio: Array.from(audio), language },
   });
 }

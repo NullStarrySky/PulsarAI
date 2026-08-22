@@ -4,23 +4,12 @@
 	"version": "0.1.0",
 	"identifier": "com.nullstarrysky.pulsarai",
 	"build": {
-		"beforeDevCommand": "bun run dev",
+		"beforeDevCommand": "bun run renderer:dev",
 		"devUrl": "http://localhost:1420",
-		"beforeBuildCommand": "bun run build",
-		"frontendDist": "../dist"
+		"beforeBuildCommand": "bun run renderer:build",
+		"frontendDist": "../../dist"
 	},
 	"app": {
-		"windows": [
-			{
-				"title": "pulsarai",
-				"width": 970,
-				"height": 600,
-				"minWidth": 320,
-				"minHeight": 480,
-				"decorations": false,
-				"dragDropEnabled": false
-			}
-		],
 		"security": {
 			"csp": null
 		}

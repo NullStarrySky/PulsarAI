@@ -1,5 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { host } from "@/host";
 import { defineStore } from "pinia";
 import type {
   CharacterPackage,
@@ -854,7 +853,7 @@ export const useBackupStore = defineStore("backup", {
       }
     },
     async selectDirectory() {
-      const selected = await open({ directory: true, multiple: false });
+      const selected = await host.dialog.open({ directory: true, multiple: false });
       if (typeof selected === "string") {
         this.updateLocal({ directory: selected });
         await this.refreshBackups();
@@ -916,7 +915,7 @@ export const useBackupStore = defineStore("backup", {
         plugins = [clonePlain(root)];
       }
 
-      const path = await save({
+      const path = await host.dialog.save({
         defaultPath: `${safeArchiveFileName(name)}.pulsar-resource.zst`,
         filters: [{ name: "Pulsar 资源归档", extensions: ["zst"] }],
       });
@@ -927,17 +926,17 @@ export const useBackupStore = defineStore("backup", {
         rootId: id,
         snapshot: { packages, conversations, containers, plugins },
       };
-      await invoke("resource_archive_write", { path, payload });
+      await host.backup.invoke("resource_archive_write", { path, payload });
       this.status = `已导出：${name}`;
     },
     async importResourceArchive(mode: ResourceImportMode) {
-      const selected = await open({
+      const selected = await host.dialog.open({
         directory: false,
         multiple: false,
         filters: [{ name: "Pulsar 资源归档", extensions: ["zst"] }],
       });
       if (typeof selected !== "string") return false;
-      const payload = await invoke<ResourceArchivePayload>(
+      const payload = await host.backup.invoke<ResourceArchivePayload>(
         "resource_archive_read",
         {
           path: selected,
@@ -964,12 +963,12 @@ export const useBackupStore = defineStore("backup", {
       return this.restoreSelectedResources(mode, selected);
     },
     async refreshBackups() {
-      this.backups = await invoke<BackupInfo[]>("backup_list", {
+      this.backups = await host.backup.invoke<BackupInfo[]>("backup_list", {
         directory: String(this.local.directory || ""),
       });
     },
     async createLocalBackup() {
-      const backup = await invoke<BackupInfo>("backup_create", {
+      const backup = await host.backup.invoke<BackupInfo>("backup_create", {
         directory: String(this.local.directory || ""),
         maxBackups: String(this.local.maxBackups),
       });
@@ -983,7 +982,7 @@ export const useBackupStore = defineStore("backup", {
         this.status = "请先选择备份文件";
         return;
       }
-      await invoke("backup_restore", {
+      await host.backup.invoke("backup_restore", {
         directory: String(this.local.directory || ""),
         backupId: String(this.local.selectedBackup),
       });
@@ -997,7 +996,7 @@ export const useBackupStore = defineStore("backup", {
       this.loadingResources = true;
       try {
         this.status = "";
-        const snapshot = await invoke<BackupResourceSnapshot>(
+        const snapshot = await host.backup.invoke<BackupResourceSnapshot>(
           "backup_read_resources",
           {
             directory: String(this.local.directory || ""),
@@ -1287,12 +1286,12 @@ export const useBackupStore = defineStore("backup", {
       }
 
       if (resourceArchivePath) {
-        await invoke("resource_archive_restore_files", {
+        await host.backup.invoke("resource_archive_restore_files", {
           path: resourceArchivePath,
           overwrite: false,
         });
       } else {
-        await invoke("backup_restore_resource_files", {
+        await host.backup.invoke("backup_restore_resource_files", {
           directory: String(this.local.directory || ""),
           backupId: String(this.local.selectedBackup),
         });
@@ -1476,12 +1475,12 @@ export const useBackupStore = defineStore("backup", {
       }
 
       if (resourceArchivePath) {
-        await invoke("resource_archive_restore_files", {
+        await host.backup.invoke("resource_archive_restore_files", {
           path: resourceArchivePath,
           overwrite: true,
         });
       } else {
-        await invoke("backup_restore_resource_files", {
+        await host.backup.invoke("backup_restore_resource_files", {
           directory: String(this.local.directory || ""),
           backupId: String(this.local.selectedBackup),
         });
@@ -1496,7 +1495,7 @@ export const useBackupStore = defineStore("backup", {
       if (!this.local.selectedBackup) {
         return;
       }
-      await invoke("backup_delete", {
+      await host.backup.invoke("backup_delete", {
         directory: String(this.local.directory || ""),
         backupId: String(this.local.selectedBackup),
       });
@@ -1526,7 +1525,7 @@ export const useBackupStore = defineStore("backup", {
     async startLanServer() {
       try {
         const snapshot = await this.buildSyncSnapshot();
-        const result = await invoke<LanSyncStatus>("lan_sync_start", {
+        const result = await host.backup.invoke<LanSyncStatus>("lan_sync_start", {
           port: Number(this.lan.port),
           pairingKey: this.lan.pairingKey,
           snapshot,
@@ -1543,7 +1542,7 @@ export const useBackupStore = defineStore("backup", {
       }
     },
     async stopLanServer() {
-      await invoke("lan_sync_stop");
+      await host.backup.invoke("lan_sync_stop");
       this.serverRunning = false;
       this.lan.enabled = false;
       this.persist();
@@ -1557,7 +1556,7 @@ export const useBackupStore = defineStore("backup", {
       }
     },
     async publishSnapshot() {
-      await invoke("lan_sync_publish", {
+      await host.backup.invoke("lan_sync_publish", {
         snapshot: await this.buildSyncSnapshot(),
       });
     },
@@ -1568,7 +1567,7 @@ export const useBackupStore = defineStore("backup", {
       }
       this.syncing = true;
       try {
-        const remote = await invoke<LanSyncSnapshot>("lan_sync_fetch", {
+        const remote = await host.backup.invoke<LanSyncSnapshot>("lan_sync_fetch", {
           address: this.lan.peerAddress.trim(),
           pairingKey: this.lan.pairingKey,
         });
@@ -1584,7 +1583,7 @@ export const useBackupStore = defineStore("backup", {
           plugin,
         );
         const mergedSnapshot = await this.buildSyncSnapshot();
-        await invoke("lan_sync_push", {
+        await host.backup.invoke("lan_sync_push", {
           address: this.lan.peerAddress.trim(),
           pairingKey: this.lan.pairingKey,
           snapshot: mergedSnapshot,
@@ -1613,7 +1612,7 @@ export const useBackupStore = defineStore("backup", {
       if (!this.serverRunning || this.syncing) {
         return;
       }
-      const snapshots = await invoke<LanSyncSnapshot[]>(
+      const snapshots = await host.backup.invoke<LanSyncSnapshot[]>(
         "lan_sync_take_pending",
       );
       if (snapshots.length === 0) {

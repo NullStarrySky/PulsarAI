@@ -1,6 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { defineStore } from "pinia";
+import { host } from "@/host";
 
 export type WindowCloseBehavior = "ask" | "exit" | "tray";
 export type WindowCloseChoice = Exclude<WindowCloseBehavior, "ask">;
@@ -52,11 +51,13 @@ export const useWindowLifecycleStore = defineStore("window-lifecycle", {
       await this.applyCloseChoice(choice);
     },
     async applyCloseChoice(choice: WindowCloseChoice) {
+      const appWindow = host.desktop?.window;
+      if (!appWindow) return;
       if (choice === "tray") {
-        await getCurrentWindow().hide();
+        await appWindow.hide();
         return;
       }
-      await invoke("app_exit");
+      await appWindow.close();
     },
   },
 });

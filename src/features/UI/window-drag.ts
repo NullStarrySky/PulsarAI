@@ -1,7 +1,5 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { host } from "@/host";
 
-const appWindow = isTauri() ? getCurrentWindow() : null;
 const interactiveSelector = [
   "button",
   "input",
@@ -15,6 +13,7 @@ const interactiveSelector = [
 ].join(",");
 
 export async function startWindowDragFromBackground(event: MouseEvent) {
+  const appWindow = host.desktop?.window;
   if (!appWindow || event.button !== 0 || event.buttons !== 1) return;
   const target = event.target;
   if (target instanceof Element && target.closest(interactiveSelector)) return;
@@ -23,16 +22,9 @@ export async function startWindowDragFromBackground(event: MouseEvent) {
     void appWindow.toggleMaximize();
     return;
   }
-  document.documentElement.classList.add("native-window-dragging");
-  void document.documentElement.offsetWidth;
   try {
-    if (await appWindow.isMaximized()) {
-      await appWindow.unmaximize();
-    }
     await appWindow.startDragging();
   } catch {
     // Native dragging can be cancelled when the pointer is released early.
-  } finally {
-    document.documentElement.classList.remove("native-window-dragging");
   }
 }

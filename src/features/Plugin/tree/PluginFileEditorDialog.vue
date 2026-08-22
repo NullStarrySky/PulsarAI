@@ -73,10 +73,11 @@ let dialogInteractable: ReturnType<typeof interact> | null = null;
 const fileType = computed(() => props.file ? pluginFileType(props.file.name) : "text");
 const normalizedPath = computed(() => props.path.toLocaleLowerCase());
 const previewAvailable = computed(() => (
-  ["markdown", "chat", "component", "media"].includes(fileType.value)
+  ["markdown", "chat", "data", "component", "media"].includes(fileType.value)
   || normalizedPath.value === pluginConventions.config.toLocaleLowerCase()
   || normalizedPath.value === pluginConventions.slots.toLocaleLowerCase()
   || normalizedPath.value === pluginConventions.regex.toLocaleLowerCase()
+  || normalizedPath.value.endsWith(".regex.json")
 ));
 const isMedia = computed(() => fileType.value === "media");
 const mediaKind = computed(() => props.file

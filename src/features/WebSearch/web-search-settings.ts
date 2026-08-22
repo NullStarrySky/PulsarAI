@@ -1,4 +1,5 @@
 import { getDefaultConfig, setDefaultConfig } from "@/features/defaultConfigs/default-config-service";
+import { host } from "@/host";
 import {
   clearSecretValue,
   hasSecret,
@@ -15,7 +16,7 @@ const settingsKey = "webSearch.settings";
 export async function loadWebSearchSettings(): Promise<WebSearchSettings> {
   const fallback = createDefaultWebSearchSettings();
   const stored = await getDefaultConfig<Partial<WebSearchSettings>>(settingsKey, fallback);
-  const activeProviderId = stored.activeProviderId === "exa" ? "exa" : "playwright";
+  const activeProviderId = host.desktop && stored.activeProviderId !== "exa" ? "playwright" : "exa";
   return {
     ...fallback,
     ...stored,

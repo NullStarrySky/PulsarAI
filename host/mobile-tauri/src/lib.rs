@@ -19,14 +19,7 @@ use surrealdb::{
     engine::local::{Db, SurrealKv},
     Surreal,
 };
-#[cfg(desktop)]
-use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-};
 use tauri::{AppHandle, Manager, State};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-use playwright_rs::{LaunchOptions, Playwright};
 use tokio::sync::OnceCell;
 
 mod migration;
@@ -1924,86 +1917,6 @@ async fn model_proxy_fetch(
     })
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn playwright_web_search(query: &str, limit: usize) -> Result<Vec<WebSearchResult>, String> {
-    let playwright = Playwright::launch()
-        .await
-        .map_err(|error| format!("无法启动 Playwright driver：{error}"))?;
-    let browser = match playwright
-        .chromium()
-        .launch_with_options(
-            LaunchOptions::new().headless(true).args(vec![
-                "--disable-gpu".to_string(),
-                "--no-first-run".to_string(),
-            ]),
-        )
-        .await
-    {
-        Ok(browser) => browser,
-        Err(error) => {
-            let _ = playwright.shutdown().await;
-            return Err(format!("无法启动 Playwright Chromium：{error}"));
-        }
-    };
-
-    let search_url = format!(
-        "https://html.duckduckgo.com/html/?q={}",
-        urlencoding::encode(query),
-    );
-    let search_result = async {
-        let page = browser
-            .new_page()
-            .await
-            .map_err(|error| error.to_string())?;
-        page.goto(&search_url, None)
-            .await
-            .map_err(|error| error.to_string())?;
-        let items = page.locator(".result");
-        items
-            .wait_for(None)
-            .await
-            .map_err(|error| error.to_string())?;
-        let mut results = Vec::new();
-        for item in items.all().await.map_err(|error| error.to_string())? {
-            if results.len() >= limit {
-                break;
-            }
-            let link = item.locator(".result__a");
-            let title = link
-                .inner_text()
-                .await
-                .unwrap_or_default()
-                .trim()
-                .to_string();
-            let url = link
-                .get_attribute("href")
-                .await
-                .unwrap_or_default()
-                .unwrap_or_default();
-            if title.is_empty() || url.is_empty() {
-                continue;
-            }
-            let snippet = item
-                .locator(".result__snippet")
-                .inner_text()
-                .await
-                .unwrap_or_default()
-                .trim()
-                .to_string();
-            results.push(WebSearchResult {
-                title,
-                url,
-                snippet,
-            });
-        }
-        Ok::<_, String>(results)
-    }
-    .await;
-    let _ = browser.close().await;
-    let _ = playwright.shutdown().await;
-    search_result
-}
-
 async fn exa_web_search(
     app: &AppHandle,
     state: &AppState,
@@ -2058,7 +1971,6 @@ async fn exa_web_search(
         .collect())
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tauri::command]
 async fn web_search(
     app: AppHandle,
@@ -2070,29 +1982,9 @@ async fn web_search(
         return Err("搜索关键词不能为空。".to_string());
     }
     let limit = request.limit.clamp(1, 10);
-
-    match request.provider.as_deref().unwrap_or("playwright") {
-        "playwright" => playwright_web_search(query, limit).await,
+    match request.provider.as_deref().unwrap_or("exa") {
         "exa" => exa_web_search(&app, &state, query, limit).await,
-        provider => Err(format!("未知网络搜索提供商：{provider}")),
-    }
-}
-
-#[cfg(any(target_os = "android", target_os = "ios"))]
-#[tauri::command]
-async fn web_search(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    request: WebSearchRequest,
-) -> Result<Vec<WebSearchResult>, String> {
-    let query = request.query.trim();
-    if query.is_empty() {
-        return Err("搜索关键词不能为空。".to_string());
-    }
-    let limit = request.limit.clamp(1, 10);
-    match request.provider.as_deref().unwrap_or("playwright") {
-        "exa" => exa_web_search(&app, &state, query, limit).await,
-        "playwright" => Err("Playwright 浏览器搜索目前仅支持桌面端。移动端请启用 Exa。".to_string()),
+        "playwright" => Err("Playwright 浏览器搜索仅在 Electron 桌面端可用。".to_string()),
         provider => Err(format!("未知网络搜索提供商：{provider}")),
     }
 }
@@ -2151,43 +2043,6 @@ async fn tts_piper_synthesize(
     piper_tts::synthesize(&app, request).await
 }
 
-#[tauri::command]
-fn app_exit(app: AppHandle) {
-    app.exit(0);
-}
-
-#[cfg(desktop)]
-fn setup_system_tray(app: &mut tauri::App) -> tauri::Result<()> {
-    let quit = MenuItemBuilder::with_id("quit", "退出 Pulsar").build(app)?;
-    let menu = MenuBuilder::new(app).item(&quit).build()?;
-    TrayIconBuilder::new()
-        .icon(tauri::include_image!("./icons/32x32.png"))
-        .tooltip("Pulsar")
-        .menu(&menu)
-        .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| {
-            if event.id().as_ref() == "quit" {
-                app.exit(0);
-            }
-        })
-        .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                if let Some(window) = tray.app_handle().get_webview_window("main") {
-                    let _ = window.unminimize();
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }
-        })
-        .build(app)?;
-    Ok(())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -2213,12 +2068,6 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_android_battery_optimization::init())
         .plugin(tauri_plugin_m3::init());
-
-    #[cfg(desktop)]
-    let builder = builder.setup(|app| {
-        setup_system_tray(app)?;
-        Ok(())
-    });
 
     builder
         .invoke_handler(tauri::generate_handler![
@@ -2271,7 +2120,6 @@ pub fn run() {
             migration_read_text,
             migration_read_binary,
             migration_read_png_character,
-            app_exit,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

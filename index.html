@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Plugin Sandbox compiles user-authored macros and scripts with AsyncFunction. It remains isolated from Electron's Node APIs. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' http://127.0.0.1:1420 ws://127.0.0.1:1420 https: wss:; frame-src https:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <link rel="icon" href="/src/assets/favicon.ico" sizes="any" />
     <title>Pulsar</title>
   </head>

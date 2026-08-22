@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, type Component } from "vue";
-import type { UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { host } from "@/host";
 import {
   readSubWindowParamsFromLocation,
   type SubWindowBridgeMessage,
@@ -26,8 +25,8 @@ const props = withDefaults(
 const emit = defineEmits<{ message: [message: SubWindowBridgeMessage] }>();
 const currentParams = ref<SubWindowParams | null>(props.windowParams ?? readSubWindowParamsFromLocation());
 const visible = ref(props.loadMode === "immediate");
-let unlistenParams: UnlistenFn | null = null;
-let unlistenBridge: UnlistenFn | null = null;
+let unlistenParams: (() => void) | null = null;
+let unlistenBridge: (() => void) | null = null;
 
 const shouldRender = computed(() => visible.value || props.loadMode === "immediate");
 
@@ -40,16 +39,14 @@ watch(
   },
 );
 
-onMounted(async () => {
-  try {
-    unlistenParams = await getCurrentWebviewWindow().listen<SubWindowParams>("subwindow:params", (event) => {
-      currentParams.value = event.payload;
+onMounted(() => {
+  if (host.desktop) {
+    unlistenParams = host.desktop.subWindow.listen("subwindow:params", (payload) => {
+      currentParams.value = payload as SubWindowParams;
       visible.value = true;
     });
-  } catch {
-    // Browser preview cannot access Tauri window APIs.
   }
-  unlistenBridge = await listenBridgeMessages((message) => emit("message", message));
+  unlistenBridge = listenBridgeMessages((message) => emit("message", message));
 });
 
 onUnmounted(() => {

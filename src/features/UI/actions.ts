@@ -5,7 +5,7 @@ import {
   SquareMinus,
   Trash2,
 } from "lucide-vue-next";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { host } from "@/host";
 import { useCommandStore, type CommandDefinition } from "@/features/Hotkey/command-store";
 import { resetCharacterDataAction } from "@/features/Conversation/actions";
 import { toggleSttRecordingAction } from "@/features/STT/actions";
@@ -43,13 +43,13 @@ function createCoreCommands(): CommandDefinition[] {
       icon: Settings,
       run: () => useLayoutStore().openSettings(),
     },
-    {
+    ...(host.desktop ? [{
       id: "ui.window.minimize",
       title: "最小化窗口",
       category: "窗口",
       icon: SquareMinus,
-      run: () => getCurrentWindow().minimize(),
-    },
+      run: () => host.desktop?.window.minimize(),
+    }] : []),
     {
       id: "conversation.reset-character-data",
       title: "清空全部角色数据",

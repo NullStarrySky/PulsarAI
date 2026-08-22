@@ -1,17 +1,10 @@
-import {
-  getVoices,
-  isInitialized,
-  isSpeaking,
-  previewVoice,
-  speak,
-  stop,
-} from "tauri-plugin-tts-api";
+import { host } from "@/host";
 import type { SystemSpeechVoice, SystemSpeakRequest } from "../tts";
 
 export async function speakWithSystemTts(request: SystemSpeakRequest) {
   const text = request.text.trim();
   if (!text) throw new Error("系统 TTS 文本不能为空。");
-  await speak({
+  await host.speech.invoke("speak", { request: {
     text,
     language: request.language ?? null,
     voiceId: request.voiceId ?? null,
@@ -19,23 +12,24 @@ export async function speakWithSystemTts(request: SystemSpeakRequest) {
     pitch: request.pitch ?? null,
     volume: request.volume ?? null,
     queueMode: request.queueMode ?? null,
-  });
+  } });
 }
 
 export async function stopSystemTts() {
-  await stop();
+  await host.speech.invoke("stop");
 }
 
 export async function isSystemTtsSpeaking() {
-  return isSpeaking();
+  return host.speech.invoke<boolean>("isSpeaking");
 }
 
 export async function getSystemTtsStatus() {
-  return isInitialized();
+  return host.speech.invoke<{ initialized: boolean; voiceCount: number }>("status");
 }
 
 export async function listSystemTtsVoices(language?: string): Promise<SystemSpeechVoice[]> {
-  return (await getVoices(language?.trim() || undefined)).map((voice) => ({
+  const voices = await host.speech.invoke<Array<{ id: string; name: string; language: string }>>("voices", { language: language?.trim() || undefined });
+  return voices.map((voice) => ({
     id: voice.id,
     name: voice.name,
     language: voice.language,
@@ -43,5 +37,5 @@ export async function listSystemTtsVoices(language?: string): Promise<SystemSpee
 }
 
 export async function previewSystemTtsVoice(voiceId: string, text?: string) {
-  await previewVoice({ voiceId, text: text?.trim() || null });
+  await host.speech.invoke("preview", { request: { voiceId, text: text?.trim() || null } });
 }

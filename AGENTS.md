@@ -5,6 +5,11 @@
 - Do not run `bun run build` unless the user explicitly asks for production packaging or build verification.
 - Do not run full test suites unless the user explicitly asks.
 - When reading files with PowerShell `Get-Content`, always pass `-Encoding UTF8`.
+- Renderer feature code imports native capability only from `@/host`; do not import Electron, Tauri, or a Tauri plugin outside `host/`.
+- `host/index.ts` is the stable cross-platform facade. Its selected target implementation is `host/desktop-electron` or `host/mobile-tauri`; keep platform-exclusive APIs in `host.desktop` or `host.mobile`, not as no-op compatibility APIs.
+- Electron owns frameless main-window geometry, drag regions, tray/close lifecycle, subwindows, desktop environment checks, and Playwright. Keep its preload bridge narrow, with `contextIsolation` and sandbox enabled; renderer code must never receive `ipcRenderer`, Node, or arbitrary command execution.
+- Mobile Tauri owns Android battery controls, M3 navigation-bar control, and system speech recognition. It must not register desktop tray, desktop window lifecycle, multi-window, Playwright, or desktop-only settings/actions.
+- `host/mobile-tauri/tauri.conf.json` is the Tauri project marker. Use `bun run mobile:*`; use `bun run desktop:*` for Electron. Do not restore a top-level `src-tauri/` host or ambiguous `electron`/`tauri` scripts.
 - Prefer scoped implementation, current feature seams, and small verifiable steps.
 - When implementing UI components, reuse shadcn-vue components and theme CSS variables whenever practical so spacing, color, radius, focus, and state styling stay consistent.
 - Use shadcn-vue `ScrollArea` by default for application-owned scrolling regions such as settings navigation/content, plugin trees, and long resource panels. Its shared wrapper must mount visible vertical and horizontal `ScrollBar` components for overflowing content; keep native overflow only where a specialized editor or virtualizer owns scrolling.

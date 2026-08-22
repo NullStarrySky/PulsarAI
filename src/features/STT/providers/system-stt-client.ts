@@ -1,51 +1,63 @@
-import {
-  checkPermission,
-  getSupportedLanguages,
-  isAvailable,
-  onError,
-  onResult,
-  requestPermission,
-  startListening,
-  stopListening,
-} from "tauri-plugin-stt-api";
+import { host } from "@/host";
 import type {
   SystemSpeechRecognitionError,
   SystemSpeechRecognitionOptions,
   SystemSpeechRecognitionResult,
 } from "../stt";
 
-export async function getSystemSttAvailability() {
-  return isAvailable();
+export interface SystemSttAvailability {
+  available: boolean;
+  reason?: string;
 }
 
-export async function getSystemSttPermission() {
-  return checkPermission();
+export interface SystemSttPermission {
+  microphone: "granted" | "denied" | "unknown";
+  speechRecognition: "granted" | "denied" | "unknown";
 }
 
-export async function requestSystemSttPermission() {
-  return requestPermission();
+export async function getSystemSttAvailability(): Promise<SystemSttAvailability> {
+  const available = await host.mobile?.speechRecognition.isAvailable();
+  return available ? { available } : { available: false, reason: "系统语音识别仅在移动端可用。" };
+}
+
+export async function getSystemSttPermission(): Promise<SystemSttPermission> {
+  return host.mobile?.stt.invoke<SystemSttPermission>("permission") ?? {
+    microphone: "denied",
+    speechRecognition: "denied",
+  };
+}
+
+export async function requestSystemSttPermission(): Promise<SystemSttPermission> {
+  return host.mobile?.stt.invoke<SystemSttPermission>("requestPermission") ?? {
+    microphone: "denied",
+    speechRecognition: "denied",
+  };
 }
 
 export async function listSystemSttLanguages() {
-  return (await getSupportedLanguages()).languages;
+  const result = await host.mobile?.stt.invoke<{ languages: string[] }>("languages");
+  return result?.languages ?? [];
 }
 
 export async function startSystemStt(options: SystemSpeechRecognitionOptions = {}) {
-  await startListening({
+  if (!host.mobile) throw new Error("系统语音识别仅在移动端可用。");
+  await host.mobile.stt.invoke("start", { options: {
     language: options.language?.trim() || undefined,
     maxDuration: options.maxDuration,
     onDevice: options.onDevice,
-  });
+  } });
 }
 
 export async function stopSystemStt() {
-  await stopListening();
+  await host.mobile?.stt.invoke("stop");
 }
 
 export function onSystemSttResult(handler: (result: SystemSpeechRecognitionResult) => void) {
-  return onResult(handler);
+  if (!host.mobile) return () => {};
+  return host.mobile.stt.invoke<() => void>("onResult", { handler });
 }
 
 export function onSystemSttError(handler: (error: SystemSpeechRecognitionError) => void) {
-  return onError(handler);
+  if (!host.mobile) return () => {};
+  return host.mobile.stt.invoke<() => void>("onError", { handler });
 }

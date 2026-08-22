@@ -61,7 +61,7 @@ if (args[0] === "dev" && process.platform === "win32") {
   releaseWindowsDevPort(DEV_PORT)
 }
 
-const child = Bun.spawn(["bunx", "tauri", ...args], {
+const child = Bun.spawn(["bunx", "tauri", ...args, "--config", "host/mobile-tauri/tauri.conf.json"], {
   stdin: "inherit",
   stdout: "inherit",
   stderr: "inherit",

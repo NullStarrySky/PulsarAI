@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useDebounceFn } from "@vueuse/core";
 import { push } from "notivue";
 import { Button } from "@/components/ui/button";
+import { host } from "@/host";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import SettingForm from "@/features/Setting/components/SettingForm.vue";
@@ -28,15 +29,15 @@ const testQuery = ref("PulsarAI 网络搜索连接测试");
 const results = ref<WebSearchResult[]>([]);
 const testError = ref("");
 
-const providers = computed<ServiceProviderView[]>(() => [
-  {
+const providers = computed<ServiceProviderView[]>(() => ([
+  ...(host.desktop ? [{
     id: "playwright",
     name: "Playwright 浏览器",
     description: "本机无头 Chromium 搜索 DuckDuckGo；不需要 API Key，仅支持桌面端。",
     enabled: settings.value.playwrightEnabled,
     canEnable: true,
     source: "feature",
-  },
+  }] : []),
   {
     id: "exa",
     name: "Exa",
@@ -45,7 +46,7 @@ const providers = computed<ServiceProviderView[]>(() => [
     canEnable: exaHasApiKey.value,
     source: "feature",
   },
-]);
+]) as ServiceProviderView[]);
 
 const activeProviderId = computed<WebSearchProviderId>(() => settings.value.activeProviderId);
 const isExa = computed(() => activeProviderId.value === "exa");
@@ -72,7 +73,7 @@ watch(settings, () => {
 }, { deep: true });
 
 function selectProvider(providerId: string) {
-  if (providerId === "playwright" || providerId === "exa") {
+  if ((host.desktop && providerId === "playwright") || providerId === "exa") {
     settings.value.activeProviderId = providerId;
   }
 }
@@ -82,7 +83,7 @@ function toggleProvider(providerId: string, enabled: boolean) {
     push.warning("请先填写 Exa API Key。 ");
     return;
   }
-  if (providerId === "playwright") settings.value.playwrightEnabled = enabled;
+  if (host.desktop && providerId === "playwright") settings.value.playwrightEnabled = enabled;
   if (providerId === "exa") settings.value.exaEnabled = enabled;
 }
 
@@ -101,7 +102,7 @@ async function testSearch() {
     push.warning("请先启用 Exa。 ");
     return;
   }
-  if (provider === "playwright" && !settings.value.playwrightEnabled) {
+  if (host.desktop && provider === "playwright" && !settings.value.playwrightEnabled) {
     push.warning("请先启用 Playwright 浏览器。 ");
     return;
   }
@@ -140,7 +141,7 @@ async function testSearch() {
           />
         </SettingFormField>
       </template>
-      <template v-else>
+      <template v-else-if="host.desktop">
         <SettingFormField title="Playwright Chromium" description="使用内置 Playwright 原生运行时在隔离无头 Chromium 中检索公开搜索结果。无需浏览器驱动或 Selenium。">
           <p class="text-sm text-muted-foreground">仅提供有边界的搜索与结果摘录；不向模型暴露任意 DOM 执行或浏览器控制能力。</p>
         </SettingFormField>

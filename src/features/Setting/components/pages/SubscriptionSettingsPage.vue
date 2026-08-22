@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { host } from "@/host";
 import { Check, ExternalLink, Sparkles } from "lucide-vue-next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,7 +68,7 @@ const openingPlanId = ref<string | null>(null);
 async function openSubscription(planId: string) {
   openingPlanId.value = planId;
   try {
-    await openUrl(SUBSCRIPTION_URL);
+    await host.external.open(SUBSCRIPTION_URL);
   } finally {
     openingPlanId.value = null;
   }

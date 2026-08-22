@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { host } from "@/host";
 import { loadWebSearchSettings } from "./web-search-settings";
 import type { WebSearchProviderId } from "./web-search-types";
 
@@ -21,11 +21,9 @@ export async function webSearch(
   if (selectedProvider === "exa" && !settings.exaEnabled) {
     throw new Error("Exa 搜索未启用。");
   }
-  return invoke<WebSearchResult[]>("web_search", {
-    request: {
+  return host.network.webSearch<WebSearchResult[]>({
       query,
       limit: limit ?? settings.resultLimit,
       provider: selectedProvider,
-    },
   });
 }

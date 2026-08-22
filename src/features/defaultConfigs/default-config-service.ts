@@ -1,20 +1,20 @@
-import { invoke } from "@tauri-apps/api/core";
+import { host } from "@/host";
 import {
   defaultConfigKeys,
   fallbackDefaultConfigs,
 } from "./default-config";
 
 export async function getDefaultConfig<T>(key: string, fallback: T): Promise<T> {
-  const value = await invoke<T | null>("config_get", { key });
+  const value = await host.config.get<T>(key);
   return value ?? fallback;
 }
 
 export function setDefaultConfig<T>(key: string, value: T) {
-  return invoke<void>("config_set", { key, value });
+  return host.config.set(key, value);
 }
 
 export function deleteDefaultConfig(key: string) {
-  return invoke<void>("config_delete", { key });
+  return host.config.remove(key);
 }
 
 export function getDefaultChatModel() {

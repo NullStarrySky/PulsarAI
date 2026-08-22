@@ -17,6 +17,18 @@ html.native-window-dragging #app {
   will-change: transform;
 }
 
+.electron-window-drag-region {
+  -webkit-app-region: drag;
+}
+
+.electron-window-drag-region button,
+.electron-window-drag-region [role="button"],
+.electron-window-drag-region input,
+.electron-window-drag-region select,
+.electron-window-drag-region textarea {
+  -webkit-app-region: no-drag;
+}
+
 @font-face {
   font-family: "Fira Code";
   src: url("../assets/fonts/fira-code.woff2") format("woff2");

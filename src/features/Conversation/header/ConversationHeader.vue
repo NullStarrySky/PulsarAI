@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import { isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CalendarClock, FolderTree, Maximize2, Minus, Pin, PinOff, Search, Settings, X } from "lucide-vue-next";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
@@ -10,6 +8,7 @@ import { useResponsiveStore } from "@/features/Misc/responsive-store";
 import PackageManager from "@/features/Package/PackageManager.vue";
 import PluginHeaderButton from "@/features/Plugin/PluginHeaderButton.vue";
 import { useLayoutStore } from "@/features/UI/layout-store";
+import { host } from "@/host";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
 import { startWindowDragFromBackground } from "@/features/UI/window-drag";
 import { useCommandStore } from "@/features/Hotkey/command-store";
@@ -21,7 +20,7 @@ const layout = useLayoutStore();
 const responsive = useResponsiveStore();
 const appearance = useAppearanceStore();
 const command = useCommandStore();
-const appWindow = isTauri() ? getCurrentWindow() : null;
+const appWindow = host.desktop?.window;
 const hovered = ref(false);
 const menuOpen = ref(false);
 const scheduleOpen = ref(false);
@@ -53,6 +52,7 @@ onUnmounted(() => window.removeEventListener("mousemove", onMouseMove));
     class="select-none items-center px-3 transition-all duration-200 ease-out mobile:px-2"
     :class="[
       topBarClass,
+      host.desktop && 'electron-window-drag-region',
       layout.topBarPinned
         ? 'relative z-30 flex h-10 shrink-0 border-b border-zen-frame-border/80 mobile:h-12'
         : 'fixed left-1.5 right-1.5 top-1.5 z-50 flex h-10 rounded-xl border border-zen-frame-border/80 shadow-xl backdrop-blur-md mobile:h-12',
@@ -74,7 +74,7 @@ onUnmounted(() => window.removeEventListener("mousemove", onMouseMove));
       <PluginHeaderButton :active="props.pluginOpen" :button-class="buttonClass" active-button-class="bg-muted/75 text-foreground" @toggle="emit('toggle-plugin')" />
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="[buttonClass, !layout.topBarPinned && 'bg-muted/75 text-foreground']" :title="layout.topBarPinned ? '自动折叠顶栏' : '固定顶栏'" @click="layout.toggleTopBarPinned()"><Pin v-if="layout.topBarPinned" class="size-4" /><PinOff v-else class="size-4" /></Button>
     </div>
-    <div v-if="!responsive.isMobileLayout" class="flex shrink-0 items-center gap-0.5">
+    <div v-if="host.desktop && !responsive.isMobileLayout" class="flex shrink-0 items-center gap-0.5">
       <span class="mx-0.5 h-4 w-px shrink-0" :class="dividerClass" />
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="最小化" @click="appWindow?.minimize()"><Minus class="size-4" /></Button>
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="最大化或还原" @click="appWindow?.toggleMaximize()"><Maximize2 class="size-4" /></Button>

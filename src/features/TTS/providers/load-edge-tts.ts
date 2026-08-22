@@ -1,5 +1,4 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { EdgeTtsTauriWebSocket } from "./edge-tts-tauri-websocket";
+import { host } from "@/host";
 
 type EdgeTtsModule = typeof import("edge-tts-ts");
 
@@ -11,25 +10,7 @@ function importEdgeTts(): Promise<EdgeTtsModule> {
   }
 
   const NativeWebSocket = globalThis.WebSocket;
-  if (isTauri()) {
-    globalThis.WebSocket = EdgeTtsTauriWebSocket as unknown as typeof WebSocket;
-  } else {
-    class BrowserCompatibleWebSocket extends NativeWebSocket {
-      constructor(
-        url: string | URL,
-        protocolsOrOptions?: string | string[] | { headers?: Record<string, string> },
-      ) {
-        if (typeof protocolsOrOptions === "string" || Array.isArray(protocolsOrOptions)) {
-          super(url, protocolsOrOptions);
-        } else {
-          // Plain browsers cannot set the Node-only handshake headers used by
-          // edge-tts-ts. This path remains useful for its standalone diagnostic.
-          super(url);
-        }
-      }
-    }
-    globalThis.WebSocket = BrowserCompatibleWebSocket;
-  }
+  globalThis.WebSocket = host.webSocket;
 
   return import("edge-tts-ts").finally(() => {
     globalThis.WebSocket = NativeWebSocket;

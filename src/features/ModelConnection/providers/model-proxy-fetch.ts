@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { host } from "@/host";
 
 interface ProxyHeader {
   name: string;
@@ -24,13 +24,11 @@ export const modelProxyFetch: typeof fetch = async (input, init) => {
   request.headers.forEach((value, name) => headers.push({ name, value }));
 
   const body = await readRequestBody(request);
-  const response = await invoke<ProxyFetchResponse>("model_proxy_fetch", {
-    request: {
+  const response = await host.network.modelProxyFetch<ProxyFetchResponse>({
       url: request.url,
       method: request.method,
       headers,
       body,
-    },
   });
 
   return new Response(new Uint8Array(response.body), {

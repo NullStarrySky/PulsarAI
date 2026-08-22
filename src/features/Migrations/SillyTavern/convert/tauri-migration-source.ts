@@ -1,20 +1,20 @@
-import { invoke } from "@tauri-apps/api/core";
+import { host } from "@/host";
 import type {
   MigrationScanResult,
   SillyTavernReaderTransport,
 } from "./source-types";
 
-export const tauriSillyTavernReaderTransport: SillyTavernReaderTransport = {
+export const hostSillyTavernReaderTransport: SillyTavernReaderTransport = {
   scan(path) {
-    return invoke<MigrationScanResult>("migration_scan_path", { path });
+    return host.migration.invoke<MigrationScanResult>("scan", { path });
   },
   readText(path) {
-    return invoke<string>("migration_read_text", { path });
+    return host.migration.invoke<string>("readText", { path });
   },
   readBinary(path) {
-    return invoke<{ mediaType: string; base64: string }>("migration_read_binary", { path });
+    return host.migration.invoke<{ mediaType: string; base64: string }>("readBinary", { path });
   },
   readPngCharacter(path) {
-    return invoke<string>("migration_read_png_character", { path });
+    return host.migration.invoke<string>("readPngCharacter", { path });
   },
 };

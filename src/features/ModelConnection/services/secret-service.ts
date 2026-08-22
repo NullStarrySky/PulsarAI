@@ -1,17 +1,17 @@
-import { invoke } from "@tauri-apps/api/core";
+import { host } from "@/host";
 
 export function hasSecret(name: string) {
-  return invoke<boolean>("secret_has", { name });
+  return host.secrets.has(name);
 }
 
 export function setSecret(name: string, value: string) {
-  return invoke<void>("secret_set", { name, value });
+  return host.secrets.set(name, value);
 }
 
 export function clearSecretValue(name: string) {
-  return invoke<void>("secret_clear_value", { name });
+  return host.secrets.clearValue(name);
 }
 
 export function deleteSecret(name: string) {
-  return invoke<void>("secret_delete", { name });
+  return host.secrets.remove(name);
 }

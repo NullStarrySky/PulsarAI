@@ -11,7 +11,6 @@ import {
 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import SttInputButton from "@/features/STT/SttInputButton.vue";
-import { useResponsiveStore } from "@/features/Misc/responsive-store";
 import type { ActionPart, FilePart } from "@/features/Conversation/messages/conversation-types";
 import type { ResolvedPluginAction } from "@/features/Plugin/tree/plugin-types";
 import ComposerAttachmentStrip from "./ComposerAttachmentStrip.vue";
@@ -39,7 +38,6 @@ const emit = defineEmits<{
   openView: [action: ResolvedPluginAction];
 }>();
 
-const responsive = useResponsiveStore();
 const toolsOpen = ref(false);
 const activeIndex = ref(0);
 const token = computed(() => {
@@ -49,9 +47,9 @@ const token = computed(() => {
 });
 const menuKind = computed(() => toolsOpen.value ? "at" as const : token.value?.kind ?? null);
 const atRows = [
-  { key: "attach", title: "附加文件与照片", icon: Paperclip },
-  { key: "whiteboard", title: "打开白板", icon: PenTool },
-  { key: "fullscreen", title: "全屏输入", icon: Maximize2 },
+  { key: "attach", title: "附加文件与照片", description: "从设备选择附件", icon: Paperclip },
+  { key: "whiteboard", title: "打开白板", description: "在画布中整理想法", icon: PenTool },
+  { key: "fullscreen", title: "展开输入框", description: "进入专注编辑模式", icon: Maximize2 },
 ] as const;
 const actionRows = computed(() => props.actions.filter(
   (action) => action.resource.name.toLocaleLowerCase().includes(token.value?.query ?? ""),
@@ -59,7 +57,6 @@ const actionRows = computed(() => props.actions.filter(
 const menuRows = computed(() => menuKind.value === "at"
   ? atRows
   : menuKind.value === "slash" ? actionRows.value : []);
-const wide = computed(() => !responsive.isMobileLayout);
 const canSubmit = computed(
   () => Boolean(props.modelValue.trim() || props.selectedAction || props.attachments.length) && !props.generating,
 );
@@ -124,7 +121,7 @@ function handleKeydown(event: KeyboardEvent) {
     <Transition name="fade">
       <div
         v-if="menuKind && menuRows.length"
-        class="absolute bottom-[calc(100%+0.5rem)] left-0 z-20 w-[min(32rem,calc(100vw-1rem))] overflow-hidden rounded-xl border bg-popover p-1.5 shadow-lg"
+        class="absolute bottom-[calc(100%+0.625rem)] left-0 z-20 w-[min(32rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border bg-popover/98 p-1.5 shadow-xl backdrop-blur"
       >
         <p class="border-b px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground">{{ menuKind === 'at' ? '快捷工具' : '选择插件动作' }}</p>
         <div class="max-h-60 overflow-y-auto py-1">
@@ -133,13 +130,13 @@ function handleKeydown(event: KeyboardEvent) {
               v-for="(item, index) in atRows"
               :key="item.key"
               type="button"
-              class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs"
+              class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-xs transition-colors"
               :class="index === activeIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60'"
               @mousedown.prevent
               @click="runAtTool(item.key)"
             >
               <component :is="item.icon" class="size-4 text-muted-foreground" />
-              <span>{{ item.title }}</span>
+              <span class="min-w-0"><span class="block font-medium">{{ item.title }}</span><span class="mt-0.5 block text-[11px] opacity-70">{{ item.description }}</span></span>
             </button>
           </template>
           <template v-else>
@@ -147,13 +144,12 @@ function handleKeydown(event: KeyboardEvent) {
               v-for="(item, index) in actionRows"
               :key="`${item.pluginId}:${item.resource.id}`"
               type="button"
-              class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs"
+              class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-xs transition-colors"
               :class="index === activeIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60'"
               @mousedown.prevent
               @click="pickAction(item)"
             >
-              <span class="font-mono font-medium text-primary">/{{ item.resource.name }}</span>
-              <span class="ml-auto truncate text-muted-foreground">{{ item.pluginName }}</span>
+              <span class="min-w-0"><span class="block font-mono font-medium text-primary">/{{ item.resource.name }}</span><span class="mt-0.5 block truncate text-[11px] text-muted-foreground">{{ item.pluginName }}</span></span>
             </button>
           </template>
         </div>
@@ -168,8 +164,7 @@ function handleKeydown(event: KeyboardEvent) {
     </div>
 
     <div
-      class="rounded-2xl border bg-background/95 p-1.5 shadow-sm transition-[border-radius] duration-150 focus-within:ring-2 focus-within:ring-ring/20"
-      :class="{ 'rounded-xl': !wide && !attachments.length }"
+      class="rounded-2xl border border-border/80 bg-background/95 p-1.5 shadow-[0_8px_26px_-18px_hsl(var(--foreground)/0.55)] transition-[border-color,box-shadow] duration-150 focus-within:border-ring/55 focus-within:shadow-[0_10px_30px_-18px_hsl(var(--ring)/0.45)]"
     >
       <ComposerAttachmentStrip
         v-if="attachments.length"
@@ -177,15 +172,11 @@ function handleKeydown(event: KeyboardEvent) {
         @remove="emit('removeAttachment', $event)"
       />
 
-      <div
-        class="grid min-w-0 items-end gap-1"
-        :class="wide ? 'grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] grid-rows-[minmax(5.25rem,auto)_auto]' : 'grid-cols-[auto_minmax(0,1fr)_auto_auto_auto]'"
-      >
+      <div class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] items-end gap-1">
         <Button
           size="icon"
           variant="ghost"
-          class="size-8 rounded-lg text-muted-foreground"
-          :class="wide ? 'col-start-1 row-start-2' : 'col-start-1'"
+          class="size-8 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
           title="更多输入工具"
           @click="toolsOpen = !toolsOpen"
         >
@@ -196,26 +187,23 @@ function handleKeydown(event: KeyboardEvent) {
           :model-value="modelValue"
           compact
           placeholder="随心输入，输入 @ 或 / 打开工具…"
-          class="min-w-0"
-          :class="wide ? 'col-span-5 col-start-1 row-start-1' : 'col-start-2'"
+          class="col-start-2 min-w-0"
           @update:model-value="emit('update:modelValue', $event)"
           @submit="emit('submit')"
         />
 
-        <div :class="wide ? 'col-start-2 row-start-2 min-w-0' : 'col-start-3 min-w-0'">
+        <div class="col-start-3 min-w-0">
           <slot name="model" />
         </div>
 
         <SttInputButton
-          class="size-8 rounded-lg text-muted-foreground"
-          :class="wide ? 'col-start-4 row-start-2' : 'col-start-4'"
+          class="col-start-4 size-8 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
           @result="insertDictation"
         />
 
         <Button
           size="icon"
-          class="size-8 rounded-lg"
-          :class="wide ? 'col-start-5 row-start-2' : 'col-start-5'"
+          class="col-start-5 size-8 rounded-xl shadow-sm"
           :disabled="!canSubmit"
           title="发送"
           @click="emit('submit')"

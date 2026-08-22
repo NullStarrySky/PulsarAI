@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { host } from "@/host";
 
 export const PIPER_TTS_PROVIDER_ID = "piper";
 
@@ -21,15 +21,15 @@ export interface PiperSynthesis {
 }
 
 export function listPiperModels() {
-  return invoke<PiperModelPack[]>("tts_piper_models");
+  return host.local.invoke<PiperModelPack[]>("tts", "piper_models");
 }
 
 export function downloadPiperModel(pack: PiperModelDownloadPack, url: string) {
-  return invoke<PiperModelPack>("tts_piper_download", { request: { pack, url } });
+  return host.local.invoke<PiperModelPack>("tts", "piper_download", { request: { pack, url } });
 }
 
 export function deletePiperModel(id: string) {
-  return invoke<void>("tts_piper_delete", { id });
+  return host.local.invoke<void>("tts", "piper_delete", { id });
 }
 
 export async function synthesizeWithPiper(options: {
@@ -38,7 +38,7 @@ export async function synthesizeWithPiper(options: {
   speaker?: number;
   speed?: number;
 }) {
-  const result = await invoke<PiperSynthesis>("tts_piper_synthesize", {
+  const result = await host.local.invoke<PiperSynthesis>("tts", "piper_synthesize", {
     request: options,
   });
   return {

@@ -1,4 +1,3 @@
-import { isTauri } from "@tauri-apps/api/core";
 import { defineStore } from "pinia";
 import { usePackageStore } from "@/features/Package/package-store";
 import type { PluginConfig, PluginConfigValue } from "@/features/Plugin/editors/config/plugin-config";
@@ -272,9 +271,9 @@ function cloneStarterNodes(nodes: PluginTreeNode[]): PluginTreeNode[] {
       icon: node.icon,
       treeOrder: node.treeOrder,
       kind: "file",
-      content: structuredClone(node.content),
+      content: clonePlain(node.content),
       order: node.order,
-      ...(node.insertion ? { insertion: structuredClone(node.insertion) } : {}),
+      ...(node.insertion ? { insertion: clonePlain(node.insertion) } : {}),
     };
   });
 }
@@ -963,11 +962,6 @@ export const usePluginStore = defineStore("plugin-resource", {
       const bundledPlugins = createBuiltinPlugins();
       setPluginStateItems(this, bundledPlugins);
       this.loadError = "";
-      if (!isTauri()) {
-        this.activePluginId = bundledPlugins[0]?.id ?? "";
-        this.loaded = true;
-        return;
-      }
       let records: Plugin[];
       try {
         records = await loadPersistedPlugins();
@@ -1017,7 +1011,6 @@ export const usePluginStore = defineStore("plugin-resource", {
       this.loaded = true;
     },
     async persistPlugin(plugin: Plugin) {
-      if (!isTauri()) return;
       await savePersistedPlugin(clonePlain(plugin));
     },
     async searchPluginNodes(query: string, limit = 40) {

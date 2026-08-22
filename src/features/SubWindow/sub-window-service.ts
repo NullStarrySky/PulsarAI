@@ -1,5 +1,4 @@
-import { emit, emitTo, listen } from "@tauri-apps/api/event";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { host } from "@/host";
 import {
   createSubWindowLabel,
   encodeSubWindowParams,
@@ -26,37 +25,37 @@ export async function openSubWindow(params: SubWindowParams) {
   }
 
   const url = `${window.location.pathname}?subwindow=${encodeSubWindowParams(params)}`;
-  const webview = new WebviewWindow(params.label, {
+  const desktop = host.desktop;
+  if (!desktop) {
+    throw new Error("子窗口仅在桌面端可用。");
+  }
+  await desktop.subWindow.create({
+    label: params.label,
     url,
     title: params.title ?? "PulsarAI",
-    parent: "main",
-    visible: !params.hidden,
-    decorations: false,
     width: 980,
     height: 720,
+    hidden: params.hidden,
   });
-
-  webview.once("tauri://error", (event) => {
-    console.error("Unable to create subwindow", event.payload);
-  });
-  return webview;
+  return params.label;
 }
 
 export async function returnToMain(target: SubWindowTarget) {
-  await emit("subwindow:return", target);
+  await host.desktop?.subWindow.send("main", "subwindow:return", target);
 }
 
 export async function sendSubWindowParams(label: string, params: SubWindowParams) {
-  await emitTo(label, "subwindow:params", params);
+  await host.desktop?.subWindow.send(label, "subwindow:params", params);
 }
 
 export async function sendBridgeMessage(message: Omit<SubWindowBridgeMessage, "id">) {
-  await emit("subwindow:bridge", {
+  await host.desktop?.subWindow.send("main", "subwindow:bridge", {
     ...message,
     id: crypto.randomUUID(),
   });
 }
 
-export async function listenBridgeMessages(handler: (message: SubWindowBridgeMessage) => void) {
-  return listen<SubWindowBridgeMessage>("subwindow:bridge", (event) => handler(event.payload));
+export function listenBridgeMessages(handler: (message: SubWindowBridgeMessage) => void) {
+  if (!host.desktop) return () => {};
+  return host.desktop.subWindow.listen("subwindow:bridge", (payload) => handler(payload as SubWindowBridgeMessage));
 }
