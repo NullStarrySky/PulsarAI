@@ -35,7 +35,6 @@ const providers = computed<ServiceProviderView[]>(() => ([
     name: "Playwright 浏览器",
     description: "本机无头 Chromium 搜索 DuckDuckGo；不需要 API Key，仅支持桌面端。",
     enabled: settings.value.playwrightEnabled,
-    canEnable: true,
     source: "feature",
   }] : []),
   {
@@ -43,7 +42,6 @@ const providers = computed<ServiceProviderView[]>(() => ([
     name: "Exa",
     description: "Exa Search API / ExaJS 兼容提供商，返回结构化网页结果并需要 API Key。",
     enabled: settings.value.exaEnabled,
-    canEnable: exaHasApiKey.value,
     source: "feature",
   },
 ]) as ServiceProviderView[]);
@@ -56,7 +54,6 @@ const persistExaKey = useDebounceFn(async (value: string) => {
   if (value === secretMask) return;
   await saveExaApiKey(value);
   exaHasApiKey.value = Boolean(value.trim());
-  if (!exaHasApiKey.value && settings.value.exaEnabled) settings.value.exaEnabled = false;
 }, 600);
 
 onMounted(async () => {
@@ -79,10 +76,6 @@ function selectProvider(providerId: string) {
 }
 
 function toggleProvider(providerId: string, enabled: boolean) {
-  if (providerId === "exa" && enabled && !exaHasApiKey.value) {
-    push.warning("请先填写 Exa API Key。 ");
-    return;
-  }
   if (host.desktop && providerId === "playwright") settings.value.playwrightEnabled = enabled;
   if (providerId === "exa") settings.value.exaEnabled = enabled;
 }

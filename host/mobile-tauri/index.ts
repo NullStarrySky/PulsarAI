@@ -59,6 +59,7 @@ export const host: Host = {
   },
   secrets: {
     has: (name) => command("secret_has", { name }),
+    preview: (name) => command("secret_preview", { name }),
     set: (name, value) => command("secret_set", { name, value }),
     clearValue: (name) => command("secret_clear_value", { name }),
     remove: (name) => command("secret_delete", { name }),

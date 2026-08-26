@@ -1,16 +1,25 @@
 <script setup lang="ts">
-import { CalendarClock, FolderTree, Maximize2, Minus, Pin, PinOff, Search, Settings, X } from "lucide-vue-next";
+import { CalendarClock, FolderTree, Maximize2, Minus, MoreHorizontal, Pencil, Pin, PinOff, Search, Settings, Trash2, X } from "lucide-vue-next";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import ChatManager from "@/features/Conversation/chats/ChatManager.vue";
+import { useChatStore } from "@/features/Conversation/chats/chat-store";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
 import PackageManager from "@/features/Package/PackageManager.vue";
+import { usePackageStore } from "@/features/Package/package-store";
 import PluginHeaderButton from "@/features/Plugin/PluginHeaderButton.vue";
 import { useLayoutStore } from "@/features/UI/layout-store";
 import { host } from "@/host";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
-import { startWindowDragFromBackground } from "@/features/UI/window-drag";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import SchedulePage from "@/features/UI/schedule/SchedulePage.vue";
 
@@ -20,10 +29,19 @@ const layout = useLayoutStore();
 const responsive = useResponsiveStore();
 const appearance = useAppearanceStore();
 const command = useCommandStore();
+const packages = usePackageStore();
+const chats = useChatStore();
 const appWindow = host.desktop?.window;
 const hovered = ref(false);
-const menuOpen = ref(false);
+const packageMenuOpen = ref(false);
+const chatMenuOpen = ref(false);
+const operationsOpen = ref(false);
 const scheduleOpen = ref(false);
+const packageManager = ref<InstanceType<typeof PackageManager> | null>(null);
+const chatManager = ref<InstanceType<typeof ChatManager> | null>(null);
+const topBarHoverBoundary = 56;
+const selectedPackage = computed(() => packages.packages.find((item) => item.id === props.packageId) ?? null);
+const selectedChat = computed(() => chats.chatsForPackage(props.packageId).find((item) => item.id === props.chatId) ?? null);
 
 const topBarClass = computed(() => !appearance.zenFrameEnabled
   ? "bg-background text-foreground border-b border-border/80"
@@ -37,34 +55,52 @@ const dividerClass = computed(() => !appearance.zenFrameEnabled
 const closeClass = computed(() => !appearance.zenFrameEnabled
   ? "text-muted-foreground/75 hover:bg-destructive hover:text-destructive-foreground"
   : appearance.zenFrameIsDark ? "text-white/80 hover:bg-red-600 hover:text-white" : "text-slate-700 hover:bg-red-600 hover:text-slate-950");
-const visible = computed(() => layout.topBarPinned || hovered.value || menuOpen.value || props.pluginOpen || props.assetOpen);
+const frameBorderClass = computed(() => layout.topBarPinned
+  ? appearance.zenFrameEnabled ? "border-b border-zen-frame-border/80" : "border-b border-border/80"
+  : appearance.zenFrameEnabled ? "border border-zen-frame-border/80" : "border border-border/80");
+const visible = computed(() => layout.topBarPinned || hovered.value || operationsOpen.value);
 
 function onMouseMove(event: MouseEvent) {
-  if (!layout.topBarPinned && event.clientY <= 14) hovered.value = true;
+  if (!layout.topBarPinned) hovered.value = event.clientY <= topBarHoverBoundary;
 }
 onMounted(() => window.addEventListener("mousemove", onMouseMove));
 onUnmounted(() => window.removeEventListener("mousemove", onMouseMove));
 </script>
 
 <template>
-  <div v-if="!layout.topBarPinned" class="fixed inset-x-0 top-0 z-40 h-3" @mouseenter="hovered = true" />
+  <div v-if="!layout.topBarPinned" class="fixed inset-x-0 top-0 z-40 h-6" />
   <header
     class="select-none items-center px-3 transition-all duration-200 ease-out mobile:px-2"
     :class="[
       topBarClass,
       host.desktop && 'electron-window-drag-region',
       layout.topBarPinned
-        ? 'relative z-30 flex h-10 shrink-0 border-b border-zen-frame-border/80 mobile:h-12'
-        : 'fixed left-1.5 right-1.5 top-1.5 z-50 flex h-10 rounded-xl border border-zen-frame-border/80 shadow-xl backdrop-blur-md mobile:h-12',
-      !layout.topBarPinned && (visible ? 'translate-y-0 opacity-100 pointer-events-auto' : '-translate-y-[calc(100%+1rem)] opacity-0 pointer-events-none'),
+        ? 'relative z-30 flex h-10 shrink-0 mobile:h-12'
+        : 'fixed left-1.5 right-1.5 z-50 flex h-10 rounded-xl shadow-xl backdrop-blur-md mobile:h-12',
+      frameBorderClass,
+      !layout.topBarPinned && (visible ? 'top-1.5 opacity-100 pointer-events-auto' : '-top-14 opacity-0 pointer-events-none'),
     ]"
-    @mousedown="startWindowDragFromBackground"
-    @mouseleave="hovered = false"
   >
     <div class="flex min-w-0 flex-1 items-center gap-1.5">
-      <PackageManager :package-id="props.packageId" :button-class="buttonClass" @open-change="menuOpen = $event" @select="emit('update:packageId', $event)" />
+      <PackageManager ref="packageManager" :package-id="props.packageId" :button-class="buttonClass" @open-change="packageMenuOpen = $event" @select="emit('update:packageId', $event)" />
       <span class="h-4 w-px shrink-0" :class="dividerClass" />
-      <ChatManager :package-id="props.packageId" :chat-id="props.chatId" :button-class="buttonClass" @open-change="menuOpen = $event" @select="emit('update:chatId', $event)" />
+      <ChatManager ref="chatManager" :package-id="props.packageId" :chat-id="props.chatId" :button-class="buttonClass" @open-change="chatMenuOpen = $event" @select="emit('update:chatId', $event)" />
+      <DropdownMenu v-model:open="operationsOpen">
+        <DropdownMenuTrigger as-child>
+          <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="角色与会话操作"><MoreHorizontal class="size-4" /></Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" class="w-48" data-window-drag-block>
+          <DropdownMenuLabel>角色</DropdownMenuLabel>
+          <DropdownMenuItem :disabled="!selectedPackage" @click="packageManager?.togglePin()"><Pin data-icon="inline-start" />{{ selectedPackage?.pinned ? '取消置顶角色' : '置顶角色' }}</DropdownMenuItem>
+          <DropdownMenuItem :disabled="!selectedPackage" @click="packageManager?.rename()"><Pencil data-icon="inline-start" />重命名角色</DropdownMenuItem>
+          <DropdownMenuItem class="text-destructive focus:text-destructive" :disabled="!selectedPackage" @click="packageManager?.removeSelected()"><Trash2 data-icon="inline-start" />删除角色</DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>会话</DropdownMenuLabel>
+          <DropdownMenuItem :disabled="!selectedChat" @click="chatManager?.togglePin()"><Pin data-icon="inline-start" />{{ selectedChat?.pinned ? '取消置顶会话' : '置顶会话' }}</DropdownMenuItem>
+          <DropdownMenuItem :disabled="!selectedChat" @click="chatManager?.rename()"><Pencil data-icon="inline-start" />重命名会话</DropdownMenuItem>
+          <DropdownMenuItem class="text-destructive focus:text-destructive" :disabled="!selectedChat" @click="chatManager?.removeSelected()"><Trash2 data-icon="inline-start" />删除会话</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
     <div class="flex shrink-0 items-center gap-0.5">
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="设置" @click="layout.openSettings()"><Settings class="size-4" /></Button>

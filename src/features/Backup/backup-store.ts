@@ -22,7 +22,7 @@ import {
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import {
   type Plugin,
-  type PluginTreeNode,
+  type PluginFile,
   pluginParentPath,
 } from "@/features/Plugin/tree/plugin-types";
 
@@ -315,9 +315,9 @@ function mergeContainer(
 }
 
 function mergePluginNodes(
-  local: PluginTreeNode[],
-  remote: PluginTreeNode[],
-): PluginTreeNode[] {
+  local: PluginFile[],
+  remote: PluginFile[],
+): PluginFile[] {
   const result = local.map(clonePlain);
   const siblingNamesAt = (parentPath: string) =>
     result
@@ -329,54 +329,32 @@ function mergePluginNodes(
       result.push(clonePlain(remoteNode));
       continue;
     }
-    if (existing.kind !== remoteNode.kind) {
-      // Kind conflict at the same path: keep local and add a renamed copy.
-      const parentPath = pluginParentPath(remoteNode.path);
-      const name = uniqueRestoredName(
-        remoteNode.name,
-        siblingNamesAt(parentPath),
-      );
-      const path = parentPath ? `${parentPath}/${name}` : name;
-      result.push({
-        ...clonePlain(remoteNode),
-        id: crypto.randomUUID(),
-        path,
-        name,
-        treeOrder:
-          Math.max(existing.treeOrder ?? 0, remoteNode.treeOrder ?? 0) + 1,
-      });
+    const alreadyPreserved = result.some(
+      (node) =>
+        node.path !== remoteNode.path &&
+        valuesEqualWithoutKeys(
+          node as unknown as Record<string, unknown>,
+          remoteNode as unknown as Record<string, unknown>,
+          ["id", "name", "treeOrder", "path"],
+        ),
+    );
+    if (alreadyPreserved) {
       continue;
     }
-    if (existing.kind === "file" && remoteNode.kind === "file") {
-      const alreadyPreserved = result.some(
-        (node) =>
-          node.kind === "file" &&
-          node.path !== remoteNode.path &&
-          valuesEqualWithoutKeys(
-            node as unknown as Record<string, unknown>,
-            remoteNode as unknown as Record<string, unknown>,
-            ["id", "name", "treeOrder", "path"],
-          ),
-      );
-      if (alreadyPreserved) {
-        continue;
-      }
-      const parentPath = pluginParentPath(remoteNode.path);
-      const name = uniqueRestoredName(
-        remoteNode.name,
-        siblingNamesAt(parentPath),
-      );
-      const path = parentPath ? `${parentPath}/${name}` : name;
-      result.push({
-        ...clonePlain(remoteNode),
-        id: crypto.randomUUID(),
-        path,
-        name,
-        treeOrder:
-          Math.max(existing.treeOrder ?? 0, remoteNode.treeOrder ?? 0) + 1,
-      });
-    }
-    // Matching folder rows carry no content; keep the local one.
+    const parentPath = pluginParentPath(remoteNode.path);
+    const name = uniqueRestoredName(
+      remoteNode.name,
+      siblingNamesAt(parentPath),
+    );
+    const path = parentPath ? `${parentPath}/${name}` : name;
+    result.push({
+      ...clonePlain(remoteNode),
+      id: crypto.randomUUID(),
+      path,
+      name,
+      treeOrder:
+        Math.max(existing.treeOrder ?? 0, remoteNode.treeOrder ?? 0) + 1,
+    });
   }
   return result;
 }
@@ -388,7 +366,8 @@ function mergePlugin(local: Plugin, remote: Plugin) {
     id: local.id,
     packageId: local.packageId,
     builtIn: local.builtIn,
-    nodes: mergePluginNodes(local.nodes, remote.nodes),
+    files: mergePluginNodes(local.files, remote.files),
+    emptyFolders: [...new Set([...local.emptyFolders, ...remote.emptyFolders])],
   };
 }
 
@@ -853,7 +832,10 @@ export const useBackupStore = defineStore("backup", {
       }
     },
     async selectDirectory() {
-      const selected = await host.dialog.open({ directory: true, multiple: false });
+      const selected = await host.dialog.open({
+        directory: true,
+        multiple: false,
+      });
       if (typeof selected === "string") {
         this.updateLocal({ directory: selected });
         await this.refreshBackups();
@@ -1525,11 +1507,14 @@ export const useBackupStore = defineStore("backup", {
     async startLanServer() {
       try {
         const snapshot = await this.buildSyncSnapshot();
-        const result = await host.backup.invoke<LanSyncStatus>("lan_sync_start", {
-          port: Number(this.lan.port),
-          pairingKey: this.lan.pairingKey,
-          snapshot,
-        });
+        const result = await host.backup.invoke<LanSyncStatus>(
+          "lan_sync_start",
+          {
+            port: Number(this.lan.port),
+            pairingKey: this.lan.pairingKey,
+            snapshot,
+          },
+        );
         this.serverRunning = result.running;
         this.lan.enabled = result.running;
         this.persist();
@@ -1567,10 +1552,13 @@ export const useBackupStore = defineStore("backup", {
       }
       this.syncing = true;
       try {
-        const remote = await host.backup.invoke<LanSyncSnapshot>("lan_sync_fetch", {
-          address: this.lan.peerAddress.trim(),
-          pairingKey: this.lan.pairingKey,
-        });
+        const remote = await host.backup.invoke<LanSyncSnapshot>(
+          "lan_sync_fetch",
+          {
+            address: this.lan.peerAddress.trim(),
+            pairingKey: this.lan.pairingKey,
+          },
+        );
         if (remote.protocolVersion !== 1) {
           throw new Error("对端同步协议版本不兼容");
         }

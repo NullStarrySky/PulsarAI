@@ -45,7 +45,6 @@ const connectivityResponse = ref("");
 const connectivityFailed = ref(false);
 const checkingConnectivity = ref(false);
 const fetchingModels = ref(false);
-const apiKeyMask = "••••••••";
 
 const providerForm = reactive({
   id: "",
@@ -68,7 +67,6 @@ const activeProvider = computed(() => store.activeProvider);
 const activeProviderHasKey = computed(() => Boolean(store.apiKeyStatus[activeProvider.value.apiKeyName]));
 const providerViews = computed<ServiceProviderView[]>(() => store.providers.map((provider) => ({
   ...provider,
-  canEnable: Boolean(store.apiKeyStatus[provider.apiKeyName]),
   source: "model",
 })));
 const providerChatModels = computed(() => activeProvider.value.models.filter((model) => model.enabled && model.apiType === "chat"));
@@ -168,7 +166,7 @@ function resetModelForm() {
 }
 
 function syncApiKeyDraft() {
-  apiKeyDraft.value = activeProviderHasKey.value ? apiKeyMask : "";
+  apiKeyDraft.value = store.apiKeyPreviews[activeProvider.value.apiKeyName] ?? "";
 }
 
 function syncConnectivityModel() {
@@ -177,22 +175,33 @@ function syncConnectivityModel() {
   }
 }
 
-const saveApiKeyDebounced = useDebounceFn(async (value: string) => {
-  if (value === apiKeyMask) {
-    return;
-  }
+const saveApiKeyDebounced = useDebounceFn(async (providerId: string, value: string, preview: string) => {
+  if (value === preview) return;
 
-  if (!value.trim()) {
-    await store.clearProviderApiKeyValue(activeProvider.value.id);
-    return;
+  try {
+    if (value.trim()) {
+      await store.saveProviderApiKey(providerId, value.trim());
+      push.success("API Key 已保存");
+    } else {
+      await store.clearProviderApiKeyValue(providerId);
+      push.success("API Key 已清除");
+    }
+    if (activeProvider.value.id === providerId && apiKeyDraft.value === value) syncApiKeyDraft();
+  } catch (error) {
+    push.error(error instanceof Error ? error.message : "API Key 保存失败");
   }
-
-  await store.saveProviderApiKey(activeProvider.value.id, value.trim());
 }, 600);
 
 function updateApiKey(value: string) {
+  const provider = activeProvider.value;
   apiKeyDraft.value = value;
-  void saveApiKeyDebounced(value);
+  connectivityResponse.value = "";
+  connectivityFailed.value = false;
+  void saveApiKeyDebounced(provider.id, value, store.apiKeyPreviews[provider.apiKeyName] ?? "");
+}
+
+function selectApiKey(event: FocusEvent) {
+  (event.target as HTMLInputElement | null)?.select();
 }
 
 async function addProvider() {
@@ -227,12 +236,6 @@ async function activateProvider(providerId: string) {
 }
 
 async function toggleProviderEnabled(providerId: string, enabled: boolean) {
-  const provider = store.providers.find((item) => item.id === providerId);
-  if (!provider) return;
-  if (enabled && !store.apiKeyStatus[provider.apiKeyName]) {
-    push.warning("请先填写 API Key，再启用该提供商。");
-    return;
-  }
   await store.patchProvider(providerId, { enabled });
 }
 
@@ -311,11 +314,13 @@ async function fetchModelList() {
                 />
               </SettingFormField>
 
-              <SettingFormField title="API Key" description="用于连接当前服务商。">
+              <SettingFormField title="API Key" description="保存后仅显示前 8 位和后 4 位；提供商状态不受 Key 是否存在影响。">
                 <Input
                   :model-value="apiKeyDraft"
-                  type="password"
                   :placeholder="activeProviderHasKey ? '已填写，输入新值可替换' : '填写 API Key'"
+                  autocomplete="off"
+                  spellcheck="false"
+                  @focus="selectApiKey"
                   @update:model-value="updateApiKey(String($event))"
                 />
               </SettingFormField>

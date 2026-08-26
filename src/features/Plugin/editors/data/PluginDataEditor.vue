@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Braces, Code2 } from "lucide-vue-next";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,10 +35,6 @@ function updateInitialValue(value: string) {
     </div>
 
     <div class="grid gap-5 overflow-y-auto p-5 md:grid-cols-2">
-      <label class="grid gap-2 text-sm font-medium">
-        说明
-        <Input :model-value="definition.description" placeholder="此数据提供什么？" @update:model-value="write({ description: String($event ?? '') })" />
-      </label>
       <label class="grid gap-2 text-sm font-medium">
         隔离范围
         <Select :model-value="definition.isolation" @update:model-value="write({ isolation: $event as PluginDataDefinition['isolation'] })">

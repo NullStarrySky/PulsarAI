@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { Grid2X2, List, MoreHorizontal, Pencil, Pin, Plus, Search, Trash2 } from "lucide-vue-next";
+import { Grid2X2, List, Plus, Search } from "lucide-vue-next";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePackageStore } from "./package-store";
 import type { CharacterPackage } from "./package-types";
@@ -14,7 +13,6 @@ const props = defineProps<{ packageId: string; buttonClass?: string }>();
 const emit = defineEmits<{ select: [packageId: string]; "open-change": [open: boolean] }>();
 const packages = usePackageStore();
 const open = ref(false);
-const opsOpen = ref(false);
 const search = ref("");
 const renaming = ref(false);
 const nameDraft = ref("");
@@ -25,7 +23,7 @@ const visiblePackages = computed(() => {
   return packages.sortedPackages.filter((item) => !keyword || item.name.toLocaleLowerCase().includes(keyword) || item.description?.toLocaleLowerCase().includes(keyword));
 });
 
-watch([open, opsOpen, renaming], () => emit("open-change", open.value || opsOpen.value || renaming.value));
+watch([open, renaming], () => emit("open-change", open.value || renaming.value));
 function color(item?: CharacterPackage | null) {
   const source = item?.id ?? "pulsar";
   const hue = [...source].reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0);
@@ -37,6 +35,8 @@ async function togglePin() { if (selected.value) await packages.update(selected.
 function rename() { if (!selected.value) return; nameDraft.value = selected.value.name; renaming.value = true; }
 async function confirmRename() { const name = nameDraft.value.trim(); const item = selected.value; renaming.value = false; if (item && name && name !== item.name) await packages.update(item.id, { name }); }
 async function removeSelected() { if (!selected.value || !window.confirm(`删除角色包“${selected.value.name}”？`)) return; await packages.remove(selected.value.id); const next = packages.sortedPackages[0] ?? await packages.create(); emit("select", next.id); }
+
+defineExpose({ rename, removeSelected, togglePin });
 </script>
 
 <template>
@@ -57,20 +57,12 @@ async function removeSelected() { if (!selected.value || !window.confirm(`删除
       </div>
       <ScrollArea class="mt-1 h-[min(23rem,58vh)]">
         <div v-if="view === 'list'" class="grid grid-cols-1 gap-1 p-1">
-          <button v-for="item in visiblePackages" :key="item.id" type="button" class="group relative flex min-w-0 items-center gap-2.5 rounded-lg p-2 text-left hover:bg-muted/70" :class="item.id === props.packageId && 'bg-muted/55'" @click="select(item)"><Avatar class="size-10"><AvatarImage v-if="item.icon" :src="item.icon" :alt="item.name" /><AvatarFallback class="font-semibold text-white" :style="color(item)">{{ item.name.slice(0, 1) }}</AvatarFallback></Avatar><span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">{{ item.name }}</span><span class="mt-0.5 block truncate text-xs text-muted-foreground">{{ item.description || '暂无描述' }}</span></span></button>
+          <button v-for="item in visiblePackages" :key="item.id" type="button" class="group relative flex min-w-0 items-center gap-2.5 rounded-lg p-2 text-left hover:bg-muted/70" @click="select(item)"><Avatar class="size-10"><AvatarImage v-if="item.icon" :src="item.icon" :alt="item.name" /><AvatarFallback class="font-semibold text-white" :style="color(item)">{{ item.name.slice(0, 1) }}</AvatarFallback></Avatar><span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">{{ item.name }}</span><span class="mt-0.5 block truncate text-xs text-muted-foreground">{{ item.description || '暂无描述' }}</span></span></button>
         </div>
         <div v-else class="grid grid-cols-2 gap-2 p-1"><button v-for="item in visiblePackages" :key="item.id" type="button" class="group relative aspect-[4/5] overflow-hidden rounded-xl border text-left shadow-sm transition hover:-translate-y-1 hover:shadow-xl" :style="color(item)" @click="select(item)"><span class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent" /><span class="absolute inset-x-0 bottom-0 p-3 text-white"><span class="block text-sm font-semibold">{{ item.name }}</span><span class="mt-1 block max-h-0 overflow-hidden text-xs leading-5 text-white/75 opacity-0 transition-all group-hover:max-h-20 group-hover:opacity-100">{{ item.description || '暂无描述' }}</span></span></button></div>
         <p v-if="visiblePackages.length === 0" class="py-12 text-center text-sm text-muted-foreground">没有匹配的角色</p>
       </ScrollArea>
       </PopoverContent>
     </Popover>
-    <DropdownMenu v-model:open="opsOpen">
-      <DropdownMenuTrigger as-child><Button variant="ghost" size="icon-sm" class="rounded-full" :class="props.buttonClass" title="角色操作"><MoreHorizontal class="size-4" /></Button></DropdownMenuTrigger>
-      <DropdownMenuContent align="start" class="w-44" data-window-drag-block>
-        <DropdownMenuItem :disabled="!selected" @click="togglePin"><Pin data-icon="inline-start" />{{ selected?.pinned ? '取消置顶角色' : '置顶角色' }}</DropdownMenuItem>
-        <DropdownMenuItem :disabled="!selected" @click="rename"><Pencil data-icon="inline-start" />重命名角色</DropdownMenuItem>
-        <DropdownMenuItem class="text-destructive focus:text-destructive" :disabled="!selected" @click="removeSelected"><Trash2 data-icon="inline-start" />删除角色</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
   </div>
 </template>

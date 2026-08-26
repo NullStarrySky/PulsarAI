@@ -29,6 +29,7 @@ export interface HostConfig {
 
 export interface HostSecrets {
   has(name: string): Promise<boolean>;
+  preview(name: string): Promise<string>;
   set(name: string, value: string): Promise<void>;
   clearValue(name: string): Promise<void>;
   remove(name: string): Promise<void>;
@@ -44,7 +45,6 @@ export interface HostDesktopWindow {
   toggleMaximize(): Promise<void>;
   close(): Promise<void>;
   hide(): Promise<void>;
-  startDragging(): Promise<void>;
 }
 
 export interface HostDesktop {

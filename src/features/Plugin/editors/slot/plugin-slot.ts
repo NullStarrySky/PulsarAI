@@ -8,7 +8,6 @@ export const pluginSlotSchema = z.object({
   description: z.string().default(""),
   contentSuffixes: z.array(z.string()).default([]),
   selectionMode: z.enum(["single", "multiple", "none"]).default("none"),
-  overrideStrategy: z.enum(["override", "merge", "intersection"]).default("override"),
   selectedPaths: z.array(z.string()).optional(),
 });
 
@@ -23,6 +22,28 @@ export function createPluginSlotDefinitions(
   slots: PluginSlot[] = [],
 ): PluginSlotDefinitions {
   return { slots: structuredClone(slots) };
+}
+
+export function selectPluginSlotResources<T extends { pluginId: string; path: string }>(
+  slot: PluginSlot,
+  resources: T[],
+  selectedPaths: string[] | undefined,
+  selectorPluginId?: string,
+) {
+  if (slot.selectionMode === "none") return resources;
+  const selected = new Set(
+    (selectedPaths ?? []).map((path) =>
+      path.startsWith("@")
+        ? path
+        : `@${selectorPluginId}/${path.replace(/^\/+/, "")}`,
+    ),
+  );
+  const matches = selected.size
+    ? resources.filter((resource) =>
+        selected.has(`@${resource.pluginId}/${resource.path}`),
+      )
+    : resources;
+  return slot.selectionMode === "single" ? matches.slice(0, 1) : matches;
 }
 
 /** Parse and validate a slots.json resource at its editor boundary. */

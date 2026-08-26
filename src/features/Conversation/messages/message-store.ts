@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { toRaw } from "vue";
 import { remove, selectByField, upsert } from "@/features/Database/database-service";
-import type { AdditionalParts, ChatMessage, ChatMessageContainer, ChatMessageType, ConversationResourceUpdate, FilePart, Role } from "./conversation-types";
+import type { AdditionalParts, ChatMessage, ChatMessageContainer, ChatMessageMeta, ChatMessageType, ConversationResourceUpdate, FilePart, Role } from "./conversation-types";
 import { formatChatMessageError } from "./conversation-types";
 import { normalizeMarkdownLineBreaks } from "@/features/Misc/markdown";
 import type { ModelMessage } from "ai";
@@ -153,6 +153,26 @@ export const useMessageStore = defineStore("conversation-messages", {
       const message = container ? this.currentMessage(container) : null;
       if (!container || !message) return;
       message.content = normalizeMarkdownLineBreaks(content);
+      delete message.meta.translation;
+      await this.persist(container);
+    },
+    async setMessageFavorite(containerId: string, favorite: boolean) {
+      const container = this.containers.find((item) => item.id === containerId);
+      const message = container ? this.currentMessage(container) : null;
+      if (!container || !message) return;
+      message.favorite = favorite;
+      await this.persist(container);
+    },
+    async setMessageTranslation(
+      containerId: string,
+      content: string,
+      translation: NonNullable<ChatMessageMeta["translation"]>,
+    ) {
+      const container = this.containers.find((item) => item.id === containerId);
+      const message = container ? this.currentMessage(container) : null;
+      if (!container || !message) return;
+      message.content = normalizeMarkdownLineBreaks(content);
+      message.meta.translation = translation;
       await this.persist(container);
     },
     async switchVersion(containerId: string, index: number) {

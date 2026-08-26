@@ -187,7 +187,7 @@ describe("Simplified Runtime importResource", () => {
     const generate = api.read("generate.js");
 
     expect(generate).toContain('imports("@builtin-core-plugin/config.json")');
-    expect(generate).toContain('parse(slot.paths("chat", "global"))');
+    expect(generate).toContain('imports(slot.paths("CTX_BUILD", "global"))');
     expect(api.slot.paths("chat", "global")).toEqual([
       "@builtin-core-plugin/default.chat.json",
     ]);
@@ -269,6 +269,21 @@ describe("Simplified Runtime importResource", () => {
     ]);
     plugin.enabled = false;
     expect(api.slot.paths("REGEX", "global")).toEqual([]);
+  });
+
+  it("keeps data injection and prompt descriptions in separate slots", () => {
+    const core = createBuiltinPlugins().find(
+      (plugin) => plugin.id === "builtin-core-plugin",
+    )!;
+    const api = createPluginSelfApi(core.id, { plugins: [core] });
+
+    expect(api.slot.get("DATA", "global")).toBeNull();
+    expect(api.slot.get("DATA_INJECT", "global")).toMatchObject({
+      contentSuffixes: ["data.json"],
+    });
+    expect(api.slot.get("data_prompt", "global")).toMatchObject({
+      contentSuffixes: ["chat.json"],
+    });
   });
 
   it("handles condition checks synchronously on import", () => {

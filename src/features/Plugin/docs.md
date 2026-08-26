@@ -21,14 +21,14 @@ Plugin 是 Pulsar 的可编程资源系统。一个 Plugin 同时提供数据库
 - `write`、`edit`、`mkdir`、`move`、`remove` 乐观地同步修改当前视图；普通编辑在后台持久化，生成期编辑写入 Conversation Overlay。
 - `open`、`close`、`toggle` 操作资源编辑器；目标为 `@/` 或 `@pluginId/` 时操作相应 Plugin 面板。
 - `read_docs()` 列出内置 Agent 文档 ID，`read_docs(id)` 同步返回对应 Markdown 文件的原始文本；这些文档按需读取，不常驻注入每次会话上下文。
-- `slot.paths(id, scope?)` 返回显式的 `@pluginId/path` 数组。生成脚本把聊天路径直接交给 `parse()`。
+- `slot.paths(id, scope?)` 返回插槽选中的显式 `@pluginId/path` 数组。生成脚本通过选中的 `CTX_BUILD` 资源构建聊天上下文。
 - 除 JavaScript 资源执行、Sandbox 递归解析和数据库边界外，路径查询与文件操作保持同步。
 
 ## 插槽与约定资源
 
 `slots.json` 声明插槽的 ID、作用域、后缀、选择模式和覆盖策略；文件通过自己的 `insertion.slot` 注册，另可声明同步 JavaScript `condition` 或 `conditionPath`。`order` 决定插槽顺序，相同值以 Plugin ID 和资源 ID 稳定排序。
 
-固定约定包括 `config.json`、`slots.json`、`generatePath`、`chat`、`REGEX`、`DATA`、`COMMAND`、`background`、`tools/<name>/tool.js` 与 `tools/<name>/prompt.md`。背景候选与选择只属于 `background` 插槽，不复制到 `config.json`。
+固定约定包括 `config.json`、`slots.json`、`generatePath`、`chat`、`REGEX`、`DATA_INJECT`、`data_prompt`、`COMMAND`、`background`、`tools/<name>/tool.js` 与 `tools/<name>/prompt.md`。`.data.json` 只保存状态定义；`DATA_INJECT` 只由生成流程读取，`.chat.json` 数据说明放入只由上下文构建读取的 `data_prompt`。背景候选与选择只属于 `background` 插槽，不复制到 `config.json`。
 
 ## 文件树
 
@@ -49,12 +49,14 @@ Plugin/
 ├─ runtime/
 │  ├─ environment.ts               Conversation 绑定的 Sandbox 环境装配
 │  ├─ self-api.ts                  文件、插槽及 open/close/toggle API
+│  ├─ logger.ts                    PluginLogger
+│  ├─ yaml-formatter.ts            YAML 格式提取
+│  └─ index.ts                     runtime 公共导出与受控工具
 ├─ resources/
 │  ├─ resource-types.ts            文本/二进制内容边界
 │  ├─ resource-wrapper.ts          各资源类型的单资源 import 包装
 │  └─ PluginResourceRenderer.vue   通用资源渲染入口
 ├─ editors/                        chat、config、data、JS、media、regex、slot、Vue 编辑器
-├─ environment/                    PluginLogger 与受控工具函数
 ├─ agent/                          ToolLoopAgent、codeAct 与 askUser
 ├─ builtIn/                        core、blank、default 三套内置 Plugin 来源
 └─ test/                           文件模型、import/作用域与工具回归测试
@@ -66,5 +68,6 @@ Plugin/
 - 一个 `codeAct` 是一个事务：函数成功且显式返回才提交该次操作，否则恢复调用前快照。
 - `@/` 的含义由源码所属 Plugin 决定，不由最外层生成 Plugin 或当前循环决定。
 - `import` 负责单资源包装，`parse` 负责对选中资源递归解析；不得把递归行为塞回 `import`。
+- 一个插槽只属于生成流程构建或上下文构建，不能同时用于两者；`DATA_INJECT` 和 `data_prompt` 是数据资源的阶段边界。
 - `regex.json` 是启用 Plugin 根目录的规则定义，自动注册到有序 `REGEX` 插槽；生成路径决定是否执行它，`applyOnRendering: true` 仅允许影响展示。
 - Renderer 只能拿到受限环境能力，不能取得 Pinia Store、Node、Electron/Tauri 或任意命令执行能力。

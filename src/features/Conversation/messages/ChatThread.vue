@@ -12,6 +12,7 @@ const { activePath, messageOf } = conversation;
 const packages = usePackageStore();
 const viewport = ref<{ element: HTMLElement | null } | null>(null);
 const loadedChatId = ref("");
+const holdVirtualEnd = ref(false);
 const visibleContainers = computed(() => activePath.value.filter((item) => !item.hidden && (item.role !== "system" || Boolean(messageOf(item)?.content))));
 const virtualizer = useVirtualizer(computed(() => ({
   count: visibleContainers.value.length,
@@ -19,7 +20,7 @@ const virtualizer = useVirtualizer(computed(() => ({
   getItemKey: (index: number) => visibleContainers.value[index]?.id ?? index,
   estimateSize: () => 240,
   overscan: 6,
-  anchorTo: "end" as const,
+  anchorTo: holdVirtualEnd.value ? undefined : ("end" as const),
   followOnAppend: true,
   scrollEndThreshold: 80,
 })));
@@ -27,6 +28,12 @@ const virtualItems = computed(() => virtualizer.value.getVirtualItems());
 
 function measureRow(element: Element | ComponentPublicInstance | null) {
   if (element instanceof Element) virtualizer.value.measureElement(element);
+}
+function pauseVirtualEnd() { holdVirtualEnd.value = true; }
+function resumeVirtualEndAtBottom() {
+  const element = viewport.value?.element;
+  if (element && element.scrollTop + element.clientHeight >= element.scrollHeight - 80)
+    holdVirtualEnd.value = false;
 }
 
 async function loadChat(chatId: string) {
@@ -36,13 +43,16 @@ async function loadChat(chatId: string) {
   if (props.chatId === chatId) loadedChatId.value = chatId;
 }
 
-watch(() => props.chatId, loadChat, { immediate: true });
+watch(() => props.chatId, (chatId) => {
+  holdVirtualEnd.value = false;
+  void loadChat(chatId);
+}, { immediate: true });
 </script>
 
 <template>
   <MessageScrollerProvider auto-scroll default-scroll-position="last-anchor">
     <MessageScroller class="absolute inset-0 min-h-0 min-w-0">
-      <MessageScrollerViewport ref="viewport">
+      <MessageScrollerViewport ref="viewport" @scroll="resumeVirtualEndAtBottom">
         <MessageScrollerContent :virtual-count="visibleContainers.length" class="gap-0">
           <div class="grid min-h-full w-full grid-cols-[minmax(1rem,1fr)_minmax(0,724px)_minmax(1rem,1fr)] mobile:block">
             <div aria-hidden="true" class="mobile:hidden" />
@@ -50,7 +60,9 @@ watch(() => props.chatId, loadChat, { immediate: true });
               <div v-if="loadedChatId === props.chatId && visibleContainers.length" class="relative w-full" :style="{ height: `${virtualizer.getTotalSize()}px` }">
                 <div v-for="row in virtualItems" :key="String(row.key)" :ref="measureRow" :data-index="row.index" class="absolute left-0 top-0 w-full pb-4" :style="{ transform: `translateY(${row.start}px)` }">
                   <MessageScrollerItem :message-id="visibleContainers[row.index]!.id" :scroll-anchor="visibleContainers[row.index]!.role === 'user'">
-                    <ChatBubble :container="visibleContainers[row.index]!" :message="messageOf(visibleContainers[row.index]!)" />
+                    <ChatBubble :container="visibleContainers[row.index]!" :message="messageOf(visibleContainers[row.index]!)" @process-interaction="pauseVirtualEnd">
+                      <template #messageAction="slotProps"><slot name="messageAction" v-bind="slotProps" /></template>
+                    </ChatBubble>
                   </MessageScrollerItem>
                 </div>
               </div>

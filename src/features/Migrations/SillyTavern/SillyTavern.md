@@ -80,7 +80,7 @@ OpenAI prompt 中 `injection_position != 1` 的启用正文按角色写入 `*.ch
 
 `power_user.personas` 提供头像文件到展示名映射，`persona_descriptions` 提供描述。只有被已认领会话 `user_name` 使用的 persona 才复制到对应角色包；未认领 persona 保留 warning。
 
-背景以媒体 data URL 写入内置 Plugin 的 `background` 容器，不依赖酒馆原路径继续存在。`settings.json/background.name` 选中的背景会以无扩展名路径 ID 写入内置 Plugin 的 `appearance/background`；角色本地 Plugin 中同 ID 的背景资源运行时优先。
+背景以媒体 data URL 写入内置 Plugin 的 `background` 容器，不依赖酒馆原路径继续存在。背景的可用资源与选择状态由 `background` 插槽自身管理，不再额外写入 Plugin 配置项。
 
 当前只把 `oai_settings.custom_url/reverse_proxy` 转为自定义 ModelConnection，并导入明确的 model ID。`secrets.json` 不会自动复制，也不会出现在日志或报告中；用户必须在模型设置中确认密钥。
 

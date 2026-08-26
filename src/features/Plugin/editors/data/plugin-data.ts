@@ -11,7 +11,6 @@ const valueSchema: z.ZodType<PluginDataValue> = z.lazy(() => z.union([
 const dataSchema = z.object({
   version: z.literal(1).default(1),
   isolation: z.enum(["resource", "conversation"]).default("resource"),
-  description: z.string().default(""),
   initialValue: valueSchema.default({}),
   enableUpdater: z.boolean().default(false),
   wrapperSource: z.string().default(""),
@@ -21,7 +20,7 @@ const dataSchema = z.object({
 export type PluginDataDefinition = z.infer<typeof dataSchema>;
 
 const fallback: PluginDataDefinition = {
-  version: 1, isolation: "resource", description: "", initialValue: {}, enableUpdater: false, wrapperSource: "",
+  version: 1, isolation: "resource", initialValue: {}, enableUpdater: false, wrapperSource: "",
 };
 
 export function createPluginDataDefinition(): PluginDataDefinition {

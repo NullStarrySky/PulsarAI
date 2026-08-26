@@ -18,7 +18,6 @@ const emptySlot = (): PluginSlot => ({
   description: "",
   contentSuffixes: [],
   selectionMode: "none",
-  overrideStrategy: "override",
 });
 function write(next: PluginSlot[]) {
   emit("update:modelValue", JSON.stringify(createPluginSlotDefinitions(next), null, 2));
@@ -52,6 +51,7 @@ function remove(index: number) { write(slots.value.filter((_, itemIndex) => item
             <label class="grid gap-1.5 text-xs font-medium">选择方式<Select :model-value="slot.selectionMode" @update:model-value="update(index, { selectionMode: $event as PluginSlot['selectionMode'] })"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">无选择</SelectItem><SelectItem value="single">单选</SelectItem><SelectItem value="multiple">多选</SelectItem></SelectContent></Select></label>
             <label class="grid gap-1.5 text-xs font-medium md:col-span-2">说明<Input :model-value="slot.description" placeholder="这个容器会在何处使用？" @update:model-value="update(index, { description: String($event ?? '') })" /></label>
             <label class="grid gap-1.5 text-xs font-medium md:col-span-2">允许的后缀（每行一个）<Textarea class="min-h-20 font-mono text-xs" :model-value="slot.contentSuffixes.join('\n')" placeholder=".md\n.regex.json" @update:model-value="update(index, { contentSuffixes: String($event ?? '').split(/\r?\n/).map((value) => value.trim()).filter(Boolean) })" /></label>
+            <label v-if="slot.selectionMode !== 'none'" class="grid gap-1.5 text-xs font-medium md:col-span-2">选中资源（每行一个相对路径或 `@pluginId/path`）<Textarea class="min-h-20 font-mono text-xs" :model-value="(slot.selectedPaths ?? []).join('\n')" placeholder="context/build.js" @update:model-value="update(index, { selectedPaths: String($event ?? '').split(/\r?\n/).map((value) => value.trim()).filter(Boolean) })" /></label>
           </div>
         </section>
       </div>

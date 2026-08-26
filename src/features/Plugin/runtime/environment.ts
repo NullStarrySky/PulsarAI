@@ -11,16 +11,16 @@ import {
 import { usePackageStore } from "@/features/Package/package-store";
 import { createAgentResourceProvider } from "@/features/Plugin/agent/runtime/default-agent";
 import type { PluginConfig } from "@/features/Plugin/editors/config/plugin-config";
-import { PluginLogger } from "@/features/Plugin/environment/logger";
-import { environmentTools } from "@/features/Plugin/environment/tools";
+import { parsePluginDataDefinition } from "@/features/Plugin/editors/data/plugin-data";
+import { environmentTools, PluginLogger } from "@/features/Plugin/runtime";
 import type { PluginSelfApiMutation } from "@/features/Plugin/runtime/self-api";
 import { createPluginSelfApi } from "@/features/Plugin/runtime/self-api";
+import { useSlotStore } from "@/features/Plugin/tree/slot-store";
 import {
   findPluginNodeByPath,
   type Plugin,
   type PluginFile,
   pluginConventions,
-  pluginFileType,
 } from "@/features/Plugin/tree/plugin-types";
 import {
   type SandboxEnvironment,
@@ -130,14 +130,10 @@ function parseRegex(value: string) {
  * ============================================================================ */
 
 export function pluginGenerateFile(plugin: Plugin) {
-  const file = plugin.files.find(
-    (node) =>
-      node.insertion?.slot?.toLocaleLowerCase() === "generatepath" &&
-      pluginFileType(node.name) === "javascript" &&
-      typeof node.content === "string" &&
-      node.content.trim(),
-  );
-  return file ?? null;
+  return useSlotStore()
+    .api([plugin])
+    .get("generatePath", "global")
+    ?.resources[0]?.file ?? null;
 }
 
 export function pluginConfigValue(plugin: Plugin, key: string) {
@@ -149,6 +145,22 @@ export function pluginConfigValue(plugin: Plugin, key: string) {
   )
     return null;
   return (config.content as PluginConfig)[key]?.value ?? null;
+}
+
+function injectSelectedData(
+  environment: SandboxEnvironment,
+  selfApi: ReturnType<typeof createPluginSelfApi>,
+) {
+  for (const path of selfApi.slot.paths("DATA_INJECT", "global")) {
+    const definition = parsePluginDataDefinition(selfApi.read(path));
+    const name = definition.varName?.trim();
+    if (!name) continue;
+    if (name in environment) throw new Error(`数据变量名冲突：${name}`);
+    const value = selfApi.import(path, environment);
+    if (value instanceof Promise)
+      throw new Error(`数据注入必须同步：${path}`);
+    if (value !== null) environment[name] = value;
+  }
 }
 
 /* ============================================================================
@@ -365,6 +377,7 @@ export async function buildPluginGenerationEnvironment(
     logger,
     input: createComposerApi(input.conversationId),
   };
+  injectSelectedData(environment, selfApi);
   // Agent stays an opt-in environment capability.  It is not a parallel
   // generation path: a plugin explicitly constructs and runs it.
   environment.agent = createAgentResourceProvider({ environment });

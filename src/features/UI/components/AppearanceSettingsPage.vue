@@ -253,6 +253,20 @@ function importFont() {
       </SettingFormField>
 
       <SettingFormField
+        title="Agent 加载动画"
+        description="Agent 正在思考或调用工具时，过程栏使用的像素加载样式。"
+      >
+        <Select v-model="appearance.agentLoadingStyle">
+          <SelectTrigger class="ml-auto w-36"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="drive">Drive</SelectItem>
+            <SelectItem value="dots">Dots</SelectItem>
+            <SelectItem value="orbit">Orbit</SelectItem>
+          </SelectContent>
+        </Select>
+      </SettingFormField>
+
+      <SettingFormField
         title="Zen 包裹边框"
         description="为应用整体包裹一层沉浸式边框。关闭后应用视图无缝充满窗口。"
       >

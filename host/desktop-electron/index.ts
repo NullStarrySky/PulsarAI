@@ -83,6 +83,7 @@ export const host: Host = {
   },
   secrets: {
     has: (name) => invoke("secrets", "has", { name }),
+    preview: (name) => invoke("secrets", "preview", { name }),
     set: (name, value) => invoke("secrets", "set", { name, value }),
     clearValue: (name) => invoke("secrets", "clearValue", { name }),
     remove: (name) => invoke("secrets", "remove", { name }),
@@ -113,7 +114,6 @@ export const host: Host = {
       toggleMaximize: () => invoke("window", "toggleMaximize"),
       close: () => invoke("window", "close"),
       hide: () => invoke("window", "hide"),
-      startDragging: () => invoke("window", "startDragging"),
     },
     openExternal: (url) => invoke("desktop", "openExternal", { url }),
     executeEnvironmentCommand: (name) => invoke("desktop", "executeEnvironmentCommand", { name }),

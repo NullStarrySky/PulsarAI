@@ -26,9 +26,6 @@ export interface PluginFolder extends PluginNodeBase {
 
 export type PluginTreeNode = PluginFile | PluginFolder;
 
-// Kept as a public alias because Conversation actions expose a resource object.
-export type PluginResource = PluginFile;
-
 export interface Plugin {
   id: string;
   packageId: string | null;
@@ -41,13 +38,6 @@ export interface Plugin {
   emptyFolders: string[];
   enabled: boolean;
   builtIn: boolean;
-}
-
-export interface ResolvedPluginAction {
-  pluginId: string;
-  pluginName: string;
-  kind: "process" | "prompt" | "view";
-  resource: PluginFile;
 }
 
 export type PluginFileType =

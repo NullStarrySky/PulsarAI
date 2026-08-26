@@ -8,5 +8,6 @@ export async function loadPersistedProviders() {
 }
 
 export async function persistProvider(provider: ModelProviderDefinition) {
-  await upsert(table, provider.id, provider);
+  const persisted = JSON.parse(JSON.stringify(provider)) as ModelProviderDefinition;
+  await upsert(table, persisted.id, persisted);
 }

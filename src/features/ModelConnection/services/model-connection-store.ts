@@ -7,6 +7,7 @@ import {
   clearSecretValue,
   deleteSecret,
   hasSecret,
+  previewSecret,
   setSecret,
 } from "./secret-service";
 import type {
@@ -59,6 +60,7 @@ export const useModelConnectionStore = defineStore("modelConnection", {
     activeProviderId: "openai",
     activeModelTab: "all" as ModelApiType | "all",
     apiKeyStatus: {} as Record<string, boolean>,
+    apiKeyPreviews: {} as Record<string, string>,
     providers: cloneProviders() as ModelProviderDefinition[],
     loaded: false,
   }),
@@ -144,12 +146,12 @@ export const useModelConnectionStore = defineStore("modelConnection", {
           registerProviderHydration(provider);
         }
         await Promise.all(this.providers.map(async (provider) => {
-          const hasApiKey = await hasSecret(provider.apiKeyName);
+          const [hasApiKey, preview] = await Promise.all([
+            hasSecret(provider.apiKeyName),
+            previewSecret(provider.apiKeyName),
+          ]);
           this.apiKeyStatus[provider.apiKeyName] = hasApiKey;
-          if (provider.enabled && !hasApiKey) {
-            provider.enabled = false;
-            await persistProvider(provider);
-          }
+          this.apiKeyPreviews[provider.apiKeyName] = preview;
         }));
         this.loaded = true;
       })();
@@ -171,10 +173,6 @@ export const useModelConnectionStore = defineStore("modelConnection", {
         return;
       }
 
-      if (patch.enabled === true && !this.apiKeyStatus[provider.apiKeyName]) {
-        return false;
-      }
-
       Object.assign(provider, patch);
 
       registerProviderHydration(provider);
@@ -188,7 +186,12 @@ export const useModelConnectionStore = defineStore("modelConnection", {
         return;
       }
 
-      this.apiKeyStatus[provider.apiKeyName] = await hasSecret(provider.apiKeyName);
+      const [hasApiKey, preview] = await Promise.all([
+        hasSecret(provider.apiKeyName),
+        previewSecret(provider.apiKeyName),
+      ]);
+      this.apiKeyStatus[provider.apiKeyName] = hasApiKey;
+      this.apiKeyPreviews[provider.apiKeyName] = preview;
     },
     async saveProviderApiKey(providerId: string, apiKey: string) {
       const provider = this.providers.find((item) => item.id === providerId);
@@ -207,10 +210,6 @@ export const useModelConnectionStore = defineStore("modelConnection", {
 
       await clearSecretValue(provider.apiKeyName);
       await this.refreshSecretStatus(providerId);
-      if (provider.enabled) {
-        provider.enabled = false;
-        await persistProvider(provider);
-      }
     },
     async deleteProviderApiKey(providerId: string) {
       const provider = this.providers.find((item) => item.id === providerId);
@@ -220,10 +219,6 @@ export const useModelConnectionStore = defineStore("modelConnection", {
 
       await deleteSecret(provider.apiKeyName);
       await this.refreshSecretStatus(providerId);
-      if (provider.enabled) {
-        provider.enabled = false;
-        await persistProvider(provider);
-      }
     },
     async addProvider(input: NewModelProviderInput) {
       const id = input.id.trim().toLowerCase();
@@ -261,6 +256,7 @@ export const useModelConnectionStore = defineStore("modelConnection", {
       await remove("model_connection_providers", providerId);
       unregisterProviderHydration(providerId);
       delete this.apiKeyStatus[provider.apiKeyName];
+      delete this.apiKeyPreviews[provider.apiKeyName];
       if (this.activeProviderId === providerId) {
         this.activeProviderId = this.providers[0]?.id ?? "";
       }
@@ -337,9 +333,6 @@ export const useModelConnectionStore = defineStore("modelConnection", {
       }
 
       if (enabled) {
-        if (!this.apiKeyStatus[provider.apiKeyName]) {
-          return;
-        }
         provider.enabled = true;
         models[0].enabled = true;
       } else {

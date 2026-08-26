@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractYAMLFormatter } from "@/features/Plugin/environment/tools/yaml-formatter";
+import { extractYAMLFormatter } from "@/features/Plugin/runtime";
 
 describe("extractYAMLFormatter", () => {
   it("extracts frontmatter YAML and returns stripped result with parsed formatter", () => {

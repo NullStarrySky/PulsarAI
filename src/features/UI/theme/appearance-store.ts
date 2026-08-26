@@ -12,6 +12,8 @@ import {
   type MobileNavigationBarMode,
 } from "@/features/Misc/mobile-navigation-bar";
 
+export type AgentLoadingStyle = "drive" | "dots" | "orbit";
+
 interface AppearanceSnapshot {
   themeId: string;
   themeMode: ThemeMode;
@@ -23,6 +25,7 @@ interface AppearanceSnapshot {
   uiScale: number;
   composerSendWithEnter: boolean;
   interactiveCodePreview: boolean;
+  agentLoadingStyle: AgentLoadingStyle;
   mobileNavigationBarMode: MobileNavigationBarMode;
   zenFrameEnabled: boolean;
   frameColorMode: "auto" | "custom";
@@ -48,6 +51,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
   const uiScale = ref(snapshot.uiScale);
   const composerSendWithEnter = ref(snapshot.composerSendWithEnter);
   const interactiveCodePreview = ref(snapshot.interactiveCodePreview);
+  const agentLoadingStyle = ref<AgentLoadingStyle>(snapshot.agentLoadingStyle);
   const mobileNavigationBarMode = ref(snapshot.mobileNavigationBarMode);
   const zenFrameEnabled = ref<boolean>(snapshot.zenFrameEnabled ?? true);
   const frameColorMode = ref<"auto" | "custom">(snapshot.frameColorMode ?? "auto");
@@ -60,15 +64,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
   const activeTheme = computed(() => themes.value.find((theme) => theme.id === themeId.value) ?? builtInThemes[0]);
   const activeFont = computed(() => fonts.value.find((font) => font.id === fontId.value) ?? builtInFonts[0]);
 
-  const zenFrameIsDark = computed(() => {
-    if (!zenFrameEnabled.value) {
-      return typeof document !== "undefined" ? document.documentElement.classList.contains("dark") : true;
-    }
-    if (frameColorMode.value === "custom" && frameCustomColor.value) {
-      return isColorDark(frameCustomColor.value);
-    }
-    return typeof document !== "undefined" ? document.documentElement.classList.contains("dark") : true;
-  });
+  const zenFrameIsDark = ref(true);
 
   watch(
     [
@@ -82,6 +78,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
       uiScale,
       composerSendWithEnter,
       interactiveCodePreview,
+      agentLoadingStyle,
       mobileNavigationBarMode,
       zenFrameEnabled,
       frameColorMode,
@@ -101,6 +98,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
         uiScale: uiScale.value,
         composerSendWithEnter: composerSendWithEnter.value,
         interactiveCodePreview: interactiveCodePreview.value,
+        agentLoadingStyle: agentLoadingStyle.value,
         mobileNavigationBarMode: mobileNavigationBarMode.value,
         zenFrameEnabled: zenFrameEnabled.value,
         frameColorMode: frameColorMode.value,
@@ -156,6 +154,12 @@ export const useAppearanceStore = defineStore("appearance", () => {
       document.documentElement.style.removeProperty("--zen-frame-bg");
       document.documentElement.style.removeProperty("--zen-frame-border");
     }
+    zenFrameIsDark.value = isCssColorDark(
+      zenFrameEnabled.value
+        ? "var(--zen-frame-bg)"
+        : "var(--background)",
+      topBarIsDark,
+    );
     document.documentElement.style.setProperty("--editor-font-size", `${editorFontSize.value}px`);
     document.documentElement.style.setProperty("--editor-line-height", `${editorLineHeight.value}px`);
     void syncMobileNavigationBar(
@@ -172,6 +176,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
     customThemes,
     composerSendWithEnter,
     interactiveCodePreview,
+    agentLoadingStyle,
     fontId,
     fontSize,
     fonts,
@@ -193,22 +198,23 @@ export const useAppearanceStore = defineStore("appearance", () => {
   };
 });
 
-function isColorDark(hexColor: string): boolean {
-  if (!hexColor || typeof hexColor !== "string") return true;
-  const hex = hexColor.replace("#", "").trim();
-  if (hex.length === 3) {
-    const r = parseInt(hex[0] + hex[0], 16);
-    const g = parseInt(hex[1] + hex[1], 16);
-    const b = parseInt(hex[2] + hex[2], 16);
-    return (r * 299 + g * 587 + b * 114) / 1000 < 150;
-  }
-  if (hex.length === 6) {
-    const r = parseInt(hex.substring(0, 2), 16);
-    const g = parseInt(hex.substring(2, 4), 16);
-    const b = parseInt(hex.substring(4, 6), 16);
-    return (r * 299 + g * 587 + b * 114) / 1000 < 150;
-  }
-  return true;
+function isCssColorDark(color: string, fallback: boolean): boolean {
+  if (typeof document === "undefined") return fallback;
+  const probe = document.createElement("span");
+  probe.style.color = color;
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  document.documentElement.append(probe);
+  const resolvedColor = getComputedStyle(probe).color;
+  probe.remove();
+
+  const context = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+  if (!context || !resolvedColor) return fallback;
+  context.fillStyle = resolvedColor;
+  context.fillRect(0, 0, 1, 1);
+  const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data;
+  if (alpha === 0) return fallback;
+  return (red * 299 + green * 587 + blue * 114) / 1000 < 150;
 }
 
 function applyTheme(
@@ -294,6 +300,7 @@ function readSnapshot(): AppearanceSnapshot {
     uiScale: 100,
     composerSendWithEnter: true,
     interactiveCodePreview: false,
+    agentLoadingStyle: "drive",
     mobileNavigationBarMode: "topbar",
     zenFrameEnabled: true,
     frameColorMode: "auto",
@@ -322,6 +329,10 @@ function readSnapshot(): AppearanceSnapshot {
         typeof parsed.interactiveCodePreview === "boolean"
           ? parsed.interactiveCodePreview
           : fallback.interactiveCodePreview,
+      agentLoadingStyle:
+        parsed.agentLoadingStyle === "dots" || parsed.agentLoadingStyle === "orbit"
+          ? parsed.agentLoadingStyle
+          : "drive",
       zenFrameEnabled: typeof parsed.zenFrameEnabled === "boolean" ? parsed.zenFrameEnabled : fallback.zenFrameEnabled,
       frameColorMode: parsed.frameColorMode === "custom" ? "custom" : "auto",
       frameCustomColor: typeof parsed.frameCustomColor === "string" ? parsed.frameCustomColor : fallback.frameCustomColor,

@@ -786,11 +786,11 @@ fn plugin_node_content_text(node: &serde_json::Value) -> String {
 fn collect_plugin_node_records(
     plugin_id: &str,
     plugin_name: &str,
-    nodes: &serde_json::Value,
+    files: &serde_json::Value,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let list = nodes
+    let list = files
         .as_array()
-        .ok_or_else(|| "插件 nodes 必须是数组".to_string())?;
+        .ok_or_else(|| "插件 files 必须是数组".to_string())?;
     let mut records = Vec::with_capacity(list.len());
     let mut seen_paths = HashSet::new();
     for node in list {
@@ -806,10 +806,6 @@ fn collect_plugin_node_records(
             .get("name")
             .and_then(serde_json::Value::as_str)
             .unwrap_or_default();
-        let kind = object
-            .get("kind")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("file");
         let path = object
             .get("path")
             .and_then(serde_json::Value::as_str)
@@ -831,7 +827,7 @@ fn collect_plugin_node_records(
             "plugin_name": plugin_name,
             "path": path,
             "name": name,
-            "kind": kind,
+            "kind": "file",
             "search_text": search_text,
             "value": stored_node,
         }));
@@ -851,7 +847,7 @@ async fn select_plugin_values(db: &Surreal<Db>) -> Result<Vec<serde_json::Value>
     let node_rows: Vec<serde_json::Value> = result
         .take(0)
         .map_err(|error| format!("读取插件节点失败：{error}"))?;
-    let mut nodes_by_plugin: std::collections::BTreeMap<String, Vec<serde_json::Value>> =
+    let mut files_by_plugin: std::collections::BTreeMap<String, Vec<serde_json::Value>> =
         std::collections::BTreeMap::new();
     for row in node_rows {
         let object = row
@@ -867,7 +863,7 @@ async fn select_plugin_values(db: &Surreal<Db>) -> Result<Vec<serde_json::Value>
             .get("value")
             .cloned()
             .ok_or_else(|| "插件节点记录缺少 value".to_string())?;
-        nodes_by_plugin.entry(plugin_id).or_default().push(node);
+        files_by_plugin.entry(plugin_id).or_default().push(node);
     }
     let mut plugins = Vec::with_capacity(metadata.len());
     for mut plugin in metadata {
@@ -876,10 +872,10 @@ async fn select_plugin_values(db: &Surreal<Db>) -> Result<Vec<serde_json::Value>
             .and_then(serde_json::Value::as_str)
             .unwrap_or_default()
             .to_string();
-        let nodes = nodes_by_plugin.remove(&plugin_id).unwrap_or_default();
+        let files = files_by_plugin.remove(&plugin_id).unwrap_or_default();
         if let Some(object) = plugin.as_object_mut() {
             object.remove("rootId");
-            object.insert("nodes".to_string(), serde_json::Value::Array(nodes));
+            object.insert("files".to_string(), serde_json::Value::Array(files));
         }
         plugins.push(plugin);
     }
@@ -1122,6 +1118,45 @@ async fn secret_has(
     Ok(get_secret_value(db, &name)
         .await?
         .is_some_and(|value| !value.is_empty()))
+}
+
+#[tauri::command]
+async fn secret_preview(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+) -> Result<String, String> {
+    let db = app_db(&app, &state).await?;
+    let Some(value) = get_secret_value(db, &name)
+        .await?
+        .filter(|value| !value.is_empty())
+    else {
+        return Ok(String::new());
+    };
+    let characters: Vec<char> = value.chars().collect();
+    if characters.len() <= 6 {
+        return Ok(format!(
+            "{}…{}",
+            characters[0],
+            characters[characters.len() - 1]
+        ));
+    }
+    if characters.len() <= 12 {
+        return Ok(format!(
+            "{}…{}",
+            characters[..4].iter().collect::<String>(),
+            characters[characters.len() - 2..]
+                .iter()
+                .collect::<String>()
+        ));
+    }
+    Ok(format!(
+        "{}…{}",
+        characters[..8].iter().collect::<String>(),
+        characters[characters.len() - 4..]
+            .iter()
+            .collect::<String>()
+    ))
 }
 
 #[tauri::command]
@@ -1381,14 +1416,14 @@ async fn database_save_plugin(
         .unwrap_or_default();
     let mut metadata = plugin.clone();
     if let Some(object) = metadata.as_object_mut() {
-        object.remove("nodes");
+        object.remove("files");
     }
-    let nodes = collect_plugin_node_records(
+    let files = collect_plugin_node_records(
         plugin_id,
         plugin_name,
         plugin_object
-            .get("nodes")
-            .ok_or_else(|| format!("插件 {plugin_id} 缺少 nodes"))?,
+            .get("files")
+            .ok_or_else(|| format!("插件 {plugin_id} 缺少 files"))?,
     )?;
 
     let db = app_db(&app, &state).await?;
@@ -1402,7 +1437,7 @@ async fn database_save_plugin(
     )
     .bind(("plugin_id", plugin_id.to_string()))
     .bind(("metadata", metadata))
-    .bind(("nodes", nodes))
+    .bind(("nodes", files))
     .await
     .map_err(|error| error.to_string())?;
     Ok(())
@@ -2072,6 +2107,7 @@ pub fn run() {
     builder
         .invoke_handler(tauri::generate_handler![
             secret_has,
+            secret_preview,
             secret_set,
             secret_clear_value,
             secret_delete,

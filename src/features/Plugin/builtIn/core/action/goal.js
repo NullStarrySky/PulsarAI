@@ -1,6 +1,7 @@
 const goalState = read("@/goal/goal.data");
+const context = await imports(slot.paths("CTX_BUILD", "global"));
 const messages = [
-  ...chat,
+  ...context,
   {
     role: "system",
     content: [

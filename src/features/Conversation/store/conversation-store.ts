@@ -40,7 +40,7 @@ export function useConversationStore(pinia?: Pinia): ConversationIntegration {
     containerPathTo: messages.pathFor,
     containerPathForConversation: (chat: { lastContainerId: string | null; rootContainerId: string | null }) => messages.pathFor(chat.lastContainerId ?? chat.rootContainerId),
     switchMessage: messages.switchVersion,
-    setMessageFavorite: async () => {},
+    setMessageFavorite: messages.setMessageFavorite,
     requestLastMessageEdit: () => {},
     requestMessageNavigation: () => {},
   };

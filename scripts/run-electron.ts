@@ -1,4 +1,20 @@
 const rendererUrl = "http://127.0.0.1:1420";
+const ignoredElectronStderr = "libpng warning: iCCP: known incorrect sRGB profile";
+
+async function forwardElectronStderr(stream: ReadableStream<Uint8Array>) {
+  const decoder = new TextDecoder();
+  let pending = "";
+  for await (const chunk of stream) {
+    pending += decoder.decode(chunk, { stream: true });
+    const lines = pending.split(/\r?\n/u);
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line !== ignoredElectronStderr) process.stderr.write(`${line}\n`);
+    }
+  }
+  pending += decoder.decode();
+  if (pending && pending !== ignoredElectronStderr) process.stderr.write(pending);
+}
 
 async function rendererIsReady() {
   try {
@@ -25,10 +41,13 @@ try {
   const electron = Bun.spawn(["bunx", "electron", "host/desktop-electron/main.mjs"], {
     stdin: "inherit",
     stdout: "inherit",
-    stderr: "inherit",
+    stderr: "pipe",
     env: { ...process.env, ELECTRON_RENDERER_URL: rendererUrl, PULSAR_HOST: "desktop-electron" },
   });
-  process.exit(await electron.exited);
+  const stderr = forwardElectronStderr(electron.stderr);
+  const exitCode = await electron.exited;
+  await stderr;
+  process.exit(exitCode);
 } finally {
   if (vite) {
     vite.kill();

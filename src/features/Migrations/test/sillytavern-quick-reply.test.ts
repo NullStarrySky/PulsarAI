@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { convertSillyTavernSnapshot } from "./sillytavern-converter";
-import { discriminateSillyTavernResource } from "./sillytavern-discriminator";
-import { placeSillyTavernArtifacts } from "./sillytavern-placer";
+import { convertSillyTavernSnapshot } from "../SillyTavern/convert/sillytavern-converter";
+import { discriminateSillyTavernResource } from "../SillyTavern/convert/sillytavern-discriminator";
+import { placeSillyTavernArtifacts } from "../SillyTavern/convert/sillytavern-placer";
 import type {
   SillyTavernParsedResource,
   SillyTavernSourceSnapshot,
-} from "./source-types";
+} from "../SillyTavern/convert/source-types";
 
 function resource(
   relativePath: string,

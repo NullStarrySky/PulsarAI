@@ -4,9 +4,11 @@ import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDatabase } from "./database.mjs";
+import { hydrateSecretPlaceholders, secretPreview } from "./secret-utils.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const rendererUrl = process.env.ELECTRON_RENDERER_URL;
+const applicationIcon = path.join(directory, "icons", process.platform === "win32" ? "icon.ico" : "icon.png");
 const windows = new Map();
 let mainWindow;
 let database;
@@ -19,6 +21,7 @@ const windowOptions = {
   frame: false,
   center: true,
   backgroundColor: "#0b0d10",
+  icon: applicationIcon,
   webPreferences: {
     preload: path.join(directory, "preload.cjs"),
     contextIsolation: true,
@@ -26,6 +29,9 @@ const windowOptions = {
     nodeIntegration: false,
   },
 };
+
+app.setName("PulsarAI");
+if (process.platform === "win32") app.setAppUserModelId("PulsarAI");
 
 function requiredString(value, label) {
   if (typeof value !== "string" || !value.trim()) throw new Error(`${label} is required.`);
@@ -46,12 +52,36 @@ async function modelProxyFetch(request) {
   const input = request && typeof request === "object" ? request : {};
   const url = new URL(requiredString(input.url, "request.url"));
   if (!/^https?:$/.test(url.protocol)) throw new Error("Only HTTP(S) proxy requests are allowed.");
-  const headers = new Headers(Array.isArray(input.headers) ? input.headers.map(({ name, value }) => [name, value]) : []);
-  const response = await fetch(url, {
-    method: typeof input.method === "string" ? input.method : "GET",
-    headers,
-    body: Array.isArray(input.body) ? Uint8Array.from(input.body) : undefined,
-  });
+  const headers = new Headers();
+  for (const header of Array.isArray(input.headers) ? input.headers : []) {
+    headers.set(header.name, await hydrateSecretPlaceholders(
+      String(header.value ?? ""),
+      (name) => database.selectOne("host_secrets", name),
+    ));
+  }
+  let body = Array.isArray(input.body) ? Uint8Array.from(input.body) : undefined;
+  if (body) {
+    try {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(body);
+      body = new TextEncoder().encode(await hydrateSecretPlaceholders(
+        text,
+        (name) => database.selectOne("host_secrets", name),
+      ));
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+    }
+  }
+  let response;
+  try {
+    response = await fetch(url, {
+      method: typeof input.method === "string" ? input.method : "GET",
+      headers,
+      body,
+    });
+  } catch (error) {
+    const detail = error?.cause instanceof Error ? error.cause.message : error instanceof Error ? error.message : String(error);
+    throw new Error(`模型请求失败：${detail}`);
+  }
   return {
     status: response.status,
     headers: [...response.headers.entries()].map(([name, value]) => ({ name, value })),
@@ -165,6 +195,7 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
   }
   if (namespace === "secrets") {
     if (method === "has") return Boolean(await database.selectOne("host_secrets", payload.name));
+    if (method === "preview") return secretPreview(await database.selectOne("host_secrets", payload.name));
     if (method === "set") return database.upsert("host_secrets", payload.name, payload.value);
     if (method === "clearValue") return database.upsert("host_secrets", payload.name, "");
     if (method === "remove") return database.remove("host_secrets", payload.name);
@@ -175,7 +206,6 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
     if (method === "toggleMaximize") return target?.isMaximized() ? target.unmaximize() : target?.maximize();
     if (method === "close") return target?.close();
     if (method === "hide") return target?.hide();
-    if (method === "startDragging") return undefined;
   }
   if (namespace === "desktop") {
     if (method === "openExternal") return shell.openExternal(requiredString(payload.url, "url"));

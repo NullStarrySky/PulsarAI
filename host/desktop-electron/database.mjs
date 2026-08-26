@@ -20,7 +20,8 @@ function assertTable(table) {
 }
 
 function assertId(id) {
-  if (typeof id !== "string" || !id.trim()) throw new Error("A non-empty record ID is required.");
+  if (typeof id !== "string" || !id.trim())
+    throw new Error("A non-empty record ID is required.");
   return id;
 }
 
@@ -29,7 +30,9 @@ function recordId(table, id) {
 }
 
 function sortRecords(records) {
-  return [...records].sort((a, b) => String(a.resource_key).localeCompare(String(b.resource_key)));
+  return [...records].sort((a, b) =>
+    String(a.resource_key).localeCompare(String(b.resource_key)),
+  );
 }
 
 export async function createDatabase(userDataPath) {
@@ -41,15 +44,20 @@ export async function createDatabase(userDataPath) {
   await database.use({ namespace: "pulsar", database: "pulsar" });
 
   async function selectAll(table) {
-    return sortRecords(await database.select(assertTable(table))).map(({ resource_key, value }) => ({
-      id: resource_key ?? null,
-      value,
-    }));
+    return sortRecords(await database.select(assertTable(table))).map(
+      ({ resource_key, value }) => ({
+        id: resource_key ?? null,
+        value,
+      }),
+    );
   }
 
   async function selectByField(table, field, value) {
-    if (field !== "packageId" && field !== "conversationid") throw new Error("Unsupported resource field.");
-    return (await selectAll(table)).filter((record) => record.value?.[field] === value);
+    if (field !== "packageId" && field !== "conversationid")
+      throw new Error("Unsupported resource field.");
+    return (await selectAll(table)).filter(
+      (record) => record.value?.[field] === value,
+    );
   }
 
   async function selectOne(table, id) {
@@ -66,7 +74,9 @@ export async function createDatabase(userDataPath) {
   }
 
   async function resetCharacterData() {
-    await Promise.all(resourceTables.map((table) => database.delete(assertTable(table))));
+    await Promise.all(
+      resourceTables.map((table) => database.delete(assertTable(table))),
+    );
   }
 
   async function loadPlugins() {
@@ -74,7 +84,11 @@ export async function createDatabase(userDataPath) {
   }
 
   async function savePlugin(plugin) {
-    if (!plugin || typeof plugin !== "object" || typeof plugin.id !== "string") {
+    if (
+      !plugin ||
+      typeof plugin !== "object" ||
+      typeof plugin.id !== "string"
+    ) {
       throw new Error("插件记录缺少 ID。");
     }
     await upsert("resource_plugins", plugin.id, plugin);
@@ -85,14 +99,29 @@ export async function createDatabase(userDataPath) {
   }
 
   async function searchPluginNodes(query, limit = 40) {
-    const normalized = String(query ?? "").trim().toLocaleLowerCase();
+    const normalized = String(query ?? "")
+      .trim()
+      .toLocaleLowerCase();
     if (!normalized) return [];
     const cappedLimit = Math.min(Math.max(Number(limit) || 40, 1), 100);
     const plugins = await loadPlugins();
-    return plugins.flatMap((plugin) => (plugin.nodes ?? []).map((node) => ({ plugin, node })))
-      .filter(({ plugin, node }) => [plugin.name, node.name, node.path, node.content]
-        .some((value) => String(value ?? "").toLocaleLowerCase().includes(normalized)))
-      .sort((a, b) => `${a.plugin.name}/${a.node.path}`.localeCompare(`${b.plugin.name}/${b.node.path}`, "zh-Hans"))
+    return plugins
+      .flatMap((plugin) =>
+        (plugin.files ?? []).map((node) => ({ plugin, node })),
+      )
+      .filter(({ plugin, node }) =>
+        [plugin.name, node.name, node.path, node.content].some((value) =>
+          String(value ?? "")
+            .toLocaleLowerCase()
+            .includes(normalized),
+        ),
+      )
+      .sort((a, b) =>
+        `${a.plugin.name}/${a.node.path}`.localeCompare(
+          `${b.plugin.name}/${b.node.path}`,
+          "zh-Hans",
+        ),
+      )
       .slice(0, cappedLimit)
       .map(({ plugin, node }) => ({
         pluginId: plugin.id,
@@ -101,7 +130,10 @@ export async function createDatabase(userDataPath) {
         path: node.path,
         name: node.name,
         kind: node.kind,
-        excerpt: typeof node.content === "string" ? node.content.slice(0, 180) : JSON.stringify(node.content ?? "").slice(0, 180),
+        excerpt:
+          typeof node.content === "string"
+            ? node.content.slice(0, 180)
+            : JSON.stringify(node.content ?? "").slice(0, 180),
       }));
   }
 
@@ -116,6 +148,8 @@ export async function createDatabase(userDataPath) {
     savePlugin,
     deletePlugin,
     searchPluginNodes,
-    async close() { await database.close(); },
+    async close() {
+      await database.close();
+    },
   };
 }

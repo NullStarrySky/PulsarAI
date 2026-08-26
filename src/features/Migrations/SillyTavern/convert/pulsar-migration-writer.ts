@@ -452,7 +452,6 @@ function configureGlobalPlugin(
           description: "从 SillyTavern 世界书导入的上下文条目。",
           contentSuffixes: ["md"],
           selectionMode: "none",
-          overrideStrategy: "override",
         },
       ],
     };

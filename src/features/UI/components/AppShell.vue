@@ -36,8 +36,14 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex h-[100dvh] min-w-0 flex-col overflow-hidden bg-zen-frame-bg text-foreground">
-    <div class="min-h-0 flex-1">
+  <div
+    class="flex h-[100dvh] min-w-0 flex-col overflow-hidden text-foreground"
+    :class="appearance.zenFrameEnabled ? 'bg-zen-frame-bg p-1.5 mobile:p-1' : 'bg-background'"
+  >
+    <div
+      class="min-h-0 flex-1"
+      :class="appearance.zenFrameEnabled && 'overflow-hidden rounded-xl border border-zen-frame-border/80 bg-background shadow-sm mobile:rounded-lg'"
+    >
       <ConversationStageOnePage />
     </div>
     <SettingsDialog />

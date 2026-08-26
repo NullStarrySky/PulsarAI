@@ -33,6 +33,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
+  rawInput: [value: string];
   submit: [];
 }>();
 const appearance = useAppearanceStore();
@@ -51,6 +52,11 @@ function handleKeydown(event: KeyboardEvent) {
   const editor = (event.target as HTMLElement | null)?.closest?.(".ProseMirror");
   if (!(editor?.textContent ?? props.modelValue).trim()) return;
   emit("submit");
+}
+
+function handleInput(event: Event) {
+  const editor = (event.target as HTMLElement | null)?.closest?.(".ProseMirror") as HTMLElement | null;
+  if (editor) emit("rawInput", editor.innerText);
 }
 
 const ComposerInner = defineComponent({
@@ -169,6 +175,7 @@ const ComposerInner = defineComponent({
         },
       ]"
       :style="$attrs.style"
+      @input.capture="handleInput"
       @keydown.capture="handleKeydown"
     >
       <ComposerInner
@@ -185,10 +192,10 @@ const ComposerInner = defineComponent({
 
 <style>
 .conversation-composer-editor :where(.milkdown, .editor, .ProseMirror) {
-  min-height: 5.5rem !important; /* Made it taller to avoid blocking text selection popups */
+  min-height: 4.4rem !important;
   min-width: 0 !important;
   width: 100%;
-  max-height: 16rem;
+  max-height: 12.8rem;
   max-width: 100%;
   border: 0 !important;
   background: transparent !important;
@@ -217,8 +224,8 @@ const ComposerInner = defineComponent({
 }
 
 .mobile-layout .conversation-composer-editor .ProseMirror {
-  min-height: 6rem !important;
-  max-height: 12rem;
+  min-height: 4.8rem !important;
+  max-height: 9.6rem;
   padding: 0.5rem 0.45rem 2rem 0.45rem !important;
   font-size: var(--editor-font-size, 14px) !important;
 }

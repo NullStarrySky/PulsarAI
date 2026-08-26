@@ -1,90 +1,53 @@
 <script setup lang="ts">
-import { computed, ref, toRef, type Component } from "vue";
-import { Paperclip, Send } from "lucide-vue-next";
+import { computed, onMounted, ref, toRef, type Component } from "vue";
 import { push } from "notivue";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import ModelSelect from "@/features/ModelConnection/components/ModelSelect.vue";
+import { useDefaultConfigStore } from "@/features/defaultConfigs/default-config-store";
 import { usePackageStore } from "@/features/Package/package-store";
-import type { PluginConfig } from "@/features/Plugin/editors/config/plugin-config";
 import { compilePluginVueFile } from "@/features/Plugin/editors/vue/plugin-vue-runtime";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
-import { findPluginNodeByPath, type ResolvedPluginAction } from "@/features/Plugin/tree/plugin-types";
+import { type SlotResource, useSlotStore } from "@/features/Plugin/tree/slot-store";
 import { fileToMessagePart } from "@/features/Conversation/messages/message-attachment";
 import type { ActionPart, FilePart } from "@/features/Conversation/messages/conversation-types";
 import { useConversation } from "@/features/Conversation/use-conversation";
-import ConversationComposerEditor from "./ConversationComposerEditor.vue";
-import ComposerAttachmentStrip from "./ComposerAttachmentStrip.vue";
 import PromptBar from "./PromptBar.vue";
 
 const props = defineProps<{ chatId: string }>();
 const chat = useConversation(toRef(props, "chatId"));
 const packages = usePackageStore();
 const plugins = usePluginStore();
+const slots = useSlotStore();
+const defaults = useDefaultConfigStore();
 const files = ref<FilePart[]>([]);
 const selectedAction = ref<ActionPart | null>(null);
 const input = ref<HTMLInputElement | null>(null);
-const fullscreenOpen = ref(false);
 const whiteboardOpen = ref(false);
 const actionViewOpen = ref(false);
-const actionView = ref<ResolvedPluginAction | null>(null);
+const actionView = ref<SlotResource | null>(null);
 const actionViewComponent = ref<Component | null>(null);
 
 const currentPackage = computed(() =>
   packages.packages.find((item) => item.id === chat.chat.value?.packageId) ?? null,
 );
-const mainPlugin = computed(() => {
-  const id = currentPackage.value?.mainPluginId;
-  return id ? plugins.plugins.find((item) => item.id === id) ?? null : null;
-});
-const modelConfig = computed(() => {
-  const plugin = mainPlugin.value;
-  const file = plugin ? findPluginNodeByPath(plugin, "config.json") : null;
-  return file?.kind === "file" && file.content && typeof file.content === "object" ? file : null;
-});
-const selectedModel = computed(() => {
-  const value = modelConfig.value
-    ? (modelConfig.value.content as PluginConfig)["generation/model"]?.value
-    : null;
-  return typeof value === "string" ? value : "";
-});
 const isEmpty = computed(() => chat.activePath.value.length === 0);
 const suggestions = ["用一句话介绍你自己", "我们开始一段新的对话", "帮我梳理一个想法"];
-const actions = computed(() => plugins.actionResourcesForPackage(
-  currentPackage.value?.id,
-  currentPackage.value?.enabledGlobalPluginIds,
-  currentPackage.value?.mainPluginId,
-));
+const actions = computed(() => {
+  const enabledPlugins = plugins.enabledPluginsForPackage(
+    currentPackage.value?.id,
+    currentPackage.value?.enabledGlobalPluginIds,
+    currentPackage.value?.mainPluginId,
+  );
+  return slots.api(enabledPlugins).get("COMMAND", "global")?.resources ?? [];
+});
 
-async function updateModel(value: string) {
-  const plugin = mainPlugin.value;
-  if (!plugin) return;
-  const file = modelConfig.value;
-  const config = file?.content as PluginConfig | undefined;
-  if (file && config && !config["generation/model"]) {
-    await plugins.updateNode(plugin.id, file.id, {
-      content: {
-        ...structuredClone(config),
-        "generation/model": {
-          renderer: {
-            name: "ModelSelect",
-            title: "模型",
-            description: "留空时继承全局默认模型；引用可附带思考强度。",
-          },
-          value: value || null,
-        },
-      },
-    });
-    return;
-  }
-  await plugins.setConfigValue(plugin.id, "generation/model", value || null);
-}
+onMounted(() => { if (!defaults.loaded) void defaults.load(); });
 
 async function selectFiles(event: Event) {
   const target = event.target as HTMLInputElement;
@@ -107,13 +70,13 @@ function useSuggestion(value: string) {
   chat.draft.value = value;
 }
 
-function openActionView(action: ResolvedPluginAction) {
+function openActionView(action: SlotResource) {
   const plugin = plugins.plugins.find((item) => item.id === action.pluginId);
   if (!plugin) {
     push.error("动作所属插件不可用。");
     return;
   }
-  const result = compilePluginVueFile(plugin, action.resource);
+  const result = compilePluginVueFile(plugin, action.file);
   if (!result.component) {
     push.error(result.diagnostics[0] || "无法打开动作视图。");
     return;
@@ -150,18 +113,15 @@ function openActionView(action: ResolvedPluginAction) {
         @submit="send"
         @attach="input?.click()"
         @whiteboard="whiteboardOpen = true"
-        @fullscreen="fullscreenOpen = true"
         @remove-attachment="files.splice($event, 1)"
         @update:selected-action="selectedAction = $event"
         @open-view="openActionView"
       >
         <template #model>
           <ModelSelect
-            :model-value="selectedModel"
+            :model-value="defaults.defaultChatModel"
             button-class="h-8 max-w-[min(18rem,42vw)] justify-between rounded-lg border-0 bg-muted/65 px-2.5 text-xs shadow-none mobile:h-10"
-            allow-empty
-            empty-label="继承默认模型"
-            @update:model-value="updateModel"
+            @update:model-value="defaults.setDefaultChatModel"
           />
         </template>
       </PromptBar>
@@ -169,28 +129,6 @@ function openActionView(action: ResolvedPluginAction) {
     </div>
     <div aria-hidden="true" class="mobile:hidden" />
   </div>
-
-  <Dialog v-model:open="fullscreenOpen">
-    <DialogContent class="h-[min(46rem,calc(100dvh-2rem))] max-w-3xl overflow-hidden">
-      <DialogHeader><DialogTitle>输入消息</DialogTitle></DialogHeader>
-      <ComposerAttachmentStrip
-        v-if="files.length"
-        :attachments="files"
-        @remove="files.splice($event, 1)"
-      />
-      <ConversationComposerEditor
-        v-model="chat.draft.value"
-        class="flex-1"
-        placeholder="输入消息…"
-        @submit="fullscreenOpen = false; send()"
-      />
-      <DialogFooter>
-        <Button variant="ghost" size="icon" class="mr-auto" title="添加附件" @click="input?.click()"><Paperclip class="size-4" /></Button>
-        <Button variant="outline" @click="fullscreenOpen = false">取消</Button>
-        <Button :disabled="chat.generating.value || (!chat.draft.value.trim() && !files.length)" @click="fullscreenOpen = false; send()"><Send class="size-4" />发送</Button>
-      </DialogFooter>
-    </DialogContent>
-  </Dialog>
 
   <Dialog v-model:open="whiteboardOpen">
     <DialogContent class="h-[min(820px,92vh)] w-[min(1200px,calc(100vw-32px))] max-w-none overflow-hidden p-0 sm:max-w-none mobile:h-[100dvh] mobile:w-screen mobile:rounded-none mobile:border-0">
@@ -201,7 +139,7 @@ function openActionView(action: ResolvedPluginAction) {
 
   <Dialog v-model:open="actionViewOpen">
     <DialogContent class="max-h-[min(760px,90vh)] w-[min(760px,calc(100vw-32px))] max-w-none overflow-y-auto sm:max-w-none">
-      <DialogHeader><DialogTitle>/{{ actionView?.resource.name }}</DialogTitle></DialogHeader>
+      <DialogHeader><DialogTitle>/{{ actionView ? actionView.name.replace(/\.[^.]+$/, '') : '' }}</DialogTitle></DialogHeader>
       <component :is="actionViewComponent" v-if="actionViewComponent" />
     </DialogContent>
   </Dialog>

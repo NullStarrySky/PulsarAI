@@ -3,7 +3,6 @@ import { computed, ref, watch } from "vue";
 import {
   ArrowUp,
   LoaderCircle,
-  Maximize2,
   Paperclip,
   PenTool,
   Plus,
@@ -12,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import SttInputButton from "@/features/STT/SttInputButton.vue";
 import type { ActionPart, FilePart } from "@/features/Conversation/messages/conversation-types";
-import type { ResolvedPluginAction } from "@/features/Plugin/tree/plugin-types";
+import type { SlotResource } from "@/features/Plugin/tree/slot-store";
 import ComposerAttachmentStrip from "./ComposerAttachmentStrip.vue";
 import ConversationComposerEditor from "./ConversationComposerEditor.vue";
 
@@ -20,7 +19,7 @@ const props = withDefaults(
   defineProps<{
     modelValue: string;
     attachments: FilePart[];
-    actions?: ResolvedPluginAction[];
+    actions?: SlotResource[];
     selectedAction?: ActionPart | null;
     generating?: boolean;
   }>(),
@@ -33,26 +32,33 @@ const emit = defineEmits<{
   submit: [];
   attach: [];
   whiteboard: [];
-  fullscreen: [];
   removeAttachment: [index: number];
-  openView: [action: ResolvedPluginAction];
+  openView: [action: SlotResource];
 }>();
 
 const toolsOpen = ref(false);
 const activeIndex = ref(0);
+const liveInput = ref(props.modelValue);
+const menuDismissed = ref(false);
 const token = computed(() => {
-  const match = /(^|\s)([@/])([\w-]*)$/.exec(props.modelValue);
+  const input = liveInput.value.replace(/\u200B/g, "");
+  const lineStart = input.lastIndexOf("\n") + 1;
+  const lastLine = input.slice(lineStart);
+  const match = /(^|\s)([@/])([\w-]*)$/u.exec(lastLine);
   if (!match) return null;
-  return { kind: match[2] === "@" ? "at" as const : "slash" as const, query: match[3].toLocaleLowerCase() };
+  return {
+    kind: match[2] === "@" ? "at" as const : "slash" as const,
+    query: match[3].toLocaleLowerCase(),
+    start: lineStart + match.index + match[1].length,
+  };
 });
-const menuKind = computed(() => toolsOpen.value ? "at" as const : token.value?.kind ?? null);
+const menuKind = computed(() => toolsOpen.value ? "at" as const : menuDismissed.value ? null : token.value?.kind ?? null);
 const atRows = [
   { key: "attach", title: "附加文件与照片", description: "从设备选择附件", icon: Paperclip },
   { key: "whiteboard", title: "打开白板", description: "在画布中整理想法", icon: PenTool },
-  { key: "fullscreen", title: "展开输入框", description: "进入专注编辑模式", icon: Maximize2 },
 ] as const;
 const actionRows = computed(() => props.actions.filter(
-  (action) => action.resource.name.toLocaleLowerCase().includes(token.value?.query ?? ""),
+  (action) => action.name.toLocaleLowerCase().includes(token.value?.query ?? ""),
 ));
 const menuRows = computed(() => menuKind.value === "at"
   ? atRows
@@ -62,35 +68,59 @@ const canSubmit = computed(
 );
 
 watch([menuKind, () => token.value?.query], () => { activeIndex.value = 0; });
+watch(() => props.modelValue, (value) => {
+  if (typeof document !== "undefined" && document.activeElement?.closest(".conversation-composer-editor")) return;
+  liveInput.value = value;
+});
+
+function updateLiveInput(value: string) {
+  liveInput.value = value;
+  toolsOpen.value = false;
+  menuDismissed.value = false;
+}
 
 function insertDictation(text: string) {
   emit("update:modelValue", `${props.modelValue}${props.modelValue ? " " : ""}${text}`);
 }
 
-function runAtTool(key: typeof atRows[number]["key"]) {
-  if (key === "attach") emit("attach");
-  if (key === "whiteboard") emit("whiteboard");
-  if (key === "fullscreen") emit("fullscreen");
-  toolsOpen.value = false;
+function clearActiveToken() {
+  const activeToken = token.value;
+  if (!activeToken) return;
+  const nextValue = liveInput.value.slice(0, activeToken.start);
+  liveInput.value = nextValue;
+  emit("update:modelValue", nextValue);
 }
 
-function pickAction(action: ResolvedPluginAction) {
-  if (action.kind === "prompt") {
-    emit("update:modelValue", typeof action.resource.content === "string" ? action.resource.content : JSON.stringify(action.resource.content, null, 2));
-  } else if (action.kind === "view") {
+function runAtTool(key: typeof atRows[number]["key"]) {
+  clearActiveToken();
+  if (key === "attach") emit("attach");
+  if (key === "whiteboard") emit("whiteboard");
+  toolsOpen.value = false;
+  menuDismissed.value = false;
+}
+
+function pickAction(action: SlotResource) {
+  if (action.type === "markdown") {
+    const nextValue = typeof action.file.content === "string" ? action.file.content : JSON.stringify(action.file.content, null, 2);
+    liveInput.value = nextValue;
+    emit("update:modelValue", nextValue);
+  } else if (action.type === "component") {
+    clearActiveToken();
     emit("openView", action);
   } else {
     emit("update:selectedAction", {
       type: "action",
-      actionId: action.resource.id,
+      actionId: action.file.id,
       pluginId: action.pluginId,
       pluginName: action.pluginName,
-      name: action.resource.name,
+      name: action.name.replace(/\.[^.]+$/, ""),
       description: "",
     });
+    liveInput.value = "";
     emit("update:modelValue", "");
   }
   toolsOpen.value = false;
+  menuDismissed.value = false;
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -102,17 +132,20 @@ function handleKeydown(event: KeyboardEvent) {
       activeIndex.value = (activeIndex.value + (event.key === "ArrowDown" ? 1 : -1) + count) % count;
       return;
     }
-    if (event.key === "Enter" || event.key === "Tab") {
+    if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") {
       event.preventDefault();
       event.stopPropagation();
       const item = menuRows.value[activeIndex.value];
       if (!item) return;
       if (menuKind.value === "at") runAtTool((item as typeof atRows[number]).key);
-      else pickAction(item as ResolvedPluginAction);
+      else pickAction(item as SlotResource);
       return;
     }
   }
-  if (event.key === "Escape") toolsOpen.value = false;
+  if (event.key === "Escape") {
+    toolsOpen.value = false;
+    menuDismissed.value = true;
+  }
 }
 </script>
 
@@ -120,18 +153,17 @@ function handleKeydown(event: KeyboardEvent) {
   <div class="relative" @keydown.capture="handleKeydown">
     <Transition name="fade">
       <div
-        v-if="menuKind && menuRows.length"
-        class="absolute bottom-[calc(100%+0.625rem)] left-0 z-20 w-[min(32rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border bg-popover/98 p-1.5 shadow-xl backdrop-blur"
+        v-if="menuKind"
+        class="absolute inset-x-0 bottom-[calc(100%+0.625rem)] z-20 overflow-hidden rounded-2xl border bg-popover/98 p-1.5 shadow-xl backdrop-blur"
       >
         <p class="border-b px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground">{{ menuKind === 'at' ? '快捷工具' : '选择插件动作' }}</p>
         <div class="max-h-60 overflow-y-auto py-1">
           <template v-if="menuKind === 'at'">
             <button
-              v-for="(item, index) in atRows"
+              v-for="item in atRows"
               :key="item.key"
               type="button"
-              class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-xs transition-colors"
-              :class="index === activeIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60'"
+              class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-xs transition-colors hover:bg-accent/60"
               @mousedown.prevent
               @click="runAtTool(item.key)"
             >
@@ -141,16 +173,16 @@ function handleKeydown(event: KeyboardEvent) {
           </template>
           <template v-else>
             <button
-              v-for="(item, index) in actionRows"
-              :key="`${item.pluginId}:${item.resource.id}`"
+              v-for="item in actionRows"
+              :key="`${item.pluginId}:${item.file.id}`"
               type="button"
-              class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-xs transition-colors"
-              :class="index === activeIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/60'"
+              class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-xs transition-colors hover:bg-accent/60"
               @mousedown.prevent
               @click="pickAction(item)"
             >
-              <span class="min-w-0"><span class="block font-mono font-medium text-primary">/{{ item.resource.name }}</span><span class="mt-0.5 block truncate text-[11px] text-muted-foreground">{{ item.pluginName }}</span></span>
+              <span class="min-w-0"><span class="block font-mono font-medium text-primary">/{{ item.name.replace(/\.[^.]+$/, '') }}</span><span class="mt-0.5 block truncate text-[11px] text-muted-foreground">{{ item.pluginName }}</span></span>
             </button>
+            <p v-if="actionRows.length === 0" class="px-3 py-8 text-center text-xs text-muted-foreground">暂无匹配的插件动作</p>
           </template>
         </div>
       </div>
@@ -172,45 +204,44 @@ function handleKeydown(event: KeyboardEvent) {
         @remove="emit('removeAttachment', $event)"
       />
 
-      <div class="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] items-end gap-1">
-        <Button
-          size="icon"
-          variant="ghost"
-          class="size-8 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="更多输入工具"
-          @click="toolsOpen = !toolsOpen"
-        >
-          <Plus class="size-4" />
-        </Button>
-
+      <div class="min-w-0">
         <ConversationComposerEditor
           :model-value="modelValue"
-          compact
           placeholder="随心输入，输入 @ 或 / 打开工具…"
-          class="col-start-2 min-w-0"
+          class="min-w-0"
+          @raw-input="updateLiveInput"
           @update:model-value="emit('update:modelValue', $event)"
           @submit="emit('submit')"
         />
-
-        <div class="col-start-3 min-w-0">
-          <slot name="model" />
+        <div class="mt-1 flex min-w-0 items-center gap-1">
+          <Button
+            size="icon"
+            variant="ghost"
+            class="size-8 shrink-0 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="更多输入工具"
+            @click="toolsOpen = !toolsOpen"
+          >
+            <Plus class="size-4" />
+          </Button>
+          <div class="min-w-0 flex-1" />
+          <div class="min-w-0 shrink">
+            <slot name="model" />
+          </div>
+          <SttInputButton
+            class="size-8 shrink-0 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
+            @result="insertDictation"
+          />
+          <Button
+            size="icon"
+            class="size-8 shrink-0 rounded-xl shadow-sm"
+            :disabled="!canSubmit"
+            title="发送"
+            @click="emit('submit')"
+          >
+            <LoaderCircle v-if="generating" class="size-4 animate-spin" />
+            <ArrowUp v-else class="size-4" />
+          </Button>
         </div>
-
-        <SttInputButton
-          class="col-start-4 size-8 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground"
-          @result="insertDictation"
-        />
-
-        <Button
-          size="icon"
-          class="col-start-5 size-8 rounded-xl shadow-sm"
-          :disabled="!canSubmit"
-          title="发送"
-          @click="emit('submit')"
-        >
-          <LoaderCircle v-if="generating" class="size-4 animate-spin" />
-          <ArrowUp v-else class="size-4" />
-        </Button>
       </div>
     </div>
   </div>

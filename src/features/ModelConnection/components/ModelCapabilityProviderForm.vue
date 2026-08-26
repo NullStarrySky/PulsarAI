@@ -25,15 +25,21 @@ const emit = defineEmits<{
   "update:apiKey": [value: string];
   "update:baseUrl": [value: string];
 }>();
+
+function selectApiKey(event: FocusEvent) {
+  (event.target as HTMLInputElement | null)?.select();
+}
 </script>
 
 <template>
   <SettingForm>
-    <SettingFormField title="API Key" description="与 ModelConnection 共享，不在当前 Feature 中复制保存。">
+    <SettingFormField title="API Key" description="与 ModelConnection 共享；保存后仅显示前 8 位和后 4 位。">
       <Input
         :model-value="apiKeyDraft"
-        type="password"
         :placeholder="hasApiKey ? '已填写，输入新值可替换' : '填写 API Key'"
+        autocomplete="off"
+        spellcheck="false"
+        @focus="selectApiKey"
         @update:model-value="emit('update:apiKey', String($event))"
       />
     </SettingFormField>

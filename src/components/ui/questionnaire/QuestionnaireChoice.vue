@@ -6,6 +6,7 @@ import { questionnaireItemKey } from "./context";
 
 const props = withDefaults(defineProps<{
   value: string;
+  checked?: boolean;
   disabled?: boolean;
   class?: HTMLAttributes["class"];
 }>(), { disabled: false });
@@ -19,6 +20,7 @@ const item = inject(questionnaireItemKey);
       :type="item?.multiple ? 'checkbox' : 'radio'"
       :name="item?.name"
       :value="props.value"
+      :checked="props.checked"
       :disabled="props.disabled || item?.disabled"
       class="size-4 shrink-0 accent-primary"
       @change="emit('change', $event)"

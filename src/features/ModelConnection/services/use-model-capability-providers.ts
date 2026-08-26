@@ -4,8 +4,6 @@ import { supportsFeatureService, type ModelApiType } from "../model-provider";
 import type { ServiceProviderView } from "../service-provider";
 import { useModelConnectionStore } from "./model-connection-store";
 
-const apiKeyMask = "••••••••";
-
 export function useModelCapabilityProviders(apiType: ModelApiType) {
   const store = useModelConnectionStore();
   const activeProviderId = ref("");
@@ -26,7 +24,6 @@ export function useModelCapabilityProviders(apiType: ModelApiType) {
       icon: provider.icon,
       iconUrl: provider.iconUrl,
       enabled: provider.enabled && provider.models.some((model) => model.apiType === apiType && model.enabled),
-      canEnable: Boolean(store.apiKeyStatus[provider.apiKeyName]),
       source: "model",
     })),
   );
@@ -50,7 +47,9 @@ export function useModelCapabilityProviders(apiType: ModelApiType) {
   }
 
   function syncApiKeyDraft() {
-    apiKeyDraft.value = activeProviderHasKey.value ? apiKeyMask : "";
+    apiKeyDraft.value = activeProvider.value
+      ? store.apiKeyPreviews[activeProvider.value.apiKeyName] ?? ""
+      : "";
   }
 
   async function initialize() {
@@ -79,19 +78,21 @@ export function useModelCapabilityProviders(apiType: ModelApiType) {
     if (providerId === activeProviderId.value) syncModel();
   }
 
-  const persistApiKey = useDebounceFn(async (value: string) => {
-    const provider = activeProvider.value;
-    if (!provider || value === apiKeyMask) return;
+  const persistApiKey = useDebounceFn(async (providerId: string, value: string, preview: string) => {
+    if (value === preview) return;
     if (value.trim()) {
-      await store.saveProviderApiKey(provider.id, value.trim());
+      await store.saveProviderApiKey(providerId, value.trim());
     } else {
-      await store.clearProviderApiKeyValue(provider.id);
+      await store.clearProviderApiKeyValue(providerId);
     }
+    if (activeProvider.value?.id === providerId && apiKeyDraft.value === value) syncApiKeyDraft();
   }, 600);
 
   function updateApiKey(value: string) {
+    const provider = activeProvider.value;
+    if (!provider) return;
     apiKeyDraft.value = value;
-    void persistApiKey(value);
+    void persistApiKey(provider.id, value, store.apiKeyPreviews[provider.apiKeyName] ?? "");
   }
 
   return {

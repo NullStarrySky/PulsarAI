@@ -93,8 +93,7 @@ function selectProvider(providerId: string) {
             <Switch
               size="sm"
               :model-value="provider.enabled"
-              :disabled="provider.canEnable === false"
-              :title="provider.canEnable === false ? '填写 API Key 后才能启用' : '启用提供商'"
+              title="启用提供商"
               @click.stop
               @update:model-value="emit('toggle-provider', provider.id, Boolean($event))"
             />
