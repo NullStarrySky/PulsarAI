@@ -177,7 +177,7 @@ $$
     await sleep(12);
   }
 } else {
-  const messages = [...bootstrapMessages, ...chat];
+  const messages = chat;
   if (useStreamText) {
     await agent.streamText({ container: reply, messages });
   } else {

@@ -1,65 +1,135 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
-import { ArrowUp, Check, X } from "lucide-vue-next";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { ArrowUp, ChevronLeft, ChevronRight } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { askUserSchema, registerAskUser, type AskUserInput } from "../runtime/ask-user";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Questionnaire,
+  QuestionnaireChoice,
+  QuestionnaireChoices,
+  QuestionnaireDescription,
+  QuestionnaireItem,
+  QuestionnaireTitle,
+} from "@/components/ui/questionnaire";
+import {
+  askUserSchema,
+  registerAskUser,
+  type AskUserAnswer,
+  type AskUserInput,
+  type AskUserQuestion,
+  type AskUserResult,
+} from "../runtime/ask-user";
 
 const open = ref(false);
 const request = ref<AskUserInput | null>(null);
-const answer = ref("");
-let settle: ((value: unknown) => void) | null = null;
+const questionIndex = ref(0);
+const answers = ref<Record<string, AskUserAnswer>>({});
+let settle: ((value: AskUserResult) => void) | null = null;
 let unregister: (() => void) | null = null;
+
+const currentQuestion = computed(() => request.value?.questions[questionIndex.value] ?? null);
+const isLastQuestion = computed(() => questionIndex.value === (request.value?.questions.length ?? 1) - 1);
+const currentAnswered = computed(() => currentQuestion.value ? hasAnswer(currentQuestion.value) : false);
 
 onMounted(() => {
   unregister = registerAskUser((input) => new Promise((resolve) => {
     settle?.({ cancelled: true });
     request.value = askUserSchema.parse(input);
-    answer.value = "";
+    questionIndex.value = 0;
+    answers.value = {};
     settle = resolve;
     open.value = true;
   }));
 });
 onBeforeUnmount(() => { unregister?.(); finish({ cancelled: true }); });
 
-function finish(value: unknown) {
+function finish(value: AskUserResult) {
   settle?.(value);
   settle = null;
   open.value = false;
 }
-function optionValue(option: AskUserInput["options"][number]) {
+function optionValue(option: AskUserQuestion["options"][number]) {
   return typeof option === "string" ? option : option.value || option.label;
 }
-function submit() { finish({ answer: answer.value.trim(), cancelled: false }); }
+function hasAnswer(question: AskUserQuestion) {
+  const answer = answers.value[question.id];
+  return Array.isArray(answer) ? answer.length > 0 : answer !== undefined && answer !== "";
+}
+function selectOption(question: AskUserQuestion, option: AskUserQuestion["options"][number]) {
+  const value = optionValue(option);
+  if (question.kind === "multi-select") {
+    const current = Array.isArray(answers.value[question.id]) ? answers.value[question.id] as string[] : [];
+    answers.value = { ...answers.value, [question.id]: current.includes(value) ? current.filter((item) => item !== value) : [...current, value] };
+    return;
+  }
+  answers.value = { ...answers.value, [question.id]: value };
+}
+function setText(question: AskUserQuestion, value: string) { answers.value = { ...answers.value, [question.id]: value }; }
+function setBoolean(question: AskUserQuestion, value: boolean) { answers.value = { ...answers.value, [question.id]: value }; }
+function submit() { if (currentAnswered.value) finish({ answers: answers.value, cancelled: false }); }
+function nextQuestion() {
+  if (currentAnswered.value && !isLastQuestion.value) questionIndex.value += 1;
+}
+function advance() { if (isLastQuestion.value) submit(); else nextQuestion(); }
+function isOptionSelected(question: AskUserQuestion, option: AskUserQuestion["options"][number]) {
+  const value = optionValue(option);
+  const answer = answers.value[question.id];
+  return question.kind === "multi-select" ? Array.isArray(answer) && answer.includes(value) : answer === value;
+}
+function textAnswer(question: AskUserQuestion) {
+  const answer = answers.value[question.id];
+  return typeof answer === "string" ? answer : "";
+}
 </script>
 
 <template>
   <Dialog :open="open" @update:open="value => !value && finish({ cancelled: true })">
-    <DialogContent :show-close-button="false" class="w-auto max-w-[calc(100vw-32px)] gap-0 border-none bg-transparent p-0 shadow-none sm:max-w-none">
-      <div v-if="request" class="flex min-h-[200px] w-full max-w-md flex-col items-stretch">
-        <div class="w-full overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-sm">
-          <div class="p-4 animate-in fade-in-50 duration-200">
-            <div class="flex items-start justify-between gap-3">
-              <span class="text-sm font-semibold leading-snug text-foreground">{{ request.question }}</span>
-              <Button type="button" variant="ghost" size="icon" class="size-6 shrink-0 text-muted-foreground hover:text-foreground" title="关闭" @click="finish({ cancelled: true })"><X class="size-3.5" /></Button>
+    <DialogContent :show-close-button="false" class="!max-h-[calc(100dvh-2rem)] !w-[calc(100vw-2rem)] !max-w-[38rem] gap-0 overflow-hidden p-0">
+      <template v-if="request && currentQuestion">
+        <DialogHeader class="border-b px-6 py-5 mobile:px-4">
+          <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+              <DialogTitle>需要你的回答</DialogTitle>
+              <DialogDescription class="mt-1">请补充信息后继续执行。</DialogDescription>
             </div>
-            <div v-if="request.options.length" class="mt-3 flex flex-col gap-1">
-              <button v-for="option in request.options" :key="typeof option === 'string' ? option : option.label" type="button" class="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground" :class="answer === optionValue(option) ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground'" @click="answer = optionValue(option)">
-                <span class="flex size-4 shrink-0 items-center justify-center rounded-full" :class="answer === optionValue(option) ? 'bg-primary text-primary-foreground' : 'border border-input text-transparent'">
-                  <Check class="size-3 stroke-[3]" />
-                </span>
-                <span class="flex-1">{{ typeof option === 'string' ? option : option.label }}</span>
-              </button>
-            </div>
-            <div class="mt-3 flex items-center gap-2 rounded-lg border border-input bg-background px-2.5 py-1.5 transition-colors focus-within:border-ring">
-              <input v-model="answer" class="min-w-0 flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground outline-none" placeholder="输入自由回答…" @keydown.enter.prevent="submit" />
-            </div>
+            <Button type="button" variant="outline" size="sm" @click="finish({ cancelled: true })">取消</Button>
           </div>
-          <div class="flex items-center justify-end border-t border-border bg-muted/30 px-4 py-2.5">
-            <Button type="button" size="icon" class="size-7 rounded-lg transition-transform active:scale-95 disabled:opacity-40" :disabled="!answer.trim()" title="提交回答" @click="submit"><ArrowUp class="size-4 stroke-[2.5]" /></Button>
+        </DialogHeader>
+
+        <Questionnaire @submit.prevent="advance">
+          <div :key="currentQuestion.id" class="animate-in fade-in-50 slide-in-from-right-1 px-6 py-6 duration-200 mobile:px-4">
+            <QuestionnaireItem :name="currentQuestion.id" :multiple="currentQuestion.kind === 'multi-select'">
+              <QuestionnaireTitle>{{ currentQuestion.question }}</QuestionnaireTitle>
+              <QuestionnaireDescription v-if="currentQuestion.kind === 'multi-select'">可选择多项</QuestionnaireDescription>
+              <QuestionnaireDescription v-else-if="currentQuestion.kind === 'select'">请选择一项</QuestionnaireDescription>
+              <QuestionnaireDescription v-else-if="currentQuestion.kind === 'boolean'">请选择是否接受</QuestionnaireDescription>
+
+              <QuestionnaireChoices v-if="currentQuestion.kind === 'select' || currentQuestion.kind === 'multi-select'">
+                <QuestionnaireChoice v-for="option in currentQuestion.options" :key="optionValue(option)" :value="optionValue(option)" :checked="isOptionSelected(currentQuestion, option)" @change="selectOption(currentQuestion, option)">
+                  {{ typeof option === "string" ? option : option.label }}
+                </QuestionnaireChoice>
+              </QuestionnaireChoices>
+
+              <QuestionnaireChoices v-else-if="currentQuestion.kind === 'boolean'" class="sm:grid-cols-2">
+                <QuestionnaireChoice value="false" :checked="answers[currentQuestion.id] === false" @change="setBoolean(currentQuestion, false)">拒绝</QuestionnaireChoice>
+                <QuestionnaireChoice value="true" :checked="answers[currentQuestion.id] === true" @change="setBoolean(currentQuestion, true)">接受</QuestionnaireChoice>
+              </QuestionnaireChoices>
+
+              <Input v-else class="mt-4" :model-value="textAnswer(currentQuestion)" :placeholder="currentQuestion.placeholder || '输入回答…'" @update:model-value="setText(currentQuestion, String($event))" />
+            </QuestionnaireItem>
           </div>
-        </div>
-      </div>
+
+          <DialogFooter class="!m-0 !flex-row !items-center !justify-between !rounded-b-xl !border-x-0 !border-b-0 !bg-background !px-6 !py-2.5 mobile:!px-4 sm:!flex-row sm:!justify-between">
+            <div class="flex items-center gap-1">
+              <Button type="button" variant="ghost" size="icon-sm" title="上一题" :disabled="questionIndex === 0" @click="questionIndex -= 1"><ChevronLeft /></Button>
+              <span class="min-w-10 text-center text-xs tabular-nums text-muted-foreground">{{ questionIndex + 1 }}/{{ request.questions.length }}</span>
+              <Button type="button" variant="ghost" size="icon-sm" title="下一题" :disabled="isLastQuestion || !currentAnswered" @click="nextQuestion"><ChevronRight /></Button>
+            </div>
+            <Button type="submit" size="icon-sm" class="rounded-lg" :title="isLastQuestion ? '提交回答' : '下一题'" :disabled="!currentAnswered"><ArrowUp /></Button>
+          </DialogFooter>
+        </Questionnaire>
+      </template>
     </DialogContent>
   </Dialog>
 </template>

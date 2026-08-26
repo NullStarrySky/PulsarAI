@@ -1,5 +1,6 @@
 import { push } from "notivue";
 import { z } from "zod";
+import type { ModelMessage } from "ai";
 
 const chatSchema = z.object({
   message: z.array(z.object({
@@ -17,7 +18,8 @@ export function createPluginChatContext(): PluginChatContext {
   return { message: [] };
 }
 
-export function parsePluginChatContext(input: unknown): PluginChatContext {
+/** Read the authoring document; the editor retains optional labels and enabled state. */
+export function readPluginChatContext(input: unknown): PluginChatContext {
   let value = input;
   if (typeof input === "string") {
     try { value = JSON.parse(input); }
@@ -32,4 +34,11 @@ export function parsePluginChatContext(input: unknown): PluginChatContext {
     return createPluginChatContext();
   }
   return parsed.data;
+}
+
+/** Import only runnable model messages; authoring metadata never enters the Sandbox. */
+export function parsePluginChatContext(input: unknown): ModelMessage[] {
+  return readPluginChatContext(input).message
+    .filter((message) => message.enabled !== false)
+    .map(({ role, content }) => ({ role, content }));
 }

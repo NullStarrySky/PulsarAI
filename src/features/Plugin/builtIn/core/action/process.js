@@ -3,7 +3,7 @@ if (!String(goalState || "").trim()) {
   await reply.setContent("当前没有可执行的 goal。先使用 /goal 设置目标和待办。");
 } else {
   const messages = [
-    ...bootstrapMessages,
+    ...chat,
     {
       role: "system",
       content: [

@@ -11,7 +11,7 @@ export interface PluginResource {
   file: PluginFile;
   type: PluginResourceType;
   read(): PluginResourceValue;
-  import(environment: Record<string, unknown>): Promise<unknown>;
+  import(environment: Record<string, unknown>): unknown | Promise<unknown>;
 }
 
 export function resourceType(file: PluginFile): PluginResourceType {
@@ -31,9 +31,14 @@ export function binaryContent(file: PluginFile): ArrayBuffer {
   const source = file.content;
   if (source instanceof ArrayBuffer) return source.slice(0);
   if (ArrayBuffer.isView(source)) {
-    return source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+    return source.buffer.slice(
+      source.byteOffset,
+      source.byteOffset + source.byteLength,
+    );
   }
   // Persisted media currently keeps an URL/string payload.  Encoding preserves
   // the byte-oriented API until the database media backend supplies raw bytes.
-  return new TextEncoder().encode(typeof source === "string" ? source : JSON.stringify(source ?? null)).buffer;
+  return new TextEncoder().encode(
+    typeof source === "string" ? source : JSON.stringify(source ?? null),
+  ).buffer;
 }

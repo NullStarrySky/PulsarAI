@@ -1,15 +1,19 @@
-import {
-  executeSandboxCodeAsync,
-  resolveSandboxMessagesAsync,
-  resolveSandboxTextAsync,
-} from "@/features/Sandbox/sandbox";
+import { executeSandboxCodeAsync } from "@/features/Sandbox/sandbox";
 import type { PluginFile } from "@/features/Plugin/tree/plugin-types";
-import { binaryContent, resourceType, textContent, type PluginResource } from "./resource-types";
+import {
+  binaryContent,
+  resourceType,
+  textContent,
+  type PluginResource,
+} from "./resource-types";
 import { parsePluginChatContext } from "@/features/Plugin/editors/chat/plugin-chat";
-import { createDataFacade, parsePluginDataDefinition } from "@/features/Plugin/editors/data/plugin-data";
+import {
+  createDataFacade,
+  parsePluginDataDefinition,
+} from "@/features/Plugin/editors/data/plugin-data";
 
 export interface ResourceImportEnvironment extends Record<string, unknown> {
-  imports?: (path: string) => Promise<unknown>;
+  imports?: (path: string | string[]) => unknown | Promise<unknown>;
 }
 
 function parseJson(source: string): unknown {
@@ -25,15 +29,12 @@ export function wrapResource(file: PluginFile): PluginResource {
   return {
     file,
     type,
-    read: () => type === "media" ? binaryContent(file) : textContent(file),
-    async import(environment: ResourceImportEnvironment) {
+    read: () => (type === "media" ? binaryContent(file) : textContent(file)),
+    import(environment: ResourceImportEnvironment) {
       const text = textContent(file);
-      const logger = environment.logger as { append(message: string, depth?: number, type?: string, path?: string): void } | undefined;
-      if (type === "markdown") return resolveSandboxTextAsync(text, [environment], { logger });
+      if (type === "markdown") return text;
       if (type === "chat") {
-        const parsed = parsePluginChatContext(text);
-        const messages = parsed.message.filter((message) => message.enabled !== false);
-        return resolveSandboxMessagesAsync(messages, [environment], { logger });
+        return parsePluginChatContext(text);
       }
       if (type === "data") {
         const definition = parsePluginDataDefinition(text);
@@ -44,7 +45,8 @@ export function wrapResource(file: PluginFile): PluginResource {
         );
       }
       if (type === "json") return parseJson(text);
-      if (type === "javascript") return executeSandboxCodeAsync(text, [environment]);
+      if (type === "javascript")
+        return executeSandboxCodeAsync(text, [environment]);
       return type === "media" ? new TextEncoder().encode(text).buffer : text;
     },
   };

@@ -14,7 +14,7 @@ export interface MigratedRegexRule {
   range: "user_input" | "ai_output" | "all";
   depth_min: number | "INF";
   depth_max: number | "INF";
-  applyOnRending: boolean;
+  applyOnRendering: boolean;
 }
 
 export interface MigratedLorebookEntry {

@@ -572,7 +572,7 @@ function convertRegexCollection(
       range: supportsUser && supportsAssistant ? "all" : supportsUser ? "user_input" : "ai_output",
       depth_min: depthValue(raw.minDepth ?? raw.min_depth, 1),
       depth_max: depthValue(raw.maxDepth ?? raw.max_depth, "INF"),
-      applyOnRending: raw.markdownOnly === true || raw.only_format_display === true,
+      applyOnRendering: raw.markdownOnly === true || raw.only_format_display === true,
     }];
   });
 }

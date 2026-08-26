@@ -5,15 +5,17 @@ import {
   pluginFileType,
   type Plugin,
   type PluginFile,
-  type PluginTreeNode,
 } from "@/features/Plugin/tree/plugin-types";
 import { createPluginMediaContent } from "@/features/Plugin/editors/media/plugin-media";
 
-const rawFiles = import.meta.glob("../builtIn/*/**/*.{md,json,js,vue,ts,txt,data}", {
-  eager: true,
-  query: "?raw",
-  import: "default",
-}) as Record<string, string>;
+const rawFiles = import.meta.glob(
+  "../builtIn/*/**/*.{md,json,js,vue,ts,txt,data}",
+  {
+    eager: true,
+    query: "?raw",
+    import: "default",
+  },
+) as Record<string, string>;
 const assetUrls = import.meta.glob("../builtIn/*/**/*", {
   eager: true,
   query: "?url",
@@ -21,14 +23,17 @@ const assetUrls = import.meta.glob("../builtIn/*/**/*", {
 }) as Record<string, string>;
 
 interface SourceMeta {
-  plugin: Omit<Plugin, "nodes">;
-  nodes: Record<string, {
-    id: string;
-    icon?: string;
-    treeOrder?: number;
-    order?: number;
-    insertion?: PluginFile["insertion"];
-  }>;
+  plugin: Omit<Plugin, "files" | "emptyFolders">;
+  nodes: Record<
+    string,
+    {
+      id: string;
+      icon?: string;
+      treeOrder?: number;
+      order?: number;
+      insertion?: PluginFile["insertion"];
+    }
+  >;
 }
 
 export function createBuiltinPlugins() {
@@ -41,23 +46,17 @@ export function createBuiltinPlugins() {
 
 function createBuiltinPlugin(folder: string, metaSource: string): Plugin {
   const meta = JSON.parse(metaSource) as SourceMeta;
-  const nodes: PluginTreeNode[] = [];
+  const files: PluginFile[] = [];
+  const declaredFolders: string[] = [];
   for (const [path, nodeMeta] of Object.entries(meta.nodes)) {
     if (path === "/") continue;
     const name = path.slice(path.lastIndexOf("/") + 1);
     const sourceKey = `../builtIn/${folder}/${path}`;
-    const isFile = Object.prototype.hasOwnProperty.call(rawFiles, sourceKey)
-      || Object.prototype.hasOwnProperty.call(assetUrls, sourceKey);
+    const isFile =
+      Object.prototype.hasOwnProperty.call(rawFiles, sourceKey) ||
+      Object.prototype.hasOwnProperty.call(assetUrls, sourceKey);
     if (!isFile) {
-      nodes.push({
-        id: nodeMeta.id,
-        path,
-        name,
-        icon: nodeMeta.icon ?? "",
-        treeOrder: nodeMeta.treeOrder ?? 0,
-        kind: "folder",
-        collapsed: false,
-      });
+      declaredFolders.push(path);
       continue;
     }
     const type = pluginFileType(name);
@@ -67,7 +66,7 @@ function createBuiltinPlugin(folder: string, metaSource: string): Plugin {
     } else if (type === "json" || type === "chat" || type === "data") {
       content = JSON.parse(String(content));
     }
-    nodes.push({
+    files.push({
       id: nodeMeta.id,
       path,
       name,
@@ -76,9 +75,18 @@ function createBuiltinPlugin(folder: string, metaSource: string): Plugin {
       kind: "file",
       content,
       order: nodeMeta.order ?? 100,
-      ...(nodeMeta.insertion ? { insertion: structuredClone(nodeMeta.insertion) } : {}),
+      ...(nodeMeta.insertion
+        ? { insertion: structuredClone(nodeMeta.insertion) }
+        : {}),
     });
   }
-  nodes.sort((left, right) => left.path.localeCompare(right.path));
-  return { ...meta.plugin, builtIn: true, nodes };
+  files.sort((left, right) => left.path.localeCompare(right.path));
+  const emptyFolders = declaredFolders.filter(
+    (path) =>
+      !files.some((file) => file.path.startsWith(`${path}/`)) &&
+      !declaredFolders.some(
+        (other) => other !== path && other.startsWith(`${path}/`),
+      ),
+  );
+  return { ...meta.plugin, builtIn: true, files, emptyFolders };
 }

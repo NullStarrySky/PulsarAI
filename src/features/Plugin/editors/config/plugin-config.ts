@@ -40,12 +40,6 @@ export type PluginConfigRenderer =
   | (PluginConfigRendererBase & { name: "ModelSelect"; apiType?: ModelApiType })
   | (PluginConfigRendererBase & { name: "MediaSelect"; allowEmpty?: boolean })
   | (PluginConfigRendererBase & {
-      name: "PathSelect";
-      pathRegex?: string;
-      slotId?: string;
-      allowEmpty?: boolean;
-    })
-  | (PluginConfigRendererBase & {
       /** A plugin-provided renderer name; props remain plain JSON. */
       name: "Custom";
       component: string;
@@ -66,16 +60,6 @@ export function createPluginConfig(): PluginConfig {
         name: "ModelSelect",
         title: "模型",
         description: "留空时继承全局默认模型；引用可附带思考强度。",
-      },
-      value: null,
-    },
-    "appearance/background": {
-      renderer: {
-        name: "PathSelect",
-        title: "会话背景",
-        description: "从 background slot 选择扩展名无关的路径 ID。",
-        slotId: "background",
-        allowEmpty: true,
       },
       value: null,
     },

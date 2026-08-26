@@ -1,9 +1,6 @@
 const config = await imports("@/config.json");
 const useStreamText = Boolean(config.useStreamText?.value);
-const messages = [
-  ...bootstrapMessages,
-  ...await imports("./default.chat.json"),
-];
+const messages = await parse(slot.paths("chat", "global"));
 
 if (useStreamText) {
   await agent.streamText({ container: reply, messages });

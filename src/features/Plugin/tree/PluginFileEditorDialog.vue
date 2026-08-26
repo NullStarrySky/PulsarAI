@@ -2,10 +2,11 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { storeToRefs } from "pinia";
 import interact from "interactjs";
-import { Braces, Code2, Eye, FileText, Image, SlidersHorizontal, X } from "lucide-vue-next";
+import { Braces, Code2, Eye, FileText, Image, LoaderCircle, Play, ScrollText, SlidersHorizontal, X } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -28,8 +29,10 @@ import { persistConversationOverlayFileEdit } from "@/features/Conversation/mess
 import { useSlotStore, pluginFileMatchesSlotSuffix } from "@/features/Plugin/tree/slot-store";
 import { pluginMediaSource, pluginMediaType } from "@/features/Plugin/editors/media/plugin-media";
 import { pluginConventions, pluginFileType, type Plugin, type PluginFile } from "@/features/Plugin/tree/plugin-types";
+import { previewPluginResource } from "@/features/Plugin/runtime/environment";
 import PluginFileEditorSurface from "@/features/Plugin/editors/PluginFileEditorSurface.vue";
 import PluginInsertionConditionEditor from "@/features/Plugin/tree/PluginInsertionConditionEditor.vue";
+import ConversationMarkdown from "@/features/Conversation/stage/markstream/ConversationMarkdown.vue";
 
 const AUTO_SAVE_INTERVAL = 800;
 
@@ -66,6 +69,12 @@ const resourceOrder = ref(100);
 const errorMessage = ref("");
 const lastSavedAt = ref("");
 const conditionOpen = ref(false);
+const runtimePreviewOpen = ref(false);
+const runtimeLogsOpen = ref(false);
+const runtimePreview = ref<unknown>("尚未运行预览。");
+const runtimePreviewError = ref("");
+const runtimeLogs = ref<string[]>([]);
+const previewing = ref(false);
 const dialog = ref<HTMLElement | null>(null);
 const frame = ref({ x: 0, y: 0, width: 680, height: 720 });
 let restoring = false;
@@ -131,6 +140,12 @@ const saveStatus = computed(() => {
   if (errorMessage.value) return errorMessage.value;
   return `上次保存：${lastSavedAt.value || "—"}`;
 });
+const previewMessages = computed(() => Array.isArray(runtimePreview.value)
+  && runtimePreview.value.length > 0
+  && runtimePreview.value.every(isPreviewMessage)
+  ? runtimePreview.value
+  : null);
+const previewMarkdown = computed(() => formatRuntimePreview(runtimePreview.value));
 
 function serializeContent(file: PluginFile | null) {
   if (!file) return "";
@@ -145,10 +160,57 @@ function restoreDraft() {
   insertionConditionPath.value = props.file?.insertion?.conditionPath ?? "";
   resourceOrder.value = props.file?.order ?? 100;
   errorMessage.value = "";
+  runtimePreview.value = "尚未运行预览。";
+  runtimePreviewError.value = "";
+  runtimeLogs.value = [];
   lastSavedAt.value = "";
   editorMode.value = previewAvailable.value ? "preview" : "source";
   resetFrame();
   void nextTick(() => { restoring = false; });
+}
+
+function formatRuntimePreview(value: unknown) {
+  if (typeof value === "string") return value || "（空字符串）";
+  if (value instanceof ArrayBuffer) return `（二进制资源：${value.byteLength} bytes）`;
+  if (value === undefined) return "（无返回值）";
+  try {
+    return `\`\`\`json\n${JSON.stringify(value, null, 2) ?? "null"}\n\`\`\``;
+  } catch {
+    return String(value);
+  }
+}
+
+function isPreviewMessage(value: unknown): value is { role: string; content: unknown } {
+  return Boolean(value && typeof value === "object" && "role" in value && "content" in value);
+}
+
+function previewMessageContent(message: { content: unknown }) {
+  if (typeof message.content === "string") return message.content;
+  return formatRuntimePreview(message.content);
+}
+
+async function runRuntimePreview() {
+  const plugin = props.plugin;
+  const file = props.file;
+  if (!plugin || !file || previewing.value) return;
+  previewing.value = true;
+  runtimePreviewError.value = "";
+  try {
+    const result = await previewPluginResource({
+      plugin,
+      file,
+      plugins: visiblePlugins.value,
+      conversationId: props.conversationId,
+      content: isMedia.value ? file.content : draft.value,
+    });
+    runtimePreview.value = result.value;
+    runtimePreviewError.value = result.error ?? "";
+    runtimeLogs.value = result.logger.logs.map((entry) =>
+      `${"  ".repeat(entry.depth)}[${entry.type.toUpperCase()}] ${entry.message}${entry.path ? ` · ${entry.path}` : ""}`,
+    );
+  } finally {
+    previewing.value = false;
+  }
 }
 
 function resetFrame() {
@@ -177,7 +239,7 @@ function setupInteraction() {
   dialogInteractable = interact(target)
     .draggable({
       allowFrom: ".plugin-file-drag-handle",
-      ignoreFrom: ".plugin-file-control",
+      ignoreFrom: ".plugin-file-control, button, [role='button'], input, select, textarea",
       modifiers: [
         interact.modifiers.restrictRect({
           restriction: "parent",
@@ -342,7 +404,7 @@ onBeforeUnmount(() => {
               <p class="truncate text-xs text-muted-foreground">{{ plugin.name }} / {{ path }}</p>
             </div>
 
-            <div class="plugin-file-control contents">
+            <div class="plugin-file-control contents" @mousedown.stop @pointerdown.stop>
               <Select :model-value="insertionTarget" @update:model-value="updateInsertion">
                 <SelectTrigger class="h-8 w-fit max-w-40 text-xs" aria-label="插入位置">
                   <SelectValue placeholder="不插入">{{ selectedSlotTitle }}</SelectValue>
@@ -364,7 +426,7 @@ onBeforeUnmount(() => {
                 <Popover v-model:open="conditionOpen">
                   <PopoverTrigger as-child>
                     <Button variant="outline" size="sm" class="h-8" title="插入条件">
-                      <SlidersHorizontal data-icon="inline-start" />
+                      <SlidersHorizontal data-icon="inline-start" class="pointer-events-none" />
                       条件
                     </Button>
                   </PopoverTrigger>
@@ -395,10 +457,54 @@ onBeforeUnmount(() => {
               </template>
 
               <div v-if="previewAvailable && !isMedia" class="flex rounded-lg border bg-muted/20 p-0.5" data-no-window-drag>
-                <Button :variant="editorMode === 'preview' ? 'secondary' : 'ghost'" size="icon-sm" title="组件视图" @click="editorMode = 'preview'"><Eye /></Button>
-                <Button :variant="editorMode === 'source' ? 'secondary' : 'ghost'" size="icon-sm" title="源码视图" @click="editorMode = 'source'"><Code2 /></Button>
+                <Button :variant="editorMode === 'preview' ? 'secondary' : 'ghost'" size="icon-sm" title="组件视图" @click="editorMode = 'preview'"><Eye class="pointer-events-none" /></Button>
+                <Button :variant="editorMode === 'source' ? 'secondary' : 'ghost'" size="icon-sm" title="源码视图" @click="editorMode = 'source'"><Code2 class="pointer-events-none" /></Button>
               </div>
-              <Button variant="ghost" size="icon-sm" class="rounded-full" aria-label="关闭文件编辑器" @click="closeEditor"><X /></Button>
+              <Popover v-model:open="runtimePreviewOpen">
+                <PopoverTrigger as-child>
+                  <Button variant="ghost" size="icon-sm" title="沙箱递归预览" @click="void runRuntimePreview()">
+                    <LoaderCircle v-if="previewing" class="pointer-events-none animate-spin" />
+                    <Play v-else class="pointer-events-none" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" class="w-[min(36rem,calc(100vw-1rem))] p-3" data-no-window-drag>
+                  <div class="mb-2 flex items-center justify-between gap-3">
+                    <span class="text-sm font-medium">沙箱递归预览</span>
+                    <Button variant="ghost" size="sm" :disabled="previewing" @click="void runRuntimePreview()">
+                      <LoaderCircle v-if="previewing" class="pointer-events-none animate-spin" />
+                      <Play v-else class="pointer-events-none" />
+                      运行
+                    </Button>
+                  </div>
+                  <p v-if="runtimePreviewError" class="mb-2 text-xs text-destructive">{{ runtimePreviewError }}</p>
+                  <ScrollArea class="h-72 rounded-lg border bg-muted/20">
+                    <div v-if="previewMessages" class="space-y-2 p-2">
+                      <article v-for="(message, index) in previewMessages" :key="index" class="overflow-hidden rounded-xl border border-border/80 bg-background/70 shadow-sm">
+                        <header class="border-b border-border/70 bg-muted/40 px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{{ message.role }}</header>
+                        <div class="p-3"><ConversationMarkdown :model-value="previewMessageContent(message)" compact mode="docs" :plugin-id="plugin.id" /></div>
+                      </article>
+                    </div>
+                    <div v-else class="p-3"><ConversationMarkdown :model-value="previewMarkdown" compact mode="docs" :plugin-id="plugin.id" /></div>
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
+              <Popover v-model:open="runtimeLogsOpen">
+                <PopoverTrigger as-child>
+                  <Button variant="ghost" size="icon-sm" title="沙箱预览日志">
+                    <ScrollText class="pointer-events-none" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" class="w-[min(36rem,calc(100vw-1rem))] p-3" data-no-window-drag>
+                  <div class="mb-2 flex items-center justify-between gap-3">
+                    <span class="text-sm font-medium">预览日志</span>
+                    <span class="text-xs text-muted-foreground">{{ runtimeLogs.length }} 条</span>
+                  </div>
+                  <ScrollArea class="h-72 rounded-lg border bg-muted/20">
+                    <pre class="min-w-max whitespace-pre-wrap break-words p-3 font-mono text-xs leading-5 text-muted-foreground">{{ runtimeLogs.join('\n') || '运行预览后会在这里显示导入、条件和宏展开日志。' }}</pre>
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
+              <Button variant="ghost" size="icon-sm" class="rounded-full" aria-label="关闭文件编辑器" @click="closeEditor"><X class="pointer-events-none" /></Button>
             </div>
           </header>
 

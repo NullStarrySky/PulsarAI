@@ -1,6 +1,6 @@
 const goalState = read("@/goal/goal.data");
 const messages = [
-  ...bootstrapMessages,
+  ...chat,
   {
     role: "system",
     content: [

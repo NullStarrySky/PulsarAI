@@ -9,8 +9,6 @@ import {
   type Plugin,
   type PluginFile,
 } from "@/features/Plugin/tree/plugin-types";
-import type { PluginConfig } from "@/features/Plugin/editors/config/plugin-config";
-import { pluginPathSelectionValue } from "@/features/Plugin/tree/plugin-path-selection";
 import type {
   ConversationMigrationArtifact,
   MigratedLorebookEntry,
@@ -39,21 +37,38 @@ export class PulsarSillyTavernMigrationWriter {
     private readonly transport: SillyTavernReaderTransport,
   ) {}
 
-  async commit(plan: SillyTavernPlacementPlan): Promise<SillyTavernImportCommitResult> {
-    if ([...plan.conflicts, ...plan.diagnostics].some((diagnostic) => diagnostic.severity === "error")) {
+  async commit(
+    plan: SillyTavernPlacementPlan,
+  ): Promise<SillyTavernImportCommitResult> {
+    if (
+      [...plan.conflicts, ...plan.diagnostics].some(
+        (diagnostic) => diagnostic.severity === "error",
+      )
+    ) {
       throw new Error("迁移计划仍有阻断错误，请先修复来源或资源对应关系。");
     }
     const conversation = useConversationStore(this.pinia);
     const plugins = usePluginStore(this.pinia);
     const models = useModelConnectionStore(this.pinia);
-    await Promise.all([conversation.initialize(), plugins.initialize(), models.initialize()]);
-    this.assertNoExistingConflicts(plan, conversation.packages.map((item) => item.id), plugins.plugins.map((item) => item.id), models.providers.map((item) => item.id));
+    await Promise.all([
+      conversation.initialize(),
+      plugins.initialize(),
+      models.initialize(),
+    ]);
+    this.assertNoExistingConflicts(
+      plan,
+      conversation.packages.map((item) => item.id),
+      plugins.plugins.map((item) => item.id),
+      models.providers.map((item) => item.id),
+    );
 
     const createdPackageIds: string[] = [];
     const createdGlobalPluginIds: string[] = [];
     const createdProviderIds: string[] = [];
     const builtinSnapshots = new Map<string, Plugin>();
-    for (const placement of plan.globalPlugins.filter((item) => item.existing)) {
+    for (const placement of plan.globalPlugins.filter(
+      (item) => item.existing,
+    )) {
       const plugin = plugins.plugins.find((item) => item.id === placement.id);
       if (plugin) builtinSnapshots.set(plugin.id, structuredClone(plugin));
     }
@@ -100,11 +115,16 @@ export class PulsarSillyTavernMigrationWriter {
         await plugins.deletePlugin(pluginId).catch(() => undefined);
       }
       for (const packageId of createdPackageIds.reverse()) {
-        await conversation.deletePackage(packageId, { activateFallback: false }).catch(() => undefined);
+        await conversation
+          .deletePackage(packageId, { activateFallback: false })
+          .catch(() => undefined);
       }
       for (const snapshot of builtinSnapshots.values()) {
-        const index = plugins.plugins.findIndex((item) => item.id === snapshot.id);
-        if (index >= 0) plugins.plugins.splice(index, 1, structuredClone(snapshot));
+        const index = plugins.plugins.findIndex(
+          (item) => item.id === snapshot.id,
+        );
+        if (index >= 0)
+          plugins.plugins.splice(index, 1, structuredClone(snapshot));
         await plugins.persistPlugin(snapshot).catch(() => undefined);
       }
       throw error;
@@ -118,12 +138,21 @@ export class PulsarSillyTavernMigrationWriter {
     providerIds: string[],
   ) {
     const conflicts = [
-      ...plan.packages.filter((item) => packageIds.includes(item.id)).map((item) => `角色包 ${item.id}`),
-      ...plan.packages.filter((item) => pluginIds.includes(item.pluginId)).map((item) => `插件 ${item.pluginId}`),
-      ...plan.globalPlugins.filter((item) => !item.existing && pluginIds.includes(item.id)).map((item) => `插件 ${item.id}`),
-      ...plan.providers.filter((item) => providerIds.includes(item.providerId)).map((item) => `服务商 ${item.providerId}`),
+      ...plan.packages
+        .filter((item) => packageIds.includes(item.id))
+        .map((item) => `角色包 ${item.id}`),
+      ...plan.packages
+        .filter((item) => pluginIds.includes(item.pluginId))
+        .map((item) => `插件 ${item.pluginId}`),
+      ...plan.globalPlugins
+        .filter((item) => !item.existing && pluginIds.includes(item.id))
+        .map((item) => `插件 ${item.id}`),
+      ...plan.providers
+        .filter((item) => providerIds.includes(item.providerId))
+        .map((item) => `服务商 ${item.providerId}`),
     ];
-    if (conflicts.length) throw new Error(`目标已存在，迁移不会覆盖：${conflicts.join("、")}`);
+    if (conflicts.length)
+      throw new Error(`目标已存在，迁移不会覆盖：${conflicts.join("、")}`);
   }
 
   private async writePackage(placement: CharacterPackagePlacement) {
@@ -132,28 +161,38 @@ export class PulsarSillyTavernMigrationWriter {
     const icon = placement.artifact.avatarPath
       ? await this.readDataUrl(placement.artifact.avatarPath)
       : "";
-    const packageItem = await conversation.createPackage({
-      id: placement.id,
-      pluginId: placement.pluginId,
-      name: placement.artifact.name,
-      nickname: placement.artifact.nickname,
-      description: placement.artifact.description,
-      icon,
-    }, { activate: false });
-    const plugin = plugins.plugins.find((item) => item.id === packageItem.pluginId);
-    if (!plugin) throw new Error(`迁移创建的角色插件不存在：${packageItem.pluginId}`);
+    const packageItem = await conversation.createPackage(
+      {
+        id: placement.id,
+        pluginId: placement.pluginId,
+        name: placement.artifact.name,
+        nickname: placement.artifact.nickname,
+        description: placement.artifact.description,
+        icon,
+      },
+      { activate: false },
+    );
+    const plugin = plugins.plugins.find(
+      (item) => item.id === packageItem.pluginId,
+    );
+    if (!plugin)
+      throw new Error(`迁移创建的角色插件不存在：${packageItem.pluginId}`);
     plugin.name = placement.artifact.name;
     plugin.shortDescription = `从 SillyTavern 角色卡 ${placement.artifact.nickname} 导入`;
     plugin.icon = icon;
     configureLocalPlugin(plugin, placement);
     await plugins.persistPlugin(plugin);
-    await conversation.updatePackage(packageItem.id, { mainPluginId: plugin.id });
+    await conversation.updatePackage(packageItem.id, {
+      mainPluginId: plugin.id,
+    });
 
     for (const chat of placement.conversations) {
       await writeConversation(conversation, placement.id, chat, false);
     }
-    const greetings = [placement.artifact.firstMessage, ...placement.artifact.alternateGreetings]
-      .filter(Boolean);
+    const greetings = [
+      placement.artifact.firstMessage,
+      ...placement.artifact.alternateGreetings,
+    ].filter(Boolean);
     if (greetings.length) {
       const template: ConversationMigrationArtifact = {
         id: `${placement.artifact.id}:template`,
@@ -165,11 +204,16 @@ export class PulsarSillyTavernMigrationWriter {
         characterName: placement.artifact.name,
         userName: "",
         createdAt: new Date().toISOString(),
-        messages: [{
-          role: "assistant",
-          activeVersion: 0,
-          versions: greetings.map((content) => ({ content, createdAt: new Date().toISOString() })),
-        }],
+        messages: [
+          {
+            role: "assistant",
+            activeVersion: 0,
+            versions: greetings.map((content) => ({
+              content,
+              createdAt: new Date().toISOString(),
+            })),
+          },
+        ],
       };
       await writeConversation(conversation, placement.id, template, true);
     }
@@ -179,16 +223,26 @@ export class PulsarSillyTavernMigrationWriter {
     const plugins = usePluginStore(this.pinia);
     const conversation = useConversationStore(this.pinia);
     let plugin = await plugins.createGlobalPlugin();
-    plugin = await plugins.renamePluginId(plugin.id, placement.id) ?? plugin;
+    plugin = (await plugins.renamePluginId(plugin.id, placement.id)) ?? plugin;
     plugin.name = placement.name;
-    plugin.shortDescription = "从未被角色认领的 SillyTavern 世界书导入；由角色包单独启用。";
+    plugin.shortDescription =
+      "从未被角色认领的 SillyTavern 世界书导入；由角色包单独启用。";
     configureGlobalPlugin(plugin, placement);
     await plugins.persistPlugin(plugin);
     for (const packageId of placement.enabledPackageIds ?? []) {
-      const packageItem = conversation.packages.find((item) => item.id === packageId);
-      if (!packageItem || packageItem.enabledGlobalPluginIds.includes(plugin.id)) continue;
+      const packageItem = conversation.packages.find(
+        (item) => item.id === packageId,
+      );
+      if (
+        !packageItem ||
+        packageItem.enabledGlobalPluginIds.includes(plugin.id)
+      )
+        continue;
       await conversation.updatePackage(packageId, {
-        enabledGlobalPluginIds: [...packageItem.enabledGlobalPluginIds, plugin.id],
+        enabledGlobalPluginIds: [
+          ...packageItem.enabledGlobalPluginIds,
+          plugin.id,
+        ],
       });
     }
   }
@@ -200,7 +254,9 @@ export class PulsarSillyTavernMigrationWriter {
     const entryFolder = ensureFolder(plugin, "", "entry");
     for (const preset of placement.presets ?? []) {
       const folder = ensureFolder(plugin, entryFolder, safeName(preset.name));
-      upsertFile(plugin, folder, `${safeName(preset.name)}.chat.json`, { message: preset.messages });
+      upsertFile(plugin, folder, `${safeName(preset.name)}.chat.json`, {
+        message: preset.messages,
+      });
       for (const [index, document] of preset.depthDocuments.entries()) {
         upsertFile(
           plugin,
@@ -213,59 +269,87 @@ export class PulsarSillyTavernMigrationWriter {
           },
         );
       }
-      upsertFile(plugin, folder, `${safeName(preset.name)}.regex.json`, preset.regexRules);
+      upsertFile(
+        plugin,
+        folder,
+        `${safeName(preset.name)}.regex.json`,
+        preset.regexRules,
+      );
       upsertFile(plugin, folder, "configuration.json", preset.rawConfiguration);
     }
-    const backgroundFolder = ensureFolder(plugin, "", pluginConventions.backgroundFolder);
-    let selectedBackground: string | null = null;
+    const backgroundFolder = ensureFolder(
+      plugin,
+      "",
+      pluginConventions.backgroundFolder,
+    );
     for (const background of placement.backgrounds ?? []) {
       const dataUrl = await this.readDataUrl(background.path);
       const name = safeName(background.name);
-      upsertFile(plugin, backgroundFolder, name, {
-        kind: "media",
-        url: dataUrl,
-        mediaType: dataUrl.startsWith("data:video/") ? "video" : "image",
-      }, {
-        insertion: { slot: "background" },
-      });
-      if (background.selected) {
-        selectedBackground = pluginPathSelectionValue(`${pluginConventions.backgroundFolder}/${name}`);
-      }
+      upsertFile(
+        plugin,
+        backgroundFolder,
+        name,
+        {
+          kind: "media",
+          url: dataUrl,
+          mediaType: dataUrl.startsWith("data:video/") ? "video" : "image",
+        },
+        {
+          insertion: { slot: "background" },
+        },
+      );
     }
-    const actionsFolder = ensureFolder(plugin, "", pluginConventions.actionFolder);
-    const quickRepliesFolder = ensureFolder(plugin, actionsFolder, "quick-replies");
+    const actionsFolder = ensureFolder(
+      plugin,
+      "",
+      pluginConventions.actionFolder,
+    );
+    const quickRepliesFolder = ensureFolder(
+      plugin,
+      actionsFolder,
+      "quick-replies",
+    );
     for (const quickReply of placement.quickReplies ?? []) {
       upsertFile(
         plugin,
         quickRepliesFolder,
-        uniqueFileName(plugin, quickRepliesFolder, safeName(quickReply.name), "md"),
+        uniqueFileName(
+          plugin,
+          quickRepliesFolder,
+          safeName(quickReply.name),
+          "md",
+        ),
         quickReply.content,
         { insertion: { slot: "COMMAND" } },
       );
     }
-    if (selectedBackground) {
-      const config = findPluginNodeByPath(plugin, pluginConventions.config);
-      if (config?.kind === "file" && config.content && typeof config.content === "object") {
-        const entry = (config.content as PluginConfig).background;
-        if (entry) entry.value = selectedBackground;
-      }
-    }
     const migrationFolder = ensureFolder(plugin, "", "migration");
-    upsertFile(plugin, migrationFolder, `sillytavern-public-${Date.now()}.json`, {
-      source: "SillyTavern",
-      presets: placement.presets?.map((item) => ({
-        name: item.name,
-        source: item.source,
-        diagnostics: item.diagnostics,
-      })) ?? [],
-      backgrounds: placement.backgrounds?.map((item) => ({ name: item.name, source: item.source })) ?? [],
-      quickReplies: placement.quickReplies?.map((item) => ({
-        name: item.name,
-        setName: item.setName,
-        source: item.source,
-      })) ?? [],
-      note: "预设入口已保留为普通资源；文本内的单纯宏和同步 EJS 已在导入期转换为 JavaScript。",
-    });
+    upsertFile(
+      plugin,
+      migrationFolder,
+      `sillytavern-public-${Date.now()}.json`,
+      {
+        source: "SillyTavern",
+        presets:
+          placement.presets?.map((item) => ({
+            name: item.name,
+            source: item.source,
+            diagnostics: item.diagnostics,
+          })) ?? [],
+        backgrounds:
+          placement.backgrounds?.map((item) => ({
+            name: item.name,
+            source: item.source,
+          })) ?? [],
+        quickReplies:
+          placement.quickReplies?.map((item) => ({
+            name: item.name,
+            setName: item.setName,
+            source: item.source,
+          })) ?? [],
+        note: "预设入口已保留为普通资源；文本内的单纯宏和同步 EJS 已在导入期转换为 JavaScript。",
+      },
+    );
     await plugins.persistPlugin(plugin);
   }
 
@@ -275,28 +359,56 @@ export class PulsarSillyTavernMigrationWriter {
   }
 }
 
-function configureLocalPlugin(plugin: Plugin, placement: CharacterPackagePlacement) {
+function configureLocalPlugin(
+  plugin: Plugin,
+  placement: CharacterPackagePlacement,
+) {
   const characterFolder = ensureFolder(plugin, "", "character");
-  upsertFile(plugin, characterFolder, "main.md", placement.artifact.characterMarkdown, {
-    insertion: { slot: "context" },
-  });
+  upsertFile(
+    plugin,
+    characterFolder,
+    "main.md",
+    placement.artifact.characterMarkdown,
+    {
+      insertion: { slot: "context" },
+    },
+  );
   const userFolder = ensureFolder(plugin, characterFolder, "user");
   for (const persona of placement.personas) {
-    upsertFile(plugin, userFolder, `${safeName(persona.name)}.md`, persona.markdown || `# ${persona.name}`, {
-      insertion: { slot: "user" },
-    });
+    upsertFile(
+      plugin,
+      userFolder,
+      `${safeName(persona.name)}.md`,
+      persona.markdown || `# ${persona.name}`,
+      {
+        insertion: { slot: "user" },
+      },
+    );
   }
   const lorebooksFolder = ensureFolder(plugin, "", "lorebooks");
   const embeddedFolder = ensureFolder(plugin, lorebooksFolder, "embedded");
-  writeLorebookEntries(plugin, embeddedFolder, placement.artifact.name, placement.artifact.embeddedLorebooks);
+  writeLorebookEntries(
+    plugin,
+    embeddedFolder,
+    placement.artifact.name,
+    placement.artifact.embeddedLorebooks,
+  );
   for (const worldbook of placement.claimedWorldbooks) {
-    writeLorebookEntries(plugin, lorebooksFolder, worldbook.name, worldbook.entries);
+    writeLorebookEntries(
+      plugin,
+      lorebooksFolder,
+      worldbook.name,
+      worldbook.entries,
+    );
   }
   const regexFile = findPluginNodeByPath(plugin, pluginConventions.regex);
-  if (regexFile?.kind === "file") regexFile.content = placement.artifact.regexRules;
+  if (regexFile?.kind === "file")
+    regexFile.content = placement.artifact.regexRules;
   const defaultChat = findPluginNodeByPath(plugin, "default.chat.json");
   if (defaultChat?.kind === "file") {
-    defaultChat.content = { message: [{ role: "system", content: "[[ chat ]]" }] };
+    defaultChat.content = {
+      message: [{ role: "system", content: "[[ chat ]]" }],
+    };
   }
   const generate = findPluginNodeByPath(plugin, "generate.js");
   if (generate?.kind === "file") generate.content = sillyTavernGenerateSource();
@@ -308,32 +420,51 @@ function configureLocalPlugin(plugin: Plugin, placement: CharacterPackagePlaceme
       nickname: placement.artifact.nickname,
       unconsumedFields: placement.artifact.unconsumedFields,
     },
-    claimedWorldbooks: placement.claimedWorldbooks.map((item) => ({ name: item.name, source: item.source })),
-    conversations: placement.conversations.map((item) => ({ title: item.title, source: item.source })),
+    claimedWorldbooks: placement.claimedWorldbooks.map((item) => ({
+      name: item.name,
+      source: item.source,
+    })),
+    conversations: placement.conversations.map((item) => ({
+      title: item.title,
+      source: item.source,
+    })),
     diagnostics: placement.artifact.diagnostics,
-    unsupportedTemplateSyntax: placement.artifact.diagnostics
-      .filter((item) => item.code === "sillytavern.macro.unsupported" || item.code === "sillytavern.ejs.unsupported"),
+    unsupportedTemplateSyntax: placement.artifact.diagnostics.filter(
+      (item) =>
+        item.code === "sillytavern.macro.unsupported" ||
+        item.code === "sillytavern.ejs.unsupported",
+    ),
   });
 }
 
-function configureGlobalPlugin(plugin: Plugin, placement: GlobalPluginPlacement) {
+function configureGlobalPlugin(
+  plugin: Plugin,
+  placement: GlobalPluginPlacement,
+) {
   const slots = findPluginNodeByPath(plugin, pluginConventions.slots);
   if (slots?.kind === "file") {
     slots.content = {
-      slots: [{
-        id: "context",
-        title: "世界书上下文",
-        scope: "global",
-        description: "从 SillyTavern 世界书导入的上下文条目。",
-        contentSuffixes: ["md"],
-        selectionMode: "none",
-        overrideStrategy: "override",
-      }],
+      slots: [
+        {
+          id: "context",
+          title: "世界书上下文",
+          scope: "global",
+          description: "从 SillyTavern 世界书导入的上下文条目。",
+          contentSuffixes: ["md"],
+          selectionMode: "none",
+          overrideStrategy: "override",
+        },
+      ],
     };
   }
   const lorebooks = ensureFolder(plugin, "", "lorebooks");
   if (placement.worldbook) {
-    writeLorebookEntries(plugin, lorebooks, placement.worldbook.name, placement.worldbook.entries);
+    writeLorebookEntries(
+      plugin,
+      lorebooks,
+      placement.worldbook.name,
+      placement.worldbook.entries,
+    );
   }
   const migrationFolder = ensureFolder(plugin, "", "migration");
   upsertFile(plugin, migrationFolder, "sillytavern-import-report.json", {
@@ -343,15 +474,31 @@ function configureGlobalPlugin(plugin: Plugin, placement: GlobalPluginPlacement)
   });
 }
 
-function writeLorebookEntries(plugin: Plugin, parentPath: string, bookName: string, entries: MigratedLorebookEntry[]) {
+function writeLorebookEntries(
+  plugin: Plugin,
+  parentPath: string,
+  bookName: string,
+  entries: MigratedLorebookEntry[],
+) {
   const folder = ensureFolder(plugin, parentPath, safeName(bookName));
   for (const [index, entry] of entries.entries()) {
-    upsertFile(plugin, folder, `${String(index + 1).padStart(3, "0")}-${safeName(entry.name)}.md`, entry.content, {
-      order: entry.order,
-      ...(entry.enabled
-        ? { insertion: { slot: entry.insertionTarget, ...(entry.condition ? { condition: entry.condition } : {}) } }
-        : {}),
-    });
+    upsertFile(
+      plugin,
+      folder,
+      `${String(index + 1).padStart(3, "0")}-${safeName(entry.name)}.md`,
+      entry.content,
+      {
+        order: entry.order,
+        ...(entry.enabled
+          ? {
+              insertion: {
+                slot: entry.insertionTarget,
+                ...(entry.condition ? { condition: entry.condition } : {}),
+              },
+            }
+          : {}),
+      },
+    );
   }
 }
 
@@ -366,7 +513,9 @@ async function writeConversation(
     title: artifact.title,
     kind: "chat",
   });
-  const initial = store.containers.find((item) => item.conversationid === conversation.id);
+  const initial = store.containers.find(
+    (item) => item.conversationid === conversation.id,
+  );
   if (!initial) throw new Error(`创建会话后没有初始容器：${artifact.title}`);
   const logicalMessages = artifact.messages;
   const containers: ChatMessageContainer[] = logicalMessages.length
@@ -383,7 +532,12 @@ async function writeConversation(
             createdAt: version.createdAt,
             meta: {
               ...(version.modelName
-                ? { generateInfo: { modelName: version.modelName, startTime: version.createdAt } }
+                ? {
+                    generateInfo: {
+                      modelName: version.modelName,
+                      startTime: version.createdAt,
+                    },
+                  }
                 : {}),
               steps: [],
             },
@@ -401,11 +555,15 @@ async function writeConversation(
     container.previousContainer = previous?.id ?? null;
     container.activeNextContainer = next?.id ?? null;
   });
-  const initialIndex = store.containers.findIndex((item) => item.id === initial.id);
-  if (initialIndex >= 0) store.containers.splice(initialIndex, 1, containers[0]!);
+  const initialIndex = store.containers.findIndex(
+    (item) => item.id === initial.id,
+  );
+  if (initialIndex >= 0)
+    store.containers.splice(initialIndex, 1, containers[0]!);
   store.containers.push(...containers.slice(1));
   conversation.rootContainerId = containers[0]?.id ?? initial.id;
-  conversation.lastContainerId = containers[containers.length - 1]?.id ?? initial.id;
+  conversation.lastContainerId =
+    containers[containers.length - 1]?.id ?? initial.id;
   conversation.createdAt = artifact.createdAt;
   conversation.updatedAt = artifact.createdAt;
   await Promise.all([
@@ -413,28 +571,28 @@ async function writeConversation(
     store.persistConversation(conversation),
   ]);
   store.syncConversationLink(conversation);
-  if (template) await store.updateConversation(conversation.id, { isTemplate: true });
+  if (template)
+    await store.updateConversation(conversation.id, { isTemplate: true });
 }
 
 function siblingCount(plugin: Plugin, parentPath: string) {
-  return plugin.nodes.filter((node) => pluginParentPath(node.path) === parentPath).length;
+  return plugin.files.filter(
+    (file) => pluginParentPath(file.path) === parentPath,
+  ).length;
 }
 
-function ensureFolder(plugin: Plugin, parentPath: string, name: string): string {
+function ensureFolder(
+  plugin: Plugin,
+  parentPath: string,
+  name: string,
+): string {
   const path = parentPath ? `${parentPath}/${name}` : name;
-  const existing = plugin.nodes.find(
-    (node) => node.kind === "folder" && node.path === path,
-  );
-  if (existing) return path;
-  plugin.nodes.push({
-    id: crypto.randomUUID(),
-    path,
-    name,
-    icon: "",
-    treeOrder: siblingCount(plugin, parentPath),
-    kind: "folder",
-    collapsed: false,
-  });
+  if (!plugin.files.some((file) => file.path.startsWith(`${path}/`))) {
+    plugin.emptyFolders = plugin.emptyFolders.filter(
+      (folder) => !path.startsWith(`${folder}/`),
+    );
+    if (!plugin.emptyFolders.includes(path)) plugin.emptyFolders.push(path);
+  }
   return path;
 }
 
@@ -443,13 +601,13 @@ function upsertFile(
   parentPath: string,
   name: string,
   content: unknown,
-  input: Pick<PluginFile, "order" | "insertion"> | { order?: number; insertion?: PluginFile["insertion"] } = {},
+  input:
+    | Pick<PluginFile, "order" | "insertion">
+    | { order?: number; insertion?: PluginFile["insertion"] } = {},
 ) {
   const path = parentPath ? `${parentPath}/${name}` : name;
-  const existing = plugin.nodes.find(
-    (node) => node.kind === "file" && node.path === path,
-  );
-  if (existing?.kind === "file") {
+  const existing = plugin.files.find((node) => node.path === path);
+  if (existing) {
     existing.content = structuredClone(content);
     existing.order = input.order ?? existing.order;
     if (input.insertion) existing.insertion = structuredClone(input.insertion);
@@ -467,19 +625,32 @@ function upsertFile(
     order: input.order ?? 100,
     ...(input.insertion ? { insertion: structuredClone(input.insertion) } : {}),
   };
-  plugin.nodes.push(file);
+  plugin.files.push(file);
+  plugin.emptyFolders = plugin.emptyFolders.filter(
+    (folder) => path !== folder && !path.startsWith(`${folder}/`),
+  );
   return file;
 }
 
 function safeName(value: string) {
-  const normalized = value.trim().replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-").replace(/\s+/g, " ");
+  const normalized = value
+    .trim()
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-")
+    .replace(/\s+/g, " ");
   return normalized || "untitled";
 }
 
-function uniqueFileName(plugin: Plugin, parentPath: string, base: string, extension: string) {
-  const existing = new Set(plugin.nodes
-    .filter((node) => node.kind === "file" && pluginParentPath(node.path) === parentPath)
-    .map((node) => node.name.toLocaleLowerCase()));
+function uniqueFileName(
+  plugin: Plugin,
+  parentPath: string,
+  base: string,
+  extension: string,
+) {
+  const existing = new Set(
+    plugin.files
+      .filter((node) => pluginParentPath(node.path) === parentPath)
+      .map((node) => node.name.toLocaleLowerCase()),
+  );
   for (let index = 1; ; index += 1) {
     const suffix = index === 1 ? "" : `-${index}`;
     const candidate = `${base}${suffix}.${extension}`;
@@ -500,7 +671,7 @@ function sillyTavernGenerateSource() {
     'const depth6 = await slot.import("depth:6", "global");',
     'const regexRules = await slot.import("REGEX", "global").then((items) => items.flatMap((value) => Array.isArray(value) ? value : []));',
     "const applyRules = (text, role, depth) => regexRules.reduce((current, rule) => {",
-    "  if (!rule || rule.applyOnRending) return current;",
+    "  if (!rule || rule.applyOnRendering) return current;",
     '  if (rule.range !== "all" && !(rule.range === "user_input" && role === "user") && !(rule.range === "ai_output" && role === "assistant")) return current;',
     '  const min = rule.depth_min === "INF" ? 1 : Number(rule.depth_min || 1);',
     '  const max = rule.depth_max === "INF" ? Infinity : Number(rule.depth_max || Infinity);',
@@ -513,7 +684,7 @@ function sillyTavernGenerateSource() {
     "const depthBlocks = [depth0, depth1, depth2, depth3, depth4, depth5, depth6];",
     "depthBlocks.forEach((blocks, depth) => { if (blocks.length) history.splice(Math.max(0, history.length - depth), 0, { role: 'system', content: blocks.map(String).join('\\n\\n') }); });",
     "const context = [...localContext, ...globalContext].filter(Boolean).map(String).join('\\n\\n');",
-    "const messages = [...bootstrapMessages, ...(context ? [{ role: 'system', content: context }] : []), ...compileChat(await imports('./default.chat.json'), { chat: history, CHAT: history })];",
+    "const messages = [...bootstrapMessages, ...(context ? [{ role: 'system', content: context }] : []), ...await parse('./default.chat.json', { chat: history, CHAT: history })];",
     "const runner = new agent.ToolLoopAgent({ container: reply });",
     "await runner.stream({ messages });",
     "  const complete = reply.read().message.content;",

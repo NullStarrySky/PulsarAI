@@ -28,9 +28,9 @@ export interface CreateDefaultAgentResourcesInput {
   environment?: SandboxEnvironment;
   modelName?: string;
   resourceTransaction?: {
-    begin: () => void | Promise<void>;
-    commit: () => void | Promise<void>;
-    rollback: () => void | Promise<void>;
+    begin: () => void;
+    commit: () => void;
+    rollback: () => void;
   };
 }
 
@@ -83,6 +83,7 @@ const jsInputSchema = z.object({
 
 const codeActInstructions = [
   "Use the single codeAct tool for every API operation.",
+  "When user input is needed to continue, call await agent.askUser({ questions: [{ id, question, kind: 'text' | 'select' | 'multi-select' | 'boolean', options?, placeholder? }] }) inside codeAct and handle its { answers, cancelled } result. Boolean questions use true for accept and false for reject.",
   "Never narrate private planning, tool selection, or tool execution in the final text. Those are recorded separately by the runtime.",
   "Use normal text only for the final user-facing answer after the necessary tool calls are complete.",
   "Submit one JavaScript function in the form `async function () { ... return value; }`.",
@@ -90,7 +91,7 @@ const codeActInstructions = [
   "Return plain serializable data. Preserve resource `id` and `path` when later calls may need to follow the result.",
   "To delegate a bounded task, call `await generate({ plugin?, environment?, prompt })` inside the function. It returns the child agent's final text; the default plugin is the blank no-template process and an omitted environment uses an in-memory temporary conversation.",
   "Plugin custom functions documented under `# 自定义工具` are context functions: call them with `await ctx.tools[name](...args)`.",
-  "Inspect Plugin slots with `slot.list()` / `get()` and import selected members with `slot.import(slotId)`.",
+  "Inspect Plugin slots with `slot.list()` / `get()`. `slot.paths(slotId)` and `slot.import(slotId)` synchronously return selected resource paths; pass a selected resource or path array to `await parse(...)` for recursive macro expansion. A chat resource returns pure message[] without authoring labels or disabled entries. Importing a JavaScript resource is the exception and returns its execution Promise.",
   "Plugin write/edit/mkdir/move/remove/config.set and writable .data wrapper operations update the current Conversation resource overlay. They are committed atomically only when the codeAct call succeeds.",
   "Use open(path), close(path), or toggle(path) to operate a Plugin resource editor. `@/` and `@pluginId/` operate that Plugin's asset panel; a file path such as `@/notes.md` operates its editor. Each returns whether the target is open plus its stable IDs.",
   "Read and update .data through its documented wrapper facade when possible, or use data.readForResource(resourceId, dataId) and data.writeForResource(resourceId, dataId, value). Persisted data values must remain pure JSON.",
@@ -106,22 +107,22 @@ function createCodeActTool(
       description: codeActInstructions,
       inputSchema: jsInputSchema,
       execute: async (input) => {
-        await transaction?.begin();
+        transaction?.begin();
         try {
           const output = await executeCodeAct(input.code, environment);
           if (
-            output
-            && typeof output === "object"
-            && "ok" in output
-            && output.ok === true
+            output &&
+            typeof output === "object" &&
+            "ok" in output &&
+            output.ok === true
           ) {
-            await transaction?.commit();
+            transaction?.commit();
           } else {
-            await transaction?.rollback();
+            transaction?.rollback();
           }
           return output;
         } catch (error) {
-          await transaction?.rollback();
+          transaction?.rollback();
           throw error;
         }
       },
@@ -216,7 +217,10 @@ export function createAgentResourceProvider(
               input: part.input,
               output: {
                 ok: false,
-                error: part.error instanceof Error ? part.error.message : String(part.error),
+                error:
+                  part.error instanceof Error
+                    ? part.error.message
+                    : String(part.error),
               },
             });
           } else if (part.type === "error") {

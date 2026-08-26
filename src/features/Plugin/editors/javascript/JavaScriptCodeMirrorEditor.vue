@@ -97,13 +97,19 @@ function pluginSyntaxCompletions(context: CompletionContext) {
         {
           label: "imports(path)",
           apply: 'imports("./resource.md")',
-          detail: "导入并展开资源内容",
+          detail: "按资源类型包装并返回内容",
           type: "function",
         },
         {
           label: "slot.import(name)",
           apply: 'slot.import("slot 名")',
-          detail: "读取并展开 slot 内容",
+          detail: "获取 slot 资源路径数组（paths 的别名）",
+          type: "function",
+        },
+        {
+          label: "slot.paths(name)",
+          apply: 'slot.paths("slot 名")',
+          detail: "获取 slot 资源路径数组，供 imports(path) 使用",
           type: "function",
         },
         ...(props.importSuggestions ?? []).map((item) => ({
