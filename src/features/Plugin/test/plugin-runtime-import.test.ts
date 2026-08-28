@@ -11,12 +11,17 @@ vi.hoisted(() => {
 
 import { createPluginSelfApi } from "@/features/Plugin/runtime/self-api";
 import {
-  buildPluginGenerationEnvironment,
   previewPluginResource,
 } from "@/features/Plugin/runtime/environment";
+import { ctxbuilder } from "@/features/Plugin/runtime/ctx-builder";
+import { runPlugin } from "@/features/Plugin/runtime/run-api";
 import { createBuiltinPlugins } from "@/features/Plugin/tree/builtin-plugins";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
+import { useChatStore } from "@/features/Conversation/chats/chat-store";
+import { useMessageStore } from "@/features/Conversation/messages/message-store";
+import { usePackageStore } from "@/features/Package/package-store";
 import type { Plugin } from "@/features/Plugin/tree/plugin-types";
+import type { SandboxEnvironment } from "@/features/Sandbox/sandbox";
 
 function createMockPlugin(
   id: string,
@@ -187,7 +192,7 @@ describe("Simplified Runtime importResource", () => {
     const generate = api.read("generate.js");
 
     expect(generate).toContain('imports("@builtin-core-plugin/config.json")');
-    expect(generate).toContain('imports(slot.paths("CTX_BUILD", "global"))');
+    expect(generate).toContain('parse(slot.paths("CTX_BUILD", "global"), ctx)');
     expect(api.slot.paths("chat", "global")).toEqual([
       "@builtin-core-plugin/default.chat.json",
     ]);
@@ -205,33 +210,106 @@ describe("Simplified Runtime importResource", () => {
     );
   });
 
-  it("exposes the Plugin resolver as the generation Sandbox imports capability", async () => {
+  it("builds message-bound Plugin capabilities only through ctxbuilder", async () => {
     const plugin = createMockPlugin("test-plugin", [
       {
         path: "generate.js",
         content: "return undefined;",
         insertion: { slot: "generatePath" },
       },
+      { path: "tools/add/tool.js", content: "async (left, right) => left + right" },
+      { path: "tools/add/prompt.md", content: "Use ctx.add(left, right) to add two numbers." },
     ]);
-    const generation = await buildPluginGenerationEnvironment([plugin], {
-      activePath: [],
-      chat: [],
-      conversationId: "chat",
-      conversation: { id: "chat" },
-      packageId: "pkg-1",
-      mainPluginId: plugin.id,
-      containerId: "reply",
-      prompt: "",
+    const chats = useChatStore();
+    const messages = useMessageStore();
+    const packages = usePackageStore();
+    chats.chats = [{
+      id: "chat", packageId: "pkg-1", kind: "chat", title: "chat", rendererId: "chat",
+      rootContainerId: "assistant", lastContainerId: "assistant", composerDraft: "",
+      createdAt: "2026-08-28T00:00:00.000Z", updatedAt: "2026-08-28T00:00:00.000Z",
+    }];
+    packages.packages = [{ id: "pkg-1", mainPluginId: plugin.id, enabledGlobalPluginIds: [] }] as any;
+    messages.containers = [{
+      id: "assistant", conversationid: "chat", role: "assistant", activeMessage: 0,
+      availableNextContainer: [], activeNextContainer: null, previousContainer: null,
+      content: [{ id: "message", type: "message", content: "", createdAt: "2026-08-28T00:00:00.000Z", meta: { steps: [] } }],
+    }];
+    messages.persist = vi.fn().mockResolvedValue(undefined);
+    usePluginStore().plugins = [plugin];
+    const context: SandboxEnvironment = { conversationId: "chat", pluginId: plugin.id };
+    const built = await ctxbuilder(context, {
+      chat: true,
+      conversation: true,
+      role: true,
+      input: true,
+      message: { containerId: "assistant", role: "assistant" },
+      plugin: true,
+      toolFunction: true,
     });
 
-    expect(generation.environment.imports).toBe(generation.selfApi.import);
-    expect(generation.environment.parse).toEqual(expect.any(Function));
-    const readDocs = generation.environment.read_docs as (
+    expect(context.imports).toBe(built.selfApi?.import);
+    expect(context.parse).toEqual(expect.any(Function));
+    expect(built.container?.id).toBe("assistant");
+    const conversations = context.conversations as { read: () => { id: string } | null };
+    const roles = context.roles as { read: () => { id: string } | null };
+    const input = context.input as { read: () => string };
+    expect(conversations.read()?.id).toBe("chat");
+    expect(roles.read()?.id).toBe("pkg-1");
+    expect(input.read()).toBe("");
+    const add = context.add as (left: number, right: number) => Promise<number>;
+    expect(await add(2, 3)).toBe(5);
+    expect(built.selfApi?.slot.paths("toolFunction", "global")).toEqual([
+      "@test-plugin/tools/add/prompt.md",
+    ]);
+    const readDocs = context.read_docs as (
       id?: string,
     ) => string[] | string | null;
     expect(readDocs()).toEqual(["package", "plugin", "conversation"]);
     expect(readDocs("plugin")).toContain("# Plugin 资源");
     expect(readDocs("missing")).toBeNull();
+  });
+
+  it("refuses Plugin capabilities when no message version was requested", async () => {
+    await expect(ctxbuilder(
+      { conversationId: "chat", pluginId: "test-plugin" },
+      { plugin: true },
+    )).rejects.toThrow("必须同时请求 message feature");
+  });
+
+  it("runs a Plugin against its concrete assistant message version", async () => {
+    const plugin = createMockPlugin("test-plugin", [
+      {
+        path: "generate.js",
+        content: 'const result = `${conversationId}:${pluginId}:${container.id}`; await reply.setContent(result); return undefined;',
+        insertion: { slot: "generatePath" },
+      },
+    ]);
+    const chats = useChatStore();
+    const messages = useMessageStore();
+    const packages = usePackageStore();
+    chats.chats = [{
+      id: "chat", packageId: "pkg-1", kind: "chat", title: "chat", rendererId: "chat",
+      rootContainerId: "assistant", lastContainerId: "assistant", composerDraft: "",
+      createdAt: "2026-08-28T00:00:00.000Z", updatedAt: "2026-08-28T00:00:00.000Z",
+    }];
+    packages.packages = [{ id: "pkg-1", mainPluginId: plugin.id, enabledGlobalPluginIds: [] }] as any;
+    messages.containers = [{
+      id: "assistant", conversationid: "chat", role: "assistant", activeMessage: 0,
+      availableNextContainer: [], activeNextContainer: null, previousContainer: null,
+      content: [{ id: "message", type: "message", content: "", createdAt: "2026-08-28T00:00:00.000Z", meta: { steps: [] } }],
+    }];
+    messages.persist = vi.fn().mockResolvedValue(undefined);
+    usePluginStore().plugins = [plugin];
+
+    const result = await runPlugin({
+      plugin: plugin.name,
+      conversationId: "chat",
+      roleId: "pkg-1",
+      containerId: "assistant",
+    });
+
+    expect(result.containerId).toBe("assistant");
+    expect(messages.containers[0]?.content[0]?.content).toBe("chat:test-plugin:assistant");
   });
 
   it("imports pure chat messages and parses the selected resource", async () => {

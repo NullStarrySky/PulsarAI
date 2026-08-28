@@ -18,7 +18,7 @@ Plugin 是 Pulsar 的可编程资源系统。一个 Plugin 同时提供数据库
 ## 文件与界面 API
 
 - `read`、`readMeta`、`ls`、`exists`、`slot.list/get/paths` 读取当前内存视图。
-- `write`、`edit`、`mkdir`、`move`、`remove` 乐观地同步修改当前视图；普通编辑在后台持久化，生成期编辑写入 Conversation Overlay。
+- `write`、`edit`、`mkdir`、`move`、`remove` 乐观地同步修改当前视图；普通编辑在后台持久化，消息绑定运行中的修改写入该消息版本的结构化变更。
 - `open`、`close`、`toggle` 操作资源编辑器；目标为 `@/` 或 `@pluginId/` 时操作相应 Plugin 面板。
 - `read_docs()` 列出内置 Agent 文档 ID，`read_docs(id)` 同步返回对应 Markdown 文件的原始文本；这些文档按需读取，不常驻注入每次会话上下文。
 - `slot.paths(id, scope?)` 返回插槽选中的显式 `@pluginId/path` 数组。生成脚本通过选中的 `CTX_BUILD` 资源构建聊天上下文。
@@ -29,6 +29,8 @@ Plugin 是 Pulsar 的可编程资源系统。一个 Plugin 同时提供数据库
 `slots.json` 声明插槽的 ID、作用域、后缀、选择模式和覆盖策略；文件通过自己的 `insertion.slot` 注册，另可声明同步 JavaScript `condition` 或 `conditionPath`。`order` 决定插槽顺序，相同值以 Plugin ID 和资源 ID 稳定排序。
 
 固定约定包括 `config.json`、`slots.json`、`generatePath`、`chat`、`REGEX`、`DATA_INJECT`、`data_prompt`、`COMMAND`、`background`、`tools/<name>/tool.js` 与 `tools/<name>/prompt.md`。`.data.json` 只保存状态定义；`DATA_INJECT` 只由生成流程读取，`.chat.json` 数据说明放入只由上下文构建读取的 `data_prompt`。背景候选与选择只属于 `background` 插槽，不复制到 `config.json`。
+
+`ctxbuilder(ctx, features)` 是唯一环境装配入口：`ctx` 必须先给出 `conversationId` 与 `pluginId`。`chat` 写入模型消息和活动路径；`conversation` 写入会话快照及 `conversations.read/list/create/update/remove`；`role` 写入角色快照及 `roles.read/list/create/update/remove`；`input` 写入草稿 API；`message` 返回并写入具体消息容器/版本；`plugin` 仅在消息版本存在时绑定 self API；`toolFunction` 将 `tools/<name>/tool.js` 直接写为 `ctx[name]`，而同目录 `prompt.md` 自动进入 `toolFunction` 上下文插槽。`run(pluginName, conversationId, roleId)`（或对象式 `runPlugin`）用完整 feature 集执行该 Plugin 的 `generatePath`；Conversation 不再自行拼装环境。
 
 ## 文件树
 
@@ -47,7 +49,9 @@ Plugin/
 │  ├─ PluginFileEditorDialog.vue   文件编辑对话框
 │  └─ PluginInsertionConditionEditor.vue 插入条件编辑
 ├─ runtime/
-│  ├─ environment.ts               Conversation 绑定的 Sandbox 环境装配
+│  ├─ ctx-builder.ts               声明式上下文 feature 装配
+│  ├─ run-api.ts                   消息绑定的 Plugin generatePath 执行入口
+│  ├─ environment.ts               条件、配置与可抛弃预览支持
 │  ├─ self-api.ts                  文件、插槽及 open/close/toggle API
 │  ├─ logger.ts                    PluginLogger
 │  ├─ yaml-formatter.ts            YAML 格式提取
@@ -64,8 +68,8 @@ Plugin/
 
 ## 不变量
 
-- 基础文件持久化与 Conversation Overlay 是两个事实层；生成期不得直接污染基础 Plugin。
-- 一个 `codeAct` 是一个事务：函数成功且显式返回才提交该次操作，否则恢复调用前快照。
+- 基础文件与消息版本的结构化 Plugin 变更是两个事实层；`usePluginStore(chatId)` 以缓存从基础树增量应用活动路径变更，生成期不得直接污染基础 Plugin。
+- `codeAct` 的资源写入直接进入当前消息版本；不通过撤销快照，最终树由版本变更重算。
 - `@/` 的含义由源码所属 Plugin 决定，不由最外层生成 Plugin 或当前循环决定。
 - `import` 负责单资源包装，`parse` 负责对选中资源递归解析；不得把递归行为塞回 `import`。
 - 一个插槽只属于生成流程构建或上下文构建，不能同时用于两者；`DATA_INJECT` 和 `data_prompt` 是数据资源的阶段边界。

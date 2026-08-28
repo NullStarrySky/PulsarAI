@@ -1,6 +1,6 @@
 const config = await imports("@/config.json");
 const useStreamText = Boolean(config.useStreamText?.value);
-const messages = await imports(slot.paths("CTX_BUILD", "global"));
+const messages = await parse(slot.paths("CTX_BUILD", "global"), ctx);
 
 if (useStreamText) {
   await agent.streamText({ container: reply, messages });

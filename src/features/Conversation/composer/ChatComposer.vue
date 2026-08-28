@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/dialog";
 import ModelSelect from "@/features/ModelConnection/components/ModelSelect.vue";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/default-config-store";
-import { usePackageStore } from "@/features/Package/package-store";
 import { compilePluginVueFile } from "@/features/Plugin/editors/vue/plugin-vue-runtime";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import { type SlotResource, useSlotStore } from "@/features/Plugin/tree/slot-store";
@@ -21,8 +20,7 @@ import PromptBar from "./PromptBar.vue";
 
 const props = defineProps<{ chatId: string }>();
 const chat = useConversation(toRef(props, "chatId"));
-const packages = usePackageStore();
-const plugins = usePluginStore();
+const plugins = usePluginStore(toRef(props, "chatId"));
 const slots = useSlotStore();
 const defaults = useDefaultConfigStore();
 const files = ref<FilePart[]>([]);
@@ -33,18 +31,10 @@ const actionViewOpen = ref(false);
 const actionView = ref<SlotResource | null>(null);
 const actionViewComponent = ref<Component | null>(null);
 
-const currentPackage = computed(() =>
-  packages.packages.find((item) => item.id === chat.chat.value?.packageId) ?? null,
-);
 const isEmpty = computed(() => chat.activePath.value.length === 0);
 const suggestions = ["用一句话介绍你自己", "我们开始一段新的对话", "帮我梳理一个想法"];
 const actions = computed(() => {
-  const enabledPlugins = plugins.enabledPluginsForPackage(
-    currentPackage.value?.id,
-    currentPackage.value?.enabledGlobalPluginIds,
-    currentPackage.value?.mainPluginId,
-  );
-  return slots.api(enabledPlugins).get("COMMAND", "global")?.resources ?? [];
+  return slots.api(plugins.finalPlugins.value).get("COMMAND", "global")?.resources ?? [];
 });
 
 onMounted(() => { if (!defaults.loaded) void defaults.load(); });
@@ -71,7 +61,7 @@ function useSuggestion(value: string) {
 }
 
 function openActionView(action: SlotResource) {
-  const plugin = plugins.plugins.find((item) => item.id === action.pluginId);
+  const plugin = plugins.finalPlugins.value.find((item) => item.id === action.pluginId);
   if (!plugin) {
     push.error("动作所属插件不可用。");
     return;

@@ -70,6 +70,11 @@ export const useSlotStore = defineStore("plugin-slots", {
           plugin.files.flatMap((node) =>
             ((node.insertion?.slot === slot.id &&
               pluginFileMatchesSlotSuffix(node.name, slot.contentSuffixes)) ||
+              (slot.id === "toolFunction" &&
+                /^tools\/[^/]+\/prompt\.md$/i.test(node.path) &&
+                plugin.files.some((file) =>
+                  file.path === node.path.replace(/prompt\.md$/i, "tool.js"),
+                )) ||
               (slot.id === "REGEX" &&
                 plugin.enabled &&
                 node.path === pluginConventions.regex))

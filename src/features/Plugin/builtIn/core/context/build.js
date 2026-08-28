@@ -20,6 +20,7 @@ for (const id of [
   "user",
   "document",
   "data_prompt",
+  "toolFunction",
   "chat",
 ]) messages.push(...await messagesForSlot(id));
 

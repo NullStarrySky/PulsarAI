@@ -12,23 +12,19 @@ import {
   type PluginTreeNode,
 } from "@/features/Plugin/tree/plugin-types";
 import type {
-  ChatMessageContainer,
   ConversationResourceNodeSnapshot,
   ConversationResourceOperation,
   ConversationResourceOperationStats,
-  ConversationResourceUpdate,
-} from "./conversation-types";
-
-type OverlaySnapshot = {
-  plugins: Plugin[];
-  operations: ConversationResourceOperation[];
-  stats: ConversationResourceOperationStats;
-};
+} from "@/features/Conversation/messages/conversation-types";
 
 export interface ConversationResourceOverlayOptions {
   plugins: Plugin[];
-  activePath: ChatMessageContainer[];
-  onUpdate?: (update: ConversationResourceUpdate) => void | Promise<void>;
+  /** A cached conversation view already owns this tree. */
+  copy?: boolean;
+  onChange?: (
+    change: ConversationResourceOperation,
+    stats: ConversationResourceOperationStats,
+  ) => void | Promise<void>;
 }
 
 function clone<T>(value: T): T {
@@ -83,19 +79,6 @@ function emptyStats(): ConversationResourceOperationStats {
   };
 }
 
-function statsFor(
-  operations: ConversationResourceOperation[],
-  codeAct: ConversationResourceOperationStats["codeAct"],
-  logCount: number,
-): ConversationResourceOperationStats {
-  const stats = emptyStats();
-  stats.total = operations.length;
-  stats.codeAct = clone(codeAct);
-  stats.logCount = logCount;
-  for (const operation of operations) stats[operation.type] += 1;
-  return stats;
-}
-
 function snapshotNode(node: PluginTreeNode): ConversationResourceNodeSnapshot {
   return {
     id: node.id,
@@ -114,18 +97,11 @@ function snapshotNode(node: PluginTreeNode): ConversationResourceNodeSnapshot {
   };
 }
 
-function fileFromSnapshot(
-  snapshot: ConversationResourceNodeSnapshot,
-): PluginFile {
+function fileFromSnapshot(snapshot: ConversationResourceNodeSnapshot): PluginFile {
   if (snapshot.kind !== "file") throw new Error("资源快照不是文件。");
   return {
-    id: snapshot.id,
-    path: snapshot.path,
-    name: snapshot.name,
-    icon: snapshot.icon,
-    treeOrder: snapshot.treeOrder,
-    kind: "file",
-    content: clone(snapshot.content),
+    id: snapshot.id, path: snapshot.path, name: snapshot.name, icon: snapshot.icon,
+    treeOrder: snapshot.treeOrder, kind: "file", content: clone(snapshot.content),
     order: snapshot.order ?? 100,
     ...(snapshot.insertion ? { insertion: clone(snapshot.insertion) } : {}),
   };
@@ -182,44 +158,68 @@ function findNode(plugin: Plugin, resourceId: string) {
 }
 
 function moveNode(
-  plugin: Plugin,
+  sourcePlugin: Plugin,
   node: PluginTreeNode,
+  targetPlugin: Plugin,
   targetParentPath: string,
 ) {
   const parent = normalizePath(targetParentPath);
   if (parent) {
-    if (!pluginDirectoryExists(plugin, parent))
+    if (!pluginDirectoryExists(targetPlugin, parent))
       throw new Error(`移动目标不是文件夹：${targetParentPath}`);
   }
   if (
+    sourcePlugin === targetPlugin &&
     node.kind === "folder" &&
     (parent === node.path || parent.startsWith(`${node.path}/`))
   ) {
     throw new Error("不能把文件夹移动到自身或其子目录。");
   }
   const nextPath = parent ? `${parent}/${node.name}` : node.name;
-  const collision = findPluginNodeByPath(plugin, nextPath);
+  const collision = findPluginNodeByPath(targetPlugin, nextPath);
   if (collision && collision.id !== node.id) {
     throw new Error(`移动后路径已存在：${nextPath}`);
   }
   const formerPath = node.path;
-  if (parent) clearEmptyAncestors(plugin, `${parent}/occupied`);
+  if (parent) clearEmptyAncestors(targetPlugin, `${parent}/occupied`);
   if (node.kind === "folder") {
     const prefix = `${formerPath}/`;
-    for (const descendant of plugin.files) {
+    const movingFiles = sourcePlugin.files.filter((file) =>
+      file.path.startsWith(prefix),
+    );
+    const movingFolders = sourcePlugin.emptyFolders.filter((folder) =>
+      folder === formerPath || folder.startsWith(prefix),
+    );
+    for (const descendant of movingFiles) {
       if (descendant.path.startsWith(prefix)) {
         descendant.path = `${nextPath}${descendant.path.slice(formerPath.length)}`;
       }
     }
-    plugin.emptyFolders = plugin.emptyFolders.map((folder) =>
-      folder === formerPath || folder.startsWith(prefix)
-        ? `${nextPath}${folder.slice(formerPath.length)}`
-        : folder,
-    );
+    if (sourcePlugin === targetPlugin) {
+      sourcePlugin.emptyFolders = sourcePlugin.emptyFolders.map((folder) =>
+        folder === formerPath || folder.startsWith(prefix)
+          ? `${nextPath}${folder.slice(formerPath.length)}`
+          : folder,
+      );
+    } else {
+      const movingIds = new Set(movingFiles.map((file) => file.id));
+      sourcePlugin.files = sourcePlugin.files.filter((file) => !movingIds.has(file.id));
+      sourcePlugin.emptyFolders = sourcePlugin.emptyFolders.filter(
+        (folder) => folder !== formerPath && !folder.startsWith(prefix),
+      );
+      targetPlugin.files.push(...movingFiles);
+      targetPlugin.emptyFolders.push(...movingFolders.map((folder) =>
+        `${nextPath}${folder.slice(formerPath.length)}`,
+      ).filter((folder) => !targetPlugin.emptyFolders.includes(folder)));
+    }
   } else {
     node.path = nextPath;
+    if (sourcePlugin !== targetPlugin) {
+      sourcePlugin.files = sourcePlugin.files.filter((file) => file.id !== node.id);
+      targetPlugin.files.push(node);
+    }
   }
-  keepParentIfEmpty(plugin, formerPath);
+  keepParentIfEmpty(sourcePlugin, formerPath);
 }
 
 /**
@@ -228,64 +228,61 @@ function moveNode(
  */
 export class ConversationResourceOverlay {
   plugins: Plugin[];
-  private readonly createdAt = new Date().toISOString();
-  private readonly onUpdate?: ConversationResourceOverlayOptions["onUpdate"];
-  private operations: ConversationResourceOperation[] = [];
-  private codeAct = emptyStats().codeAct;
-  private transaction: OverlaySnapshot | null = null;
+  private readonly onChange?: ConversationResourceOverlayOptions["onChange"];
+  private readonly operationStats = emptyStats();
   private logger: PluginLogger | null = null;
 
   constructor(options: ConversationResourceOverlayOptions) {
-    this.plugins = clone(options.plugins);
-    this.onUpdate = options.onUpdate;
-    for (const container of options.activePath) {
-      const message =
-        container.activeMessage === null
-          ? null
-          : container.content[container.activeMessage];
-      for (const operation of message?.meta.resourceUpdate?.operations ?? []) {
-        this.apply(operation);
-      }
-    }
+    this.plugins = options.copy === false ? options.plugins : clone(options.plugins);
+    this.onChange = options.onChange;
   }
 
   setLogger(logger: PluginLogger) {
     this.logger = logger;
   }
 
-  begin() {
-    if (this.transaction)
-      throw new Error("不能嵌套执行 CodeAct Overlay 事务。");
-    this.transaction = {
-      plugins: clone(this.plugins),
-      operations: clone(this.operations),
-      stats: this.stats(),
-    };
-    this.codeAct.attempted += 1;
-    this.logger?.append("开始 CodeAct Overlay 事务。", 0, "info");
-  }
-
-  commit() {
-    if (!this.transaction) return;
-    this.transaction = null;
-    this.codeAct.committed += 1;
-    this.logger?.append("提交 CodeAct Overlay 事务。", 0, "info");
+  recordCodeAct() {
+    this.operationStats.codeAct.attempted += 1;
     this.publish();
   }
 
-  rollback() {
-    if (!this.transaction) return;
-    const snapshot = this.transaction;
-    this.plugins = clone(snapshot.plugins);
-    this.operations = clone(snapshot.operations);
-    this.transaction = null;
-    this.codeAct = {
-      ...snapshot.stats.codeAct,
-      attempted: snapshot.stats.codeAct.attempted + 1,
-      rolledBack: snapshot.stats.codeAct.rolledBack + 1,
-    };
-    this.logger?.append("回滚 CodeAct Overlay 事务。", 0, "error");
-    this.publish();
+  /** Applies a persisted structural change to the cached final tree. */
+  applyChange(operation: ConversationResourceOperation) {
+    if (operation.type === "edit") {
+      if (operation.target.kind !== "plugin-node") return;
+      const plugin = this.plugins.find((item) => item.id === operation.target.pluginId);
+      const node = plugin ? findPluginTreeNode(plugin, operation.target.resourceId) : null;
+      if (node) Object.assign(node, fileFromSnapshot(operation.value as ConversationResourceNodeSnapshot));
+      return;
+    }
+    if (operation.type === "create") {
+      const plugin = this.plugins.find((item) => item.id === operation.pluginId);
+      if (!plugin) return;
+      ensureFolders(plugin, operation.parentPath);
+      if (operation.node.kind === "folder") {
+        if (!pluginDirectoryExists(plugin, operation.node.path)) plugin.emptyFolders.push(operation.node.path);
+      } else if (!plugin.files.some((file) => file.id === operation.node.id)) {
+        plugin.files.push(fileFromSnapshot(operation.node));
+        clearEmptyAncestors(plugin, operation.node.path);
+      }
+      return;
+    }
+    if (operation.type === "move") {
+      const plugin = this.plugins.find((item) => item.id === operation.pluginId);
+      const node = plugin ? findPluginTreeNode(plugin, operation.resourceId) : null;
+      const targetPlugin = this.plugins.find((item) => item.id === operation.targetPluginId);
+      if (plugin && node && targetPlugin)
+        moveNode(plugin, node, targetPlugin, operation.targetParentPath);
+      return;
+    }
+    if (operation.type === "remove" && operation.target.kind === "plugin-node") {
+      const plugin = this.plugins.find((item) => item.id === operation.target.pluginId);
+      const node = plugin ? findPluginTreeNode(plugin, operation.target.resourceId) : null;
+      if (!plugin || !node) return;
+      plugin.files = plugin.files.filter((item) => item.id !== node.id && !item.path.startsWith(`${node.path}/`));
+      plugin.emptyFolders = plugin.emptyFolders.filter((folder) => folder !== node.path && !folder.startsWith(`${node.path}/`));
+      keepParentIfEmpty(plugin, node.path);
+    }
   }
 
   writeFile(pluginId: string, path: string, content: string | ArrayBuffer) {
@@ -346,7 +343,7 @@ export class ConversationResourceOverlay {
   updateFile(
     pluginId: string,
     resourceId: string,
-    patch: Pick<PluginFile, "content" | "order" | "insertion">,
+    patch: Partial<Pick<PluginFile, "content" | "order" | "insertion">>,
   ) {
     const plugin = findPlugin(this.plugins, pluginId);
     const node = findNode(plugin, resourceId);
@@ -386,17 +383,18 @@ export class ConversationResourceOverlay {
     });
   }
 
-  move(pluginId: string, from: string, targetPath: string) {
+  move(pluginId: string, from: string, targetPluginId: string, targetPath: string) {
     const plugin = findPlugin(this.plugins, pluginId);
+    const targetPlugin = findPlugin(this.plugins, targetPluginId);
     const node = findPluginNodeByPath(plugin, normalizePath(from));
     if (!node) throw new Error(`资源不存在：${from}`);
     const targetParentPath = pluginParentPath(normalizePath(targetPath));
-    moveNode(plugin, node, targetParentPath);
+    moveNode(plugin, node, targetPlugin, targetParentPath);
     this.record({
       type: "move",
       pluginId,
       resourceId: node.id,
-      targetPluginId: pluginId,
+      targetPluginId,
       targetParentPath,
       name: node.name,
     });
@@ -420,113 +418,36 @@ export class ConversationResourceOverlay {
   }
 
   stats() {
-    return statsFor(
-      this.operations,
-      this.codeAct,
-      this.logger?.logs.length ?? 0,
-    );
-  }
-
-  resourceUpdate(): ConversationResourceUpdate {
     return {
-      operations: clone(this.operations),
-      createdAt: this.createdAt,
-      stats: this.stats(),
+      ...clone(this.operationStats),
+      logCount: this.logger?.logs.length ?? 0,
     };
   }
 
-  finalize() {
-    if (this.codeAct.attempted > 0 || this.operations.length > 0)
-      this.publish();
-  }
-
   private record(operation: ConversationResourceOperation) {
-    this.operations.push(clone(operation));
+    this.operationStats.total += 1;
+    this.operationStats[operation.type] += 1;
     this.logger?.append(`Overlay ${operation.type} 操作已暂存。`, 0, "api");
+    this.publish(operation);
   }
 
-  private publish() {
-    if (!this.onUpdate) return;
-    void Promise.resolve(this.onUpdate(this.resourceUpdate())).catch(
-      (error) => {
+  private publish(change?: ConversationResourceOperation) {
+    if (!this.onChange || !change) return;
+    try {
+      void Promise.resolve(this.onChange(clone(change), this.stats())).catch((error) => {
         this.logger?.append(
           `Overlay 持久化失败：${error instanceof Error ? error.message : String(error)}`,
           0,
           "error",
         );
-      },
-    );
+      });
+    } catch (error) {
+      this.logger?.append(
+        `Overlay 持久化失败：${error instanceof Error ? error.message : String(error)}`,
+        0,
+        "error",
+      );
+    }
   }
 
-  private apply(operation: ConversationResourceOperation) {
-    if (operation.type === "edit") {
-      if (operation.target.kind !== "plugin-node") return;
-      const plugin = this.plugins.find(
-        (item) => item.id === operation.target.pluginId,
-      );
-      const node = plugin
-        ? findPluginTreeNode(plugin, operation.target.resourceId)
-        : null;
-      if (!node) return;
-      Object.assign(
-        node,
-        fileFromSnapshot(operation.value as ConversationResourceNodeSnapshot),
-      );
-      return;
-    }
-    if (operation.type === "create") {
-      const plugin = this.plugins.find(
-        (item) => item.id === operation.pluginId,
-      );
-      if (!plugin) return;
-      ensureFolders(plugin, operation.parentPath);
-      if (operation.node.kind === "folder") {
-        if (!pluginDirectoryExists(plugin, operation.node.path))
-          plugin.emptyFolders.push(operation.node.path);
-      } else if (
-        !plugin.files.some(
-          (file) =>
-            file.id === operation.node.id || file.path === operation.node.path,
-        )
-      ) {
-        plugin.files.push(fileFromSnapshot(operation.node));
-        clearEmptyAncestors(plugin, operation.node.path);
-      }
-      return;
-    }
-    if (operation.type === "move") {
-      if (operation.pluginId !== operation.targetPluginId) return;
-      const plugin = this.plugins.find(
-        (item) => item.id === operation.pluginId,
-      );
-      if (!plugin) return;
-      const node = findPluginTreeNode(plugin, operation.resourceId);
-      if (!node) return;
-      moveNode(
-        plugin,
-        node,
-        operation.targetParentPath,
-      );
-      return;
-    }
-    if (
-      operation.type === "remove" &&
-      operation.target.kind === "plugin-node"
-    ) {
-      const plugin = this.plugins.find(
-        (item) => item.id === operation.target.pluginId,
-      );
-      const node = plugin
-        ? findPluginTreeNode(plugin, operation.target.resourceId)
-        : null;
-      if (!node || !plugin) return;
-      plugin.files = plugin.files.filter(
-        (item) => item.id !== node.id && !item.path.startsWith(`${node.path}/`),
-      );
-      plugin.emptyFolders = plugin.emptyFolders.filter(
-        (folder) => folder !== node.path && !folder.startsWith(`${node.path}/`),
-      );
-      keepParentIfEmpty(plugin, node.path);
-    }
-  }
 }

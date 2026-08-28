@@ -20,8 +20,8 @@ export function useMessageBubble(
   const attachments = computed(() => unref(message)?.parts?.filter(
     (part): part is FilePart => part.type === "file",
   ) ?? []);
-  const resourceUpdate = computed(() => unref(message)?.meta.resourceUpdate);
-  const hasResourceUpdate = computed(() => Boolean(resourceUpdate.value?.operations.length));
+  const pluginChanges = computed(() => unref(message)?.meta.pluginChanges);
+  const hasPluginChanges = computed(() => Boolean(pluginChanges.value?.changes.length));
   const agentWorking = computed(() =>
     conversation.generating.value &&
     conversation.activePath.value[conversation.activePath.value.length - 1]?.id === unref(container).id &&
@@ -33,7 +33,7 @@ export function useMessageBubble(
   const canNavigateNext = computed(() =>
     (unref(container).activeMessage ?? 0) < unref(container).content.length - 1 || !conversation.generating.value,
   );
-  const resourceSummary = computed(() => `${resourceUpdate.value?.operations.length ?? 0} 项资源变更`);
+  const resourceSummary = computed(() => `${pluginChanges.value?.changes.length ?? 0} 项资源变更`);
 
   function startEdit() {
     const current = unref(message);
@@ -77,8 +77,8 @@ export function useMessageBubble(
     editing,
     thinking,
     attachments,
-    resourceUpdate,
-    hasResourceUpdate,
+    pluginChanges,
+    hasPluginChanges,
     agentWorking,
     hasVisibleMessage,
     canNavigateNext,

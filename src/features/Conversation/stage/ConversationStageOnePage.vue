@@ -12,7 +12,6 @@ import PluginFileEditorDialog from "@/features/Plugin/tree/PluginFileEditorDialo
 import PluginManagerPanel from "@/features/Plugin/PluginManagerPanel.vue";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import type { Plugin, PluginFile } from "@/features/Plugin/tree/plugin-types";
-import { conversationOverlayPlugins } from "@/features/Conversation/messages/conversation-resource-overlay-service";
 
 const props = defineProps<{ chatId?: string }>();
 const emit = defineEmits<{ "update:chatId": [chatId: string] }>();
@@ -25,8 +24,6 @@ const plugins = usePluginStore();
 const assetPluginId = computed(() => plugins.assetPanelPluginId);
 const pluginPanelOpen = ref(false);
 const activeEditor = computed(() => plugins.activeEditorState);
-const overlayPlugins = computed(() => chatId.value ? conversationOverlayPlugins(chatId.value) : []);
-const assetPlugin = computed(() => overlayPlugins.value.find((plugin) => plugin.id === assetPluginId.value) ?? null);
 const fileEditorOpen = computed({ get: () => Boolean(activeEditor.value), set: (open: boolean) => { if (!open) plugins.closeFileEditor(); } });
 const chatId = computed({
   get: () => props.chatId ?? localChatId.value,
@@ -35,6 +32,8 @@ const chatId = computed({
     else emit("update:chatId", value);
   },
 });
+const conversationPlugins = usePluginStore(chatId);
+const assetPlugin = computed(() => conversationPlugins.finalPlugins.value.find((plugin) => plugin.id === assetPluginId.value) ?? null);
 
 watch(chatId, (value) => {
   const chat = chats.chats.find((item) => item.id === value);
@@ -84,7 +83,6 @@ function openPluginAssets(plugin: Plugin) { pluginPanelOpen.value = false; plugi
 function openPluginFile(value: { plugin: Plugin; file: PluginFile; path: string }) {
   plugins.openFileEditor(value.plugin, value.file, value.path, "preview", {
     conversationId: chatId.value,
-    overlayPlugins: overlayPlugins.value,
   });
 }
 </script>
@@ -94,7 +92,7 @@ function openPluginFile(value: { plugin: Plugin; file: PluginFile; path: string 
     <ConversationHeader v-if="ready && packageId && chatId" :package-id="packageId" v-model:chat-id="chatId" :asset-open="Boolean(assetPluginId)" :plugin-open="pluginPanelOpen" @update:package-id="selectPackage" @toggle-assets="toggleAssets" @toggle-plugin="togglePluginPanel" />
     <main v-if="ready && chatId" class="relative min-h-0 flex-1"><ChatThread :key="chatId" :chat-id="chatId"><template #messageAction="slotProps"><slot name="messageAction" v-bind="slotProps" /></template></ChatThread><ChatComposer :key="chatId" :chat-id="chatId" /><Transition name="asset-panel"><PluginAssetTreePanel v-if="assetPluginId" :plugin-id="assetPluginId" :plugin="assetPlugin" @select="openPluginFile" @close="plugins.closeAssetPanel(assetPluginId ?? undefined)" /></Transition><Transition name="asset-panel"><PluginManagerPanel v-if="pluginPanelOpen" :package-id="packageId" @select="openPluginAssets" @close="pluginPanelOpen = false" /></Transition></main>
     <AskUserComponent />
-    <PluginFileEditorDialog :open="fileEditorOpen" :plugin="activeEditor?.plugin ?? null" :file="activeEditor?.file ?? null" :path="activeEditor?.path ?? ''" :initial-mode="activeEditor?.editorMode" :panel-open="Boolean(assetPluginId)" :package-id="packageId" :conversation-id="activeEditor?.conversationId" :overlay-plugins="activeEditor?.overlayPlugins" @update:open="fileEditorOpen = $event" />
+    <PluginFileEditorDialog :open="fileEditorOpen" :plugin="activeEditor?.plugin ?? null" :file="activeEditor?.file ?? null" :path="activeEditor?.path ?? ''" :initial-mode="activeEditor?.editorMode" :panel-open="Boolean(assetPluginId)" :package-id="packageId" :conversation-id="activeEditor?.conversationId" @update:open="fileEditorOpen = $event" />
   </section>
 </template>
 

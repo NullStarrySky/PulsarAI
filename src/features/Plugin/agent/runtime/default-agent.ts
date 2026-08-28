@@ -27,11 +27,7 @@ import { askUser } from "./ask-user";
 export interface CreateDefaultAgentResourcesInput {
   environment?: SandboxEnvironment;
   modelName?: string;
-  resourceTransaction?: {
-    begin: () => void;
-    commit: () => void;
-    rollback: () => void;
-  };
+  onCodeAct?: () => void;
 }
 
 export interface DefaultAgentResources {
@@ -90,41 +86,22 @@ const codeActInstructions = [
   "The function must contain an explicit return. Use only APIs documented in the current context.",
   "Return plain serializable data. Preserve resource `id` and `path` when later calls may need to follow the result.",
   "To delegate a bounded task, call `await generate({ plugin?, environment?, prompt })` inside the function. It returns the child agent's final text; the default plugin is the blank no-template process and an omitted environment uses an in-memory temporary conversation.",
-  "Plugin custom functions documented under `# 自定义工具` are context functions: call them with `await ctx.tools[name](...args)`.",
+  "Plugin tool functions, when their prompt is present in the compiled context, are ordinary functions directly on ctx. Call the documented function name inside codeAct.",
   "Inspect Plugin slots with `slot.list()` / `get()`. `slot.paths(slotId)` and `slot.import(slotId)` synchronously return selected resource paths; pass a selected resource or path array to `await parse(...)` for recursive macro expansion. A chat resource returns pure message[] without authoring labels or disabled entries. Importing a JavaScript resource is the exception and returns its execution Promise.",
-  "Plugin write/edit/mkdir/move/remove/config.set and writable .data wrapper operations update the current Conversation resource overlay. They are committed atomically only when the codeAct call succeeds.",
+  "Plugin write/edit/mkdir/move/remove/config.set and writable .data wrapper operations update the current message's attached Plugin container immediately.",
   "Use open(path), close(path), or toggle(path) to operate a Plugin resource editor. `@/` and `@pluginId/` operate that Plugin's asset panel; a file path such as `@/notes.md` operates its editor. Each returns whether the target is open plus its stable IDs.",
   "Read and update .data through its documented wrapper facade when possible, or use data.readForResource(resourceId, dataId) and data.writeForResource(resourceId, dataId, value). Persisted data values must remain pure JSON.",
   "The tool result contains either `{ ok: true, value }` or `{ ok: false, error }`; inspect errors and correct the next function.",
 ].join("\n");
 
-function createCodeActTool(
-  environment: SandboxEnvironment,
-  transaction?: CreateDefaultAgentResourcesInput["resourceTransaction"],
-) {
+function createCodeActTool(environment: SandboxEnvironment, onCodeAct?: () => void) {
   return {
     codeAct: tool({
       description: codeActInstructions,
       inputSchema: jsInputSchema,
       execute: async (input) => {
-        transaction?.begin();
-        try {
-          const output = await executeCodeAct(input.code, environment);
-          if (
-            output &&
-            typeof output === "object" &&
-            "ok" in output &&
-            output.ok === true
-          ) {
-            transaction?.commit();
-          } else {
-            transaction?.rollback();
-          }
-          return output;
-        } catch (error) {
-          transaction?.rollback();
-          throw error;
-        }
+        onCodeAct?.();
+        return executeCodeAct(input.code, environment);
       },
     }),
   };
@@ -135,10 +112,7 @@ async function createDefaultAgentResources(
 ): Promise<DefaultAgentResources> {
   const modelName = input.modelName || (await getDefaultChatModel());
   const reasoning = parseModelReference(modelName).reasoning;
-  const tools = createCodeActTool(
-    input.environment ?? {},
-    input.resourceTransaction,
-  );
+  const tools = createCodeActTool(input.environment ?? {}, input.onCodeAct);
 
   return {
     model: hydrateModel(modelName, "chat") as LanguageModel,

@@ -1,4 +1,6 @@
-import { defineStore } from "pinia";
+import { defineStore, type Pinia } from "pinia";
+import { isRef, type MaybeRefOrGetter } from "vue";
+import { createConversationPluginStore } from "./conversation-plugin-store";
 import { usePackageStore } from "@/features/Package/package-store";
 import type { PluginLogger } from "@/features/Plugin/runtime/logger";
 import {
@@ -48,14 +50,13 @@ export interface ActivePluginFileEditorState {
   path: string;
   editorMode: "preview" | "source";
   conversationId?: string;
-  overlayPlugins?: Plugin[];
 }
 
 export interface PluginStoreApiMutation {
   writeFile(pluginId: string, path: string, content: string | ArrayBuffer): void;
   editFile(pluginId: string, path: string, find: string, replace: string): void;
   mkdir(pluginId: string, path: string): void;
-  move(pluginId: string, from: string, targetPath: string): void;
+  move(pluginId: string, from: string, targetPluginId: string, targetPath: string): void;
   remove(pluginId: string, path: string): void;
 }
 
@@ -578,13 +579,14 @@ function setPluginStateItems(state: unknown, plugins: Plugin[]) {
   (state as { plugins: Plugin[] }).plugins = plugins;
 }
 
-export const usePluginStore = defineStore("plugin-resource", {
+const usePluginStateStore = defineStore("plugin-resource", {
   state: () => ({
     loaded: false,
     loadError: "",
     activePluginId: "",
     assetPanelPluginId: null as string | null,
     search: "",
+    treeRevision: 0,
     plugins: [] as Plugin[],
     activeEditorState: null as ActivePluginFileEditorState | null,
   }),
@@ -812,7 +814,6 @@ export const usePluginStore = defineStore("plugin-resource", {
         }
         const context = {
           conversationId: options.conversationId,
-          overlayPlugins: plugins(),
         };
         if (action === "open") {
           this.showFileEditor(target.plugin, target.file, target.path, "preview", context);
@@ -900,9 +901,17 @@ export const usePluginStore = defineStore("plugin-resource", {
           const source = resolve(from);
           if (!source.node) throw new Error(`资源不存在：${from}`);
           const target = resolve(to);
-          if (target.plugin.id !== source.plugin.id) throw new Error("当前不支持跨插件移动资源。");
-          if (options.mutation) options.mutation.move(source.plugin.id, source.path, target.path);
-          else persist(this.moveNode(source.plugin.id, source.node.id, pluginParentPath(target.path)), "移动资源", `@${source.plugin.id}/${source.path}`);
+          if (options.mutation) options.mutation.move(
+            source.plugin.id,
+            source.path,
+            target.plugin.id,
+            target.path,
+          );
+          else {
+            if (target.plugin.id !== source.plugin.id)
+              throw new Error("跨插件移动只支持会话 Plugin 工作区。");
+            persist(this.moveNode(source.plugin.id, source.node.id, pluginParentPath(target.path)), "移动资源", `@${source.plugin.id}/${source.path}`);
+          }
           log("移动资源", `@${source.plugin.id}/${source.path}`);
         },
         remove: (path: string) => {
@@ -984,9 +993,11 @@ export const usePluginStore = defineStore("plugin-resource", {
       }
       this.activePluginId = this.sortedPlugins[0]?.id ?? "";
       this.loaded = true;
+      this.treeRevision += 1;
     },
     async persistPlugin(plugin: Plugin) {
       await savePersistedPlugin(clonePlain(plugin));
+      this.treeRevision += 1;
     },
     async searchPluginNodes(query: string, limit = 40) {
       await this.initialize();
@@ -1449,7 +1460,7 @@ export const usePluginStore = defineStore("plugin-resource", {
       mode: "preview" | "source" = "preview",
       context: Pick<
         ActivePluginFileEditorState,
-        "conversationId" | "overlayPlugins"
+        "conversationId"
       > = {},
     ) {
       if (
@@ -1476,7 +1487,7 @@ export const usePluginStore = defineStore("plugin-resource", {
       mode: "preview" | "source" = "preview",
       context: Pick<
         ActivePluginFileEditorState,
-        "conversationId" | "overlayPlugins"
+        "conversationId"
       > = {},
     ) {
       this.activeEditorState = {
@@ -1494,7 +1505,7 @@ export const usePluginStore = defineStore("plugin-resource", {
       mode: "preview" | "source" = "preview",
       context: Pick<
         ActivePluginFileEditorState,
-        "conversationId" | "overlayPlugins"
+        "conversationId"
       > = {},
     ) {
       if (
@@ -1518,3 +1529,31 @@ export const usePluginStore = defineStore("plugin-resource", {
     },
   },
 });
+
+export type PluginBaseStore = ReturnType<typeof usePluginStateStore>;
+
+/**
+ * Returns either the persistent Plugin owner, or a conversation-local Plugin
+ * view. The latter exposes the materialized tree and an API whose mutations
+ * become ordered operations on that conversation's active message path.
+ */
+export function usePluginStore(pinia?: Pinia): PluginBaseStore;
+export function usePluginStore(
+  conversationId: MaybeRefOrGetter<string | null | undefined>,
+): ReturnType<typeof createConversationPluginStore>;
+export function usePluginStore(pinia?: Pinia): PluginBaseStore;
+export function usePluginStore(
+  conversationIdOrPinia?: MaybeRefOrGetter<string | null | undefined> | Pinia,
+) {
+  if (
+    typeof conversationIdOrPinia === "string" ||
+    typeof conversationIdOrPinia === "function" ||
+    isRef(conversationIdOrPinia)
+  ) {
+    return createConversationPluginStore(
+      usePluginStateStore(),
+      conversationIdOrPinia,
+    );
+  }
+  return usePluginStateStore(conversationIdOrPinia);
+}

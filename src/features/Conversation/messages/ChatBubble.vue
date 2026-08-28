@@ -53,8 +53,8 @@ const {
   editing,
   thinking,
   attachments,
-  resourceUpdate,
-  hasResourceUpdate,
+  pluginChanges,
+  hasPluginChanges,
   agentWorking,
   hasVisibleMessage,
   canNavigateNext,
@@ -63,7 +63,6 @@ const {
   saveEdit,
   exportScreenshot,
   messageTime,
-  formatValue,
   attachmentPreviewUrl,
   formatAttachmentSize,
   openMessageAttachment,
@@ -102,12 +101,11 @@ const {
           <Button variant="ghost" size="icon-sm" class="rounded-full" title="复制" @click="conversation.copyMessage(container.id)"><Copy class="size-4" /></Button>
           <Button v-if="container.role === 'assistant'" variant="ghost" size="icon-sm" class="rounded-full" title="重新生成" :disabled="conversation.generating.value" @click="conversation.regenerate(container.id)"><RefreshCw class="size-4" /></Button>
           <slot name="messageAction" :container="container" :message="message" :conversation="conversation" />
-          <Popover v-if="hasResourceUpdate">
-            <PopoverTrigger as-child><Button variant="ghost" size="icon-sm" class="h-6 gap-1 rounded-full px-1.5 text-[11px] text-amber-500 hover:bg-amber-500/10 hover:text-amber-600" title="查看消息的资源操作"><Database class="size-3" /><span>{{ resourceSummary }}</span></Button></PopoverTrigger>
+          <Popover v-if="hasPluginChanges">
+            <PopoverTrigger as-child><Button variant="ghost" size="icon-sm" class="h-6 gap-1 rounded-full px-1.5 text-[11px] text-amber-500 hover:bg-amber-500/10 hover:text-amber-600" title="查看消息附属的 Plugin 统计"><Database class="size-3" /><span>{{ resourceSummary }}</span></Button></PopoverTrigger>
             <PopoverContent align="start" class="w-[min(28rem,calc(100vw-1rem))] space-y-3 p-3 text-xs">
-              <div class="flex items-center gap-1.5 border-b pb-1.5 font-semibold text-amber-500"><Database class="size-4" />消息资源 Overlay</div>
-              <div v-if="resourceUpdate?.stats" class="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg bg-muted/50 p-2 font-mono text-[11px]"><span>操作 {{ resourceUpdate.stats.total }}</span><span>日志 {{ resourceUpdate.stats.logCount }}</span><span>提交 {{ resourceUpdate.stats.codeAct.committed }}/{{ resourceUpdate.stats.codeAct.attempted }}</span><span>回滚 {{ resourceUpdate.stats.codeAct.rolledBack }}</span><span>编辑 {{ resourceUpdate.stats.edit }}</span><span>创建 {{ resourceUpdate.stats.create }}</span><span>移动 {{ resourceUpdate.stats.move }}</span><span>删除 {{ resourceUpdate.stats.remove }}</span></div>
-              <div class="max-h-64 space-y-2 overflow-y-auto font-mono"><pre v-for="(operation, index) in resourceUpdate?.operations" :key="index" class="whitespace-pre-wrap break-words rounded border bg-muted/60 p-2">{{ formatValue(operation) }}</pre></div>
+              <div class="flex items-center gap-1.5 border-b pb-1.5 font-semibold text-amber-500"><Database class="size-4" />版本 Plugin 变更</div>
+              <div v-if="pluginChanges?.stats" class="grid grid-cols-2 gap-x-4 gap-y-1 rounded-lg bg-muted/50 p-2 font-mono text-[11px]"><span>变更 {{ pluginChanges.changes.length }}</span><span>日志 {{ pluginChanges.stats.logCount }}</span><span>CodeAct {{ pluginChanges.stats.codeAct.attempted }}</span><span>编辑 {{ pluginChanges.stats.edit }}</span><span>创建 {{ pluginChanges.stats.create }}</span><span>移动 {{ pluginChanges.stats.move }}</span><span>删除 {{ pluginChanges.stats.remove }}</span></div>
             </PopoverContent>
           </Popover>
           <Popover v-if="container.role !== 'user'"><PopoverTrigger as-child><Button variant="ghost" size="icon-sm" class="rounded-full" title="分支"><GitBranch class="size-4" /></Button></PopoverTrigger><PopoverContent class="w-56 p-2"><Button variant="outline" size="sm" class="mb-2 w-full" :disabled="conversation.generating.value" @click="conversation.createBranch(container.id)"><Plus class="size-4" />新分支</Button><div class="grid grid-cols-5 gap-1"><Button v-for="(branchId, index) in conversation.branchIdsFor(container.id)" :key="branchId" size="icon-sm" :variant="conversation.activeBranchIdFor(container.id) === branchId ? 'default' : 'ghost'" @click="conversation.switchBranch(container.id, branchId)">{{ index + 1 }}</Button></div></PopoverContent></Popover>

@@ -1,4 +1,3 @@
-import type { ModelMessage } from "ai";
 import packageDocs from "@/features/Plugin/builtIn/core/docs/package.md?raw";
 import pluginDocs from "@/features/Plugin/builtIn/core/docs/plugin.md?raw";
 import conversationDocs from "@/features/Plugin/builtIn/core/docs/conversation.md?raw";
@@ -9,9 +8,7 @@ import {
   useMessageStore,
 } from "@/features/Conversation/messages/message-store";
 import { usePackageStore } from "@/features/Package/package-store";
-import { createAgentResourceProvider } from "@/features/Plugin/agent/runtime/default-agent";
 import type { PluginConfig } from "@/features/Plugin/editors/config/plugin-config";
-import { parsePluginDataDefinition } from "@/features/Plugin/editors/data/plugin-data";
 import { environmentTools, PluginLogger } from "@/features/Plugin/runtime";
 import type { PluginSelfApiMutation } from "@/features/Plugin/runtime/self-api";
 import { createPluginSelfApi } from "@/features/Plugin/runtime/self-api";
@@ -147,24 +144,8 @@ export function pluginConfigValue(plugin: Plugin, key: string) {
   return (config.content as PluginConfig)[key]?.value ?? null;
 }
 
-function injectSelectedData(
-  environment: SandboxEnvironment,
-  selfApi: ReturnType<typeof createPluginSelfApi>,
-) {
-  for (const path of selfApi.slot.paths("DATA_INJECT", "global")) {
-    const definition = parsePluginDataDefinition(selfApi.read(path));
-    const name = definition.varName?.trim();
-    if (!name) continue;
-    if (name in environment) throw new Error(`数据变量名冲突：${name}`);
-    const value = selfApi.import(path, environment);
-    if (value instanceof Promise)
-      throw new Error(`数据注入必须同步：${path}`);
-    if (value !== null) environment[name] = value;
-  }
-}
-
 /* ============================================================================
- * 3. Environment Resolver (IoC 环境变量解析)
+ * 3. Preview input resolver
  * ============================================================================ */
 
 export function resolveEnvironment(
@@ -199,43 +180,8 @@ export function resolveEnvironment(
 }
 
 /* ============================================================================
- * 4. Plugin Generation Environment Builder (沙箱生成环境构建器)
+ * 4. Disposable resource preview
  * ============================================================================ */
-
-export interface PluginGenerationDiagnostic {
-  type: string;
-  message: string;
-  path?: string;
-}
-
-export interface GenerationPathEnvironmentInput {
-  activePath: unknown[];
-  chat: ModelMessage[];
-  conversationId: string;
-  conversation: unknown;
-  packageId: string;
-  mainPluginId: string;
-  containerId: string;
-  action?: {
-    pluginId: string;
-    resourceId: string;
-    name: string;
-  };
-  prompt: string;
-  now?: () => string;
-  baseEnvironment?: SandboxEnvironment;
-  /** Conversation injects its versioned Overlay here during generation. */
-  resourceMutation?: PluginSelfApiMutation;
-}
-
-export interface PluginGenerationEnvironment {
-  environment: SandboxEnvironment;
-  enabledPlugins: Plugin[];
-  processPlugin: Plugin | null;
-  generatePath: string | null;
-  selfApi: ReturnType<typeof createPluginSelfApi>;
-  logger: PluginLogger;
-}
 
 export interface PluginResourcePreviewInput {
   plugin: Plugin;
@@ -323,83 +269,4 @@ export async function previewPluginResource(
     logger.append(message, 0, "error", resourcePath);
     return { value: null, error: message, logger };
   }
-}
-
-export async function buildPluginGenerationEnvironment(
-  plugins: Plugin[],
-  input: GenerationPathEnvironmentInput,
-): Promise<PluginGenerationEnvironment> {
-  const characterPackage =
-    usePackageStore().packages.find((item) => item.id === input.packageId) ??
-    null;
-  const enabledPlugins = plugins.filter(
-    (plugin) =>
-      plugin.id !== "builtin-default-plugin" &&
-      (plugin.enabled || plugin.id === input.mainPluginId),
-  );
-  const selfApi = createPluginSelfApi(input.mainPluginId, {
-    plugins: enabledPlugins,
-    mutation: input.resourceMutation,
-    conversationId: input.conversationId,
-  });
-  const logger = selfApi.logger;
-  const environment: SandboxEnvironment = {
-    ...(input.baseEnvironment ?? {}),
-    activePath: input.activePath,
-    chat: input.chat,
-    CHAT: input.chat,
-    conversationId: input.conversationId,
-    conversation: input.conversation,
-    packageId: input.packageId,
-    package: characterPackage,
-    containerId: input.containerId,
-    action: input.action?.name ?? "",
-    prompt: input.prompt,
-    now: input.now ?? (() => new Date().toISOString()),
-    utils: environmentTools,
-    imports: selfApi.import,
-    parse: (path: string | string[], extra: Record<string, unknown> = {}) =>
-      selfApi.parse(path, { ...environment, ...extra }),
-    fs: selfApi,
-    read: selfApi.read,
-    write: selfApi.write,
-    edit: selfApi.edit,
-    ls: selfApi.ls,
-    exists: selfApi.exists,
-    mkdir: selfApi.mkdir,
-    move: selfApi.move,
-    remove: selfApi.remove,
-    open: selfApi.open,
-    close: selfApi.close,
-    toggle: selfApi.toggle,
-    read_docs: readBuiltinAgentDocs,
-    slot: selfApi.slot,
-    logger,
-    input: createComposerApi(input.conversationId),
-  };
-  injectSelectedData(environment, selfApi);
-  // Agent stays an opt-in environment capability.  It is not a parallel
-  // generation path: a plugin explicitly constructs and runs it.
-  environment.agent = createAgentResourceProvider({ environment });
-
-  const processPlugin =
-    enabledPlugins.find((plugin) => plugin.id === input.mainPluginId) ?? null;
-  if (!processPlugin) {
-    throw new Error(`主要插件不存在或未启用：${input.mainPluginId}`);
-  }
-  const generateFile = pluginGenerateFile(processPlugin);
-  if (!generateFile) {
-    throw new Error(
-      `主要插件 ${processPlugin.name} 缺少插入到 generatePath slot 的 JS 入口脚本。`,
-    );
-  }
-
-  return {
-    environment,
-    enabledPlugins,
-    processPlugin,
-    generatePath: `@${processPlugin.id}/${generateFile.path}`,
-    selfApi,
-    logger,
-  };
 }

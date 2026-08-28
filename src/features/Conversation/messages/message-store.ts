@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { toRaw } from "vue";
 import { remove, selectByField, upsert } from "@/features/Database/database-service";
-import type { AdditionalParts, ChatMessage, ChatMessageContainer, ChatMessageMeta, ChatMessageType, ConversationResourceUpdate, FilePart, Role } from "./conversation-types";
+import type { AdditionalParts, ChatMessage, ChatMessageContainer, ChatMessageMeta, ChatMessageType, FilePart, Role } from "./conversation-types";
 import { formatChatMessageError } from "./conversation-types";
 import { normalizeMarkdownLineBreaks } from "@/features/Misc/markdown";
 import type { ModelMessage } from "ai";
@@ -101,12 +101,9 @@ export const useMessageStore = defineStore("conversation-messages", {
       previousContainer?: string | null;
       parts?: AdditionalParts[];
       hidden?: boolean;
-      resourceUpdate?: ConversationResourceUpdate;
     }) {
       const container = createContainer(input);
       if (input.hidden) container.hidden = true;
-      const currentMessage = this.currentMessage(container);
-      if (currentMessage && input.resourceUpdate) currentMessage.meta.resourceUpdate = structuredClone(toRaw(input.resourceUpdate));
       const previous = input.previousContainer
         ? this.containers.find((item) => item.id === input.previousContainer)
         : null;
@@ -120,21 +117,6 @@ export const useMessageStore = defineStore("conversation-messages", {
         ...(previous ? [this.persist(previous)] : []),
       ]);
       return container;
-    },
-    /** A durable causal node for a user resource edit; excluded from model chat context. */
-    async appendHiddenResourceUpdate(input: {
-      conversationId: string;
-      previousContainer?: string | null;
-      resourceUpdate: ConversationResourceUpdate;
-    }) {
-      return this.append({
-        conversationId: input.conversationId,
-        role: "system",
-        content: "",
-        previousContainer: input.previousContainer,
-        hidden: true,
-        resourceUpdate: input.resourceUpdate,
-      });
     },
     /** Create the persisted reply target before a generation plugin is allowed to write. */
     async requestAssistantContainer(input: {

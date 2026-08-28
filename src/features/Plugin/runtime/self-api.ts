@@ -6,6 +6,7 @@ import {
   usePluginStore,
 } from "@/features/Plugin/tree/plugin-store";
 import type { Plugin } from "@/features/Plugin/tree/plugin-types";
+import type { ChatMessage, ChatMessageContainer } from "@/features/Conversation/messages/conversation-types";
 import { useSlotStore } from "@/features/Plugin/tree/slot-store";
 import {
   resolveSandboxMessagesAsync,
@@ -19,6 +20,10 @@ export interface PluginSelfApiOptions {
   logger?: PluginLogger;
   mutation?: PluginSelfApiMutation;
   conversationId?: string;
+  /** The exact message-version container that owns Plugin persistence. */
+  container?: ChatMessageContainer;
+  /** Required with container: the concrete version that owns Plugin changes. */
+  messageVersion?: ChatMessage;
 }
 
 function isModelMessage(value: unknown): value is ModelMessage {
@@ -31,8 +36,15 @@ export function createPluginSelfApi(
   options: PluginSelfApiOptions = {},
 ) {
   const logger = options.logger ?? new PluginLogger();
-  const plugins = options.plugins ?? usePluginStore().plugins;
-  const plugin = usePluginStore().api(pluginId, { ...options, plugins, logger });
+  if (options.container && !options.messageVersion)
+    throw new Error("会话 Plugin selfApi 必须绑定具体消息版本。");
+  const attached = options.container && options.conversationId && options.messageVersion
+    ? usePluginStore(options.conversationId).forVersion(options.container, options.messageVersion, logger)
+    : null;
+  const plugins = attached?.plugins ?? options.plugins ?? usePluginStore().plugins;
+  const plugin = attached
+    ? attached.api(pluginId, { logger })
+    : usePluginStore().api(pluginId, { ...options, plugins, logger });
   const slot = useSlotStore().api(plugins);
   const parse = async (
     path: string | string[],
@@ -52,5 +64,5 @@ export function createPluginSelfApi(
     }
     return imported;
   };
-  return { ...plugin, parse, slot, logger };
+  return { ...plugin, parse, slot, logger, plugins, flush: attached?.flush, recordCodeAct: attached?.recordCodeAct };
 }

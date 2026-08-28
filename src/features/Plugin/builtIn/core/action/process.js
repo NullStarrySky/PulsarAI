@@ -2,7 +2,7 @@ const goalState = read("@/goal/goal.data");
 if (!String(goalState || "").trim()) {
   await reply.setContent("当前没有可执行的 goal。先使用 /goal 设置目标和待办。");
 } else {
-  const context = await imports(slot.paths("CTX_BUILD", "global"));
+  const context = await parse(slot.paths("CTX_BUILD", "global"), ctx);
   const messages = [
     ...context,
     {

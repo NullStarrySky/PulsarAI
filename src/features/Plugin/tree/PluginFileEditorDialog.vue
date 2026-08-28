@@ -25,7 +25,6 @@ import {
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
 import { usePackageStore } from "@/features/Package/package-store";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
-import { persistConversationOverlayFileEdit } from "@/features/Conversation/messages/conversation-resource-overlay-service";
 import { useSlotStore, pluginFileMatchesSlotSuffix } from "@/features/Plugin/tree/slot-store";
 import { pluginMediaSource, pluginMediaType } from "@/features/Plugin/editors/media/plugin-media";
 import { pluginConventions, pluginFileType, type Plugin, type PluginFile } from "@/features/Plugin/tree/plugin-types";
@@ -45,11 +44,11 @@ const props = defineProps<{
   initialMode?: "preview" | "source";
   packageId?: string;
   conversationId?: string;
-  overlayPlugins?: Plugin[];
 }>();
 
 const emit = defineEmits<{ "update:open": [value: boolean] }>();
 const pluginStore = usePluginStore();
+const conversationPlugins = usePluginStore(computed(() => props.conversationId));
 const packages = usePackageStore();
 const responsive = useResponsiveStore();
 const { isMobileLayout } = storeToRefs(responsive);
@@ -105,11 +104,13 @@ const editorStats = computed(() => ({
   characters: draft.value.length,
   lines: draft.value ? draft.value.split(/\r?\n/).length : 0,
 }));
-const visiblePlugins = computed(() => props.overlayPlugins ?? pluginStore.sortedPluginsForPackage(
-  props.packageId ?? props.plugin?.packageId ?? "",
-  packages.packages.find((item) => item.id === (props.packageId ?? props.plugin?.packageId))?.enabledGlobalPluginIds,
-  packages.packages.find((item) => item.id === (props.packageId ?? props.plugin?.packageId))?.mainPluginId,
-));
+const visiblePlugins = computed(() => props.conversationId
+  ? conversationPlugins.finalPlugins.value
+  : pluginStore.sortedPluginsForPackage(
+      props.packageId ?? props.plugin?.packageId ?? "",
+      packages.packages.find((item) => item.id === (props.packageId ?? props.plugin?.packageId))?.enabledGlobalPluginIds,
+      packages.packages.find((item) => item.id === (props.packageId ?? props.plugin?.packageId))?.mainPluginId,
+    ));
 const slotStore = useSlotStore();
 const slotOptions = computed(() => {
   const plugin = props.plugin;
@@ -303,15 +304,13 @@ async function saveNow() {
           },
     };
     if (props.conversationId) {
-      const saved = await persistConversationOverlayFileEdit({
-        chatId: props.conversationId,
-        pluginId: plugin.id,
-        resourceId: file.id,
-        patch,
-      });
-      pluginStore.showFileEditor(saved.plugin, saved.file, props.path, editorMode.value, {
+      const savedFile = await conversationPlugins.updateFile(plugin.id, file.id, patch);
+      const savedPlugin = conversationPlugins.finalPlugins.value.find(
+        (item) => item.id === plugin.id,
+      );
+      if (!savedPlugin) throw new Error("会话资源视图中不存在插件。");
+      pluginStore.showFileEditor(savedPlugin, savedFile, props.path, editorMode.value, {
         conversationId: props.conversationId,
-        overlayPlugins: saved.plugins,
       });
     } else {
       await pluginStore.updateNode(plugin.id, file.id, patch);

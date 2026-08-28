@@ -166,6 +166,12 @@ export interface ConversationResourceUpdate {
   stats: ConversationResourceOperationStats;
 }
 
+/** Structural changes owned by one concrete message version. */
+export interface ConversationPluginChanges {
+  changes: ConversationResourceOperation[];
+  stats: ConversationResourceOperationStats;
+}
+
 /** Final, message-version-local result of all CodeAct resource work. */
 export interface ConversationResourceOperationStats {
   total: number;
@@ -200,8 +206,8 @@ export type ChatMessageMeta = {
     resolvedResourceIds?: string[];
     diagnostics?: string[];
   };
-  /** Ordered resource overlay operations produced by this concrete message version. */
-  resourceUpdate?: ConversationResourceUpdate;
+  /** Version-local structural Plugin changes; never a full Plugin snapshot. */
+  pluginChanges?: ConversationPluginChanges;
   /** Only Agent reasoning and model tool calls are persisted here. */
   steps: (ThinkingStep | ToolCallStep | ToolCallResult)[];
 };

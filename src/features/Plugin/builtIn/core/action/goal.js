@@ -1,5 +1,5 @@
 const goalState = read("@/goal/goal.data");
-const context = await imports(slot.paths("CTX_BUILD", "global"));
+const context = await parse(slot.paths("CTX_BUILD", "global"), ctx);
 const messages = [
   ...context,
   {
