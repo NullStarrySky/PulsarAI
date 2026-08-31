@@ -5,22 +5,23 @@ description: Plugin 路径、文件操作、import、插槽和约定资源格式
 
 # Plugin 资源 API
 
-Plugin 是数据库支持的扁平文件集合。所有 API 都在当前启用 Plugin 的内存视图或 Conversation Overlay 上工作。
+Plugin 是数据库支持的扁平文件集合。对外文件 API 运行在 World 或 Conversation Overlay 上。
 
 ## 路径
 
 ```text
-@/notes/today.md
-@builtin-core-plugin/default.chat.json
+/self/notes/today.md
+/global/builtin-core-plugin/default.chat.json
 ```
 
-- `@/` 解析到当前 API 所属的主要 Plugin。
-- `@pluginId/` 显式指定 Plugin。
-- 不带前缀的路径也按当前 Plugin 解析。
+- `/` 是 World 根，固定包含 `/config.json`、`/self/` 和 `/global/`；`/self/` 是角色包本地挂载，`/global/<pluginId>/` 是全局或内置挂载。
+- `/config.json` 是 World 控制清单，只包含共享插槽定义和禁用 World 路径；禁用状态不改变文件的挂载与直接读取能力。
+- Plugin 源码中的 `@/` 始终解析到该源码所属 Plugin 的根；对外 World API 不使用 `@pluginId/`。
+- 不带前缀的路径只在 Plugin 内部 API 中按当前 Plugin 解析。
 - 文件 API 支持省略扩展名，但只有恰好一个文件匹配时成功；多个候选会抛错。
-- `move` 当前不支持跨 Plugin。
+- `move` 可在同一 World 的挂载之间移动资源。
 
-文本文件被 read/import 时，其中的 `@/` 会改写为该文件所属 Plugin 的显式前缀。这是源码作用域，而不是调用者作用域。
+文本文件被 read/import 时，其中的 `@/` 会改写为该文件所属 World 挂载的绝对路径。这是源码作用域，而不是调用者作用域。
 
 ## 元数据
 
@@ -39,7 +40,7 @@ interface ResourceMeta {
 }
 ```
 
-`fs.readMeta(path)` 返回单个资源元数据；`ls(path)` 返回目录的直接子节点。Plugin 根元数据使用空 ID、Plugin ID 作为 name、`/` 作为 path。
+`fs.readMeta(path)` 返回单个资源元数据；`ls(path)` 返回目录的直接子节点。`ls("/")` 返回 `config.json`、`self` 与 `global`。
 
 ## 文件操作
 
@@ -47,7 +48,7 @@ interface ResourceMeta {
 read(path: string): string | ArrayBuffer
 write(path: string, content: string | ArrayBuffer): void
 edit(path: string, find: string, replace: string): void
-ls(path = "@/"): ResourceMeta[]
+ls(path = "/"): ResourceMeta[]
 exists(path: string): boolean
 mkdir(path: string): void
 move(from: string, to: string): void
@@ -55,12 +56,12 @@ remove(path: string): void
 ```
 
 - `read`：文本返回字符串，非文本返回独立 `ArrayBuffer`；不检查条件，也不包装类型。
-- `write`：文件存在时替换，不存在时创建；不能写 Plugin 根。
+- `write`：文件存在时替换，不存在时创建；写入 `/config.json` 会校验并更新 World config，不能写 Plugin 根。
 - `edit`：只支持文本，只替换第一次匹配；找不到文本时抛错。
 - `ls`：列出直接子节点；目录层级由文件和空目录路径推断。
 - `exists`：任何解析错误都返回 `false`。
 - `mkdir`：创建叶级空目录；Plugin 根为空操作，已存在路径会抛错。
-- `move`：不能跨 Plugin。当前实现按目标父目录移动并保留源名称。
+- `move`：可在同一 World 内跨挂载移动，目标文件名由目标路径决定。
 - `remove`：删除文件或目录树；不能删除 Plugin 根。
 
 生成环境中的写操作同步修改 Overlay；普通 UI 环境乐观修改 Plugin Store，并在后台持久化。
@@ -106,11 +107,9 @@ interface PluginFileInsertion {
 interface PluginSlot {
   id: string;
   title: string;
-  scope: "local" | "global";
   description: string;
   contentSuffixes: string[];
   selectionMode: "single" | "multiple" | "none";
-  selectedPaths?: string[];
 }
 
 interface PluginSlotDefinitions {
@@ -134,9 +133,9 @@ interface SlotResource {
 }
 ```
 
-`slot.paths()` 把选中的资源转换为显式路径。当前 `slot.import()` 是同名别名，也返回路径，不包装内容。
+`slot.paths()` 把启用的资源转换为显式路径。当前 `slot.import()` 是同名别名，也返回路径，不包装内容。
 
-对 `single` 与 `multiple` 插槽，声明中的 `selectedPaths` 会从相应声明 Plugin 的资源中筛选资源；没有选择时保留全部匹配资源。多个 Plugin 声明同一个插槽时，当前启用顺序靠前且声明了选择的 Plugin 优先；Core 的选择只作内置默认值。选择语义只存在于插槽系统，不能恢复平行的 `config.json` 路径选择状态。
+根 `/config.json.slots` 与 Plugin `slots.json.slots` 使用同一结构。前者定义全局契约，后者只定义来源本地的插槽；没有父级或子插槽语义。资源通过自己的 `insertion.slot` 直接导出到相应插槽。`/config.json.disabled` 保存禁用的完整文件路径或 `/self`、`/global/<pluginId>` Plugin 挂载路径；`single` 插槽只返回排序最前的启用资源，`multiple` 与 `none` 返回全部启用资源。
 
 ## .chat.json
 

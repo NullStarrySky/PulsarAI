@@ -182,9 +182,12 @@ export class PulsarSillyTavernMigrationWriter {
     plugin.icon = icon;
     configureLocalPlugin(plugin, placement);
     await plugins.persistPlugin(plugin);
-    await conversation.updatePackage(packageItem.id, {
-      mainPluginId: plugin.id,
-    });
+    const worldConfig = structuredClone(packageItem.worldConfig);
+    worldConfig.disabled = [...new Set([
+      ...worldConfig.disabled.filter((path: string) => path !== "/self/generate.js"),
+      "/global/builtin-core-plugin/generate.js",
+    ])];
+    await conversation.updatePackage(packageItem.id, { worldConfig });
 
     for (const chat of placement.conversations) {
       await writeConversation(conversation, placement.id, chat, false);
@@ -229,20 +232,16 @@ export class PulsarSillyTavernMigrationWriter {
       "从未被角色认领的 SillyTavern 世界书导入；由角色包单独启用。";
     configureGlobalPlugin(plugin, placement);
     await plugins.persistPlugin(plugin);
-    for (const packageId of placement.enabledPackageIds ?? []) {
-      const packageItem = conversation.packages.find(
-        (item) => item.id === packageId,
-      );
-      if (
-        !packageItem ||
-        packageItem.enabledGlobalPluginIds.includes(plugin.id)
-      )
-        continue;
-      await conversation.updatePackage(packageId, {
-        enabledGlobalPluginIds: [
-          ...packageItem.enabledGlobalPluginIds,
-          plugin.id,
-        ],
+    const enabledPackages = new Set(placement.enabledPackageIds ?? []);
+    for (const packageItem of conversation.packages) {
+      if (enabledPackages.has(packageItem.id)) continue;
+      const worldConfig = structuredClone(packageItem.worldConfig);
+      worldConfig.disabled = [...new Set([
+        ...worldConfig.disabled,
+        `/global/${plugin.id}`,
+      ])];
+      await conversation.updatePackage(packageItem.id, {
+        worldConfig,
       });
     }
   }
@@ -448,7 +447,7 @@ function configureGlobalPlugin(
         {
           id: "context",
           title: "世界书上下文",
-          scope: "global",
+          parent: "document",
           description: "从 SillyTavern 世界书导入的上下文条目。",
           contentSuffixes: ["md"],
           selectionMode: "none",

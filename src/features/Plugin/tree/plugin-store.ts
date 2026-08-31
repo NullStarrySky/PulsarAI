@@ -38,6 +38,11 @@ import {
   pluginFileType,
   pluginParentPath,
 } from "@/features/Plugin/tree/plugin-types";
+import {
+  pluginWorldPath,
+  resolveWorldPath,
+  worldReference,
+} from "@/features/Plugin/tree/world-path";
 
 export const builtinCorePluginId = "builtin-core-plugin";
 export const builtinBlankPluginId = "builtin-blank-plugin";
@@ -53,7 +58,7 @@ export interface ActivePluginFileEditorState {
 }
 
 export interface PluginStoreApiMutation {
-  writeFile(pluginId: string, path: string, content: string | ArrayBuffer): void;
+  writeFile(pluginId: string, path: string, content: unknown): void;
   editFile(pluginId: string, path: string, find: string, replace: string): void;
   mkdir(pluginId: string, path: string): void;
   move(pluginId: string, from: string, targetPluginId: string, targetPath: string): void;
@@ -65,6 +70,8 @@ export interface PluginStoreApiOptions {
   logger?: PluginLogger;
   mutation?: PluginStoreApiMutation;
   conversationId?: string;
+  /** Enables complete-World paths: local files at /self and globals at /global/<id>/. */
+  packageId?: string;
 }
 
 type ResolvedPluginFile = { plugin: Plugin; file: PluginFile; path: string };
@@ -89,7 +96,7 @@ function normalizePluginPath(value: string) {
 }
 
 function resolvePluginPath(fromPath: string, request: string) {
-  if (request.startsWith("@")) return request;
+  if (request.startsWith("@/") || request.startsWith("/")) return request;
   const parent = fromPath.split("/").slice(0, -1);
   for (const part of request.split("/")) {
     if (!part || part === ".") continue;
@@ -222,7 +229,6 @@ function createStarterPlugin(
     shortDescription: "",
     files: cloneStarterFiles(defaultTemplate.files),
     emptyFolders: [...defaultTemplate.emptyFolders],
-    enabled: true,
     builtIn: false,
   };
 }
@@ -356,7 +362,6 @@ function normalizePlugin(value: Plugin): Plugin {
       typeof value.shortDescription === "string" ? value.shortDescription : "",
     files,
     emptyFolders,
-    enabled: value.enabled !== false,
     builtIn: value.builtIn === true,
   };
 }
@@ -468,7 +473,6 @@ function mergeBuiltinPlugin(bundled: Plugin, persisted: Plugin): Plugin {
     ...clonePlain(persisted),
     id: bundled.id,
     packageId: null,
-    ...(bundled.id === builtinDefaultPluginId ? { enabled: false } : {}),
     builtIn: true,
     files,
     emptyFolders: [
@@ -611,67 +615,6 @@ const usePluginStateStore = defineStore("plugin-resource", {
         )
         .sort(comparePlugins);
     },
-    sortedPluginsForPackage:
-      (state) =>
-      (
-        packageId?: string | null,
-        enabledGlobalPluginIds: string[] = [],
-        mainPluginId?: string,
-      ): Plugin[] => {
-        const enabledGlobal = new Set(enabledGlobalPluginIds);
-        const selected = pluginStateItems(state).filter(
-          (plugin) =>
-            (Boolean(packageId) && plugin.packageId === packageId) ||
-            (plugin.packageId === null &&
-              (plugin.id === mainPluginId || enabledGlobal.has(plugin.id))),
-        );
-        return selected.sort((a, b) => {
-          if (a.id === mainPluginId) return -1;
-          if (b.id === mainPluginId) return 1;
-          if (a.packageId !== b.packageId)
-            return a.packageId === packageId ? -1 : 1;
-          return comparePlugins(a, b);
-        });
-      },
-    visiblePluginsForPackage(): (
-      packageId?: string | null,
-      enabledGlobalPluginIds?: string[],
-      mainPluginId?: string,
-    ) => Plugin[] {
-      return (
-        packageId?: string | null,
-        enabledGlobalPluginIds: string[] = [],
-        mainPluginId?: string,
-      ) => {
-        const keyword = this.search.trim().toLocaleLowerCase();
-        return this.sortedPluginsForPackage(
-          packageId,
-          enabledGlobalPluginIds,
-          mainPluginId,
-        ).filter(
-          (plugin) =>
-            !keyword ||
-            plugin.name.toLocaleLowerCase().includes(keyword) ||
-            plugin.shortDescription.toLocaleLowerCase().includes(keyword),
-        );
-      };
-    },
-    enabledPluginsForPackage(): (
-      packageId?: string | null,
-      enabledGlobalPluginIds?: string[],
-      mainPluginId?: string,
-    ) => Plugin[] {
-      return (
-        packageId?: string | null,
-        enabledGlobalPluginIds: string[] = [],
-        mainPluginId?: string,
-      ) =>
-        this.sortedPluginsForPackage(
-          packageId,
-          enabledGlobalPluginIds,
-          mainPluginId,
-        ).filter((plugin) => plugin.enabled || plugin.id === mainPluginId);
-    },
     activePlugin(state): Plugin | undefined {
       return pluginStateItems(state).find(
         (plugin) => plugin.id === state.activePluginId,
@@ -693,9 +636,26 @@ const usePluginStateStore = defineStore("plugin-resource", {
         return plugin;
       };
       const resolve = (request: string, fileOnly = false) => {
-        const match = request.trim().match(/^@(?:(?<id>[^/]+))?\/?(?<path>.*)$/);
-        const plugin = findPlugin(match?.groups?.id || pluginId);
-        const path = normalizePluginPath(match?.groups?.path ?? request);
+        const normalizedRequest = request.trim();
+        if (options.packageId && normalizedRequest.startsWith("/")) {
+          const target = resolveWorldPath(
+            plugins(),
+            options.packageId,
+            normalizedRequest,
+            pluginId,
+          );
+          const path = normalizePluginPath(target.path);
+          const node = path ? findPluginNodeByPath(target.plugin, path) : null;
+          return { plugin: target.plugin, path, node };
+        }
+        if (/^@[^/]+\//.test(normalizedRequest))
+          throw new Error(`不再支持显式插件路径：${request}；请使用 World 绝对路径。`);
+        const path = normalizePluginPath(
+          normalizedRequest.startsWith("@/")
+            ? normalizedRequest.slice(2)
+            : normalizedRequest,
+        );
+        const plugin = findPlugin(pluginId);
         const node = path ? findPluginNodeByPath(plugin, path) : null;
         if (node || !fileOnly || !path || /\.[^/]+$/.test(path)) {
           return { plugin, path, node };
@@ -718,11 +678,17 @@ const usePluginStateStore = defineStore("plugin-resource", {
         if (target.node?.kind !== "file") throw new Error(`文件不存在：${request}`);
         return { plugin: target.plugin, file: target.node, path: target.path };
       };
-      const scopeText = (source: string, ownerPluginId: string) =>
-        source.split("@/").join(`@${ownerPluginId}/`);
+      const scopeText = (source: string, ownerPluginId: string) => {
+        if (!options.packageId) return source;
+        const owner = findPlugin(ownerPluginId);
+        const root = `${worldReference(pluginWorldPath(owner, "", options.packageId)).replace(/\/$/, "")}/`;
+        return source.split("@/").join(root);
+      };
       const scopeRequest = (request: string, ownerPluginId: string) =>
         request.startsWith("@/")
-          ? `@${ownerPluginId}/${request.slice(2)}`
+          ? options.packageId
+            ? `${worldReference(pluginWorldPath(findPlugin(ownerPluginId), "", options.packageId)).replace(/\/$/, "")}/${request.slice(2)}`
+            : request
           : request;
       const scopedFile = (target: ResolvedPluginFile): PluginFile =>
         isTextResource(target.file)
@@ -731,6 +697,9 @@ const usePluginStateStore = defineStore("plugin-resource", {
               content: scopeText(textContent(target.file), target.plugin.id),
             }
           : target.file;
+      const displayPath = (plugin: Plugin, path = "") => options.packageId
+        ? worldReference(pluginWorldPath(plugin, path, options.packageId))
+        : `@/${path}`;
       const uiTarget = (request: string): PluginUiTarget => {
         const target = resolve(request, true);
         if (!target.path) return { kind: "panel", plugin: target.plugin, path: "" };
@@ -779,7 +748,7 @@ const usePluginStateStore = defineStore("plugin-resource", {
         if (pass && insertion.condition) {
           pass = execute(scopeText(insertion.condition, target.plugin.id));
         }
-        log(`条件结果：${pass}`, `@${target.plugin.id}/${target.path}`, "condition", 1);
+        log(`条件结果：${pass}`, displayPath(target.plugin, target.path), "condition", 1);
         return pass;
       };
       const importFile = (
@@ -795,7 +764,7 @@ const usePluginStateStore = defineStore("plugin-resource", {
         const target = requireFile(request);
         const input = { ...environment, ...(options.logger ? { logger: options.logger } : {}) };
         if (!conditionPasses(target, input)) return null;
-        log("导入资源", `@${target.plugin.id}/${target.path}`, "import");
+        log("导入资源", displayPath(target.plugin, target.path), "import");
         return wrapResource(scopedFile(target)).import(input);
       };
       const show = (request: string, action: "open" | "close" | "toggle") => {
@@ -804,7 +773,7 @@ const usePluginStateStore = defineStore("plugin-resource", {
           if (action === "open") this.openAssetPanel(target.plugin.id);
           else if (action === "close") this.closeAssetPanel(target.plugin.id);
           else this.toggleAssetPanel(target.plugin.id);
-          log(`${action} 插件面板`, `@${target.plugin.id}/`);
+          log(`${action} 插件面板`, displayPath(target.plugin));
           return {
             open: this.assetPanelPluginId === target.plugin.id,
             kind: "panel" as const,
@@ -827,7 +796,7 @@ const usePluginStateStore = defineStore("plugin-resource", {
           this.toggleFileEditor(target.plugin, target.file, target.path, "preview", context);
         }
         const active = this.activeEditorState;
-        log(`${action} 资源`, `@${target.plugin.id}/${target.path}`);
+        log(`${action} 资源`, displayPath(target.plugin, target.path));
         return {
           open: Boolean(active && active.plugin.id === target.plugin.id &&
             (active.file.id === target.file.id || active.path === target.path)),
@@ -843,7 +812,7 @@ const usePluginStateStore = defineStore("plugin-resource", {
           const value = isTextResource(target.file)
             ? scopeText(textContent(target.file), target.plugin.id)
             : binaryContent(target.file);
-          log("读取资源", `@${target.plugin.id}/${target.path}`);
+          log("读取资源", displayPath(target.plugin, target.path));
           return value;
         },
         readMeta: (path: string) => {
@@ -852,21 +821,21 @@ const usePluginStateStore = defineStore("plugin-resource", {
             ? nodeMetadata(target.node)
             : { id: "", name: target.plugin.id, path: "/", kind: "folder" as const };
         },
-        write: (path: string, content: string | ArrayBuffer) => {
+        write: (path: string, content: unknown) => {
           const target = resolve(path);
           if (!target.path) throw new Error("不能写入插件根目录。");
           if (options.mutation) {
             options.mutation.writeFile(target.plugin.id, target.path, content);
           } else if (target.node?.kind === "file") {
             persist(this.updateNode(target.plugin.id, target.node.id, {
-              content: content instanceof ArrayBuffer ? content.slice(0) : content,
-            }), "写入资源", `@${target.plugin.id}/${target.path}`);
+              content: content instanceof ArrayBuffer ? content.slice(0) : clonePlain(content),
+            }), "写入资源", displayPath(target.plugin, target.path));
           } else {
             persist(this.createFile(target.plugin.id, pluginParentPath(target.path), {
               name: target.path.split("/").pop()!, content,
-            }), "写入资源", `@${target.plugin.id}/${target.path}`);
+            }), "写入资源", displayPath(target.plugin, target.path));
           }
-          log("写入资源", `@${target.plugin.id}/${target.path}`);
+          log("写入资源", displayPath(target.plugin, target.path));
         },
         edit: (path: string, find: string, replace: string) => {
           const target = requireFile(path);
@@ -878,9 +847,9 @@ const usePluginStateStore = defineStore("plugin-resource", {
           } else {
             persist(this.updateNode(target.plugin.id, target.file.id, {
               content: before.replace(find, replace),
-            }), "编辑资源", `@${target.plugin.id}/${target.path}`);
+            }), "编辑资源", displayPath(target.plugin, target.path));
           }
-          log("编辑资源", `@${target.plugin.id}/${target.path}`);
+          log("编辑资源", displayPath(target.plugin, target.path));
         },
         ls: (path = "@/") => {
           const target = resolve(path);
@@ -894,8 +863,8 @@ const usePluginStateStore = defineStore("plugin-resource", {
           if (!target.path) return;
           if (target.node) throw new Error(`路径已存在：${path}`);
           if (options.mutation) options.mutation.mkdir(target.plugin.id, target.path);
-          else persist(this.createFolder(target.plugin.id, pluginParentPath(target.path), target.path.split("/").pop()!), "创建文件夹", `@${target.plugin.id}/${target.path}`);
-          log("创建文件夹", `@${target.plugin.id}/${target.path}`);
+          else persist(this.createFolder(target.plugin.id, pluginParentPath(target.path), target.path.split("/").pop()!), "创建文件夹", displayPath(target.plugin, target.path));
+          log("创建文件夹", displayPath(target.plugin, target.path));
         },
         move: (from: string, to: string) => {
           const source = resolve(from);
@@ -910,16 +879,16 @@ const usePluginStateStore = defineStore("plugin-resource", {
           else {
             if (target.plugin.id !== source.plugin.id)
               throw new Error("跨插件移动只支持会话 Plugin 工作区。");
-            persist(this.moveNode(source.plugin.id, source.node.id, pluginParentPath(target.path)), "移动资源", `@${source.plugin.id}/${source.path}`);
+            persist(this.moveNode(source.plugin.id, source.node.id, pluginParentPath(target.path)), "移动资源", displayPath(source.plugin, source.path));
           }
-          log("移动资源", `@${source.plugin.id}/${source.path}`);
+          log("移动资源", displayPath(source.plugin, source.path));
         },
         remove: (path: string) => {
           const target = resolve(path);
           if (!target.path) throw new Error("Overlay 中不能删除插件根目录。");
           if (options.mutation) options.mutation.remove(target.plugin.id, target.path);
-          else if (target.node) persist(this.deleteNode(target.plugin.id, target.node.id), "删除资源", `@${target.plugin.id}/${target.path}`);
-          log("删除资源", `@${target.plugin.id}/${target.path}`);
+          else if (target.node) persist(this.deleteNode(target.plugin.id, target.node.id), "删除资源", displayPath(target.plugin, target.path));
+          log("删除资源", displayPath(target.plugin, target.path));
         },
         open: (path: string) => show(path, "open"),
         close: (path: string) => show(path, "close"),
@@ -1134,16 +1103,14 @@ const usePluginStateStore = defineStore("plugin-resource", {
             item.pluginId = nextId;
             changed = true;
           }
-          if (item.mainPluginId === pluginId) {
-            item.mainPluginId = nextId;
-            changed = true;
-          }
-          if (item.enabledGlobalPluginIds.includes(pluginId)) {
-            item.enabledGlobalPluginIds = item.enabledGlobalPluginIds.map(
-              (id) => (id === pluginId ? nextId : id),
-            );
-            changed = true;
-          }
+          const previousRoot = `/global/${pluginId}`;
+          const nextRoot = `/global/${nextId}`;
+          item.worldConfig.disabled = item.worldConfig.disabled.map((path) =>
+            path === previousRoot || path.startsWith(`${previousRoot}/`)
+              ? `${nextRoot}${path.slice(previousRoot.length)}`
+              : path,
+          );
+          changed = true;
           if (changed) await packages.persist(item);
         }
         await deletePersistedPlugin(previous);
@@ -1176,20 +1143,16 @@ const usePluginStateStore = defineStore("plugin-resource", {
       );
       if (!plugin || plugin.builtIn) return;
       const packages = usePackageStore();
-      if (
-        plugin.packageId === null &&
-        packages.packages.some((item) => item.mainPluginId === pluginId)
-      ) {
-        throw new Error("该全局插件仍是角色包的主要插件，不能删除。");
-      }
       if (plugin.packageId === null) {
         for (const packageItem of packages.packages) {
-          if (!packageItem.enabledGlobalPluginIds.includes(pluginId)) continue;
-          await packages.update(packageItem.id, {
-            enabledGlobalPluginIds: packageItem.enabledGlobalPluginIds.filter(
-              (id) => id !== pluginId,
-            ),
-          });
+          const root = `/global/${pluginId}`;
+          if (packageItem.worldConfig.disabled.some((path) =>
+            path === root || path.startsWith(`${root}/`))) {
+            const worldConfig = clonePlain(packageItem.worldConfig);
+            worldConfig.disabled = worldConfig.disabled.filter((path) =>
+              path !== root && !path.startsWith(`${root}/`));
+            await packages.update(packageItem.id, { worldConfig });
+          }
         }
       }
       setPluginStateItems(

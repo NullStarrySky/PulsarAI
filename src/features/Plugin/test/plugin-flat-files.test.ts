@@ -13,7 +13,6 @@ function plugin(): Plugin {
     name: "Flat",
     icon: "",
     shortDescription: "",
-    enabled: true,
     builtIn: false,
     files: [
       {

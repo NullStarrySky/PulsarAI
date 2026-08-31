@@ -36,7 +36,6 @@ export interface Plugin {
   files: PluginFile[];
   /** Persisted leaf directories that currently contain no files or child directories. */
   emptyFolders: string[];
-  enabled: boolean;
   builtIn: boolean;
 }
 

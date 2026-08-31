@@ -178,8 +178,10 @@ function uniqueRestoredName(name: string, existing: Iterable<string>) {
   return `${base} ${suffix}`;
 }
 
-function unionIds(local: string[] = [], remote: string[] = []) {
-  return [...new Set([...local, ...remote])];
+function remapWorldPluginPath(path: string, pluginIds: Map<string, string>) {
+  const match = path.match(/^(?<prefix>@?\/?global\/)(?<pluginId>[^/]+)(?<rest>\/.*)?$/);
+  if (!match?.groups) return path;
+  return `${match.groups.prefix}${pluginIds.get(match.groups.pluginId) ?? match.groups.pluginId}${match.groups.rest ?? ""}`;
 }
 
 function mergeById<T extends { id: string }>(
@@ -257,11 +259,16 @@ function mergePackageForUpdate(
     id: local.id,
     conversations: mergeById(local.conversations, remote.conversations),
     pluginId: remote.pluginId || local.pluginId,
-    mainPluginId: remote.mainPluginId || local.mainPluginId,
-    enabledGlobalPluginIds: unionIds(
-      local.enabledGlobalPluginIds,
-      remote.enabledGlobalPluginIds,
-    ),
+    worldConfig: {
+      slots: [...new Map([
+        ...clonePlain(local.worldConfig.slots),
+        ...clonePlain(remote.worldConfig.slots),
+      ].map((slot) => [slot.id, slot])).values()],
+      disabled: [...new Set([
+        ...clonePlain(local.worldConfig.disabled),
+        ...clonePlain(remote.worldConfig.disabled),
+      ])],
+    },
     syncEnabled: local.syncEnabled ?? remote.syncEnabled ?? true,
   };
 }
@@ -553,12 +560,17 @@ async function persistMergedSnapshot(
             (link) => !local.conversations.some((item) => item.id === link.id),
           ),
         ];
-        local.enabledGlobalPluginIds = unionIds(
-          local.enabledGlobalPluginIds,
-          remotePackage.enabledGlobalPluginIds,
-        );
         local.pluginId = remotePackage.pluginId || local.pluginId;
-        local.mainPluginId = remotePackage.mainPluginId || local.mainPluginId;
+        local.worldConfig = {
+          slots: [...new Map([
+            ...local.worldConfig.slots,
+            ...remotePackage.worldConfig.slots,
+          ].map((slot) => [slot.id, slot])).values()],
+          disabled: [...new Set([
+            ...local.worldConfig.disabled,
+            ...remotePackage.worldConfig.disabled,
+          ])],
+        };
         await conversation.persistPackage(local);
         merged += 1;
       }
@@ -1087,12 +1099,11 @@ export const useBackupStore = defineStore("backup", {
           conversations: [],
           pluginId:
             pluginIdMap.get(sourcePackage.pluginId) ?? sourcePackage.pluginId,
-          mainPluginId:
-            pluginIdMap.get(sourcePackage.mainPluginId) ??
-            sourcePackage.mainPluginId,
-          enabledGlobalPluginIds: sourcePackage.enabledGlobalPluginIds.map(
-            (pluginId) => pluginIdMap.get(pluginId) ?? pluginId,
-          ),
+          worldConfig: {
+            slots: clonePlain(sourcePackage.worldConfig.slots),
+            disabled: sourcePackage.worldConfig.disabled.map((path) =>
+              remapWorldPluginPath(path, pluginIdMap)),
+          },
           syncEnabled: sourcePackage.syncEnabled ?? true,
           order:
             Math.max(

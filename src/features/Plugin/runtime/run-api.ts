@@ -1,13 +1,13 @@
 import type { Role } from "@/features/Conversation/messages/conversation-types";
 import { useChatStore } from "@/features/Conversation/chats/chat-store";
-import { pluginGenerateFile } from "@/features/Plugin/runtime/environment";
 import { ctxbuilder, type CtxBuilderConfig } from "@/features/Plugin/runtime/ctx-builder";
-import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
+import { useWorld } from "@/features/Plugin/tree/world-store";
 import type { SandboxEnvironment } from "@/features/Sandbox/sandbox";
+import { findPluginNodeByPath } from "@/features/Plugin/tree/plugin-types";
 
-export interface RunPluginInput {
-  /** Plugin stable ID or its current display name. */
-  plugin: string;
+export interface RunWorldInput {
+  /** Selected generation container resource in the complete world. */
+  entryPath?: string;
   conversationId: string;
   /** Character package ID. When supplied it must own the conversation. */
   roleId?: string;
@@ -18,7 +18,7 @@ export interface RunPluginInput {
   features?: Omit<CtxBuilderConfig, "chat" | "message" | "plugin" | "toolFunction">;
 }
 
-export interface RunPluginResult {
+export interface RunWorldResult {
   context: SandboxEnvironment;
   containerId: string;
   messageId: string;
@@ -29,20 +29,20 @@ export interface RunPluginResult {
  * Runs a Plugin's selected generatePath inside a message-version-bound
  * workspace. Conversation supplies lifecycle/error presentation only.
  */
-export async function runPlugin(input: RunPluginInput): Promise<RunPluginResult> {
+export async function runWorld(input: RunWorldInput): Promise<RunWorldResult> {
   const chat = useChatStore().chats.find((item) => item.id === input.conversationId);
   if (!chat) throw new Error("会话不存在。");
   if (input.roleId && input.roleId !== chat.packageId)
     throw new Error("角色不属于该会话。");
 
-  const candidates = usePluginStore(input.conversationId).finalPlugins.value;
-  const plugin = candidates.find((item) => item.id === input.plugin) ??
-    candidates.find((item) => item.name === input.plugin);
-  if (!plugin)
-    throw new Error(`插件不在该会话的已选工作区中：${input.plugin}`);
-  const generateFile = pluginGenerateFile(plugin);
-  if (!generateFile)
-    throw new Error(`插件 ${plugin.name} 缺少 generatePath 入口。`);
+  const world = useWorld({ conversationId: input.conversationId });
+  const entryPath = input.entryPath ?? world.containers.value.paths("generatePath")[0];
+  if (!entryPath) throw new Error("World 没有选中的生成入口。");
+  const target = world.resolve(entryPath);
+  const plugin = target.plugin;
+  const generateFile = findPluginNodeByPath(plugin, target.path);
+  if (generateFile?.kind !== "file")
+    throw new Error(`生成入口不存在：${entryPath}`);
 
   const context: SandboxEnvironment = {
     conversationId: chat.id,
@@ -62,9 +62,9 @@ export async function runPlugin(input: RunPluginInput): Promise<RunPluginResult>
     ...input.features,
   });
   if (!built.container || !built.message || !built.selfApi)
-    throw new Error("runPlugin 未获得消息绑定的 Plugin 环境。");
+    throw new Error("runWorld 未获得消息绑定的 World 环境。");
   try {
-    await built.selfApi.import(`@${plugin.id}/${generateFile.path}`, context);
+    await built.selfApi.import(entryPath, context);
   } finally {
     await built.flush();
   }
@@ -76,12 +76,10 @@ export async function runPlugin(input: RunPluginInput): Promise<RunPluginResult>
   };
 }
 
-/** Concise Plugin-facing form: `run(pluginName, conversationId, roleId)`. */
 export function run(
-  plugin: string,
   conversationId: string,
   roleId?: string,
-  options: Omit<RunPluginInput, "plugin" | "conversationId" | "roleId"> = {},
+  options: Omit<RunWorldInput, "conversationId" | "roleId"> = {},
 ) {
-  return runPlugin({ plugin, conversationId, roleId, ...options });
+  return runWorld({ conversationId, roleId, ...options });
 }

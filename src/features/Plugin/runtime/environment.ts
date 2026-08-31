@@ -12,7 +12,6 @@ import type { PluginConfig } from "@/features/Plugin/editors/config/plugin-confi
 import { environmentTools, PluginLogger } from "@/features/Plugin/runtime";
 import type { PluginSelfApiMutation } from "@/features/Plugin/runtime/self-api";
 import { createPluginSelfApi } from "@/features/Plugin/runtime/self-api";
-import { useSlotStore } from "@/features/Plugin/tree/slot-store";
 import {
   findPluginNodeByPath,
   type Plugin,
@@ -127,10 +126,7 @@ function parseRegex(value: string) {
  * ============================================================================ */
 
 export function pluginGenerateFile(plugin: Plugin) {
-  return useSlotStore()
-    .api([plugin])
-    .get("generatePath", "global")
-    ?.resources[0]?.file ?? null;
+  return plugin.files.find((file) => file.insertion?.slot === "generatePath") ?? null;
 }
 
 export function pluginConfigValue(plugin: Plugin, key: string) {
@@ -259,7 +255,7 @@ export async function previewPluginResource(
       : undefined,
     read_docs: readBuiltinAgentDocs,
   };
-  const resourcePath = `@${input.plugin.id}/${input.file.path}`;
+  const resourcePath = `@/${input.file.path}`;
   logger.append("预览资源", 0, "import", resourcePath);
   try {
     const value = await selfApi.parse(resourcePath, environment);

@@ -6,7 +6,6 @@
     "name": "空白流程",
     "icon": "",
     "shortDescription": "不注入角色或模板上下文的最小子代理流程",
-    "enabled": true,
     "builtIn": true
   },
   "ignore": [".pulsar-plugin.json"],

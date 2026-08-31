@@ -14,9 +14,10 @@ import {
   previewPluginResource,
 } from "@/features/Plugin/runtime/environment";
 import { ctxbuilder } from "@/features/Plugin/runtime/ctx-builder";
-import { runPlugin } from "@/features/Plugin/runtime/run-api";
+import { runWorld } from "@/features/Plugin/runtime/run-api";
 import { createBuiltinPlugins } from "@/features/Plugin/tree/builtin-plugins";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
+import { createWorldConfig } from "@/features/Plugin/tree/world-config";
 import { useChatStore } from "@/features/Conversation/chats/chat-store";
 import { useMessageStore } from "@/features/Conversation/messages/message-store";
 import { usePackageStore } from "@/features/Package/package-store";
@@ -45,7 +46,6 @@ function createMockPlugin(
       insertion: f.insertion,
     })),
     emptyFolders: [],
-    enabled: true,
     builtIn: false,
   };
 }
@@ -63,6 +63,17 @@ describe("Simplified Runtime importResource", () => {
     expect(result).toBe("Hello {{ name }}!");
   });
 
+  it("rejects removed @pluginId path syntax", () => {
+    const plugin = createMockPlugin("test-plugin", [
+      { path: "greeting.md", content: "Hello" },
+    ]);
+    const api = createPluginSelfApi("test-plugin", { plugins: [plugin] });
+
+    expect(() => api.read("@test-plugin/greeting.md")).toThrow(
+      "不再支持显式插件路径",
+    );
+  });
+
   it("keeps Plugin import shallow and parses selected resources recursively", async () => {
     const plugin = createMockPlugin("test-plugin", [
       { path: "prompt.md", content: "Hello {{ name }}" },
@@ -74,7 +85,7 @@ describe("Simplified Runtime importResource", () => {
     ]);
     const api = createPluginSelfApi("test-plugin", { plugins: [plugin] });
     const raw = await api.import("root.md");
-    expect(raw).toBe('Root: {{ await imports("@test-plugin/context.md") }}');
+    expect(raw).toBe('Root: {{ await imports("@/context.md") }}');
     await expect(api.parse("root.md", { name: "Pulsar" }))
       .resolves.toBe("Root: Context: Hello Pulsar");
   });
@@ -113,20 +124,6 @@ describe("Simplified Runtime importResource", () => {
   it("keeps @/ imports scoped to each document's owning Plugin", async () => {
     const first = createMockPlugin("plugin-a", [
       {
-        path: "slots.json",
-        content: {
-          slots: [
-            {
-              id: "multi-plugin-context",
-              title: "Context",
-              scope: "global",
-              contentSuffixes: ["chat.json"],
-              selectionMode: "none",
-            },
-          ],
-        },
-      },
-      {
         path: "context.chat.json",
         content: {
           message: [
@@ -149,12 +146,25 @@ describe("Simplified Runtime importResource", () => {
       },
       { path: "detail.md", content: "from B" },
     ]);
-    const api = createPluginSelfApi(first.id, { plugins: [first, second] });
+    second.packageId = null;
+    const worldConfig = createWorldConfig();
+    worldConfig.slots.push({
+      id: "multi-plugin-context",
+      title: "Context",
+      description: "",
+      contentSuffixes: ["chat.json"],
+      selectionMode: "none",
+    });
+    const api = createPluginSelfApi(first.id, {
+      plugins: [first, second],
+      packageId: "pkg-1",
+      worldConfig,
+    });
     const paths = api.slot.paths("multi-plugin-context", "global");
 
     expect(paths).toEqual([
-      "@plugin-a/context.chat.json",
-      "@plugin-b/context.chat.json",
+      "/self/context.chat.json",
+      "/global/plugin-b/context.chat.json",
     ]);
     const messages = await api.parse(paths);
     expect(messages).toEqual([
@@ -162,11 +172,37 @@ describe("Simplified Runtime importResource", () => {
       { role: "system", content: "from B" },
     ]);
     const readDocument = JSON.parse(
-      api.read("@plugin-b/context.chat.json") as string,
+      api.read("/global/plugin-b/context.chat.json") as string,
     );
     expect(readDocument.message[0].content).toContain(
-      'imports("@plugin-b/detail.md")',
+      'imports("/global/plugin-b/detail.md")',
     );
+  });
+
+  it("uses complete-world paths and filters injection without hiding files", async () => {
+    const local = createMockPlugin("local", [
+      { path: "config.json", content: { pluginValue: true } },
+      { path: "local.md", content: "local", insertion: { slot: "document" } },
+    ]);
+    const global = createMockPlugin("global", [
+      { path: "global.md", content: '{{ await imports("@/detail.md") }}', insertion: { slot: "document" } },
+      { path: "detail.md", content: "global" },
+    ]);
+    global.packageId = null;
+    const worldConfig = createWorldConfig();
+    worldConfig.disabled.push("/global/global");
+    const api = createPluginSelfApi(local.id, {
+      plugins: [local, global],
+      packageId: "pkg-1",
+      worldConfig,
+    });
+
+    expect(api.slot.paths("document")).toEqual(["/self/local.md"]);
+    expect(JSON.parse(api.read("@/config.json") as string)).toEqual({ pluginValue: true });
+    expect(JSON.parse(api.read("/config.json") as string).slots.some((slot: { id: string }) => slot.id === "generatePath")).toBe(true);
+    expect(api.import("/config.json")).toEqual(worldConfig);
+    expect(api.read("/global/global/global.md")).toBe('{{ await imports("/global/global/detail.md") }}');
+    await expect(api.parse("/global/global/global.md")).resolves.toBe("global");
   });
 
   it("reports a recursive resource cycle from Sandbox rather than Plugin import", async () => {
@@ -175,7 +211,7 @@ describe("Simplified Runtime importResource", () => {
       { path: "two.md", content: '{{ await imports("@/one.md") }}' },
     ]);
     const api = createPluginSelfApi("test-plugin", { plugins: [plugin] });
-    await expect(api.parse("one.md")).resolves.toContain('imports("@test-plugin/two.md")');
+    await expect(api.parse("one.md")).resolves.toContain('imports("@/two.md")');
     expect(api.logger.logs).toEqual(expect.arrayContaining([
       expect.objectContaining({ message: expect.stringContaining("检测到宏展开循环"), type: "error" }),
     ]));
@@ -191,10 +227,10 @@ describe("Simplified Runtime importResource", () => {
     });
     const generate = api.read("generate.js");
 
-    expect(generate).toContain('imports("@builtin-core-plugin/config.json")');
+    expect(generate).toContain('imports("@/config.json")');
     expect(generate).toContain('parse(slot.paths("CTX_BUILD", "global"), ctx)');
     expect(api.slot.paths("chat", "global")).toEqual([
-      "@builtin-core-plugin/default.chat.json",
+      "@/default.chat.json",
     ]);
     expect(api.slot.import("chat", "global")).toEqual(
       api.slot.paths("chat", "global"),
@@ -228,7 +264,8 @@ describe("Simplified Runtime importResource", () => {
       rootContainerId: "assistant", lastContainerId: "assistant", composerDraft: "",
       createdAt: "2026-08-28T00:00:00.000Z", updatedAt: "2026-08-28T00:00:00.000Z",
     }];
-    packages.packages = [{ id: "pkg-1", mainPluginId: plugin.id, enabledGlobalPluginIds: [] }] as any;
+    const worldConfig = createWorldConfig();
+    packages.packages = [{ id: "pkg-1", pluginId: plugin.id, worldConfig }] as any;
     messages.containers = [{
       id: "assistant", conversationid: "chat", role: "assistant", activeMessage: 0,
       availableNextContainer: [], activeNextContainer: null, previousContainer: null,
@@ -259,7 +296,7 @@ describe("Simplified Runtime importResource", () => {
     const add = context.add as (left: number, right: number) => Promise<number>;
     expect(await add(2, 3)).toBe(5);
     expect(built.selfApi?.slot.paths("toolFunction", "global")).toEqual([
-      "@test-plugin/tools/add/prompt.md",
+      "/self/tools/add/prompt.md",
     ]);
     const readDocs = context.read_docs as (
       id?: string,
@@ -292,7 +329,8 @@ describe("Simplified Runtime importResource", () => {
       rootContainerId: "assistant", lastContainerId: "assistant", composerDraft: "",
       createdAt: "2026-08-28T00:00:00.000Z", updatedAt: "2026-08-28T00:00:00.000Z",
     }];
-    packages.packages = [{ id: "pkg-1", mainPluginId: plugin.id, enabledGlobalPluginIds: [] }] as any;
+    const worldConfig = createWorldConfig();
+    packages.packages = [{ id: "pkg-1", pluginId: plugin.id, worldConfig }] as any;
     messages.containers = [{
       id: "assistant", conversationid: "chat", role: "assistant", activeMessage: 0,
       availableNextContainer: [], activeNextContainer: null, previousContainer: null,
@@ -301,8 +339,7 @@ describe("Simplified Runtime importResource", () => {
     messages.persist = vi.fn().mockResolvedValue(undefined);
     usePluginStore().plugins = [plugin];
 
-    const result = await runPlugin({
-      plugin: plugin.name,
+    const result = await runWorld({
       conversationId: "chat",
       roleId: "pkg-1",
       containerId: "assistant",
@@ -336,17 +373,15 @@ describe("Simplified Runtime importResource", () => {
     ]);
   });
 
-  it("registers an enabled root regex.json in the ordered REGEX slot", () => {
+  it("registers a root regex.json in the ordered REGEX slot", () => {
     const plugin = createMockPlugin("test-plugin", [
       { path: "regex.json", content: [] },
     ]);
     const api = createPluginSelfApi(plugin.id, { plugins: [plugin] });
 
     expect(api.slot.paths("REGEX", "global")).toEqual([
-      "@test-plugin/regex.json",
+      "@/regex.json",
     ]);
-    plugin.enabled = false;
-    expect(api.slot.paths("REGEX", "global")).toEqual([]);
   });
 
   it("keeps data injection and prompt descriptions in separate slots", () => {

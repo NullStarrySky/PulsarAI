@@ -1,4 +1,5 @@
 import { defineStore } from "pinia";
+import type { WorldConfig } from "@/features/Package/package-types";
 import {
   parsePluginSlots,
   selectPluginSlotResources,
@@ -12,7 +13,11 @@ import {
   type Plugin,
   type PluginFile,
 } from "./plugin-types";
-import coreSlots from "@/features/Plugin/builtIn/core/slots.json";
+import { pluginWorldPath, worldReference } from "./world-path";
+import {
+  createWorldConfig,
+  isWorldPathDisabled,
+} from "./world-config";
 
 export { parsePluginSlots, type PluginSlot };
 export type SlotResource = {
@@ -22,14 +27,23 @@ export type SlotResource = {
   name: string;
   type: string;
   path: string;
+  worldPath: string;
   order: number;
   condition?: string;
   conditionPath?: string;
   file: PluginFile;
 };
+export interface SlotWorldOptions {
+  packageId?: string;
+  config?: WorldConfig;
+  /** Limits local slot queries to the Plugin owning the current source. */
+  sourcePluginId?: string;
+}
 export type SlotQuery = PluginSlot & {
+  scope: "local" | "global";
   pluginId: string;
   pluginName?: string;
+  allResources: SlotResource[];
   resources: SlotResource[];
 };
 
@@ -45,101 +59,136 @@ export function pluginFileMatchesSlotSuffix(name: string, suffixes: string[]) {
   });
 }
 
+function pluginSlotDefinitions(plugin: Plugin) {
+  const node = findPluginNodeByPath(plugin, pluginConventions.slots);
+  return node?.kind === "file" ? parsePluginSlots(node.content) : [];
+}
+
+function specialContribution(slotId: string, plugin: Plugin, file: PluginFile) {
+  return (
+    (slotId === "toolFunction" &&
+      /^tools\/[^/]+\/prompt\.md$/i.test(file.path) &&
+      plugin.files.some((candidate) =>
+        candidate.path === file.path.replace(/prompt\.md$/i, "tool.js"),
+      )) ||
+    (slotId === "REGEX" && file.path === pluginConventions.regex)
+  );
+}
+
+function slotResource(
+  plugin: Plugin,
+  file: PluginFile,
+  packageId?: string,
+): SlotResource {
+  return {
+    id: file.id,
+    pluginId: plugin.id,
+    pluginName: plugin.name,
+    name: file.name,
+    type: pluginFileType(file.name),
+    path: file.path,
+    worldPath: pluginWorldPath(plugin, file.path, packageId),
+    order: file.order,
+    condition: file.insertion?.condition,
+    conditionPath: file.insertion?.conditionPath,
+    file,
+  };
+}
+
+function sortResources(resources: SlotResource[]) {
+  resources.sort(
+    (a, b) =>
+      a.order - b.order ||
+      a.pluginId.localeCompare(b.pluginId) ||
+      a.id.localeCompare(b.id),
+  );
+  return resources;
+}
+
 export const useSlotStore = defineStore("plugin-slots", {
   actions: {
-    listSlots(plugins: Plugin[] = usePluginStore().sortedPlugins): SlotQuery[] {
-      const coreDefinitions = parsePluginSlots(coreSlots).map((slot) => ({
-        slot,
-        pluginId: "builtin-core-plugin",
-      }));
-      const pluginDefinitions = plugins.flatMap((plugin) => {
-        const node = findPluginNodeByPath(plugin, "slots.json");
-        return node?.kind === "file"
-          ? parsePluginSlots(node.content).map((slot) => ({
-              slot,
-              pluginId: plugin.id,
-            }))
-          : [];
-      });
-      const definitions: Array<{ slot: PluginSlot; pluginId: string }> = [];
-      for (const definition of [...coreDefinitions, ...pluginDefinitions])
-        if (!definitions.some((item) => item.slot.id === definition.slot.id))
-          definitions.push(definition);
-      return definitions.map(({ slot, pluginId }) => {
-        const resources = plugins.flatMap((plugin) =>
-          plugin.files.flatMap((node) =>
-            ((node.insertion?.slot === slot.id &&
-              pluginFileMatchesSlotSuffix(node.name, slot.contentSuffixes)) ||
-              (slot.id === "toolFunction" &&
-                /^tools\/[^/]+\/prompt\.md$/i.test(node.path) &&
-                plugin.files.some((file) =>
-                  file.path === node.path.replace(/prompt\.md$/i, "tool.js"),
-                )) ||
-              (slot.id === "REGEX" &&
-                plugin.enabled &&
-                node.path === pluginConventions.regex))
-              ? [
-                  {
-                    id: node.id,
-                    pluginId: plugin.id,
-                    pluginName: plugin.name,
-                    name: node.name,
-                    type: pluginFileType(node.name),
-                    path: node.path,
-                    order: node.order,
-                    condition: node.insertion?.condition,
-                    conditionPath: node.insertion?.conditionPath,
-                    file: node,
-                  },
-                ]
-              : [],
-          ),
-        );
-        resources.sort(
-          (a, b) =>
-            a.order - b.order ||
-            a.pluginId.localeCompare(b.pluginId) ||
-            a.id.localeCompare(b.id),
-        );
-        const selector = pluginDefinitions.find(
-          (item) =>
-            item.slot.id === slot.id && item.slot.selectedPaths?.length,
-        ) ?? (plugins.some((plugin) => plugin.id === "builtin-core-plugin")
-          ? coreDefinitions.find(
-              (item) => item.slot.id === slot.id && item.slot.selectedPaths?.length,
-            )
-          : undefined);
-        const selected = selectPluginSlotResources(
-          slot,
-          resources,
-          selector?.slot.selectedPaths,
-          selector?.pluginId,
-        );
-        return {
-          ...slot,
-          pluginId,
-          pluginName: plugins.find((plugin) => plugin.id === pluginId)?.name,
-          resources: selected,
-        };
-      });
-    },
-    getSlot(id: string, scope?: "local" | "global", plugins?: Plugin[]) {
-      return (
-        this.listSlots(plugins).find(
-          (slot) => slot.id === id && (!scope || slot.scope === scope),
-        ) ?? null
+    listSlots(
+      plugins: Plugin[] = usePluginStore().sortedPlugins,
+      options: SlotWorldOptions = {},
+    ): SlotQuery[] {
+      const config = options.config ?? createWorldConfig();
+      const locals = new Map(
+        plugins.map((plugin) => [plugin.id, pluginSlotDefinitions(plugin)]),
       );
+      const globalSlots: SlotQuery[] = config.slots.map(
+        (definition) => {
+          const allResources = sortResources(plugins.flatMap((plugin) =>
+            plugin.files.flatMap((file) => {
+              const insertionSlot = file.insertion?.slot;
+              const direct = insertionSlot === definition.id || specialContribution(definition.id, plugin, file);
+              if (!direct || !pluginFileMatchesSlotSuffix(file.name, definition.contentSuffixes))
+                return [];
+              return [slotResource(plugin, file, options.packageId)];
+            }),
+          ));
+          const enabled = allResources.filter((resource) =>
+            !isWorldPathDisabled(config, resource.worldPath));
+          const selected = selectPluginSlotResources(
+            definition,
+            enabled,
+          );
+          return {
+            ...definition,
+            scope: "global" as const,
+            pluginId: "",
+            allResources,
+            resources: selected,
+          };
+        },
+      );
+      const localSlots = plugins.flatMap((plugin) =>
+        (locals.get(plugin.id) ?? []).map((slot) => {
+          const allResources = sortResources(plugin.files.flatMap((file) =>
+            file.insertion?.slot === slot.id &&
+            pluginFileMatchesSlotSuffix(file.name, slot.contentSuffixes)
+              ? [slotResource(plugin, file, options.packageId)]
+              : [],
+          ));
+          const enabled = allResources.filter((resource) =>
+            !isWorldPathDisabled(config, resource.worldPath));
+          return {
+            ...slot,
+            scope: "local" as const,
+            pluginId: plugin.id,
+            pluginName: plugin.name,
+            allResources,
+            resources: selectPluginSlotResources(slot, enabled),
+          };
+        }),
+      );
+      return [...globalSlots, ...localSlots];
     },
-    api(plugins: Plugin[] = usePluginStore().sortedPlugins) {
+    getSlot(
+      id: string,
+      scope?: "local" | "global",
+      plugins?: Plugin[],
+      options: SlotWorldOptions = {},
+    ) {
+      return this.listSlots(plugins, options).find(
+        (slot) => slot.id === id &&
+          (!scope || slot.scope === scope) &&
+          (slot.scope === "global" || !options.sourcePluginId || slot.pluginId === options.sourcePluginId),
+      ) ?? null;
+    },
+    api(
+      plugins: Plugin[] = usePluginStore().sortedPlugins,
+      options: SlotWorldOptions = {},
+    ) {
       const list = (scope?: "local" | "global") =>
-        this.listSlots(plugins).filter(
-          (slot) => !scope || slot.scope === scope,
+        this.listSlots(plugins, options).filter((slot) =>
+          (!scope || slot.scope === scope) &&
+          (slot.scope === "global" || !options.sourcePluginId || slot.pluginId === options.sourcePluginId),
         );
       const get = (id: string, scope?: "local" | "global") =>
         list(scope).find((slot) => slot.id === id) ?? null;
       const paths = (id: string, scope?: "local" | "global") =>
-        (get(id, scope)?.resources ?? []).map(
-          (resource) => `@${resource.pluginId}/${resource.path}`,
+        (get(id, scope)?.resources ?? []).map((resource) =>
+          options.packageId ? worldReference(resource.worldPath) : `@/${resource.path}`,
         );
       return { list, get, paths, import: paths };
     },

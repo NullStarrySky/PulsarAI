@@ -6,7 +6,6 @@
     "name": "内置插件",
     "icon": "",
     "shortDescription": "PulsarAI 默认生成流程与资源",
-    "enabled": true,
     "builtIn": true
   },
   "ignore": [".pulsar-plugin.json", "**/.gitkeep"],
@@ -14,7 +13,6 @@
     "/": { "id": "builtin-root", "icon": "", "treeOrder": 0 },
     "AGENTS.md": { "id": "builtin-agents", "icon": "", "treeOrder": 1, "order": 100 },
     "config.json": { "id": "builtin-config", "icon": "", "treeOrder": 2, "order": 100 },
-    "slots.json": { "id": "builtin-slots", "icon": "", "treeOrder": 3, "order": 100 },
     "default.chat.json": { "id": "builtin-default-chat", "icon": "", "treeOrder": 4, "order": 100, "insertion": { "slot": "chat" } },
     "prompt.md": { "id": "builtin-prompt", "icon": "", "treeOrder": 5, "order": 100 },
     "docs/package.md": { "id": "builtin-docs-package", "icon": "", "treeOrder": 0, "order": 100 },

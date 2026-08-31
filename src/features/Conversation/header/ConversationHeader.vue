@@ -16,15 +16,14 @@ import { useChatStore } from "@/features/Conversation/chats/chat-store";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
 import PackageManager from "@/features/Package/PackageManager.vue";
 import { usePackageStore } from "@/features/Package/package-store";
-import PluginHeaderButton from "@/features/Plugin/PluginHeaderButton.vue";
 import { useLayoutStore } from "@/features/UI/layout-store";
 import { host } from "@/host";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import SchedulePage from "@/features/UI/schedule/SchedulePage.vue";
 
-const props = defineProps<{ packageId: string; chatId: string; assetOpen?: boolean; pluginOpen?: boolean }>();
-const emit = defineEmits<{ "update:packageId": [value: string]; "update:chatId": [value: string]; "toggle-assets": []; "toggle-plugin": [] }>();
+const props = defineProps<{ packageId: string; chatId: string; assetOpen?: boolean }>();
+const emit = defineEmits<{ "update:packageId": [value: string]; "update:chatId": [value: string]; "toggle-assets": [] }>();
 const layout = useLayoutStore();
 const responsive = useResponsiveStore();
 const appearance = useAppearanceStore();
@@ -107,7 +106,6 @@ onUnmounted(() => window.removeEventListener("mousemove", onMouseMove));
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="定时任务" @click="scheduleOpen = true"><CalendarClock class="size-4" /></Button>
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="搜索" @click="command.openPalette()"><Search class="size-4" /></Button>
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="[buttonClass, props.assetOpen && 'bg-muted/75 text-foreground']" title="资产" @click="emit('toggle-assets')"><FolderTree class="size-4" /></Button>
-      <PluginHeaderButton :active="props.pluginOpen" :button-class="buttonClass" active-button-class="bg-muted/75 text-foreground" @toggle="emit('toggle-plugin')" />
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="[buttonClass, !layout.topBarPinned && 'bg-muted/75 text-foreground']" :title="layout.topBarPinned ? '自动折叠顶栏' : '固定顶栏'" @click="layout.toggleTopBarPinned()"><Pin v-if="layout.topBarPinned" class="size-4" /><PinOff v-else class="size-4" /></Button>
     </div>
     <div v-if="host.desktop && !responsive.isMobileLayout" class="flex shrink-0 items-center gap-0.5">

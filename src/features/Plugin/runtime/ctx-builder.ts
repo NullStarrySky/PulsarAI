@@ -16,6 +16,7 @@ import { environmentTools } from "@/features/Plugin/runtime";
 import { createPluginSelfApi } from "@/features/Plugin/runtime/self-api";
 import { pluginConfigValue, readBuiltinAgentDocs } from "@/features/Plugin/runtime/environment";
 import type { Plugin } from "@/features/Plugin/tree/plugin-types";
+import { pluginWorldPath, worldReference } from "@/features/Plugin/tree/world-path";
 import type { SandboxEnvironment } from "@/features/Sandbox/sandbox";
 import { createSandboxFunction } from "@/features/Sandbox/sandbox";
 import { toRaw } from "vue";
@@ -278,6 +279,7 @@ export async function ctxbuilder(
       mkdir: selfApi.mkdir,
       move: selfApi.move,
       remove: selfApi.remove,
+      select: selfApi.select,
       open: selfApi.open,
       close: selfApi.close,
       toggle: selfApi.toggle,
@@ -314,7 +316,11 @@ export async function ctxbuilder(
     for (const toolFile of toolFiles) {
       if (toolFile.name in ctx)
         throw new Error(`工具函数名称与 ctx 冲突：${toolFile.name}`);
-      const source = result.selfApi.read(`@${toolFile.owner.id}/${toolFile.file.path}`);
+      const source = result.selfApi.read(worldReference(pluginWorldPath(
+        toolFile.owner,
+        toolFile.file.path,
+        result.chat?.packageId,
+      )));
       if (typeof source !== "string") continue;
       ctx[toolFile.name] = createSandboxFunction(source, [ctx]);
     }

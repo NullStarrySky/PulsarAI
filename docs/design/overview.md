@@ -91,12 +91,12 @@ interface Plugin {
 
 文件保存稳定 ID、Plugin 相对路径、内容和插入元数据。非空目录和所有中间目录由路径推断；只有叶级空目录需要单独保存。这样文件系统不再维护互相重复的 `parentId`、`children`、完整路径和目录节点。
 
-资源使用两种路径：
+资源区分源码与 World 路径：
 
-- `@/path`：当前源码所属 Plugin。
-- `@plugin-id/path`：显式 Plugin。
+- `@/path`：仅在源码内表示当前源码所属 Plugin。
+- `/self/path` 与 `/global/<plugin-id>/path`：World 绝对路径；根 `/config.json` 是共享契约与采用策略。
 
-`read` 和 `import` 在返回文本前，会把其中的 `@/` 固定为文件所属 Plugin 的显式前缀。于是两个不同 Plugin 的文档即使都写了 `imports("@/detail.md")`，被同一插槽收集后仍各自指向正确资源。
+`read` 和 `import` 在返回文本前，会把其中的 `@/` 固定为文件所属 World 挂载的绝对路径。于是两个不同 Plugin 的文档即使都写了 `imports("@/detail.md")`，被同一插槽收集后仍各自指向正确资源。
 
 `read` 返回原始文本或二进制；`import` 根据后缀包装恰好一个资源：Markdown 返回文本，chat 返回消息数组，data 返回 facade，JSON 返回对象，JavaScript 在环境中执行。
 
@@ -110,14 +110,13 @@ interface Plugin {
 interface PluginSlot {
   id: string;
   title: string;
-  scope: "local" | "global";
+  description: string;
   contentSuffixes: string[];
   selectionMode: "single" | "multiple" | "none";
-  selectedPaths?: string[];
 }
 ```
 
-文件通过 `insertion.slot` 注册到插槽，并可附带同步 JavaScript 条件与独立排序值。运行时从当前启用的 Plugin 收集定义和资源，按 `order`、Plugin ID、资源 ID 得到稳定顺序；`single` 和 `multiple` 插槽以 `selectedPaths` 筛选资源，不再另建 Plugin config 状态。
+全局插槽只由根 `/config.json` 预定义，且与 Plugin `slots.json` 的本地插槽保持同构。插槽没有父子关系；文件通过 `insertion.slot` 直接导出，并可附带同步 JavaScript 条件与独立排序值。运行时排除 `/config.json.disabled` 命中的文件或 Plugin 挂载，再按 `order`、Plugin ID、资源 ID 得到稳定顺序；`single` 只取得首个启用资源。
 
 插槽 API 返回的是显式资源路径，而不是提前展开后的内容：
 
@@ -140,10 +139,11 @@ type ConversationResourceOperation =
   | { type: "edit"; /* ... */ }
   | { type: "create"; /* ... */ }
   | { type: "move"; /* ... */ }
-  | { type: "remove"; /* ... */ };
+  | { type: "remove"; /* ... */ }
+  | { type: "configure"; /* complete World config */ };
 ```
 
-生成前，Conversation 克隆启用的基础 Plugin，然后沿活动消息路径重放操作，得到当前 Overlay。切换分支或消息版本后，重放另一条路径，自然得到另一份状态。
+生成前，Conversation 克隆已挂载的基础 Plugin 和 World config，然后沿活动消息路径重放操作，得到当前 Overlay。切换分支或消息版本后，重放另一条路径，自然得到另一份状态。
 
 基础 Plugin 是共享事实，消息路径上的操作是会话事实，重放得到的 Overlay 是当前派生状态。它不需要复制整个 Plugin，也不需要为每个分支维护一份独立文件树。
 

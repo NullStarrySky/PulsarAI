@@ -11,7 +11,9 @@ export type {
   CharacterPackage,
   CharacterPackageConversationLink,
   PackageCategory,
+  WorldConfig,
 } from "@/features/Package/package-types";
+import type { WorldConfig } from "@/features/Package/package-types";
 
 export type ConversationRendererId = "chat" | "novel";
 
@@ -116,6 +118,10 @@ export interface ConversationResourceNodeSnapshot {
 
 export type ConversationResourceOperation =
   | {
+      type: "configure";
+      value: WorldConfig;
+    }
+  | {
       type: "edit";
       target: {
         kind: "plugin-node";
@@ -179,6 +185,7 @@ export interface ConversationResourceOperationStats {
   create: number;
   move: number;
   remove: number;
+  configure: number;
   codeAct: {
     attempted: number;
     committed: number;

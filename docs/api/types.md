@@ -25,8 +25,16 @@ interface CharacterPackage {
     title: string;
   }>;
   pluginId: string;
-  mainPluginId: string;
-  enabledGlobalPluginIds: string[];
+  worldConfig: {
+    slots: Array<{
+      id: string;
+      title: string;
+      description: string;
+      contentSuffixes: string[];
+      selectionMode: "single" | "multiple" | "none";
+    }>;
+    disabled: string[];
+  };
   syncEnabled?: boolean;
 }
 
@@ -37,7 +45,7 @@ interface PackageCategory {
 }
 ```
 
-`pluginId` 是角色本地资源 Plugin；`mainPluginId` 决定生成入口和模型覆盖；`enabledGlobalPluginIds` 决定额外全局 Plugin。关系使用稳定 ID，不能依赖 name/nickname。
+`pluginId` 只标识角色本地资源 Plugin，不表示主要生成插件。World 根包含 `/config.json`、`/self/` 与 `/global/`；`worldConfig.slots` 定义跨 Plugin 插槽，`worldConfig.disabled` 保存禁用文件或 Plugin 挂载路径。禁用资源仍然挂载并可直接读取，只是不进入插槽。`@/` 仅在 Plugin 源码内指向该源码所属的 Plugin 根。关系使用稳定 ID，不能依赖 name/nickname。
 
 ## Conversation
 
@@ -159,7 +167,6 @@ interface Plugin {
   shortDescription: string;
   files: PluginFile[];
   emptyFolders: string[];
-  enabled: boolean;
   builtIn: boolean;
 }
 
@@ -189,7 +196,7 @@ interface PluginFolder {
 }
 ```
 
-`PluginFolder` 是推断视图，不是持久化资源。文件的稳定 ID 用于 Overlay 定位；路径可以移动。
+`PluginFolder` 是推断视图，不是持久化资源。文件的稳定 ID 用于 Overlay 定位；路径可以移动。Plugin 是持久化与挂载单元，不携带运行期开关；World 的文件/文件夹路径开关控制容器注入。
 
 ## Overlay 操作
 
@@ -236,7 +243,10 @@ type ConversationResourceOperation =
         pluginId: string;
         resourceId: string;
       };
-    };
+    }
+  | { type: "enable"; path: string }
+  | { type: "disable"; path: string }
+  | { type: "select"; containerId: string; paths: string[] };
 ```
 
 操作绑定到具体 ChatMessage 版本。重放只沿活动容器路径，并且每个容器只读取活动消息版本。
@@ -250,6 +260,9 @@ interface ConversationResourceOperationStats {
   create: number;
   move: number;
   remove: number;
+  enable: number;
+  disable: number;
+  select: number;
   codeAct: {
     attempted: number;
     committed: number;

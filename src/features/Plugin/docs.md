@@ -1,13 +1,14 @@
 # Plugin
 
-Plugin 是 Pulsar 的可编程资源系统。一个 Plugin 同时提供数据库支持的文件、插槽声明、生成入口、上下文文档、配置、数据、命令、组件和 Agent 能调用的文件 API。Conversation 只引用 Plugin，并在消息路径上叠加版本化修改；不会复制或直接改写基础 Plugin。
+World 是 Pulsar 的可编程资源系统。Plugin 只保留为数据库、共享和导入导出的挂载单元；运行时、编辑器和 Agent 面对的是角色包的一棵完整 World 树。Conversation 在消息路径上叠加版本化修改，不直接改写基础挂载。
 
 ## 数据模型
 
 - `Plugin.files` 是唯一持久化的文件集合。每个文件拥有稳定 ID、Plugin 相对路径、内容、排序值和可选插入声明。
 - `Plugin.emptyFolders` 只保存没有文件或子文件夹的叶子空目录。非空目录及全部中间目录都由 `files` 和 `emptyFolders` 的路径推断。
-- 角色本地 Plugin 的 `packageId` 指向所属角色包；全局及内置 Plugin 的 `packageId` 为 `null`。角色包分别记录本地资源 Plugin、主要生成 Plugin 和启用的全局 Plugin。
-- 资源路径使用 `@pluginId/path`。资源源码内的 `@/path` 在 `read` 或 `import` 时会按该资源的所属 Plugin 改写为显式路径，因此来自不同 Plugin 的文档不会错误共享调用者作用域。
+- World 根固定为 `/config.json`、`/self/` 和 `/global/`：角色本地 Plugin 挂载到 `/self/`，全部全局及内置 Plugin 挂载到 `/global/<pluginId>/`。
+- 角色包只保存一个 `worldConfig`，其中 `slots` 定义共享插槽，`disabled` 保存禁用文件或 Plugin 挂载路径。禁用贡献不进入插槽，但对应文件仍挂载且可直接读取。
+- 资源源码内的 `@/path` 始终表示其来源 Plugin 根；跨挂载组合时会规范化为 World 的 `/self/path` 或 `/global/<pluginId>/path`，不会串用调用者作用域。
 
 ## 导入与递归解析
 
@@ -17,35 +18,37 @@ Plugin 是 Pulsar 的可编程资源系统。一个 Plugin 同时提供数据库
 
 ## 文件与界面 API
 
-- `read`、`readMeta`、`ls`、`exists`、`slot.list/get/paths` 读取当前内存视图。
-- `write`、`edit`、`mkdir`、`move`、`remove` 乐观地同步修改当前视图；普通编辑在后台持久化，消息绑定运行中的修改写入该消息版本的结构化变更。
-- `open`、`close`、`toggle` 操作资源编辑器；目标为 `@/` 或 `@pluginId/` 时操作相应 Plugin 面板。
+- `useWorld({ packageId })` 直接修改基础 World；`useWorld({ conversationId })` 读取活动路径并把修改绑定到隐藏消息。`world.bind(container, message)` 精确绑定已有消息版本。
+- `read`、`readMeta`、`ls`、`exists` 与 `useWorldContainer(world, id)` 读取当前内存视图。
+- `write`、`edit`、`mkdir`、`move`、`remove`、`configure`、`select` 修改当前 World；会话修改持久化为消息版本的有序操作。
+- `open`、`close`、`toggle` 操作统一资产面板或资源编辑器。
 - `read_docs()` 列出内置 Agent 文档 ID，`read_docs(id)` 同步返回对应 Markdown 文件的原始文本；这些文档按需读取，不常驻注入每次会话上下文。
-- `slot.paths(id, scope?)` 返回插槽选中的显式 `@pluginId/path` 数组。生成脚本通过选中的 `CTX_BUILD` 资源构建聊天上下文。
+- `slot.paths(id, scope?)` 返回选中且有效的完整 World 路径。生成脚本通过选中的 `CTX_BUILD` 资源构建聊天上下文。
 - 除 JavaScript 资源执行、Sandbox 递归解析和数据库边界外，路径查询与文件操作保持同步。
 
 ## 插槽与约定资源
 
-`slots.json` 声明插槽的 ID、作用域、后缀、选择模式和覆盖策略；文件通过自己的 `insertion.slot` 注册，另可声明同步 JavaScript `condition` 或 `conditionPath`。`order` 决定插槽顺序，相同值以 Plugin ID 和资源 ID 稳定排序。
+根 `/config.json` 是全局插槽契约的唯一来源，并与 Plugin `slots.json` 使用同一种插槽定义。Plugin 插槽只在来源内可见，没有父级或子插槽语义；文件通过自己的 `insertion.slot` 直接注册到本地或全局插槽，另可声明同步 JavaScript `condition` 或 `conditionPath`。`order` 决定插槽顺序，相同值以 Plugin ID 和资源 ID 稳定排序。
 
-固定约定包括 `config.json`、`slots.json`、`generatePath`、`chat`、`REGEX`、`DATA_INJECT`、`data_prompt`、`COMMAND`、`background`、`tools/<name>/tool.js` 与 `tools/<name>/prompt.md`。`.data.json` 只保存状态定义；`DATA_INJECT` 只由生成流程读取，`.chat.json` 数据说明放入只由上下文构建读取的 `data_prompt`。背景候选与选择只属于 `background` 插槽，不复制到 `config.json`。
+固定约定包括 World `/config.json`、各 Plugin 自己的 `config.json`/`slots.json`、`generatePath`、`chat`、`REGEX`、`DATA_INJECT`、`data_prompt`、`COMMAND`、`background`、`tools/<name>/tool.js` 与 `tools/<name>/prompt.md`。`.data.json` 只保存状态定义；`DATA_INJECT` 只由生成流程读取，`.chat.json` 数据说明放入只由上下文构建读取的 `data_prompt`。背景选择属于 World config 中的 `background` 全局插槽，不复制到插件配置。
 
-`ctxbuilder(ctx, features)` 是唯一环境装配入口：`ctx` 必须先给出 `conversationId` 与 `pluginId`。`chat` 写入模型消息和活动路径；`conversation` 写入会话快照及 `conversations.read/list/create/update/remove`；`role` 写入角色快照及 `roles.read/list/create/update/remove`；`input` 写入草稿 API；`message` 返回并写入具体消息容器/版本；`plugin` 仅在消息版本存在时绑定 self API；`toolFunction` 将 `tools/<name>/tool.js` 直接写为 `ctx[name]`，而同目录 `prompt.md` 自动进入 `toolFunction` 上下文插槽。`run(pluginName, conversationId, roleId)`（或对象式 `runPlugin`）用完整 feature 集执行该 Plugin 的 `generatePath`；Conversation 不再自行拼装环境。
+`ctxbuilder(ctx, features)` 是唯一环境装配入口：`ctx` 必须先给出 `conversationId` 与来源 `pluginId`。`message` 返回并写入具体消息容器/版本；`plugin` 仅在消息版本存在时绑定 World API。`runWorld` 从 `generatePath` 单选容器取得入口，Conversation 不自行选择 Plugin 或拼装环境。
 
 ## 文件树
 
 ```text
 Plugin/
 ├─ docs.md                         功能边界与实现说明
-├─ PluginHeaderButton.vue          打开当前 Plugin 资源面板
-├─ PluginManagerPanel.vue          Plugin 管理界面
 ├─ tree/
 │  ├─ plugin-types.ts              扁平文件、推断目录、路径与资源类型
 │  ├─ plugin-store.ts              Plugin 状态、乐观修改、编辑器与面板状态
 │  ├─ plugin-persistence.ts        数据库读写与搜索
 │  ├─ builtin-plugins.ts           内置文件打包与装载
 │  ├─ slot-store.ts                插槽声明、资源收集和稳定排序
-│  ├─ PluginAssetTreePanel.vue     角色本地/全局/内置资源树
+│  ├─ world-config.ts              共享插槽、禁用路径与选择校验
+│  ├─ world-path.ts                /self 与 /global 挂载路径
+│  ├─ world-store.ts               组合式 World/消息绑定/容器 API
+│  ├─ PluginAssetTreePanel.vue     完整 World 资源树与根配置入口
 │  ├─ PluginFileEditorDialog.vue   文件编辑对话框
 │  └─ PluginInsertionConditionEditor.vue 插入条件编辑
 ├─ runtime/
@@ -68,10 +71,10 @@ Plugin/
 
 ## 不变量
 
-- 基础文件与消息版本的结构化 Plugin 变更是两个事实层；`usePluginStore(chatId)` 以缓存从基础树增量应用活动路径变更，生成期不得直接污染基础 Plugin。
+- 基础挂载与消息版本的结构化 World 变更是两个事实层；会话 World 从完整基础树增量应用活动路径变更，生成期不得直接污染基础 Plugin。
 - `codeAct` 的资源写入直接进入当前消息版本；不通过撤销快照，最终树由版本变更重算。
-- `@/` 的含义由源码所属 Plugin 决定，不由最外层生成 Plugin 或当前循环决定。
+- 对外 World 根为 `/config.json`、`/self/` 与 `/global/`；源码中的 `@/` 只按来源 Plugin 根解析后再规范化。
 - `import` 负责单资源包装，`parse` 负责对选中资源递归解析；不得把递归行为塞回 `import`。
 - 一个插槽只属于生成流程构建或上下文构建，不能同时用于两者；`DATA_INJECT` 和 `data_prompt` 是数据资源的阶段边界。
-- `regex.json` 是启用 Plugin 根目录的规则定义，自动注册到有序 `REGEX` 插槽；生成路径决定是否执行它，`applyOnRendering: true` 仅允许影响展示。
+- 未被 World config 禁用的 Plugin 根 `regex.json` 注册到有序 `REGEX` 容器；禁用只取消插槽贡献，不阻止直接读取文件。
 - Renderer 只能拿到受限环境能力，不能取得 Pinia Store、Node、Electron/Tauri 或任意命令执行能力。

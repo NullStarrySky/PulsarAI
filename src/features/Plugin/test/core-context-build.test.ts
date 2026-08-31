@@ -3,31 +3,27 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { executeSandboxCodeAsync } from "@/features/Sandbox/sandbox";
 
-const corePath = resolve(
+const pluginPath = resolve(
   process.cwd(),
-  "src/features/Plugin/builtIn/core",
+  "src/features/Plugin/builtIn",
 );
+const corePath = resolve(pluginPath, "core");
 
 describe("Built-in Core context builder", () => {
   it("registers every non-panel Core pipeline resource through its slot", async () => {
     const [slotsSource, manifestSource] = await Promise.all([
-      readFile(resolve(corePath, "slots.json"), "utf8"),
+      readFile(resolve(pluginPath, "world-config.json"), "utf8"),
       readFile(resolve(corePath, ".pulsar-plugin.json"), "utf8"),
     ]);
-    const slots = JSON.parse(slotsSource).slots as Array<{
-      id: string;
-      selectedPaths?: string[];
-    }>;
+    const slots = JSON.parse(slotsSource).slots as Array<{ id: string }>;
     const nodes = JSON.parse(manifestSource).nodes as Record<string, {
       insertion?: { slot: string };
     }>;
 
-    expect(slots.find((slot) => slot.id === "generatePath")?.selectedPaths)
-      .toEqual(["generate.js"]);
-    expect(slots.find((slot) => slot.id === "CTX_BUILD")?.selectedPaths)
-      .toEqual(["context/build.js"]);
-    expect(slots.find((slot) => slot.id === "DATA_INJECT")).toBeDefined();
-    expect(slots.find((slot) => slot.id === "data_prompt")).toBeDefined();
+    expect(slots.some((slot) => slot.id === "generatePath")).toBe(true);
+    expect(slots.some((slot) => slot.id === "CTX_BUILD")).toBe(true);
+    expect(slots.some((slot) => slot.id === "DATA_INJECT")).toBe(true);
+    expect(slots.some((slot) => slot.id === "data_prompt")).toBe(true);
     expect(slots.filter((slot) => slot.id.startsWith("depth:"))).toHaveLength(7);
     expect(nodes["context/build.js"]?.insertion?.slot).toBe("CTX_BUILD");
     expect(nodes["context/before-regex.js"]?.insertion?.slot)

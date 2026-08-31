@@ -11,6 +11,7 @@ import { useChatStore } from "@/features/Conversation/chats/chat-store";
 import { useMessageStore } from "@/features/Conversation/messages/message-store";
 import { usePackageStore } from "@/features/Package/package-store";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
+import { createWorldConfig } from "@/features/Plugin/tree/world-config";
 
 describe("conversation Plugin store", () => {
   beforeEach(() => setActivePinia(createPinia()));
@@ -33,16 +34,16 @@ describe("conversation Plugin store", () => {
       createdAt: "2026-08-27T00:00:00.000Z", updatedAt: "2026-08-27T00:00:00.000Z",
     }];
     chats.persist = vi.fn().mockResolvedValue(undefined);
-    packages.packages = [{ id: "pkg", mainPluginId: "plugin", enabledGlobalPluginIds: ["global"] }] as any;
+    packages.packages = [{ id: "pkg", pluginId: "plugin", worldConfig: createWorldConfig() }] as any;
     base.plugins = [
       {
         id: "plugin", packageId: "pkg", name: "plugin", icon: "", shortDescription: "",
-        enabled: true, builtIn: false, emptyFolders: [],
+        builtIn: false, emptyFolders: [],
         files: [{ id: "note", kind: "file", name: "note.md", path: "note.md", icon: "", treeOrder: 0, order: 100, content: "base" }],
       },
       {
         id: "global", packageId: null, name: "global", icon: "", shortDescription: "",
-        enabled: true, builtIn: false, emptyFolders: [],
+        builtIn: false, emptyFolders: [],
         files: [{ id: "global-note", kind: "file", name: "global.md", path: "global.md", icon: "", treeOrder: 0, order: 100, content: "global-base" }],
       },
     ];
@@ -54,8 +55,8 @@ describe("conversation Plugin store", () => {
     const tail = messages.containers.find((item) => item.id === chats.chats[0]!.lastContainerId)!;
     const message = tail.content[0]!;
     const attached = session.forVersion(tail, message);
-    attached.api("plugin").write("@global/global.md", "global-conversation");
-    attached.api("plugin").move("@global/global.md", "@plugin/");
+    attached.api("plugin").write("/global/global/global.md", "global-conversation");
+    attached.api("plugin").move("/global/global/global.md", "/self/global.md");
     await attached.flush();
 
     expect(session.finalPlugins.value[0]?.files[0]?.content).toBe("two");
@@ -89,5 +90,23 @@ describe("conversation Plugin store", () => {
       targetPluginId: "plugin",
       name: "global.md",
     });
+
+    const disabledConfig = createWorldConfig(session.config.value);
+    disabledConfig.disabled = ["/global/global"];
+    await session.configure(disabledConfig);
+    expect(session.finalPlugins.value.some((plugin) => plugin.id === "global")).toBe(true);
+    expect(session.config.value?.disabled).toEqual(["/global/global"]);
+    base.treeRevision += 1;
+    expect(session.config.value?.disabled).toEqual(["/global/global"]);
+    const selectedConfig = createWorldConfig(session.config.value);
+    selectedConfig.disabled = ["/global/global/global.md"];
+    await session.configure(selectedConfig);
+    expect(session.config.value?.disabled).toEqual([
+      "/global/global/global.md",
+    ]);
+    base.treeRevision += 1;
+    expect(session.config.value?.disabled).toEqual([
+      "/global/global/global.md",
+    ]);
   });
 });

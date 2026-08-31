@@ -12,6 +12,11 @@ import {
   resolveSandboxMessagesAsync,
   resolveSandboxTextAsync,
 } from "@/features/Sandbox/sandbox";
+import { useChatStore } from "@/features/Conversation/chats/chat-store";
+import { usePackageStore } from "@/features/Package/package-store";
+import type { WorldConfig } from "@/features/Package/package-types";
+import { createWorldConfig, parseWorldConfig, selectWorldSlotPaths } from "@/features/Plugin/tree/world-config";
+import { normalizeWorldPath } from "@/features/Plugin/tree/world-path";
 
 export type PluginSelfApiMutation = PluginStoreApiMutation;
 
@@ -24,6 +29,8 @@ export interface PluginSelfApiOptions {
   container?: ChatMessageContainer;
   /** Required with container: the concrete version that owns Plugin changes. */
   messageVersion?: ChatMessage;
+  packageId?: string;
+  worldConfig?: WorldConfig;
 }
 
 function isModelMessage(value: unknown): value is ModelMessage {
@@ -42,20 +49,41 @@ export function createPluginSelfApi(
     ? usePluginStore(options.conversationId).forVersion(options.container, options.messageVersion, logger)
     : null;
   const plugins = attached?.plugins ?? options.plugins ?? usePluginStore().plugins;
+  const packageId = options.packageId
+    ?? useChatStore().chats.find((item) => item.id === options.conversationId)?.packageId
+    ?? undefined;
+  const packageItem = usePackageStore().packages.find((item) => item.id === packageId);
+  const config = attached?.config ?? options.worldConfig ?? packageItem?.worldConfig ?? createWorldConfig();
   const plugin = attached
     ? attached.api(pluginId, { logger })
-    : usePluginStore().api(pluginId, { ...options, plugins, logger });
-  const slot = useSlotStore().api(plugins);
+    : usePluginStore().api(pluginId, { ...options, plugins, logger, packageId });
+  const slot = useSlotStore().api(plugins, {
+    packageId,
+    config,
+    sourcePluginId: pluginId,
+  });
+  const isConfigPath = (path: string) => path.trim() === "/config.json";
+  const importResource = (
+    path: string | string[],
+    environment: ResourceImportEnvironment = {},
+  ): unknown | Promise<unknown> => {
+    if (!Array.isArray(path))
+      return isConfigPath(path) ? createWorldConfig(config) : plugin.import(path, environment);
+    const values = path.map((item) => importResource(item, environment));
+    return values.some((value) => value instanceof Promise)
+      ? Promise.all(values).then((resolved) => resolved.flat())
+      : values.flat();
+  };
   const parse = async (
     path: string | string[],
     input: ResourceImportEnvironment = {},
   ) => {
     const environment: ResourceImportEnvironment = {
       ...input,
-      imports: input.imports ?? plugin.import,
+      imports: input.imports ?? importResource,
       logger,
     };
-    const imported = await plugin.import(path, environment);
+    const imported = await importResource(path, environment);
     if (typeof imported === "string") {
       return resolveSandboxTextAsync(imported, [environment], { logger });
     }
@@ -64,5 +92,60 @@ export function createPluginSelfApi(
     }
     return imported;
   };
-  return { ...plugin, parse, slot, logger, plugins, flush: attached?.flush, recordCodeAct: attached?.recordCodeAct };
+  const configure = async (value: WorldConfig) => {
+    const next = parseWorldConfig(value);
+    if (attached) {
+      attached.configure(next);
+      return;
+    }
+    if (options.mutation) throw new Error("当前资源环境不允许修改 World config。");
+    if (!packageItem) throw new Error("World config 需要会话或角色包作用域。");
+    await usePackageStore().update(packageItem.id, { worldConfig: next });
+  };
+  const read = (path: string) => isConfigPath(path)
+    ? JSON.stringify(config, null, 2)
+    : plugin.read(path);
+  const write = (path: string, content: unknown) => isConfigPath(path)
+    ? configure(parseWorldConfig(content))
+    : plugin.write(path, content);
+  const edit = (path: string, find: string, replace: string) => {
+    if (!isConfigPath(path)) return plugin.edit(path, find, replace);
+    const source = JSON.stringify(config, null, 2);
+    if (!source.includes(find)) throw new Error(`未找到待替换文本：${find}`);
+    return configure(parseWorldConfig(source.replace(find, replace)));
+  };
+  const select = async (slotId: string, paths: string[]) => {
+    const available = slot.get(slotId, "global")?.allResources.map((item) => item.worldPath) ?? [];
+    const known = slot.list("global").flatMap((item) =>
+      item.allResources.map((resource) => resource.worldPath));
+    await configure(selectWorldSlotPaths(config, slotId, available, known, paths));
+  };
+  return {
+    ...plugin,
+    import: importResource,
+    run: importResource,
+    read,
+    write,
+    edit,
+    exists: (path: string) => isConfigPath(path) || plugin.exists(path),
+    readMeta: (path: string) => isConfigPath(path)
+      ? { id: "world-config", name: "config.json", path: "/config.json", kind: "file" as const }
+      : plugin.readMeta(path),
+    ls: (path = "/") => normalizeWorldPath(path)
+      ? plugin.ls(path)
+      : [
+          { id: "world-config", name: "config.json", path: "/config.json", kind: "file" as const },
+          { id: "world-self", name: "self", path: "/self", kind: "folder" as const },
+          { id: "world-global", name: "global", path: "/global", kind: "folder" as const },
+        ],
+    parse,
+    slot,
+    logger,
+    plugins,
+    config,
+    configure,
+    select,
+    flush: attached?.flush,
+    recordCodeAct: attached?.recordCodeAct,
+  };
 }

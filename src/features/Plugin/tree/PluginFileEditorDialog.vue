@@ -23,9 +23,10 @@ import {
   NumberFieldInput,
 } from "@/components/ui/number-field";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
-import { usePackageStore } from "@/features/Package/package-store";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
-import { useSlotStore, pluginFileMatchesSlotSuffix } from "@/features/Plugin/tree/slot-store";
+import { pluginFileMatchesSlotSuffix } from "@/features/Plugin/tree/slot-store";
+import { useWorld } from "@/features/Plugin/tree/world-store";
+import { pluginWorldPath, worldReference } from "@/features/Plugin/tree/world-path";
 import { pluginMediaSource, pluginMediaType } from "@/features/Plugin/editors/media/plugin-media";
 import { pluginConventions, pluginFileType, type Plugin, type PluginFile } from "@/features/Plugin/tree/plugin-types";
 import { previewPluginResource } from "@/features/Plugin/runtime/environment";
@@ -48,8 +49,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{ "update:open": [value: boolean] }>();
 const pluginStore = usePluginStore();
-const conversationPlugins = usePluginStore(computed(() => props.conversationId));
-const packages = usePackageStore();
+const world = useWorld(computed(() => ({
+  conversationId: props.conversationId,
+  packageId: props.packageId ?? props.plugin?.packageId,
+})));
 const responsive = useResponsiveStore();
 const { isMobileLayout } = storeToRefs(responsive);
 
@@ -104,22 +107,12 @@ const editorStats = computed(() => ({
   characters: draft.value.length,
   lines: draft.value ? draft.value.split(/\r?\n/).length : 0,
 }));
-const visiblePlugins = computed(() => props.conversationId
-  ? conversationPlugins.finalPlugins.value
-  : pluginStore.sortedPluginsForPackage(
-      props.packageId ?? props.plugin?.packageId ?? "",
-      packages.packages.find((item) => item.id === (props.packageId ?? props.plugin?.packageId))?.enabledGlobalPluginIds,
-      packages.packages.find((item) => item.id === (props.packageId ?? props.plugin?.packageId))?.mainPluginId,
-    ));
-const slotStore = useSlotStore();
+const visiblePlugins = world.plugins;
 const slotOptions = computed(() => {
   const plugin = props.plugin;
   const file = props.file;
   if (!plugin || !file) return [];
-  const plugins = visiblePlugins.value.some((item: Plugin) => item.id === plugin.id)
-    ? visiblePlugins.value
-    : [plugin, ...visiblePlugins.value];
-  return slotStore.listSlots(plugins).flatMap((slot) => {
+  return world.containers.value.list().flatMap((slot) => {
     if (!pluginFileMatchesSlotSuffix(file.name, slot.contentSuffixes)) return [];
     if (slot.scope !== "global" && slot.pluginId !== plugin.id) return [];
     return [{
@@ -303,18 +296,14 @@ async function saveNow() {
             conditionPath: insertionConditionPath.value.trim() || undefined,
           },
     };
-    if (props.conversationId) {
-      const savedFile = await conversationPlugins.updateFile(plugin.id, file.id, patch);
-      const savedPlugin = conversationPlugins.finalPlugins.value.find(
-        (item) => item.id === plugin.id,
-      );
-      if (!savedPlugin) throw new Error("会话资源视图中不存在插件。");
-      pluginStore.showFileEditor(savedPlugin, savedFile, props.path, editorMode.value, {
-        conversationId: props.conversationId,
-      });
-    } else {
-      await pluginStore.updateNode(plugin.id, file.id, patch);
-    }
+    const path = worldReference(pluginWorldPath(plugin, file.path, world.packageId.value));
+    await world.updateFile(path, patch);
+    const saved = world.resolve(path);
+    const savedFile = saved.plugin.files.find((item) => item.path === saved.path);
+    if (!savedFile) throw new Error("World 中不存在刚保存的文件。");
+    pluginStore.showFileEditor(saved.plugin, savedFile, props.path, editorMode.value, {
+      conversationId: props.conversationId,
+    });
     lastSavedAt.value = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", hour12: false });
     return true;
   } catch (error) {

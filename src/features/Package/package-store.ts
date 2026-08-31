@@ -1,7 +1,8 @@
 import { defineStore } from "pinia";
 import { toRaw } from "vue";
 import { remove, upsert } from "@/features/Database/database-service";
-import { builtinCorePluginId, usePluginStore } from "@/features/Plugin/tree/plugin-store";
+import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
+import { createWorldConfig } from "@/features/Plugin/tree/world-config";
 import type { CharacterPackage, PackageCategory } from "./package-types";
 
 export const packageTable = "resource_packages";
@@ -18,12 +19,12 @@ export const usePackageStore = defineStore("conversation-packages", {
   },
   actions: {
     hydrate(packages: CharacterPackage[], categories: PackageCategory[]) {
-      this.packages = packages.map((item) => ({ ...item, pluginId: item.pluginId ?? "", mainPluginId: item.mainPluginId || builtinCorePluginId, enabledGlobalPluginIds: item.enabledGlobalPluginIds ?? [], conversations: item.conversations ?? [] }));
+      this.packages = packages.map((item) => ({ ...item, pluginId: item.pluginId ?? "", worldConfig: createWorldConfig(item.worldConfig), conversations: item.conversations ?? [] }));
       this.categories = categories;
     },
     async persist(item: CharacterPackage) { await upsert(packageTable, item.id, structuredClone(toRaw(item))); },
     async create(input: Partial<Pick<CharacterPackage, "name" | "icon" | "description">> = {}) {
-      const item: CharacterPackage = { id: crypto.randomUUID(), name: input.name?.trim() || "新角色包", icon: input.icon ?? "", description: input.description, order: Math.max(-1, ...this.packages.map((value) => value.order)) + 1, conversations: [], pluginId: "", mainPluginId: builtinCorePluginId, enabledGlobalPluginIds: [] };
+      const item: CharacterPackage = { id: crypto.randomUUID(), name: input.name?.trim() || "新角色包", icon: input.icon ?? "", description: input.description, order: Math.max(-1, ...this.packages.map((value) => value.order)) + 1, conversations: [], pluginId: "", worldConfig: createWorldConfig() };
       this.packages.push(item);
       await this.persist(item);
       const plugins = usePluginStore();
@@ -32,7 +33,7 @@ export const usePackageStore = defineStore("conversation-packages", {
       await this.persist(item);
       return item;
     },
-    async update(packageId: string, patch: Partial<Pick<CharacterPackage, "name" | "icon" | "description" | "pinned" | "mainPluginId" | "enabledGlobalPluginIds">>) {
+    async update(packageId: string, patch: Partial<Pick<CharacterPackage, "name" | "icon" | "description" | "pinned" | "worldConfig" | "syncEnabled">>) {
       const item = this.packages.find((value) => value.id === packageId);
       if (!item) return;
       Object.assign(item, patch);

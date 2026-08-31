@@ -1,8 +1,5 @@
-import { runPlugin } from "@/features/Plugin/runtime/run-api";
-import {
-  builtinCorePluginId,
-  usePluginStore,
-} from "@/features/Plugin/tree/plugin-store";
+import { runWorld } from "@/features/Plugin/runtime/run-api";
+import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import { usePackageStore } from "@/features/Package/package-store";
 import {
   formatChatMessageError,
@@ -40,8 +37,8 @@ export async function generateRequestedAssistantReply(input: {
   try {
     await plugins.initialize();
     const packageItem = packages.packages.find((item) => item.id === chat.packageId);
-    await runPlugin({
-      plugin: packageItem?.mainPluginId || builtinCorePluginId,
+    if (!packageItem) throw new Error("会话角色包不存在。");
+    await runWorld({
       conversationId: chat.id,
       roleId: chat.packageId,
       role: "assistant",

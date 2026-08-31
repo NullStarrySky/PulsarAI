@@ -16,9 +16,12 @@ import type {
   ConversationResourceOperation,
   ConversationResourceOperationStats,
 } from "@/features/Conversation/messages/conversation-types";
+import type { WorldConfig } from "@/features/Package/package-types";
+import { createWorldConfig } from "./world-config";
 
 export interface ConversationResourceOverlayOptions {
   plugins: Plugin[];
+  config: WorldConfig;
   /** A cached conversation view already owns this tree. */
   copy?: boolean;
   onChange?: (
@@ -29,6 +32,12 @@ export interface ConversationResourceOverlayOptions {
 
 function clone<T>(value: T): T {
   return cloneValue(value, new WeakMap()) as T;
+}
+
+function replaceConfig(target: WorldConfig, value: WorldConfig) {
+  const next = createWorldConfig(value);
+  target.slots = next.slots;
+  target.disabled = next.disabled;
 }
 
 function cloneValue(value: unknown, seen: WeakMap<object, unknown>): unknown {
@@ -74,6 +83,7 @@ function emptyStats(): ConversationResourceOperationStats {
     create: 0,
     move: 0,
     remove: 0,
+    configure: 0,
     codeAct: { attempted: 0, committed: 0, rolledBack: 0 },
     logCount: 0,
   };
@@ -162,6 +172,7 @@ function moveNode(
   node: PluginTreeNode,
   targetPlugin: Plugin,
   targetParentPath: string,
+  targetName = node.name,
 ) {
   const parent = normalizePath(targetParentPath);
   if (parent) {
@@ -175,7 +186,7 @@ function moveNode(
   ) {
     throw new Error("不能把文件夹移动到自身或其子目录。");
   }
-  const nextPath = parent ? `${parent}/${node.name}` : node.name;
+  const nextPath = parent ? `${parent}/${targetName}` : targetName;
   const collision = findPluginNodeByPath(targetPlugin, nextPath);
   if (collision && collision.id !== node.id) {
     throw new Error(`移动后路径已存在：${nextPath}`);
@@ -214,6 +225,7 @@ function moveNode(
     }
   } else {
     node.path = nextPath;
+    node.name = targetName;
     if (sourcePlugin !== targetPlugin) {
       sourcePlugin.files = sourcePlugin.files.filter((file) => file.id !== node.id);
       targetPlugin.files.push(node);
@@ -228,12 +240,14 @@ function moveNode(
  */
 export class ConversationResourceOverlay {
   plugins: Plugin[];
+  config: WorldConfig;
   private readonly onChange?: ConversationResourceOverlayOptions["onChange"];
   private readonly operationStats = emptyStats();
   private logger: PluginLogger | null = null;
 
   constructor(options: ConversationResourceOverlayOptions) {
     this.plugins = options.copy === false ? options.plugins : clone(options.plugins);
+    this.config = options.copy === false ? options.config : createWorldConfig(options.config);
     this.onChange = options.onChange;
   }
 
@@ -248,6 +262,10 @@ export class ConversationResourceOverlay {
 
   /** Applies a persisted structural change to the cached final tree. */
   applyChange(operation: ConversationResourceOperation) {
+    if (operation.type === "configure") {
+      replaceConfig(this.config, operation.value);
+      return;
+    }
     if (operation.type === "edit") {
       if (operation.target.kind !== "plugin-node") return;
       const plugin = this.plugins.find((item) => item.id === operation.target.pluginId);
@@ -272,7 +290,7 @@ export class ConversationResourceOverlay {
       const node = plugin ? findPluginTreeNode(plugin, operation.resourceId) : null;
       const targetPlugin = this.plugins.find((item) => item.id === operation.targetPluginId);
       if (plugin && node && targetPlugin)
-        moveNode(plugin, node, targetPlugin, operation.targetParentPath);
+        moveNode(plugin, node, targetPlugin, operation.targetParentPath, operation.name);
       return;
     }
     if (operation.type === "remove" && operation.target.kind === "plugin-node") {
@@ -285,7 +303,7 @@ export class ConversationResourceOverlay {
     }
   }
 
-  writeFile(pluginId: string, path: string, content: string | ArrayBuffer) {
+  writeFile(pluginId: string, path: string, content: unknown) {
     const plugin = findPlugin(this.plugins, pluginId);
     const normalizedPath = normalizePath(path);
     if (!normalizedPath) throw new Error("不能写入插件根目录。");
@@ -293,8 +311,7 @@ export class ConversationResourceOverlay {
     if (current?.kind === "folder")
       throw new Error(`不能向文件夹写入：${path}`);
     if (current?.kind === "file") {
-      current.content =
-        content instanceof ArrayBuffer ? content.slice(0) : content;
+      current.content = content instanceof ArrayBuffer ? content.slice(0) : clone(content);
       this.record({
         type: "edit",
         target: { kind: "plugin-node", pluginId, resourceId: current.id },
@@ -311,7 +328,7 @@ export class ConversationResourceOverlay {
       icon: "",
       treeOrder: pluginChildNodes(plugin, parentPath).length,
       kind: "file",
-      content: content instanceof ArrayBuffer ? content.slice(0) : content,
+      content: content instanceof ArrayBuffer ? content.slice(0) : clone(content),
       order: 100,
     };
     plugin.files.push(file);
@@ -388,15 +405,17 @@ export class ConversationResourceOverlay {
     const targetPlugin = findPlugin(this.plugins, targetPluginId);
     const node = findPluginNodeByPath(plugin, normalizePath(from));
     if (!node) throw new Error(`资源不存在：${from}`);
-    const targetParentPath = pluginParentPath(normalizePath(targetPath));
-    moveNode(plugin, node, targetPlugin, targetParentPath);
+    const normalizedTarget = normalizePath(targetPath);
+    const targetParentPath = pluginParentPath(normalizedTarget);
+    const targetName = normalizedTarget.split("/").pop() || node.name;
+    moveNode(plugin, node, targetPlugin, targetParentPath, targetName);
     this.record({
       type: "move",
       pluginId,
       resourceId: node.id,
       targetPluginId,
       targetParentPath,
-      name: node.name,
+      name: targetName,
     });
   }
 
@@ -415,6 +434,11 @@ export class ConversationResourceOverlay {
       type: "remove",
       target: { kind: "plugin-node", pluginId, resourceId: node.id },
     });
+  }
+
+  configure(config: WorldConfig) {
+    replaceConfig(this.config, config);
+    this.record({ type: "configure", value: this.config });
   }
 
   stats() {

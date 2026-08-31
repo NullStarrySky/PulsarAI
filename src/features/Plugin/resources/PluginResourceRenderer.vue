@@ -8,7 +8,6 @@ import PluginChatEditor from "@/features/Plugin/editors/chat/PluginChatEditor.vu
 import PluginConfigEditor from "@/features/Plugin/editors/config/PluginConfigEditor.vue";
 import PluginDataEditor from "@/features/Plugin/editors/data/PluginDataEditor.vue";
 import PluginRegexEditor from "@/features/Plugin/editors/regex/PluginRegexEditor.vue";
-import PluginSlotEditor from "@/features/Plugin/editors/slot/PluginSlotEditor.vue";
 import { resourceType } from "./resource-types";
 import type { PluginFile } from "@/features/Plugin/tree/plugin-types";
 
@@ -29,7 +28,6 @@ const codeLanguage = computed(() => type.value === "javascript" ? "javascript" :
     />
     <PluginConfigEditor v-else-if="file.path === 'config.json' && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
     <PluginDataEditor v-else-if="type === 'data' && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
-    <PluginSlotEditor v-else-if="file.path === 'slots.json' && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
     <PluginRegexEditor v-else-if="(file.path === 'regex.json' || file.path.endsWith('.regex.json')) && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
     <PluginChatEditor v-else-if="type === 'chat' && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
     <div v-else-if="type === 'media'" class="flex h-full items-center justify-center bg-muted/20 p-4">

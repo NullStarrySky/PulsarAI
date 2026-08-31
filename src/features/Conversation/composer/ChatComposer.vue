@@ -11,8 +11,8 @@ import {
 import ModelSelect from "@/features/ModelConnection/components/ModelSelect.vue";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/default-config-store";
 import { compilePluginVueFile } from "@/features/Plugin/editors/vue/plugin-vue-runtime";
-import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
-import { type SlotResource, useSlotStore } from "@/features/Plugin/tree/slot-store";
+import { type SlotResource } from "@/features/Plugin/tree/slot-store";
+import { useWorld } from "@/features/Plugin/tree/world-store";
 import { fileToMessagePart } from "@/features/Conversation/messages/message-attachment";
 import type { ActionPart, FilePart } from "@/features/Conversation/messages/conversation-types";
 import { useConversation } from "@/features/Conversation/use-conversation";
@@ -20,8 +20,7 @@ import PromptBar from "./PromptBar.vue";
 
 const props = defineProps<{ chatId: string }>();
 const chat = useConversation(toRef(props, "chatId"));
-const plugins = usePluginStore(toRef(props, "chatId"));
-const slots = useSlotStore();
+const world = useWorld(toRef(props, "chatId"));
 const defaults = useDefaultConfigStore();
 const files = ref<FilePart[]>([]);
 const selectedAction = ref<ActionPart | null>(null);
@@ -34,7 +33,7 @@ const actionViewComponent = ref<Component | null>(null);
 const isEmpty = computed(() => chat.activePath.value.length === 0);
 const suggestions = ["用一句话介绍你自己", "我们开始一段新的对话", "帮我梳理一个想法"];
 const actions = computed(() => {
-  return slots.api(plugins.finalPlugins.value).get("COMMAND", "global")?.resources ?? [];
+  return world.containers.value.get("COMMAND")?.resources ?? [];
 });
 
 onMounted(() => { if (!defaults.loaded) void defaults.load(); });
@@ -61,7 +60,7 @@ function useSuggestion(value: string) {
 }
 
 function openActionView(action: SlotResource) {
-  const plugin = plugins.finalPlugins.value.find((item) => item.id === action.pluginId);
+  const plugin = world.plugins.value.find((item) => item.id === action.pluginId);
   if (!plugin) {
     push.error("动作所属插件不可用。");
     return;

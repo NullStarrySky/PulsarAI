@@ -3,7 +3,6 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   Braces,
   ClipboardPaste,
-  ChevronDown,
   ChevronRight,
   Code2,
   Copy,
@@ -14,7 +13,6 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
-  GripVertical,
   Image,
   MoreHorizontal,
   Package,
@@ -26,8 +24,23 @@ import {
 import { push } from "notivue";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Segmented } from "@/components/ui/segmented";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,11 +52,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
+import { useWorld } from "@/features/Plugin/tree/world-store";
+import { pluginWorldPath, worldReference } from "@/features/Plugin/tree/world-path";
+import { pluginSlotSchema, type PluginSlot } from "@/features/Plugin/editors/slot/plugin-slot";
 import { createPluginResourceContent } from "@/features/Plugin/editors/resource-defaults";
 import { createPluginMediaContent } from "@/features/Plugin/editors/media/plugin-media";
+import { slotIconComponent, slotIconOptions } from "@/features/Plugin/tree/slot-icons";
+import type { SlotQuery } from "@/features/Plugin/tree/slot-store";
 import {
   pluginFileType,
   findPluginNodeByPath,
+  findPluginTreeNode,
   pluginChildNodes,
   pluginConventions,
   pluginParentPath,
@@ -59,6 +78,14 @@ interface TreeRow {
   depth: number;
   path: string;
   root: boolean;
+  label: string;
+  worldPath: string;
+  virtual?: "self" | "global" | "slot";
+  expandable?: boolean;
+  slot?: SlotQuery;
+  togglePaths?: string[];
+  enabled?: boolean;
+  sourceLabel?: string;
 }
 
 type NewPluginFileType = "agents" | "markdown" | "chat" | "data" | "javascript" | "json" | "media" | "component" | "text";
@@ -84,9 +111,8 @@ const newFileTypes: Array<{ id: NewPluginFileType; label: string; extension: str
 ];
 
 const props = defineProps<{
-  pluginId: string;
-  /** A conversation Overlay view takes precedence over the persisted Plugin. */
-  plugin?: Plugin | null;
+  packageId: string;
+  conversationId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -95,6 +121,10 @@ const emit = defineEmits<{
 }>();
 
 const pluginStore = usePluginStore();
+const world = useWorld(computed(() => ({
+  conversationId: props.conversationId,
+  packageId: props.packageId,
+})));
 const importInput = ref<HTMLInputElement | null>(null);
 const expandedIds = ref(new Set<string>());
 const selectedKey = ref("");
@@ -106,6 +136,11 @@ const renameTarget = ref<{ pluginId: string; nodeId: string } | null>(null);
 const renameDraft = ref("");
 const renamingKey = ref("");
 const draggingNode = ref<{ pluginId: string; nodeId: string } | null>(null);
+const activeTab = ref("assets");
+const tabDirection = ref(1);
+const slotEditorOpen = ref(false);
+const slotEditorId = ref<string | null>(null);
+const slotDraft = ref<PluginSlot>({ id: "", title: "", description: "", contentSuffixes: [], selectionMode: "none" });
 const panelPosition = ref<{ x: number; y: number } | null>(null);
 let isDraggingPanel = false;
 let dragStartX = 0;
@@ -138,11 +173,24 @@ function stopPanelDrag() {
   window.removeEventListener("mouseup", stopPanelDrag);
 }
 
-const packagePlugins = computed(() => props.plugin?.id === props.pluginId
-  ? [props.plugin]
-  : pluginStore.sortedPlugins.filter((plugin) => plugin.id === props.pluginId));
-const selectedPlugin = computed(() => packagePlugins.value[0] ?? null);
-const selectedPluginLabel = computed(() => selectedPlugin.value?.packageId !== null ? "本地" : selectedPlugin.value?.name ?? "插件");
+const packagePlugins = world.plugins;
+const localPlugin = computed(() => packagePlugins.value.find(
+  (plugin) => plugin.packageId === props.packageId,
+) ?? null);
+const globalPlugins = computed(() => packagePlugins.value.filter(
+  (plugin) => plugin.packageId === null,
+));
+const tabOptions = [
+  { value: "assets", label: "资产" },
+  { value: "slots", label: "插槽" },
+  { value: "sources", label: "来源" },
+];
+const treeTransition = computed(() => tabDirection.value > 0 ? "tree-tab-forward" : "tree-tab-backward");
+
+watch(activeTab, (next, previous) => {
+  tabDirection.value = tabOptions.findIndex((option) => option.value === next)
+    >= tabOptions.findIndex((option) => option.value === previous) ? 1 : -1;
+});
 
 function keyFor(pluginId: string, nodeId: string) {
   return `${pluginId}:${nodeId}`;
@@ -152,16 +200,132 @@ function rootKeyFor(pluginId: string) {
   return `${pluginId}:`;
 }
 
-const treeRows = computed(() => {
+const assetTreeRows = computed(() => {
   const rows: TreeRow[] = [];
-  for (const plugin of packagePlugins.value) {
+  const local = localPlugin.value;
+  if (!local) return rows;
+  const selfKey = "world:self";
+  rows.push({ key: selfKey, plugin: local, node: null, depth: 0, path: "", worldPath: "self", label: "self", root: true, virtual: "self" });
+  if (expandedIds.value.has(selfKey)) appendChildren(rows, local, "", 1);
+  const globalKey = "world:global";
+  rows.push({ key: globalKey, plugin: local, node: null, depth: 0, path: "", worldPath: "global", label: "global", root: true, virtual: "global" });
+  if (!expandedIds.value.has(globalKey)) return rows;
+  for (const plugin of globalPlugins.value) {
     const rootKey = rootKeyFor(plugin.id);
-    rows.push({ key: rootKey, plugin, node: null, depth: 0, path: "", root: true });
-    if (!expandedIds.value.has(rootKey)) continue;
-    appendChildren(rows, plugin, "", 1);
+    rows.push({ key: rootKey, plugin, node: null, depth: 1, path: "", worldPath: pluginWorldPath(plugin, "", props.packageId), label: plugin.name, root: true });
+    if (expandedIds.value.has(rootKey)) appendChildren(rows, plugin, "", 2);
   }
   return rows;
 });
+
+function rowIsFolder(row: TreeRow) {
+  return Boolean(row.root || row.expandable || row.node?.kind === "folder");
+}
+
+function slotResourceRows(
+  rows: TreeRow[],
+  slot: SlotQuery,
+  depth: number,
+) {
+  for (const resource of slot.allResources) {
+    const plugin = packagePlugins.value.find((item) => item.id === resource.pluginId);
+    if (!plugin) continue;
+    rows.push({
+      key: `slot:${slot.scope}:${slot.pluginId}:${slot.id}:${resource.id}`,
+      plugin,
+      node: resource.file,
+      depth,
+      path: resource.path,
+      worldPath: resource.worldPath,
+      label: resource.name,
+      root: false,
+      slot,
+      togglePaths: [resource.worldPath],
+      enabled: !world.isPathDisabled(resource.worldPath),
+      sourceLabel: slot.scope === "global" ? resource.pluginName : undefined,
+    });
+  }
+}
+
+const slotTreeRows = computed(() => {
+  const rows: TreeRow[] = [];
+  const local = localPlugin.value;
+  if (!local) return rows;
+  const globalSlots = world.containers.value.list("global");
+
+  for (const slot of globalSlots) {
+    const key = `world:slot:${slot.id}`;
+    rows.push({
+      key,
+      plugin: local,
+      node: null,
+      depth: 0,
+      path: "",
+      worldPath: "/config.json",
+      label: slot.title,
+      root: false,
+      virtual: "slot",
+      expandable: true,
+      slot,
+      togglePaths: slot.allResources.map((resource) => resource.worldPath),
+      enabled: slot.resources.length > 0,
+    });
+    if (expandedIds.value.has(key)) slotResourceRows(rows, slot, 1);
+  }
+  return rows;
+});
+
+const sourceTreeRows = computed(() => {
+  const rows: TreeRow[] = [];
+  const globalSlots = world.containers.value.list("global");
+  for (const plugin of packagePlugins.value) {
+    const key = `contribution:${plugin.id}`;
+    const mountPath = pluginWorldPath(plugin, "", props.packageId);
+    rows.push({
+      key,
+      plugin,
+      node: null,
+      depth: 0,
+      path: "",
+      worldPath: mountPath,
+      label: plugin.name,
+      root: true,
+      togglePaths: [mountPath],
+      enabled: !world.isPathDisabled(mountPath),
+    });
+    if (!expandedIds.value.has(key)) continue;
+
+    const contributed = globalSlots.filter((slot) =>
+      slot.allResources.some((resource) => resource.pluginId === plugin.id));
+    for (const slot of contributed) {
+      const resources = slot.allResources.filter((resource) => resource.pluginId === plugin.id);
+      const slotKey = `source:${plugin.id}:${slot.id}`;
+      rows.push({
+        key: slotKey,
+        plugin,
+        node: null,
+        depth: 1,
+        path: "",
+        worldPath: mountPath,
+        label: slot.title,
+        root: false,
+        virtual: "slot",
+        expandable: true,
+        slot: { ...slot, allResources: resources, resources: slot.resources.filter((resource) => resource.pluginId === plugin.id) },
+        togglePaths: resources.map((resource) => resource.worldPath),
+        enabled: resources.some((resource) => !world.isPathDisabled(resource.worldPath)),
+      });
+      if (expandedIds.value.has(slotKey)) slotResourceRows(rows, { ...slot, allResources: resources }, 2);
+    }
+  }
+  return rows;
+});
+
+const treeRows = computed(() => activeTab.value === "assets"
+  ? assetTreeRows.value
+  : activeTab.value === "slots"
+    ? slotTreeRows.value
+    : sourceTreeRows.value);
 
 function appendChildren(
   rows: TreeRow[],
@@ -171,7 +335,7 @@ function appendChildren(
 ) {
   for (const node of pluginChildNodes(plugin, folderPath)) {
     const key = keyFor(plugin.id, node.id);
-    rows.push({ key, plugin, node, depth, path: node.path, root: false });
+    rows.push({ key, plugin, node, depth, path: node.path, worldPath: pluginWorldPath(plugin, node.path, props.packageId), label: node.name, root: false });
     if (node.kind === "folder" && expandedIds.value.has(key)) {
       appendChildren(rows, plugin, node.path, depth + 1);
     }
@@ -183,26 +347,33 @@ function folderPathOf(row: TreeRow) {
 }
 
 function toggleRow(row: TreeRow) {
-  if (!row.root && row.node?.kind !== "folder") return;
+  if (!rowIsFolder(row)) return;
   const next = new Set(expandedIds.value);
   next.has(row.key) ? next.delete(row.key) : next.add(row.key);
   expandedIds.value = next;
   focusedPluginId.value = row.plugin.id;
 }
 
-function activateRow(row: TreeRow) {
-  focusedPluginId.value = row.plugin.id;
-  void pluginStore.openPlugin(row.plugin.id);
-  if (row.root || row.node?.kind === "folder") {
+async function activateRow(row: TreeRow) {
+  if (row.virtual) {
     toggleRow(row);
     return;
   }
+  focusedPluginId.value = row.plugin.id;
+  void pluginStore.openPlugin(row.plugin.id);
+  if (rowIsFolder(row)) {
+    toggleRow(row);
+    return;
+  }
+  if (row.node?.kind !== "file") return;
   selectedKey.value = row.key;
-  emit("select", { plugin: row.plugin, file: row.node!, path: row.path });
+  emit("select", { plugin: row.plugin, file: row.node, path: row.path });
 }
 
-
 function iconFor(row: TreeRow) {
+  const slotIcon = slotIconComponent(row.slot?.icon);
+  if (slotIcon && (row.virtual === "slot" || row.node?.kind === "file")) return slotIcon;
+  if (row.virtual === "slot") return Braces;
   if (row.root) return Package;
   if (row.node?.kind === "folder") {
     return expandedIds.value.has(row.key) ? FolderOpen : Folder;
@@ -214,9 +385,38 @@ function iconFor(row: TreeRow) {
   return FileText;
 }
 
+async function setRowEnabled(row: TreeRow, enabled: boolean) {
+  const paths = row.togglePaths ?? [];
+  if (!paths.length) return;
+  if (activeTab.value === "slots" && row.slot?.scope === "global" && row.virtual === "slot" && enabled) {
+    await world.select(row.slot.id, paths.map((path) => worldReference(path)));
+    return;
+  }
+  const disabled = new Set(world.config.value.disabled);
+  const knownPaths = world.containers.value.list().flatMap((slot) =>
+    slot.allResources.map((resource) => worldReference(resource.worldPath)));
+  for (const path of paths.map((path) => worldReference(path))) {
+    if (!enabled) {
+      disabled.add(path);
+      continue;
+    }
+    for (const item of [...disabled]) {
+      if (path !== item && !path.startsWith(`${item}/`)) continue;
+      disabled.delete(item);
+      for (const knownPath of knownPaths) {
+        if (knownPath !== path && (knownPath === item || knownPath.startsWith(`${item}/`))) disabled.add(knownPath);
+      }
+    }
+    disabled.delete(path);
+  }
+  await world.configure({ ...world.config.value, disabled: [...disabled].sort((left, right) => left.localeCompare(right)) });
+}
+
 function expandFolder(plugin: Plugin, folderPath: string) {
   const node = folderPath ? findPluginNodeByPath(plugin, folderPath) : null;
-  const key = node ? keyFor(plugin.id, node.id) : rootKeyFor(plugin.id);
+  const key = node
+    ? keyFor(plugin.id, node.id)
+    : plugin.packageId === props.packageId ? "world:self" : rootKeyFor(plugin.id);
   expandedIds.value = new Set([...expandedIds.value, key]);
 }
 
@@ -227,6 +427,62 @@ function chooseImport(plugin?: Plugin, folderPath = "") {
   if (!targetPlugin) return;
   importTarget.value = { pluginId: targetPlugin.id, folderPath };
   importInput.value?.click();
+}
+
+function createSlotId() {
+  const ids = new Set(world.config.value.slots.map((slot) => slot.id));
+  let index = 1;
+  let id = `slot-${index}`;
+  while (ids.has(id)) id = `slot-${++index}`;
+  return id;
+}
+
+function openNewSlot() {
+  slotEditorId.value = null;
+  slotDraft.value = {
+    id: createSlotId(),
+    title: "新插槽",
+    description: "",
+    contentSuffixes: [],
+    selectionMode: "none",
+  };
+  slotEditorOpen.value = true;
+}
+
+function openSlotEditor(slot: PluginSlot) {
+  slotEditorId.value = slot.id;
+  slotDraft.value = structuredClone(slot);
+  slotEditorOpen.value = true;
+}
+
+async function saveSlot() {
+  const parsed = pluginSlotSchema.safeParse(slotDraft.value);
+  if (!parsed.success) {
+    localError.value = "插槽 ID 与标题不能为空。";
+    return;
+  }
+  const next = parsed.data;
+  const replacing = slotEditorId.value;
+  if (world.config.value.slots.some((slot) => slot.id === next.id && slot.id !== replacing)) {
+    localError.value = `插槽 ID 已存在：${next.id}`;
+    return;
+  }
+  const slots = world.config.value.slots.map((slot) => slot.id === replacing ? next : slot);
+  if (!replacing) slots.push(next);
+  localError.value = "";
+  await world.configure({ ...world.config.value, slots });
+  slotEditorOpen.value = false;
+}
+
+async function removeSlot(slot: PluginSlot) {
+  await world.configure({ ...world.config.value, slots: world.config.value.slots.filter((item) => item.id !== slot.id) });
+}
+
+async function setSlotSelectionMode(slot: PluginSlot, selectionMode: PluginSlot["selectionMode"]) {
+  await world.configure({
+    ...world.config.value,
+    slots: world.config.value.slots.map((item) => item.id === slot.id ? { ...item, selectionMode } : item),
+  });
 }
 
 function newFileTemplate(type: NewPluginFileType) {
@@ -242,15 +498,22 @@ function newFileTemplate(type: NewPluginFileType) {
 }
 
 async function createFile(plugin: Plugin, folderPath: string, type: NewPluginFileType) {
-  const file = await pluginStore.createFile(plugin.id, folderPath, newFileTemplate(type));
-  if (!file) return;
+  const template = newFileTemplate(type);
+  const name = uniqueNodeName(plugin, folderPath, template.name);
+  const path = [folderPath, name].filter(Boolean).join("/");
+  const reference = worldReference(pluginWorldPath(plugin, path, props.packageId));
+  await world.write(reference, template.content);
+  const resolved = world.resolve(reference);
+  const file = findPluginNodeByPath(resolved.plugin, resolved.path);
+  if (file?.kind !== "file") return;
   expandFolder(plugin, folderPath);
   selectedKey.value = keyFor(plugin.id, file.id);
 }
 
 async function createFolder(plugin: Plugin, parentPath: string) {
-  const folder = await pluginStore.createFolder(plugin.id, parentPath, uniqueNodeName(plugin, parentPath, "新文件夹"));
-  if (!folder) return;
+  const name = uniqueNodeName(plugin, parentPath, "新文件夹");
+  const path = [parentPath, name].filter(Boolean).join("/");
+  await world.mkdir(worldReference(pluginWorldPath(plugin, path, props.packageId)));
   expandFolder(plugin, parentPath);
 }
 
@@ -291,21 +554,23 @@ function uniqueNodeName(plugin: Plugin, parentPath: string, name: string) {
 
 async function pasteClipboardNode(plugin: Plugin, parentPath: string, node: ClipboardNode): Promise<PluginTreeNode | null> {
   if (node.kind === "file") {
-    return pluginStore.createFile(plugin.id, parentPath, {
-      name: uniqueNodeName(plugin, parentPath, node.name),
-      content: structuredClone(node.content),
-      order: node.order,
-      insertion: node.insertion ? structuredClone(node.insertion) : undefined,
+    const name = uniqueNodeName(plugin, parentPath, node.name);
+    const path = [parentPath, name].filter(Boolean).join("/");
+    const reference = worldReference(pluginWorldPath(plugin, path, props.packageId));
+    await world.write(reference, structuredClone(node.content));
+    await world.updateFile(reference, {
+      ...(node.order === undefined ? {} : { order: node.order }),
+      ...(node.insertion ? { insertion: structuredClone(node.insertion) } : {}),
     });
+    const resolved = world.resolve(reference);
+    return findPluginNodeByPath(resolved.plugin, resolved.path);
   }
-  const folderPath = await pluginStore.createFolder(
-    plugin.id,
-    parentPath,
-    uniqueNodeName(plugin, parentPath, node.name),
-  ).then((folder) => folder?.path ?? "");
-  if (!folderPath) return null;
+  const folderPath = [parentPath, uniqueNodeName(plugin, parentPath, node.name)].filter(Boolean).join("/");
+  const reference = worldReference(pluginWorldPath(plugin, folderPath, props.packageId));
+  await world.mkdir(reference);
   for (const child of node.children ?? []) await pasteClipboardNode(plugin, folderPath, child);
-  return findPluginNodeByPath(plugin, folderPath);
+  const resolved = world.resolve(reference);
+  return findPluginNodeByPath(resolved.plugin, resolved.path);
 }
 
 async function pasteNode(plugin: Plugin, parentPath: string) {
@@ -317,12 +582,12 @@ async function pasteNode(plugin: Plugin, parentPath: string) {
 }
 
 async function copyNodePath(row: TreeRow) {
-  await navigator.clipboard.writeText(`${row.plugin.id}/${row.path}`.replace(/\/$/, ""));
+  await navigator.clipboard.writeText(worldReference(row.worldPath));
   push.success("路径已复制");
 }
 
 function isFixedConventionRow(row: TreeRow) {
-  if (row.root) return true;
+  if (row.root || row.virtual) return true;
   const path = row.path.toLocaleLowerCase();
   return [
     pluginConventions.config,
@@ -355,7 +620,14 @@ async function confirmRename() {
   if (!target || !name) return;
   renameTarget.value = null;
   renamingKey.value = "";
-  await pluginStore.updateNode(target.pluginId, target.nodeId, { name });
+  const plugin = packagePlugins.value.find((item) => item.id === target.pluginId);
+  const node = plugin ? findPluginTreeNode(plugin, target.nodeId) : null;
+  if (!plugin || !node) return;
+  const targetPath = [pluginParentPath(node.path), name].filter(Boolean).join("/");
+  await world.move(
+    worldReference(pluginWorldPath(plugin, node.path, props.packageId)),
+    worldReference(pluginWorldPath(plugin, targetPath, props.packageId)),
+  );
 }
 
 function cancelRename() {
@@ -365,21 +637,23 @@ function cancelRename() {
 }
 
 async function removeNode(row: TreeRow) {
-  await pluginStore.deleteNode(row.plugin.id, row.node!.id);
+  await world.remove(worldReference(row.worldPath));
   if (selectedKey.value === row.key) selectedKey.value = "";
 }
 
 async function dropOnRow(row: TreeRow) {
   const dragging = draggingNode.value;
-  if (!dragging || dragging.pluginId !== row.plugin.id) return;
+  if (!dragging || row.key === "world:" || row.virtual === "global") return;
+  const sourcePlugin = packagePlugins.value.find((item) => item.id === dragging.pluginId);
+  const sourceNode = sourcePlugin ? findPluginTreeNode(sourcePlugin, dragging.nodeId) : null;
+  if (!sourcePlugin || !sourceNode) return;
   const targetPath = row.root || row.node?.kind === "folder"
     ? row.node?.path ?? ""
     : pluginParentPath(row.node?.path ?? "");
-  await pluginStore.moveNode(
-    row.plugin.id,
-    dragging.nodeId,
-    targetPath,
-    !row.root && row.node?.kind === "file" ? row.node.id : undefined,
+  const destination = [targetPath, sourceNode.name].filter(Boolean).join("/");
+  await world.move(
+    worldReference(pluginWorldPath(sourcePlugin, sourceNode.path, props.packageId)),
+    worldReference(pluginWorldPath(row.plugin, destination, props.packageId)),
   );
   draggingNode.value = null;
   expandFolder(row.plugin, targetPath);
@@ -388,6 +662,11 @@ async function dropOnRow(row: TreeRow) {
 function insertionLabel(node: PluginTreeNode | null) {
   if (!node || node.kind !== "file" || !node.insertion?.slot) return "";
   return node.insertion.slot;
+}
+
+function rowBadgeLabel(row: TreeRow) {
+  if (activeTab.value === "assets") return insertionLabel(row.node);
+  return activeTab.value === "slots" ? row.sourceLabel ?? "" : "";
 }
 
 async function importFiles(event: Event) {
@@ -404,8 +683,12 @@ async function importFiles(event: Event) {
   try {
     for (const file of files) {
       const content = await browserFileContent(file);
-      const created = await pluginStore.importFile(plugin.id, target.folderPath, file.name, content);
-      if (!created) continue;
+      const path = [target.folderPath, uniqueNodeName(plugin, target.folderPath, file.name)].filter(Boolean).join("/");
+      const reference = worldReference(pluginWorldPath(plugin, path, props.packageId));
+      await world.write(reference, content);
+      const resolved = world.resolve(reference);
+      const created = findPluginNodeByPath(resolved.plugin, resolved.path);
+      if (created?.kind !== "file") continue;
       expandFolder(plugin, target.folderPath);
       selectedKey.value = keyFor(plugin.id, created.id);
       emit("select", {
@@ -448,17 +731,14 @@ onMounted(async () => {
     const first = packagePlugins.value[0];
     if (!first) return;
     focusedPluginId.value = first.id;
-    expandedIds.value = new Set([rootKeyFor(first.id)]);
+    expandedIds.value = new Set(["world:self", "world:global"]);
   } catch (error) {
     localError.value = error instanceof Error ? error.message : "资产数据库初始化失败";
   }
 });
-const pluginSections = computed(() => [
-  { title: selectedPluginLabel.value, rows: treeRows.value },
-]);
 const treeViewportHeight = computed(() => Math.min(
   448,
-  Math.max(80, treeRows.value.length * 32 + pluginSections.value.length * 28 + 16),
+  Math.max(80, treeRows.value.length * 32 + 16),
 ));
 
 watch(packagePlugins, (plugins) => {
@@ -470,7 +750,7 @@ watch(packagePlugins, (plugins) => {
   }
   if (!plugins.some((item) => item.id === focusedPluginId.value)) {
     focusedPluginId.value = first.id;
-    expandedIds.value = new Set([rootKeyFor(first.id)]);
+    expandedIds.value = new Set(["world:self", "world:global"]);
   }
 });
 onUnmounted(() => {
@@ -481,18 +761,39 @@ onUnmounted(() => {
 
 <template>
   <aside
-    class="asset-tree-panel absolute right-3 top-3 z-40 flex w-[min(724px,calc(100vw-1.5rem))] max-h-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-2xl border border-border/80 bg-popover/95 shadow-xl backdrop-blur-md transition-shadow mobile:right-2 mobile:top-2 mobile:w-[calc(100%-1rem)] mobile:max-h-[calc(100%-1rem)]"
+    class="asset-tree-panel absolute right-3 top-3 z-40 flex w-max min-w-[19rem] max-w-[calc(100vw-1.5rem)] max-h-[calc(100%-1.5rem)] flex-col overflow-hidden rounded-2xl border border-border/80 bg-popover/95 shadow-xl backdrop-blur-md transition-shadow mobile:right-2 mobile:top-2 mobile:max-h-[calc(100%-1rem)]"
     :style="panelPosition ? { transform: `translate3d(${panelPosition.x}px, ${panelPosition.y}px, 0)` } : undefined"
   >
     <div
-      class="flex h-12 shrink-0 select-none items-center justify-between border-b border-border/80 px-3 cursor-grab active:cursor-grabbing"
+      class="flex h-12 shrink-0 select-none items-center justify-between border-b border-border/80 px-3 cursor-grab active:cursor-grabbing mobile:h-auto mobile:flex-wrap mobile:gap-1 mobile:py-2"
       @mousedown="startPanelDrag"
     >
-      <h2 class="flex items-center gap-1.5 text-base font-medium">
-        <GripVertical class="size-4 text-muted-foreground/70" />
-        资产 · {{ selectedPluginLabel }}
-      </h2>
+      <Segmented v-model="activeTab" :options="tabOptions" class="[&_[data-segmented-option]]:size-7 [&_[data-segmented-option]]:px-0" @mousedown.stop>
+        <template #option="{ option }">
+          <Folder v-if="option.value === 'assets'" class="size-3.5" />
+          <Braces v-else-if="option.value === 'slots'" class="size-3.5" />
+          <Package v-else class="size-3.5" />
+        </template>
+      </Segmented>
       <div class="flex items-center gap-1">
+        <DropdownMenu v-if="activeTab === 'assets'">
+          <DropdownMenuTrigger as-child>
+            <Button variant="ghost" size="icon-sm" class="rounded-full" title="新建资源" aria-label="新建资源" :disabled="!localPlugin" @click.stop>
+              <FilePlus2 class="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" class="w-48">
+            <DropdownMenuItem v-for="fileType in newFileTypes" :key="fileType.id" @click="localPlugin && createFile(localPlugin, '', fileType.id)">
+              <span class="min-w-0 flex-1">{{ fileType.label }}</span>
+              <span class="font-mono text-[10px] text-muted-foreground">{{ fileType.extension }}</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem :disabled="!localPlugin" @click="localPlugin && createFolder(localPlugin, '')"><FolderPlus data-icon="inline-start" />新建文件夹</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button v-else-if="activeTab === 'slots'" variant="ghost" size="icon-sm" class="rounded-full" title="新建插槽" aria-label="新建插槽" @click.stop="openNewSlot">
+          <FilePlus2 class="size-4" />
+        </Button>
         <Button variant="ghost" size="icon-sm" class="rounded-full" title="导入文件" aria-label="导入文件" @click.stop="chooseImport">
           <Upload class="size-4" />
         </Button>
@@ -504,35 +805,68 @@ onUnmounted(() => {
     </div>
 
     <ScrollArea class="min-h-0" :style="{ height: `${treeViewportHeight}px`, maxHeight: 'calc(100dvh - 10rem)' }">
-      <div class="space-y-2 p-2">
-        <section v-for="section in pluginSections" :key="section.title">
-          <h3 class="px-2 pb-1 text-[11px] font-medium text-muted-foreground">{{ section.title }}</h3>
-          <div class="space-y-0.5">
+      <div class="relative w-max min-w-full overflow-hidden p-2">
+        <Transition :name="treeTransition">
+          <TransitionGroup :key="activeTab" name="tree-folder" tag="div" class="space-y-0.5">
             <div
-              v-for="row in section.rows"
+              v-for="row in treeRows"
               :key="row.key"
               class="group flex min-w-0 items-center"
-              :draggable="!row.root && !isFixedConventionRow(row)"
-              @dragstart="draggingNode = { pluginId: row.plugin.id, nodeId: row.node!.id }"
+              :draggable="activeTab === 'assets' && !row.root && !isFixedConventionRow(row)"
+              @dragstart="activeTab === 'assets' && (draggingNode = { pluginId: row.plugin.id, nodeId: row.node!.id })"
               @dragend="draggingNode = null"
               @dragover.prevent
               @drop.stop.prevent="dropOnRow(row)"
             >
+              <ContextMenu v-if="activeTab === 'slots' && row.virtual === 'slot' && row.slot">
+                <ContextMenuTrigger as-child>
+                  <button
+                    type="button"
+                    class="flex h-8 w-max min-w-full items-center gap-1 rounded-md pr-1 text-left text-sm transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    :class="[selectedKey === row.key && 'bg-muted text-foreground', renamingKey === row.key && 'flex-none']"
+                    :style="{ paddingLeft: `${Math.min(row.depth, 7) * 14 + 6}px` }"
+                    :title="worldReference(row.worldPath)"
+                    @click="activateRow(row)"
+                  >
+                    <span class="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
+                      <ChevronRight v-if="rowIsFolder(row)" class="size-3.5 transition-transform duration-200 motion-reduce:transition-none" :class="expandedIds.has(row.key) && 'rotate-90'" />
+                    </span>
+                    <img v-if="row.node?.icon && !slotIconComponent(row.slot?.icon)" :src="row.node.icon" alt="" class="size-4 shrink-0 rounded-sm object-cover" />
+                    <component v-else :is="iconFor(row)" class="size-4 shrink-0 text-muted-foreground" />
+                    <Badge v-if="renamingKey !== row.key && rowBadgeLabel(row)" variant="secondary" class="max-w-24 shrink-0 truncate px-1.5 text-[10px] font-normal" :title="rowBadgeLabel(row)">{{ rowBadgeLabel(row) }}</Badge>
+                    <span v-if="renamingKey !== row.key" class="whitespace-nowrap" :class="row.root && 'font-medium'">{{ row.label }}</span>
+                  </button>
+                </ContextMenuTrigger>
+                <ContextMenuContent class="w-48">
+                  <ContextMenuItem @click="openSlotEditor(row.slot)"><PenSquare data-icon="inline-start" />编辑属性</ContextMenuItem>
+                  <ContextMenuSub>
+                    <ContextMenuSubTrigger>选择方式</ContextMenuSubTrigger>
+                    <ContextMenuSubContent class="w-36">
+                      <ContextMenuItem @click="setSlotSelectionMode(row.slot, 'none')">{{ row.slot.selectionMode === 'none' ? '✓ ' : '' }}无选择</ContextMenuItem>
+                      <ContextMenuItem @click="setSlotSelectionMode(row.slot, 'single')">{{ row.slot.selectionMode === 'single' ? '✓ ' : '' }}单选</ContextMenuItem>
+                      <ContextMenuItem @click="setSlotSelectionMode(row.slot, 'multiple')">{{ row.slot.selectionMode === 'multiple' ? '✓ ' : '' }}多选</ContextMenuItem>
+                    </ContextMenuSubContent>
+                  </ContextMenuSub>
+                  <ContextMenuSeparator />
+                  <ContextMenuItem variant="destructive" @click="removeSlot(row.slot)"><Trash2 data-icon="inline-start" />删除插槽</ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
               <button
+                v-else
                 type="button"
-                class="flex h-8 min-w-0 items-center gap-1 rounded-md pr-1 text-left text-sm transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                :class="[selectedKey === row.key && 'bg-muted text-foreground', renamingKey === row.key ? 'flex-none' : 'flex-1']"
+                class="flex h-8 w-max min-w-full items-center gap-1 rounded-md pr-1 text-left text-sm transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                :class="[selectedKey === row.key && 'bg-muted text-foreground', renamingKey === row.key && 'flex-none']"
                 :style="{ paddingLeft: `${Math.min(row.depth, 7) * 14 + 6}px` }"
-                :title="row.path || row.plugin.name"
+                :title="worldReference(row.worldPath)"
                 @click="activateRow(row)"
               >
                 <span class="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
-                  <component :is="expandedIds.has(row.key) ? ChevronDown : ChevronRight" v-if="row.root || row.node?.kind === 'folder'" class="size-3.5" />
+                  <ChevronRight v-if="rowIsFolder(row)" class="size-3.5 transition-transform duration-200 motion-reduce:transition-none" :class="expandedIds.has(row.key) && 'rotate-90'" />
                 </span>
-                <img v-if="row.node?.icon" :src="row.node.icon" alt="" class="size-4 shrink-0 rounded-sm object-cover" />
+                <img v-if="row.node?.icon && !slotIconComponent(row.slot?.icon)" :src="row.node.icon" alt="" class="size-4 shrink-0 rounded-sm object-cover" />
                 <component v-else :is="iconFor(row)" class="size-4 shrink-0 text-muted-foreground" />
-                <span v-if="renamingKey !== row.key" class="truncate" :class="row.root && 'font-medium'">{{ row.root ? selectedPluginLabel : row.node?.name }}</span>
-                <Badge v-if="renamingKey !== row.key && insertionLabel(row.node)" variant="secondary" class="max-w-24 shrink-0 truncate px-1.5 text-[10px] font-normal" :title="insertionLabel(row.node)">{{ insertionLabel(row.node) }}</Badge>
+                <Badge v-if="renamingKey !== row.key && rowBadgeLabel(row)" variant="secondary" class="max-w-24 shrink-0 truncate px-1.5 text-[10px] font-normal" :title="rowBadgeLabel(row)">{{ rowBadgeLabel(row) }}</Badge>
+                <span v-if="renamingKey !== row.key" class="whitespace-nowrap" :class="row.root && 'font-medium'">{{ row.label }}</span>
               </button>
               <Input
                 v-if="renamingKey === row.key"
@@ -544,14 +878,23 @@ onUnmounted(() => {
                 @keydown.esc.prevent="cancelRename"
                 @blur="confirmRename"
               />
-              <DropdownMenu>
+              <Switch
+                v-if="activeTab !== 'assets' && row.togglePaths?.length"
+                :model-value="row.enabled"
+                size="sm"
+                class="mx-1 shrink-0"
+                :aria-label="`${row.label}启用状态`"
+                @click.stop
+                @update:model-value="setRowEnabled(row, Boolean($event))"
+              />
+              <DropdownMenu v-if="activeTab === 'assets'">
                 <DropdownMenuTrigger as-child>
                   <Button variant="ghost" size="icon-sm" class="mr-0.5 size-7 shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 mobile:opacity-100" title="资源菜单" @click.stop>
                     <MoreHorizontal />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" class="w-44">
-                  <template v-if="row.root || row.node?.kind === 'folder'">
+                  <template v-if="row.key !== 'world:' && row.virtual !== 'global' && rowIsFolder(row)">
                     <DropdownMenuSub>
                       <DropdownMenuSubTrigger><FilePlus2 data-icon="inline-start" />新建文件</DropdownMenuSubTrigger>
                       <DropdownMenuSubContent class="w-48">
@@ -576,9 +919,8 @@ onUnmounted(() => {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            <p v-if="section.rows.length === 0" class="px-2 py-2 text-xs text-muted-foreground">暂无插件</p>
-          </div>
-        </section>
+          </TransitionGroup>
+        </Transition>
 
         <p v-if="pluginStore.loaded && treeRows.length === 0" class="px-2 py-10 text-center text-sm text-muted-foreground">暂无资产</p>
         <p v-if="pluginStore.loadError || localError" class="px-2 py-3 text-xs leading-5 text-destructive">
@@ -587,16 +929,90 @@ onUnmounted(() => {
       </div>
     </ScrollArea>
 
+  <Dialog v-model:open="slotEditorOpen">
+    <DialogContent class="sm:max-w-lg">
+      <DialogHeader>
+        <DialogTitle>{{ slotEditorId ? '编辑插槽' : '新建插槽' }}</DialogTitle>
+        <DialogDescription>定义共享插槽的标识、显示信息和可接受的资源后缀。</DialogDescription>
+      </DialogHeader>
+      <div class="grid gap-4">
+        <label class="grid gap-1.5 text-sm font-medium">ID<Input v-model="slotDraft.id" placeholder="例如 context" /></label>
+        <label class="grid gap-1.5 text-sm font-medium">标题<Input v-model="slotDraft.title" placeholder="显示名称" /></label>
+        <label class="grid gap-1.5 text-sm font-medium">图标<Select :model-value="slotDraft.icon ?? 'none'" @update:model-value="slotDraft.icon = $event === 'none' ? undefined : String($event)"><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">默认资源图标</SelectItem><SelectItem v-for="option in slotIconOptions" :key="option.value" :value="option.value">{{ option.label }}</SelectItem></SelectContent></Select></label>
+        <label class="grid gap-1.5 text-sm font-medium">说明<Input v-model="slotDraft.description" placeholder="可选" /></label>
+        <label class="grid gap-1.5 text-sm font-medium">允许的后缀<Textarea :model-value="slotDraft.contentSuffixes.join('\n')" class="min-h-20 font-mono text-xs" placeholder="md\nchat.json" @update:model-value="slotDraft.contentSuffixes = String($event ?? '').split(/\r?\n/).map((value) => value.trim()).filter(Boolean)" /></label>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" @click="slotEditorOpen = false">取消</Button>
+        <Button @click="saveSlot">保存</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+
   </aside>
 
 </template>
 
 <style scoped>
-.asset-tree-panel {
-  width: clamp(15rem, calc((100vw - 724px) / 2 - 1.5rem), 18rem);
+.tree-tab-forward-enter-active,
+.tree-tab-forward-leave-active,
+.tree-tab-backward-enter-active,
+.tree-tab-backward-leave-active {
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease;
+}
+
+.tree-tab-forward-enter-from {
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+.tree-tab-forward-leave-to {
+  opacity: 0;
+  transform: translateX(-100%);
+}
+
+.tree-tab-backward-enter-from {
+  opacity: 0;
+  transform: translateX(-100%);
+}
+
+.tree-tab-backward-leave-to {
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+.tree-tab-forward-leave-active,
+.tree-tab-backward-leave-active {
+  position: absolute;
+  inset-inline: 0;
+}
+
+.tree-folder-enter-active,
+.tree-folder-leave-active,
+.tree-folder-move {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms ease;
+}
+
+.tree-folder-enter-from,
+.tree-folder-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tree-tab-forward-enter-active,
+  .tree-tab-forward-leave-active,
+  .tree-tab-backward-enter-active,
+  .tree-tab-backward-leave-active,
+  .tree-folder-enter-active,
+  .tree-folder-leave-active,
+  .tree-folder-move {
+    transition: none;
+  }
 }
 
 :global(.mobile-layout) .asset-tree-panel {
-  width: min(21rem, calc(100% - 1rem));
+  min-width: min(19rem, calc(100% - 1rem));
+  max-width: calc(100% - 1rem);
 }
 </style>

@@ -4,11 +4,10 @@ import { z } from "zod";
 export const pluginSlotSchema = z.object({
   id: z.string().trim().min(1),
   title: z.string().trim().min(1),
-  scope: z.enum(["local", "global"]),
+  icon: z.string().trim().min(1).optional(),
   description: z.string().default(""),
   contentSuffixes: z.array(z.string()).default([]),
   selectionMode: z.enum(["single", "multiple", "none"]).default("none"),
-  selectedPaths: z.array(z.string()).optional(),
 });
 
 export const pluginSlotsSchema = z.object({
@@ -24,26 +23,11 @@ export function createPluginSlotDefinitions(
   return { slots: structuredClone(slots) };
 }
 
-export function selectPluginSlotResources<T extends { pluginId: string; path: string }>(
+export function selectPluginSlotResources<T extends { worldPath: string }>(
   slot: PluginSlot,
   resources: T[],
-  selectedPaths: string[] | undefined,
-  selectorPluginId?: string,
 ) {
-  if (slot.selectionMode === "none") return resources;
-  const selected = new Set(
-    (selectedPaths ?? []).map((path) =>
-      path.startsWith("@")
-        ? path
-        : `@${selectorPluginId}/${path.replace(/^\/+/, "")}`,
-    ),
-  );
-  const matches = selected.size
-    ? resources.filter((resource) =>
-        selected.has(`@${resource.pluginId}/${resource.path}`),
-      )
-    : resources;
-  return slot.selectionMode === "single" ? matches.slice(0, 1) : matches;
+  return slot.selectionMode === "single" ? resources.slice(0, 1) : resources;
 }
 
 /** Parse and validate a slots.json resource at its editor boundary. */

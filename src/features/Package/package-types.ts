@@ -4,6 +4,24 @@ export interface CharacterPackageConversationLink {
   title: string;
 }
 
+export type WorldSlotSelectionMode = "single" | "multiple" | "none";
+
+export interface WorldSlotConfig {
+  id: string;
+  title: string;
+  icon?: string;
+  description: string;
+  contentSuffixes: string[];
+  selectionMode: WorldSlotSelectionMode;
+}
+
+export interface WorldConfig {
+  /** Shared cross-Plugin slot contracts, isomorphic with Plugin slots.json definitions. */
+  slots: WorldSlotConfig[];
+  /** Disabled World file paths or mounted Plugin folder paths. */
+  disabled: string[];
+}
+
 export interface CharacterPackage {
   id: string;
   name: string;
@@ -15,8 +33,8 @@ export interface CharacterPackage {
   pinned?: boolean;
   conversations: CharacterPackageConversationLink[];
   pluginId: string;
-  mainPluginId: string;
-  enabledGlobalPluginIds: string[];
+  /** World-owned shared slot contracts and disabled asset paths. */
+  worldConfig: WorldConfig;
   syncEnabled?: boolean;
 }
 

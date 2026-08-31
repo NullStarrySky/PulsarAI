@@ -65,7 +65,7 @@ slot.paths(id: string, scope?: "local" | "global"): string[]
 slot.import(id: string, scope?: "local" | "global"): string[]
 ```
 
-`slot.import` 当前是 `slot.paths` 的别名，两者同步返回显式 `@pluginId/path` 数组，并不导入内容。
+`slot.import` 当前是 `slot.paths` 的别名，两者同步返回 World 绝对路径数组，并不导入内容。
 
 ## 草稿 input
 
@@ -107,7 +107,7 @@ close(path: string): UiTargetState
 toggle(path: string): UiTargetState
 ```
 
-文件路径操作资源编辑器；`@/` 或 `@pluginId/` 操作对应 Plugin 面板。返回值包含 `open`、`kind`、`pluginId`、`path`，文件目标另含 `resourceId`。
+文件路径操作资源编辑器；World 挂载路径使用 `/self/` 或 `/global/<pluginId>/`。返回值包含 `open`、`kind`、`pluginId`、`path`，文件目标另含 `resourceId`。
 
 ## 内置文档
 

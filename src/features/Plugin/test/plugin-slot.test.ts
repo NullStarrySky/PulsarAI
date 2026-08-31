@@ -3,27 +3,29 @@ import {
   selectPluginSlotResources,
   type PluginSlot,
 } from "@/features/Plugin/editors/slot/plugin-slot";
+import {
+  createWorldConfig,
+  isWorldPathDisabled,
+  selectWorldSlotPaths,
+} from "@/features/Plugin/tree/world-config";
 
 const singleSlot: PluginSlot = {
   id: "chat",
   title: "Chat",
-  scope: "global",
   description: "",
   contentSuffixes: ["chat.json"],
   selectionMode: "single",
 };
 const resources = [
-  { pluginId: "builtin-core-plugin", path: "default.chat.json" },
-  { pluginId: "character-plugin", path: "default.chat.json" },
+  { worldPath: "global/builtin-core-plugin/default.chat.json" },
+  { worldPath: "self/default.chat.json" },
 ];
 
 describe("Plugin slot selection", () => {
-  it("selects a Plugin-relative resource and keeps one single-choice result", () => {
+  it("keeps the first enabled resource for a single-choice slot", () => {
     expect(selectPluginSlotResources(
       singleSlot,
-      resources,
-      ["default.chat.json"],
-      "character-plugin",
+      [resources[1]!, resources[0]!],
     )).toEqual([resources[1]]);
   });
 
@@ -31,7 +33,23 @@ describe("Plugin slot selection", () => {
     expect(selectPluginSlotResources(
       { ...singleSlot, selectionMode: "multiple" },
       resources,
-      undefined,
     )).toEqual(resources);
+  });
+
+  it("expands a disabled Plugin path when one single-choice export is enabled", () => {
+    const config = createWorldConfig();
+    config.disabled = ["/global/music"];
+    const next = selectWorldSlotPaths(
+      config,
+      "chat",
+      ["/global/music/a.chat.json", "/global/music/b.chat.json"],
+      ["/global/music/a.chat.json", "/global/music/b.chat.json", "/global/music/readme.md"],
+      ["/global/music/b.chat.json"],
+    );
+
+    expect(isWorldPathDisabled(next, "/global/music/b.chat.json")).toBe(false);
+    expect(isWorldPathDisabled(next, "/global/music/a.chat.json")).toBe(true);
+    expect(isWorldPathDisabled(next, "/global/music/readme.md")).toBe(true);
+    expect(next.disabled).not.toContain("/global/music");
   });
 });
