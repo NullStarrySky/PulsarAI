@@ -57,6 +57,7 @@ import { pluginWorldPath, worldReference } from "@/features/Plugin/tree/world-pa
 import { pluginSlotSchema, type PluginSlot } from "@/features/Plugin/editors/slot/plugin-slot";
 import { createPluginResourceContent } from "@/features/Plugin/editors/resource-defaults";
 import { createPluginMediaContent } from "@/features/Plugin/editors/media/plugin-media";
+import PluginAssetTreeBranch from "@/features/Plugin/tree/PluginAssetTreeBranch.vue";
 import { slotIconComponent, slotIconOptions } from "@/features/Plugin/tree/slot-icons";
 import type { SlotQuery } from "@/features/Plugin/tree/slot-store";
 import {
@@ -86,6 +87,11 @@ interface TreeRow {
   togglePaths?: string[];
   enabled?: boolean;
   sourceLabel?: string;
+}
+
+interface TreeBranch {
+  row: TreeRow;
+  children: TreeBranch[];
 }
 
 type NewPluginFileType = "agents" | "markdown" | "chat" | "data" | "javascript" | "json" | "media" | "component" | "text";
@@ -206,14 +212,13 @@ const assetTreeRows = computed(() => {
   if (!local) return rows;
   const selfKey = "world:self";
   rows.push({ key: selfKey, plugin: local, node: null, depth: 0, path: "", worldPath: "self", label: "self", root: true, virtual: "self" });
-  if (expandedIds.value.has(selfKey)) appendChildren(rows, local, "", 1);
+  appendChildren(rows, local, "", 1);
   const globalKey = "world:global";
   rows.push({ key: globalKey, plugin: local, node: null, depth: 0, path: "", worldPath: "global", label: "global", root: true, virtual: "global" });
-  if (!expandedIds.value.has(globalKey)) return rows;
   for (const plugin of globalPlugins.value) {
     const rootKey = rootKeyFor(plugin.id);
     rows.push({ key: rootKey, plugin, node: null, depth: 1, path: "", worldPath: pluginWorldPath(plugin, "", props.packageId), label: plugin.name, root: true });
-    if (expandedIds.value.has(rootKey)) appendChildren(rows, plugin, "", 2);
+    appendChildren(rows, plugin, "", 2);
   }
   return rows;
 });
@@ -270,7 +275,7 @@ const slotTreeRows = computed(() => {
       togglePaths: slot.allResources.map((resource) => resource.worldPath),
       enabled: slot.resources.length > 0,
     });
-    if (expandedIds.value.has(key)) slotResourceRows(rows, slot, 1);
+    slotResourceRows(rows, slot, 1);
   }
   return rows;
 });
@@ -293,8 +298,6 @@ const sourceTreeRows = computed(() => {
       togglePaths: [mountPath],
       enabled: !world.isPathDisabled(mountPath),
     });
-    if (!expandedIds.value.has(key)) continue;
-
     const contributed = globalSlots.filter((slot) =>
       slot.allResources.some((resource) => resource.pluginId === plugin.id));
     for (const slot of contributed) {
@@ -315,7 +318,7 @@ const sourceTreeRows = computed(() => {
         togglePaths: resources.map((resource) => resource.worldPath),
         enabled: resources.some((resource) => !world.isPathDisabled(resource.worldPath)),
       });
-      if (expandedIds.value.has(slotKey)) slotResourceRows(rows, { ...slot, allResources: resources }, 2);
+      slotResourceRows(rows, { ...slot, allResources: resources }, 2);
     }
   }
   return rows;
@@ -327,6 +330,29 @@ const treeRows = computed(() => activeTab.value === "assets"
     ? slotTreeRows.value
     : sourceTreeRows.value);
 
+function nestTreeRows(rows: TreeRow[]) {
+  const branches: TreeBranch[] = [];
+  const stack: Array<{ depth: number; children: TreeBranch[] }> = [{ depth: -1, children: branches }];
+  for (const row of rows) {
+    while (stack[stack.length - 1]!.depth >= row.depth) stack.pop();
+    const branch: TreeBranch = { row, children: [] };
+    stack[stack.length - 1]!.children.push(branch);
+    stack.push({ depth: row.depth, children: branch.children });
+  }
+  return branches;
+}
+
+const treeBranches = computed(() => nestTreeRows(treeRows.value));
+
+function isRowExpanded(row: TreeRow) {
+  return rowIsFolder(row) && expandedIds.value.has(row.key);
+}
+
+function visibleTreeRowCount(branches: TreeBranch[]): number {
+  return branches.reduce((count, branch) => count + 1
+    + (isRowExpanded(branch.row) ? visibleTreeRowCount(branch.children) : 0), 0);
+}
+
 function appendChildren(
   rows: TreeRow[],
   plugin: Plugin,
@@ -336,7 +362,7 @@ function appendChildren(
   for (const node of pluginChildNodes(plugin, folderPath)) {
     const key = keyFor(plugin.id, node.id);
     rows.push({ key, plugin, node, depth, path: node.path, worldPath: pluginWorldPath(plugin, node.path, props.packageId), label: node.name, root: false });
-    if (node.kind === "folder" && expandedIds.value.has(key)) {
+    if (node.kind === "folder") {
       appendChildren(rows, plugin, node.path, depth + 1);
     }
   }
@@ -738,7 +764,7 @@ onMounted(async () => {
 });
 const treeViewportHeight = computed(() => Math.min(
   448,
-  Math.max(80, treeRows.value.length * 32 + 16),
+  Math.max(80, visibleTreeRowCount(treeBranches.value) * 32 + 16),
 ));
 
 watch(packagePlugins, (plugins) => {
@@ -807,10 +833,15 @@ onUnmounted(() => {
     <ScrollArea class="min-h-0" :style="{ height: `${treeViewportHeight}px`, maxHeight: 'calc(100dvh - 10rem)' }">
       <div class="relative w-max min-w-full overflow-hidden p-2">
         <Transition :name="treeTransition">
-          <TransitionGroup :key="activeTab" name="tree-folder" tag="div" class="space-y-0.5">
-            <div
-              v-for="row in treeRows"
-              :key="row.key"
+          <div :key="activeTab" class="space-y-0.5">
+            <PluginAssetTreeBranch
+              v-for="branch in treeBranches"
+              :key="branch.row.key"
+              :branch="branch"
+              :is-expanded="isRowExpanded"
+            >
+              <template #default="{ row }">
+                <div
               class="group flex min-w-0 items-center"
               :draggable="activeTab === 'assets' && !row.root && !isFixedConventionRow(row)"
               @dragstart="activeTab === 'assets' && (draggingNode = { pluginId: row.plugin.id, nodeId: row.node!.id })"
@@ -918,8 +949,10 @@ onUnmounted(() => {
                   </template>
                 </DropdownMenuContent>
               </DropdownMenu>
-            </div>
-          </TransitionGroup>
+                </div>
+              </template>
+            </PluginAssetTreeBranch>
+          </div>
         </Transition>
 
         <p v-if="pluginStore.loaded && treeRows.length === 0" class="px-2 py-10 text-center text-sm text-muted-foreground">暂无资产</p>
@@ -987,26 +1020,11 @@ onUnmounted(() => {
   inset-inline: 0;
 }
 
-.tree-folder-enter-active,
-.tree-folder-leave-active,
-.tree-folder-move {
-  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms ease;
-}
-
-.tree-folder-enter-from,
-.tree-folder-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
-}
-
 @media (prefers-reduced-motion: reduce) {
   .tree-tab-forward-enter-active,
   .tree-tab-forward-leave-active,
   .tree-tab-backward-enter-active,
-  .tree-tab-backward-leave-active,
-  .tree-folder-enter-active,
-  .tree-folder-leave-active,
-  .tree-folder-move {
+  .tree-tab-backward-leave-active {
     transition: none;
   }
 }
