@@ -1,44 +1,43 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import ModelSelect from "@/features/ModelConnection/components/ModelSelect.vue";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingItem from "@/features/Setting/components/SettingItem.vue";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
-import ModelSelect from "@/features/ModelConnection/components/ModelSelect.vue";
 import { useDefaultConfigStore } from "./default-config-store";
 
 const defaults = useDefaultConfigStore();
 const sttPolishPromptDraft = ref("");
 
 onMounted(async () => {
-  await defaults.load();
-  sttPolishPromptDraft.value = defaults.sttPolishPrompt;
+	await defaults.load();
+	sttPolishPromptDraft.value = defaults.sttPolishPrompt;
 });
 
 onBeforeUnmount(() => {
-  if (sttPolishPromptDraft.value !== defaults.sttPolishPrompt) {
-    void defaults.setSttPolishPrompt(sttPolishPromptDraft.value);
-  }
+	if (sttPolishPromptDraft.value !== defaults.sttPolishPrompt) {
+		void defaults.setSttPolishPrompt(sttPolishPromptDraft.value);
+	}
 });
 
 function updateSttPolishPromptDraft(value: string | number) {
-  sttPolishPromptDraft.value = String(value);
+	sttPolishPromptDraft.value = String(value);
 }
 
 function saveSttPolishPrompt() {
-  if (sttPolishPromptDraft.value !== defaults.sttPolishPrompt) {
-    void defaults.setSttPolishPrompt(sttPolishPromptDraft.value);
-  }
+	if (sttPolishPromptDraft.value !== defaults.sttPolishPrompt) {
+		void defaults.setSttPolishPrompt(sttPolishPromptDraft.value);
+	}
 }
-
 </script>
 
 <template>

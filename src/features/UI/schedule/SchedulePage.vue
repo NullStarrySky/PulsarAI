@@ -1,70 +1,77 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
 import {
-  CalendarClock,
-  MoreHorizontal,
-  PauseCircle,
-  Play,
-  Plus,
-  Search,
-  Trash2,
+	CalendarClock,
+	MoreHorizontal,
+	PauseCircle,
+	Play,
+	Plus,
+	Search,
+	Trash2,
 } from "lucide-vue-next";
+import { computed, onMounted, ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+	Dialog,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { WEEKDAY_OPTIONS, type ScheduleTask, type ScheduleWeekday } from "./schedule";
-import { useScheduleStore } from "./schedule-store";
 import ConversationSelector from "./ConversationSelector.vue";
+import type { ScheduleTask, ScheduleWeekday } from "./schedule";
+import { WEEKDAY_OPTIONS } from "./schedule";
+import { useScheduleStore } from "./schedule-store";
 
 const schedule = useScheduleStore();
 const editorOpen = ref(false);
 const editingTaskId = ref("");
 
-const editingTask = computed(() => schedule.tasks.find((task) => task.id === editingTaskId.value) ?? null);
+const editingTask = computed(
+	() => schedule.tasks.find((task) => task.id === editingTaskId.value) ?? null,
+);
 
 onMounted(() => {
-  void schedule.initialize();
+	void schedule.initialize();
 });
 
 watch(
-  () => schedule.activeTaskId,
-  (id) => {
-    if (!editingTaskId.value && id) {
-      editingTaskId.value = id;
-    }
-  },
+	() => schedule.activeTaskId,
+	(id) => {
+		if (!editingTaskId.value && id) {
+			editingTaskId.value = id;
+		}
+	},
 );
 
 async function createTask() {
-  const task = await schedule.createTask();
-  openEditor(task.id);
+	const task = await schedule.createTask();
+	openEditor(task.id);
 }
 
 function openEditor(taskId: string) {
-  schedule.activeTaskId = taskId;
-  editingTaskId.value = taskId;
-  editorOpen.value = true;
+	schedule.activeTaskId = taskId;
+	editingTaskId.value = taskId;
+	editorOpen.value = true;
 }
 
-async function toggleWeeklyDay(task: ScheduleTask, day: ScheduleWeekday, checked: boolean) {
-  await schedule.setWeeklyDay(task, day, checked);
+async function toggleWeeklyDay(
+	task: ScheduleTask,
+	day: ScheduleWeekday,
+	checked: boolean,
+) {
+	await schedule.setWeeklyDay(task, day, checked);
 }
 </script>
 

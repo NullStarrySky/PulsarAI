@@ -1,33 +1,36 @@
 <script setup lang="ts">
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+	Select,
+	SelectContent,
+	SelectGroup,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
 } from "@/components/ui/select";
 import SettingForm from "@/features/Setting/components/SettingForm.vue";
 import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
-import type { ModelDefinition, ModelProviderDefinition } from "../model-provider";
+import type {
+	ModelDefinition,
+	ModelProviderDefinition,
+} from "../model-provider";
 
 defineProps<{
-  provider: ModelProviderDefinition;
-  models: ModelDefinition[];
-  selectedModelId: string;
-  apiKeyDraft: string;
-  hasApiKey: boolean;
+	provider: ModelProviderDefinition;
+	models: ModelDefinition[];
+	selectedModelId: string;
+	apiKeyDraft: string;
+	hasApiKey: boolean;
 }>();
 
 const emit = defineEmits<{
-  "update:selectedModelId": [value: string];
-  "update:apiKey": [value: string];
-  "update:baseUrl": [value: string];
+	"update:selectedModelId": [value: string];
+	"update:apiKey": [value: string];
+	"update:baseUrl": [value: string];
 }>();
 
 function selectApiKey(event: FocusEvent) {
-  (event.target as HTMLInputElement | null)?.select();
+	(event.target as HTMLInputElement | null)?.select();
 }
 </script>
 

@@ -27,15 +27,13 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useConversationStore } from "@/features/Conversation/store/conversation-store";
-import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
-import type { Plugin } from "@/features/Plugin/tree/plugin-types";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingItem from "@/features/Setting/components/SettingItem.vue";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
 import BackupResourceRestoreDialog from "./BackupResourceRestoreDialog.vue";
 import {
-	type BackupInterval,
-	type BackupLimit,
+	BackupInterval,
+	BackupLimit,
 	backupIntervalOptions,
 	backupLimitOptions,
 	type ResourceImportMode,
@@ -44,8 +42,6 @@ import {
 
 const backup = useBackupStore();
 const conversation = useConversationStore();
-const plugin = usePluginStore();
-const pluginItems = () => (plugin as unknown as { plugins: Plugin[] }).plugins;
 const restoreDialogOpen = ref(false);
 const selectedExportResource = ref("");
 const resourceImportMode = ref<ResourceImportMode>("copy");
@@ -80,20 +76,10 @@ const exportResourceOptions = computed(() => [
 		value: `conversation:${item.id}`,
 		label: `会话 · ${item.title}`,
 	})),
-	...pluginItems()
-		.filter((item) => !item.builtIn)
-		.map((item) => ({
-			value: `plugin:${item.id}`,
-			label: `插件 · ${item.name}`,
-		})),
 ]);
 
 onMounted(async () => {
-	await Promise.all([
-		backup.initialize(),
-		conversation.initialize(),
-		plugin.initialize(),
-	]);
+	await Promise.all([backup.initialize(), conversation.initialize()]);
 });
 
 async function openResourceRestore() {
@@ -260,11 +246,11 @@ async function importResourceArchive() {
     <SettingGroup
       title="资源导入与导出"
     >
-      <SettingItem title="导出资源" description="内置插件不可导出。归档保留稳定 ID，便于之后更新。">
+      <SettingItem title="导出资源" description="归档保留角色包、会话与对应的 World 文档。">
         <div class="grid w-full gap-2 sm:w-80 sm:grid-cols-[minmax(0,1fr)_auto]">
           <Select v-model="selectedExportResource">
             <SelectTrigger>
-              <SelectValue placeholder="选择角色包、会话或插件" />
+              <SelectValue placeholder="选择角色包或会话" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem

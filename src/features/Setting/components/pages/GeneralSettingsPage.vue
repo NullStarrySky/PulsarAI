@@ -1,19 +1,19 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
 } from "@/components/ui/select";
-import { useWindowLifecycleStore } from "@/features/UI/window-lifecycle-store";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
+import type { WindowCloseBehavior } from "@/features/UI/window-lifecycle-store";
+import { useWindowLifecycleStore } from "@/features/UI/window-lifecycle-store";
 import SettingGroup from "../SettingGroup.vue";
 import SettingItem from "../SettingItem.vue";
 import SettingPage from "../SettingPage.vue";
 import SettingSwitch from "../SettingSwitch.vue";
-import type { WindowCloseBehavior } from "@/features/UI/window-lifecycle-store";
 
 const compactMode = ref(false);
 const enableAnimations = ref(true);
@@ -21,9 +21,9 @@ const windowLifecycle = useWindowLifecycleStore();
 const appearance = useAppearanceStore();
 
 function setCloseBehavior(value: unknown) {
-  if (value === "ask" || value === "exit" || value === "tray") {
-    windowLifecycle.setCloseBehavior(value satisfies WindowCloseBehavior);
-  }
+	if (value === "ask" || value === "exit" || value === "tray") {
+		windowLifecycle.setCloseBehavior(value satisfies WindowCloseBehavior);
+	}
 }
 </script>
 

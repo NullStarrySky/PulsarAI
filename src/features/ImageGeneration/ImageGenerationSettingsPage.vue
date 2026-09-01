@@ -1,53 +1,71 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
 import { useDebounceFn } from "@vueuse/core";
 import { push } from "notivue";
+import { computed, onMounted, ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+	Select,
+	SelectContent,
+	SelectGroup,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import SettingForm from "@/features/Setting/components/SettingForm.vue";
-import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
+import { setImageModel } from "@/features/defaultConfigs/default-config-service";
 import ModelCapabilityProviderForm from "@/features/ModelConnection/components/ModelCapabilityProviderForm.vue";
 import ServiceProviderSettingsLayout from "@/features/ModelConnection/components/ServiceProviderSettingsLayout.vue";
-import { useModelCapabilityProviders } from "@/features/ModelConnection/services/use-model-capability-providers";
 import type { ServiceProviderView } from "@/features/ModelConnection/service-provider";
-import { setImageModel } from "@/features/defaultConfigs/default-config-service";
+import { useModelCapabilityProviders } from "@/features/ModelConnection/services/use-model-capability-providers";
+import SettingForm from "@/features/Setting/components/SettingForm.vue";
+import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
+import {
+	hasAutomatic1111Auth,
+	loadAutomatic1111Settings,
+	saveAutomatic1111Auth,
+	saveAutomatic1111Settings,
+} from "./automatic1111-settings";
+import {
+	hasComfyUIRunPodApiKey,
+	loadComfyUISettings,
+	saveComfyUIRunPodApiKey,
+	saveComfyUISettings,
+} from "./comfyui-settings";
 import { generateImage } from "./image-generation";
-import { hasAutomatic1111Auth, loadAutomatic1111Settings, saveAutomatic1111Auth, saveAutomatic1111Settings } from "./automatic1111-settings";
-import { hasComfyUIRunPodApiKey, loadComfyUISettings, saveComfyUIRunPodApiKey, saveComfyUISettings } from "./comfyui-settings";
 import {
-  hasNovelAIApiKey,
-  loadNovelAISettings,
-  saveNovelAIApiKey,
-  saveNovelAISettings,
-} from "./novelai-settings";
-import { hasStabilityApiKey, loadStabilitySettings, saveStabilityApiKey, saveStabilitySettings } from "./stability-settings";
-import {
-  AUTOMATIC1111_MODEL_REF,
-  AUTOMATIC1111_PROVIDER_ID,
-  COMFYUI_MODEL_REF,
-  COMFYUI_PROVIDER_ID,
-  createDefaultAutomatic1111Settings,
-  createDefaultComfyUISettings,
-  createDefaultNovelAISettings,
-  createDefaultStabilitySettings,
-  NOVELAI_MODELS,
-  NOVELAI_PROVIDER_ID,
-  NOVELAI_SAMPLERS,
-  STABILITY_MODELS,
-  STABILITY_PROVIDER_ID,
+	AUTOMATIC1111_MODEL_REF,
+	AUTOMATIC1111_PROVIDER_ID,
+	COMFYUI_MODEL_REF,
+	COMFYUI_PROVIDER_ID,
+	createDefaultAutomatic1111Settings,
+	createDefaultComfyUISettings,
+	createDefaultNovelAISettings,
+	createDefaultStabilitySettings,
+	NOVELAI_MODELS,
+	NOVELAI_PROVIDER_ID,
+	NOVELAI_SAMPLERS,
+	STABILITY_MODELS,
+	STABILITY_PROVIDER_ID,
 } from "./image-generation-types";
+import {
+	hasNovelAIApiKey,
+	loadNovelAISettings,
+	saveNovelAIApiKey,
+	saveNovelAISettings,
+} from "./novelai-settings";
 import { testAutomatic1111Connection } from "./providers/automatic1111-image-client";
-import { buildComfyUIBaseUrl, testComfyUIConnection } from "./providers/comfyui-image-client";
+import {
+	buildComfyUIBaseUrl,
+	testComfyUIConnection,
+} from "./providers/comfyui-image-client";
+import {
+	hasStabilityApiKey,
+	loadStabilitySettings,
+	saveStabilityApiKey,
+	saveStabilitySettings,
+} from "./stability-settings";
 
 const apiKeyMask = "••••••••";
 const service = useModelCapabilityProviders("image");
@@ -75,219 +93,290 @@ const resultUrl = ref("");
 const testing = ref(false);
 
 const providers = computed<ServiceProviderView[]>(() => [
-  {
-    id: AUTOMATIC1111_PROVIDER_ID,
-    name: "AUTOMATIC1111 / Forge",
-    description: "连接本机或局域网 Stable Diffusion WebUI API。",
-    enabled: automatic1111Settings.value.enabled,
-    source: "feature",
-  },
-  {
-    id: NOVELAI_PROVIDER_ID,
-    name: "NovelAI",
-    description: "远程专用图片生成服务，不作为通用模型平台注册。",
-    enabled: novelAISettings.value.enabled,
-    source: "feature",
-  },
-  {
-    id: STABILITY_PROVIDER_ID,
-    name: "Stability AI",
-    description: "Stability 官方 Stable Image API 专用图片服务。",
-    enabled: stabilitySettings.value.enabled,
-    source: "feature",
-  },
-  {
-    id: COMFYUI_PROVIDER_ID,
-    name: "ComfyUI",
-    description: "连接本机或局域网 ComfyUI 的工作流图片服务。",
-    enabled: comfyUISettings.value.enabled,
-    source: "feature",
-  },
-  ...service.providerViews.value,
+	{
+		id: AUTOMATIC1111_PROVIDER_ID,
+		name: "AUTOMATIC1111 / Forge",
+		description: "连接本机或局域网 Stable Diffusion WebUI API。",
+		enabled: automatic1111Settings.value.enabled,
+		source: "feature",
+	},
+	{
+		id: NOVELAI_PROVIDER_ID,
+		name: "NovelAI",
+		description: "远程专用图片生成服务，不作为通用模型平台注册。",
+		enabled: novelAISettings.value.enabled,
+		source: "feature",
+	},
+	{
+		id: STABILITY_PROVIDER_ID,
+		name: "Stability AI",
+		description: "Stability 官方 Stable Image API 专用图片服务。",
+		enabled: stabilitySettings.value.enabled,
+		source: "feature",
+	},
+	{
+		id: COMFYUI_PROVIDER_ID,
+		name: "ComfyUI",
+		description: "连接本机或局域网 ComfyUI 的工作流图片服务。",
+		enabled: comfyUISettings.value.enabled,
+		source: "feature",
+	},
+	...service.providerViews.value,
 ]);
 const isNovelAI = computed(() => activeServiceId.value === NOVELAI_PROVIDER_ID);
 const isComfyUI = computed(() => activeServiceId.value === COMFYUI_PROVIDER_ID);
-const isAutomatic1111 = computed(() => activeServiceId.value === AUTOMATIC1111_PROVIDER_ID);
-const isStability = computed(() => activeServiceId.value === STABILITY_PROVIDER_ID);
+const isAutomatic1111 = computed(
+	() => activeServiceId.value === AUTOMATIC1111_PROVIDER_ID,
+);
+const isStability = computed(
+	() => activeServiceId.value === STABILITY_PROVIDER_ID,
+);
 const comfyUIAddress = computed(() => {
-  try {
-    return buildComfyUIBaseUrl(comfyUISettings.value);
-  } catch {
-    return "地址配置无效";
-  }
+	try {
+		return buildComfyUIBaseUrl(comfyUISettings.value);
+	} catch {
+		return "地址配置无效";
+	}
 });
-const comfyUISamplers = ["euler", "euler_ancestral", "heun", "dpm_2", "dpm_2_ancestral", "dpmpp_2m", "dpmpp_2m_sde", "dpmpp_2s_ancestral"];
-const comfyUISchedulers = ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform", "beta"];
+const comfyUISamplers = [
+	"euler",
+	"euler_ancestral",
+	"heun",
+	"dpm_2",
+	"dpm_2_ancestral",
+	"dpmpp_2m",
+	"dpmpp_2m_sde",
+	"dpmpp_2s_ancestral",
+];
+const comfyUISchedulers = [
+	"normal",
+	"karras",
+	"exponential",
+	"sgm_uniform",
+	"simple",
+	"ddim_uniform",
+	"beta",
+];
 
 onMounted(async () => {
-  [novelAISettings.value, comfyUISettings.value, automatic1111Settings.value, stabilitySettings.value] = await Promise.all([
-    loadNovelAISettings(),
-    loadComfyUISettings(),
-    loadAutomatic1111Settings(),
-    loadStabilitySettings(),
-  ]);
-  novelAIApiKey.value = await hasNovelAIApiKey() ? apiKeyMask : "";
-  comfyUIRunPodApiKey.value = await hasComfyUIRunPodApiKey() ? apiKeyMask : "";
-  automatic1111Auth.value = await hasAutomatic1111Auth() ? apiKeyMask : "";
-  stabilityApiKey.value = await hasStabilityApiKey() ? apiKeyMask : "";
-  novelAIInitialized.value = true;
-  comfyUIInitialized.value = true;
-  await service.initialize();
+	[
+		novelAISettings.value,
+		comfyUISettings.value,
+		automatic1111Settings.value,
+		stabilitySettings.value,
+	] = await Promise.all([
+		loadNovelAISettings(),
+		loadComfyUISettings(),
+		loadAutomatic1111Settings(),
+		loadStabilitySettings(),
+	]);
+	novelAIApiKey.value = (await hasNovelAIApiKey()) ? apiKeyMask : "";
+	comfyUIRunPodApiKey.value = (await hasComfyUIRunPodApiKey())
+		? apiKeyMask
+		: "";
+	automatic1111Auth.value = (await hasAutomatic1111Auth()) ? apiKeyMask : "";
+	stabilityApiKey.value = (await hasStabilityApiKey()) ? apiKeyMask : "";
+	novelAIInitialized.value = true;
+	comfyUIInitialized.value = true;
+	await service.initialize();
 });
 
-const persistNovelAISettings = useDebounceFn(() => saveNovelAISettings(novelAISettings.value), 400);
+const persistNovelAISettings = useDebounceFn(
+	() => saveNovelAISettings(novelAISettings.value),
+	400,
+);
 const persistNovelAIApiKey = useDebounceFn(async (value: string) => {
-  if (value === apiKeyMask) return;
-  await saveNovelAIApiKey(value);
+	if (value === apiKeyMask) return;
+	await saveNovelAIApiKey(value);
 }, 600);
-const persistComfyUISettings = useDebounceFn(() => saveComfyUISettings(comfyUISettings.value), 400);
-const persistAutomatic1111Settings = useDebounceFn(() => saveAutomatic1111Settings(automatic1111Settings.value), 400);
-const persistStabilitySettings = useDebounceFn(() => saveStabilitySettings(stabilitySettings.value), 400);
+const persistComfyUISettings = useDebounceFn(
+	() => saveComfyUISettings(comfyUISettings.value),
+	400,
+);
+const persistAutomatic1111Settings = useDebounceFn(
+	() => saveAutomatic1111Settings(automatic1111Settings.value),
+	400,
+);
+const persistStabilitySettings = useDebounceFn(
+	() => saveStabilitySettings(stabilitySettings.value),
+	400,
+);
 
-watch(novelAISettings, () => {
-  if (novelAIInitialized.value) void persistNovelAISettings();
-}, { deep: true });
-watch(comfyUISettings, () => {
-  if (comfyUIInitialized.value) void persistComfyUISettings();
-}, { deep: true });
-watch(automatic1111Settings, () => void persistAutomatic1111Settings(), { deep: true });
+watch(
+	novelAISettings,
+	() => {
+		if (novelAIInitialized.value) void persistNovelAISettings();
+	},
+	{ deep: true },
+);
+watch(
+	comfyUISettings,
+	() => {
+		if (comfyUIInitialized.value) void persistComfyUISettings();
+	},
+	{ deep: true },
+);
+watch(automatic1111Settings, () => void persistAutomatic1111Settings(), {
+	deep: true,
+});
 watch(stabilitySettings, () => void persistStabilitySettings(), { deep: true });
 
 async function activateProvider(providerId: string) {
-  activeServiceId.value = providerId;
-  if (![NOVELAI_PROVIDER_ID, COMFYUI_PROVIDER_ID, AUTOMATIC1111_PROVIDER_ID, STABILITY_PROVIDER_ID].includes(providerId)) {
-    await service.activateProvider(providerId);
-  }
+	activeServiceId.value = providerId;
+	if (
+		![
+			NOVELAI_PROVIDER_ID,
+			COMFYUI_PROVIDER_ID,
+			AUTOMATIC1111_PROVIDER_ID,
+			STABILITY_PROVIDER_ID,
+		].includes(providerId)
+	) {
+		await service.activateProvider(providerId);
+	}
 }
 
 async function toggleProvider(providerId: string, enabled: boolean) {
-  if (providerId === NOVELAI_PROVIDER_ID) {
-    novelAISettings.value.enabled = enabled;
-    await saveNovelAISettings(novelAISettings.value);
-    return;
-  }
-  if (providerId === COMFYUI_PROVIDER_ID) {
-    comfyUISettings.value.enabled = enabled;
-    await saveComfyUISettings(comfyUISettings.value);
-    return;
-  }
-  if (providerId === AUTOMATIC1111_PROVIDER_ID) {
-    automatic1111Settings.value.enabled = enabled;
-    await saveAutomatic1111Settings(automatic1111Settings.value);
-    return;
-  }
-  if (providerId === STABILITY_PROVIDER_ID) {
-    stabilitySettings.value.enabled = enabled;
-    await saveStabilitySettings(stabilitySettings.value);
-    return;
-  }
-  await service.toggleProvider(providerId, enabled);
+	if (providerId === NOVELAI_PROVIDER_ID) {
+		novelAISettings.value.enabled = enabled;
+		await saveNovelAISettings(novelAISettings.value);
+		return;
+	}
+	if (providerId === COMFYUI_PROVIDER_ID) {
+		comfyUISettings.value.enabled = enabled;
+		await saveComfyUISettings(comfyUISettings.value);
+		return;
+	}
+	if (providerId === AUTOMATIC1111_PROVIDER_ID) {
+		automatic1111Settings.value.enabled = enabled;
+		await saveAutomatic1111Settings(automatic1111Settings.value);
+		return;
+	}
+	if (providerId === STABILITY_PROVIDER_ID) {
+		stabilitySettings.value.enabled = enabled;
+		await saveStabilitySettings(stabilitySettings.value);
+		return;
+	}
+	await service.toggleProvider(providerId, enabled);
 }
 
 function updateNovelAIApiKey(value: string) {
-  novelAIApiKey.value = value;
-  void persistNovelAIApiKey(value);
+	novelAIApiKey.value = value;
+	void persistNovelAIApiKey(value);
 }
 
 function updateRunPodApiKey(value: string) {
-  comfyUIRunPodApiKey.value = value;
-  if (value !== apiKeyMask) void saveComfyUIRunPodApiKey(value);
+	comfyUIRunPodApiKey.value = value;
+	if (value !== apiKeyMask) void saveComfyUIRunPodApiKey(value);
 }
 
 function updateAutomatic1111Auth(value: string) {
-  automatic1111Auth.value = value;
-  if (value === apiKeyMask) return;
-  const separator = value.indexOf(":");
-  void saveAutomatic1111Auth(separator >= 0 ? value.slice(0, separator) : value, separator >= 0 ? value.slice(separator + 1) : "");
+	automatic1111Auth.value = value;
+	if (value === apiKeyMask) return;
+	const separator = value.indexOf(":");
+	void saveAutomatic1111Auth(
+		separator >= 0 ? value.slice(0, separator) : value,
+		separator >= 0 ? value.slice(separator + 1) : "",
+	);
 }
 
 function updateStabilityApiKey(value: string) {
-  stabilityApiKey.value = value;
-  if (value !== apiKeyMask) void saveStabilityApiKey(value);
+	stabilityApiKey.value = value;
+	if (value !== apiKeyMask) void saveStabilityApiKey(value);
 }
 
 function updateNovelAISeed(value: string | number) {
-  const normalized = String(value).trim();
-  novelAISettings.value.seed = normalized ? Number(normalized) : null;
+	const normalized = String(value).trim();
+	novelAISettings.value.seed = normalized ? Number(normalized) : null;
 }
 
 async function testComfyUI() {
-  comfyUIConnecting.value = true;
-  comfyUIConnectionStatus.value = `正在连接 ${comfyUIAddress.value}…`;
-  try {
-    const result = await testComfyUIConnection(comfyUISettings.value);
-    comfyUICheckpoints.value = result.checkpoints;
-    if (!comfyUISettings.value.checkpoint && result.checkpoints[0]) {
-      comfyUISettings.value.checkpoint = result.checkpoints[0];
-    }
-    comfyUIConnectionStatus.value = "readyWorkers" in result
-      ? `连接成功，${result.readyWorkers} 个 worker 就绪。`
-      : result.checkpoints.length
-      ? `连接成功，发现 ${result.checkpoints.length} 个 checkpoint。`
-      : "连接成功，但没有发现 checkpoint。";
-    push.success("ComfyUI 连接成功");
-  } catch (error) {
-    comfyUIConnectionStatus.value = error instanceof Error ? error.message : "ComfyUI 连接失败";
-    push.error(comfyUIConnectionStatus.value);
-  } finally {
-    comfyUIConnecting.value = false;
-  }
+	comfyUIConnecting.value = true;
+	comfyUIConnectionStatus.value = `正在连接 ${comfyUIAddress.value}…`;
+	try {
+		const result = await testComfyUIConnection(comfyUISettings.value);
+		comfyUICheckpoints.value = result.checkpoints;
+		if (!comfyUISettings.value.checkpoint && result.checkpoints[0]) {
+			comfyUISettings.value.checkpoint = result.checkpoints[0];
+		}
+		comfyUIConnectionStatus.value =
+			"readyWorkers" in result
+				? `连接成功，${result.readyWorkers} 个 worker 就绪。`
+				: result.checkpoints.length
+					? `连接成功，发现 ${result.checkpoints.length} 个 checkpoint。`
+					: "连接成功，但没有发现 checkpoint。";
+		push.success("ComfyUI 连接成功");
+	} catch (error) {
+		comfyUIConnectionStatus.value =
+			error instanceof Error ? error.message : "ComfyUI 连接失败";
+		push.error(comfyUIConnectionStatus.value);
+	} finally {
+		comfyUIConnecting.value = false;
+	}
 }
 
 async function testAutomatic1111() {
-  automatic1111Status.value = "正在连接…";
-  try {
-    const result = await testAutomatic1111Connection(automatic1111Settings.value, Boolean(automatic1111Auth.value));
-    automatic1111Models.value = result.models;
-    automatic1111Samplers.value = result.samplers;
-    automatic1111Schedulers.value = result.schedulers;
-    if (!automatic1111Settings.value.model) automatic1111Settings.value.model = result.activeModel || result.models[0] || "";
-    automatic1111Status.value = `连接成功，发现 ${result.models.length} 个模型。`;
-    push.success("A1111 连接成功");
-  } catch (error) {
-    automatic1111Status.value = error instanceof Error ? error.message : "A1111 连接失败";
-    push.error(automatic1111Status.value);
-  }
+	automatic1111Status.value = "正在连接…";
+	try {
+		const result = await testAutomatic1111Connection(
+			automatic1111Settings.value,
+			Boolean(automatic1111Auth.value),
+		);
+		automatic1111Models.value = result.models;
+		automatic1111Samplers.value = result.samplers;
+		automatic1111Schedulers.value = result.schedulers;
+		if (!automatic1111Settings.value.model)
+			automatic1111Settings.value.model =
+				result.activeModel || result.models[0] || "";
+		automatic1111Status.value = `连接成功，发现 ${result.models.length} 个模型。`;
+		push.success("A1111 连接成功");
+	} catch (error) {
+		automatic1111Status.value =
+			error instanceof Error ? error.message : "A1111 连接失败";
+		push.error(automatic1111Status.value);
+	}
 }
 
 async function runTest() {
-  const model = isComfyUI.value
-    ? COMFYUI_MODEL_REF
-    : isAutomatic1111.value
-      ? AUTOMATIC1111_MODEL_REF
-      : isStability.value
-        ? `${STABILITY_PROVIDER_ID}/${stabilitySettings.value.model}`
-    : isNovelAI.value
-      ? `${NOVELAI_PROVIDER_ID}/${novelAISettings.value.model}`
-      : service.selectedModelRef.value;
-  if (!prompt.value.trim() || !model) {
-    push.warning("请输入提示词并选择图片模型。");
-    return;
-  }
-  testing.value = true;
-  resultUrl.value = "";
-  try {
-    if (isComfyUI.value) await saveComfyUISettings(comfyUISettings.value);
-    if (isAutomatic1111.value) await saveAutomatic1111Settings(automatic1111Settings.value);
-    if (isStability.value) {
-      await saveStabilitySettings(stabilitySettings.value);
-      if (stabilityApiKey.value !== apiKeyMask) await saveStabilityApiKey(stabilityApiKey.value);
-    }
-    if (isNovelAI.value) {
-      await saveNovelAISettings(novelAISettings.value);
-      if (novelAIApiKey.value !== apiKeyMask) await saveNovelAIApiKey(novelAIApiKey.value);
-    }
-    const result = await generateImage({
-      model,
-      prompt: prompt.value.trim(),
-    });
-    resultUrl.value = `data:${result.image.mediaType};base64,${result.image.base64}`;
-    push.success("图片生成完成");
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "图片生成失败");
-  } finally {
-    testing.value = false;
-  }
+	const model = isComfyUI.value
+		? COMFYUI_MODEL_REF
+		: isAutomatic1111.value
+			? AUTOMATIC1111_MODEL_REF
+			: isStability.value
+				? `${STABILITY_PROVIDER_ID}/${stabilitySettings.value.model}`
+				: isNovelAI.value
+					? `${NOVELAI_PROVIDER_ID}/${novelAISettings.value.model}`
+					: service.selectedModelRef.value;
+	if (!prompt.value.trim() || !model) {
+		push.warning("请输入提示词并选择图片模型。");
+		return;
+	}
+	testing.value = true;
+	resultUrl.value = "";
+	try {
+		if (isComfyUI.value) await saveComfyUISettings(comfyUISettings.value);
+		if (isAutomatic1111.value)
+			await saveAutomatic1111Settings(automatic1111Settings.value);
+		if (isStability.value) {
+			await saveStabilitySettings(stabilitySettings.value);
+			if (stabilityApiKey.value !== apiKeyMask)
+				await saveStabilityApiKey(stabilityApiKey.value);
+		}
+		if (isNovelAI.value) {
+			await saveNovelAISettings(novelAISettings.value);
+			if (novelAIApiKey.value !== apiKeyMask)
+				await saveNovelAIApiKey(novelAIApiKey.value);
+		}
+		const result = await generateImage({
+			model,
+			prompt: prompt.value.trim(),
+		});
+		resultUrl.value = `data:${result.image.mediaType};base64,${result.image.base64}`;
+		push.success("图片生成完成");
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "图片生成失败");
+	} finally {
+		testing.value = false;
+	}
 }
 </script>
 

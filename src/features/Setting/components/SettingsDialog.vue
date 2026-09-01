@@ -1,26 +1,33 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch, watchEffect } from "vue";
-import { storeToRefs } from "pinia";
 import interact from "interactjs";
 import { Menu, Search, X } from "lucide-vue-next";
+import { storeToRefs } from "pinia";
+import {
+	computed,
+	nextTick,
+	onBeforeUnmount,
+	ref,
+	watch,
+	watchEffect,
+} from "vue";
 import { Button } from "@/components/ui/button";
+import {
+	Dialog,
+	DialogClose,
+	DialogContent,
+	DialogDescription,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Segmented } from "@/components/ui/segmented";
-import {
-  Dialog,
-  DialogContent,
-  DialogClose,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
 import { useLayoutStore } from "@/features/UI/layout-store";
+import { cn } from "@/lib/utils";
 import {
-  ensureDefaultSettingPages,
-  getSettingPage,
-  getSettingPages,
+	ensureDefaultSettingPages,
+	getSettingPage,
+	getSettingPages,
 } from "../setting-registry";
 
 ensureDefaultSettingPages();
@@ -37,76 +44,89 @@ const dialogOffset = ref({ x: 0, y: 0 });
 let dialogInteractable: ReturnType<typeof interact> | null = null;
 
 const pages = computed(() => getSettingPages());
-const activePage = computed(() => getSettingPage(activePageId.value) ?? pages.value[0]);
+const activePage = computed(
+	() => getSettingPage(activePageId.value) ?? pages.value[0],
+);
 const activeTabs = computed(() => activePage.value?.tabs ?? []);
 const activeComponent = computed(() => {
-  const page = activePage.value;
-  if (!page) return null;
-  if (!page.tabs?.length) return page.component ?? null;
-  return page.tabs.find((tab) => tab.id === activeTabId.value)?.component
-    ?? page.tabs[0]?.component
-    ?? null;
+	const page = activePage.value;
+	if (!page) return null;
+	if (!page.tabs?.length) return page.component ?? null;
+	return (
+		page.tabs.find((tab) => tab.id === activeTabId.value)?.component ??
+		page.tabs[0]?.component ??
+		null
+	);
 });
 const filteredPages = computed(() => {
-  const keyword = settingsSearch.value.trim().toLocaleLowerCase();
-  return pages.value.filter((page) => (
-    !keyword
-    || page.meta.title.toLocaleLowerCase().includes(keyword)
-    || page.tabs?.some((tab) => tab.title.toLocaleLowerCase().includes(keyword))
-  ));
+	const keyword = settingsSearch.value.trim().toLocaleLowerCase();
+	return pages.value.filter(
+		(page) =>
+			!keyword ||
+			page.meta.title.toLocaleLowerCase().includes(keyword) ||
+			page.tabs?.some((tab) => tab.title.toLocaleLowerCase().includes(keyword)),
+	);
 });
 const dialogStyle = computed(() => ({
-  top: "50%",
-  left: "50%",
-  translate: "none",
-  width: isMobileLayout.value ? "100vw" : "min(1160px, calc(100vw - 28px))",
-  height: isMobileLayout.value ? "100dvh" : "min(780px, 90vh)",
-  transform: `translate(calc(-50% + ${dialogOffset.value.x}px), calc(-50% + ${dialogOffset.value.y}px))`,
+	top: "50%",
+	left: "50%",
+	translate: "none",
+	width: isMobileLayout.value ? "100vw" : "min(1160px, calc(100vw - 28px))",
+	height: isMobileLayout.value ? "100dvh" : "min(780px, 90vh)",
+	transform: `translate(calc(-50% + ${dialogOffset.value.x}px), calc(-50% + ${dialogOffset.value.y}px))`,
 }));
 
 watchEffect(() => {
-  if (!activePageId.value && pages.value[0]) activePageId.value = pages.value[0].meta.id;
-  const tabs = activePage.value?.tabs ?? [];
-  if (tabs.length && !tabs.some((tab) => tab.id === activeTabId.value)) {
-    activeTabId.value = tabs[0]!.id;
-  }
+	if (!activePageId.value && pages.value[0])
+		activePageId.value = pages.value[0].meta.id;
+	const tabs = activePage.value?.tabs ?? [];
+	if (tabs.length && !tabs.some((tab) => tab.id === activeTabId.value)) {
+		activeTabId.value = tabs[0]?.id;
+	}
 });
 
 watchEffect(() => {
-  if (settingsOpen.value && isMobileLayout.value) sidebarOpen.value = false;
+	if (settingsOpen.value && isMobileLayout.value) sidebarOpen.value = false;
 });
 
-watch([settingsOpen, isMobileLayout], async ([open, mobile]) => {
-  teardownDrag();
-  dialogOffset.value = { x: 0, y: 0 };
-  if (!open || mobile) return;
-  await nextTick();
-  const element = document.querySelector<HTMLElement>("[data-settings-dialog]");
-  if (!element) return;
-  dialogInteractable = interact(element).draggable({
-    allowFrom: ".settings-dialog-drag-handle",
-    ignoreFrom: "button, input, textarea, select, [role='tab'], [role='combobox']",
-    listeners: {
-      move(event) {
-        dialogOffset.value = {
-          x: dialogOffset.value.x + event.dx,
-          y: dialogOffset.value.y + event.dy,
-        };
-      },
-    },
-  });
-}, { immediate: true });
+watch(
+	[settingsOpen, isMobileLayout],
+	async ([open, mobile]) => {
+		teardownDrag();
+		dialogOffset.value = { x: 0, y: 0 };
+		if (!open || mobile) return;
+		await nextTick();
+		const element = document.querySelector<HTMLElement>(
+			"[data-settings-dialog]",
+		);
+		if (!element) return;
+		dialogInteractable = interact(element).draggable({
+			allowFrom: ".settings-dialog-drag-handle",
+			ignoreFrom:
+				"button, input, textarea, select, [role='tab'], [role='combobox']",
+			listeners: {
+				move(event) {
+					dialogOffset.value = {
+						x: dialogOffset.value.x + event.dx,
+						y: dialogOffset.value.y + event.dy,
+					};
+				},
+			},
+		});
+	},
+	{ immediate: true },
+);
 
 function teardownDrag() {
-  dialogInteractable?.unset();
-  dialogInteractable = null;
+	dialogInteractable?.unset();
+	dialogInteractable = null;
 }
 
 function selectPage(pageId: string) {
-  activePageId.value = pageId;
-  const page = getSettingPage(pageId);
-  activeTabId.value = page?.tabs?.[0]?.id ?? "";
-  if (isMobileLayout.value) sidebarOpen.value = false;
+	activePageId.value = pageId;
+	const page = getSettingPage(pageId);
+	activeTabId.value = page?.tabs?.[0]?.id ?? "";
+	if (isMobileLayout.value) sidebarOpen.value = false;
 }
 
 onBeforeUnmount(teardownDrag);

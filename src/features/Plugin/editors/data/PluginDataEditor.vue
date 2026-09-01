@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import { Braces, Code2 } from "lucide-vue-next";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { computed } from "vue";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { parsePluginDataDefinition, type PluginDataDefinition, type PluginDataValue } from "./plugin-data";
+import {
+	type PluginDataDefinition,
+	type PluginDataValue,
+	parsePluginDataDefinition,
+} from "./plugin-data";
 
 const props = defineProps<{ modelValue: string }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
@@ -12,15 +22,18 @@ const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 const definition = computed(() => parsePluginDataDefinition(props.modelValue));
 
 function write(patch: Partial<PluginDataDefinition>) {
-  emit("update:modelValue", JSON.stringify({ ...definition.value, ...patch }, null, 2));
+	emit(
+		"update:modelValue",
+		JSON.stringify({ ...definition.value, ...patch }, null, 2),
+	);
 }
 
 function updateInitialValue(value: string) {
-  try {
-    write({ initialValue: JSON.parse(value) as PluginDataValue });
-  } catch {
-    // Keep the last valid definition while the user finishes an incomplete JSON edit.
-  }
+	try {
+		write({ initialValue: JSON.parse(value) as PluginDataValue });
+	} catch {
+		// Keep the last valid definition while the user finishes an incomplete JSON edit.
+	}
 }
 </script>
 

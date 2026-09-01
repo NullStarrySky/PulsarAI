@@ -1,12 +1,12 @@
 {
-  "$schema": "../gen/schemas/mobile-schema.json",
-  "identifier": "android",
-  "description": "Android-only runtime permissions",
-  "windows": ["main", "pulsarai-*"],
-  "platforms": ["android"],
-  "permissions": [
-    "android-battery-optimization:default",
-    "m3:default",
-    "stt:default"
-  ]
+	"$schema": "../gen/schemas/mobile-schema.json",
+	"identifier": "android",
+	"description": "Android-only runtime permissions",
+	"windows": ["main", "pulsarai-*"],
+	"platforms": ["android"],
+	"permissions": [
+		"android-battery-optimization:default",
+		"m3:default",
+		"stt:default"
+	]
 }

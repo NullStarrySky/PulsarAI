@@ -1,21 +1,24 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, toRef, type Component } from "vue";
 import { push } from "notivue";
+import { type Component, computed, onMounted, ref, toRef } from "vue";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
 } from "@/components/ui/dialog";
-import ModelSelect from "@/features/ModelConnection/components/ModelSelect.vue";
-import { useDefaultConfigStore } from "@/features/defaultConfigs/default-config-store";
-import { compilePluginVueFile } from "@/features/Plugin/editors/vue/plugin-vue-runtime";
-import { type SlotResource } from "@/features/Plugin/tree/slot-store";
-import { useWorld } from "@/features/Plugin/tree/world-store";
+import type {
+	ActionPart,
+	FilePart,
+} from "@/features/Conversation/messages/conversation-types";
 import { fileToMessagePart } from "@/features/Conversation/messages/message-attachment";
-import type { ActionPart, FilePart } from "@/features/Conversation/messages/conversation-types";
 import { useConversation } from "@/features/Conversation/use-conversation";
+import { useDefaultConfigStore } from "@/features/defaultConfigs/default-config-store";
+import ModelSelect from "@/features/ModelConnection/components/ModelSelect.vue";
+import { compilePluginVueFile } from "@/features/Plugin/editors/vue/plugin-vue-runtime";
+import type { WorldResource } from "@/features/Plugin/tree/world-store";
+import { useWorld } from "@/features/Plugin/tree/world-store";
 import PromptBar from "./PromptBar.vue";
 
 const props = defineProps<{ chatId: string }>();
@@ -27,53 +30,60 @@ const selectedAction = ref<ActionPart | null>(null);
 const input = ref<HTMLInputElement | null>(null);
 const whiteboardOpen = ref(false);
 const actionViewOpen = ref(false);
-const actionView = ref<SlotResource | null>(null);
+const actionView = ref<WorldResource | null>(null);
 const actionViewComponent = ref<Component | null>(null);
 
 const isEmpty = computed(() => chat.activePath.value.length === 0);
-const suggestions = ["用一句话介绍你自己", "我们开始一段新的对话", "帮我梳理一个想法"];
-const actions = computed(() => {
-  return world.containers.value.get("COMMAND")?.resources ?? [];
+const suggestions = [
+	"用一句话介绍你自己",
+	"我们开始一段新的对话",
+	"帮我梳理一个想法",
+];
+const actions = computed(
+	() =>
+		world.slots.value.find((slot) => slot.path === "/self/slot/COMMAND")
+			?.resources ?? [],
+);
+
+onMounted(() => {
+	if (!defaults.loaded) void defaults.load();
 });
 
-onMounted(() => { if (!defaults.loaded) void defaults.load(); });
-
 async function selectFiles(event: Event) {
-  const target = event.target as HTMLInputElement;
-  files.value.push(
-    ...(await Promise.all(Array.from(target.files ?? []).map(fileToMessagePart))),
-  );
-  target.value = "";
+	const target = event.target as HTMLInputElement;
+	files.value.push(
+		...(await Promise.all(
+			Array.from(target.files ?? []).map(fileToMessagePart),
+		)),
+	);
+	target.value = "";
 }
 
 async function send() {
-  if (chat.generating.value) return;
-  const parts = selectedAction.value ? [...files.value, selectedAction.value] : files.value;
-  if (await chat.send(parts)) {
-    files.value = [];
-    selectedAction.value = null;
-  }
+	if (chat.generating.value) return;
+	const parts = selectedAction.value
+		? [...files.value, selectedAction.value]
+		: files.value;
+	if (await chat.send(parts)) {
+		files.value = [];
+		selectedAction.value = null;
+	}
 }
 
 function useSuggestion(value: string) {
-  chat.draft.value = value;
+	chat.draft.value = value;
 }
 
-function openActionView(action: SlotResource) {
-  const plugin = world.plugins.value.find((item) => item.id === action.pluginId);
-  if (!plugin) {
-    push.error("动作所属插件不可用。");
-    return;
-  }
-  const result = compilePluginVueFile(plugin, action.file);
-  if (!result.component) {
-    push.error(result.diagnostics[0] || "无法打开动作视图。");
-    return;
-  }
-  if (result.diagnostics.length) push.warning(result.diagnostics.join("\n"));
-  actionView.value = action;
-  actionViewComponent.value = result.component;
-  actionViewOpen.value = true;
+function openActionView(action: WorldResource) {
+	const result = compilePluginVueFile(action.file);
+	if (!result.component) {
+		push.error(result.diagnostics[0] || "无法打开动作视图。");
+		return;
+	}
+	if (result.diagnostics.length) push.warning(result.diagnostics.join("\n"));
+	actionView.value = action;
+	actionViewComponent.value = result.component;
+	actionViewOpen.value = true;
 }
 </script>
 
@@ -128,7 +138,7 @@ function openActionView(action: SlotResource) {
 
   <Dialog v-model:open="actionViewOpen">
     <DialogContent class="max-h-[min(760px,90vh)] w-[min(760px,calc(100vw-32px))] max-w-none overflow-y-auto sm:max-w-none">
-      <DialogHeader><DialogTitle>/{{ actionView ? actionView.name.replace(/\.[^.]+$/, '') : '' }}</DialogTitle></DialogHeader>
+      <DialogHeader><DialogTitle>/{{ actionView ? actionView.file.name.replace(/\.[^.]+$/, '') : '' }}</DialogTitle></DialogHeader>
       <component :is="actionViewComponent" v-if="actionViewComponent" />
     </DialogContent>
   </Dialog>

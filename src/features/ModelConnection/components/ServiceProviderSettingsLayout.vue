@@ -1,23 +1,23 @@
 <script setup lang="ts">
-import type { ServiceProviderView } from "../service-provider";
 import SettingForm from "@/features/Setting/components/SettingForm.vue";
 import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
+import type { ServiceProviderView } from "../service-provider";
 import ServiceProviderSelector from "./ServiceProviderSelector.vue";
 
 defineProps<{
-  providers: ServiceProviderView[];
-  activeProviderId: string;
-  search: string;
+	providers: ServiceProviderView[];
+	activeProviderId: string;
+	search: string;
 }>();
 
 const emit = defineEmits<{
-  "update:search": [value: string];
-  "select-provider": [providerId: string];
-  "toggle-provider": [providerId: string, enabled: boolean];
+	"update:search": [value: string];
+	"select-provider": [providerId: string];
+	"toggle-provider": [providerId: string, enabled: boolean];
 }>();
 
 function forwardToggleProvider(providerId: string, enabled: boolean) {
-  emit("toggle-provider", providerId, enabled);
+	emit("toggle-provider", providerId, enabled);
 }
 </script>
 

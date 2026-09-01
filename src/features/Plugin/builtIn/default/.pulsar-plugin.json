@@ -1,19 +1,35 @@
 {
-  "version": 1,
-  "plugin": {
-    "id": "builtin-default-plugin",
-    "packageId": null,
-    "name": "默认插件模板",
-    "icon": "",
-    "shortDescription": "创建新插件时的默认模板（在 UI 中隐藏）",
-    "builtIn": true,
-    "hidden": true
-  },
-  "ignore": [".pulsar-plugin.json"],
-  "nodes": {
-    "/": { "id": "builtin-default-root", "icon": "", "treeOrder": 0 },
-    "config.json": { "id": "builtin-default-config", "icon": "", "treeOrder": 0, "order": 100 },
-    "prompt.md": { "id": "builtin-default-prompt", "icon": "", "treeOrder": 3, "order": 100 },
-    "default.chat.json": { "id": "builtin-default-chat", "icon": "", "treeOrder": 4, "order": 100, "insertion": { "slot": "chat" } }
-  }
+	"version": 1,
+	"plugin": {
+		"id": "builtin-default-plugin",
+		"packageId": null,
+		"name": "默认插件模板",
+		"icon": "",
+		"shortDescription": "创建新插件时的默认模板（在 UI 中隐藏）",
+		"builtIn": true,
+		"hidden": true
+	},
+	"ignore": [".pulsar-plugin.json"],
+	"nodes": {
+		"/": { "id": "builtin-default-root", "icon": "", "treeOrder": 0 },
+		"config.json": {
+			"id": "builtin-default-config",
+			"icon": "",
+			"treeOrder": 0,
+			"order": 100
+		},
+		"prompt.md": {
+			"id": "builtin-default-prompt",
+			"icon": "",
+			"treeOrder": 3,
+			"order": 100
+		},
+		"default.chat.json": {
+			"id": "builtin-default-chat",
+			"icon": "",
+			"treeOrder": 4,
+			"order": 100,
+			"insertion": { "slot": "chat" }
+		}
+	}
 }

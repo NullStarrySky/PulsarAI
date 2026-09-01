@@ -1,47 +1,54 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
 import { Check, ChevronDown, Search } from "lucide-vue-next";
+import { computed, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import type { ServiceProviderView } from "../service-provider";
 import ProviderAvatar from "./ProviderAvatar.vue";
 
 const props = defineProps<{
-  providers: ServiceProviderView[];
-  activeProviderId: string;
-  search: string;
+	providers: ServiceProviderView[];
+	activeProviderId: string;
+	search: string;
 }>();
 
 const emit = defineEmits<{
-  "update:search": [value: string];
-  "select-provider": [providerId: string];
-  "toggle-provider": [providerId: string, enabled: boolean];
+	"update:search": [value: string];
+	"select-provider": [providerId: string];
+	"toggle-provider": [providerId: string, enabled: boolean];
 }>();
 
 const open = ref(false);
 const activeProvider = computed(
-  () => props.providers.find((provider) => provider.id === props.activeProviderId) ?? props.providers[0],
+	() =>
+		props.providers.find(
+			(provider) => provider.id === props.activeProviderId,
+		) ?? props.providers[0],
 );
 const filteredProviders = computed(() => {
-  const keyword = props.search.trim().toLowerCase();
-  if (!keyword) return props.providers;
-  return props.providers.filter((provider) =>
-    [provider.id, provider.name, provider.description]
-      .filter(Boolean)
-      .some((value) => value?.toLowerCase().includes(keyword)),
-  );
+	const keyword = props.search.trim().toLowerCase();
+	if (!keyword) return props.providers;
+	return props.providers.filter((provider) =>
+		[provider.id, provider.name, provider.description]
+			.filter(Boolean)
+			.some((value) => value?.toLowerCase().includes(keyword)),
+	);
 });
 const providerListHeight = computed(() => {
-  const rowCount = filteredProviders.value.length || 2;
-  return `${Math.min(rowCount * 48 + 8, 320)}px`;
+	const rowCount = filteredProviders.value.length || 2;
+	return `${Math.min(rowCount * 48 + 8, 320)}px`;
 });
 
 function selectProvider(providerId: string) {
-  emit("select-provider", providerId);
-  open.value = false;
+	emit("select-provider", providerId);
+	open.value = false;
 }
 </script>
 

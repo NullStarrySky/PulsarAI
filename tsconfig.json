@@ -1,32 +1,38 @@
 {
-  "compilerOptions": {
-    "target": "ES2020",
-    "useDefineForClassFields": true,
-    "module": "ESNext",
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
-    "skipLibCheck": true,
+	"compilerOptions": {
+		"target": "ES2020",
+		"useDefineForClassFields": true,
+		"module": "ESNext",
+		"lib": ["ES2020", "DOM", "DOM.Iterable"],
+		"skipLibCheck": true,
 
-    /* Bundler mode */
-    "moduleResolution": "bundler",
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"],
-      "@/host": ["./host/index.ts"],
-      "@host-target": ["./host/desktop-electron/index.ts"]
-    },
-    "allowImportingTsExtensions": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "preserve",
+		/* Bundler mode */
+		"moduleResolution": "bundler",
+		"baseUrl": ".",
+		"paths": {
+			"@/*": ["./src/*"],
+			"@/host": ["./host/index.ts"],
+			"@host-target": ["./host/desktop-electron/index.ts"]
+		},
+		"allowImportingTsExtensions": true,
+		"resolveJsonModule": true,
+		"isolatedModules": true,
+		"noEmit": true,
+		"jsx": "preserve",
 
-    /* Linting */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
-  },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "host/**/*.ts"],
-  "exclude": ["src/features/Plugin/builtIn/**/*"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+		/* Linting */
+		"strict": true,
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"noFallthroughCasesInSwitch": true
+	},
+	"include": [
+		"src/**/*.ts",
+		"src/**/*.d.ts",
+		"src/**/*.tsx",
+		"src/**/*.vue",
+		"host/**/*.ts"
+	],
+	"exclude": ["src/features/Plugin/builtIn/**/*"],
+	"references": [{ "path": "./tsconfig.node.json" }]
 }

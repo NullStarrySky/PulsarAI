@@ -1,39 +1,42 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
 import {
-  ArrowUp,
-  LoaderCircle,
-  Paperclip,
-  PenTool,
-  Plus,
-  X,
+	ArrowUp,
+	LoaderCircle,
+	Paperclip,
+	PenTool,
+	Plus,
+	X,
 } from "lucide-vue-next";
+import { computed, ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
+import type {
+	ActionPart,
+	FilePart,
+} from "@/features/Conversation/messages/conversation-types";
+import type { WorldResource } from "@/features/Plugin/tree/world-store";
 import SttInputButton from "@/features/STT/SttInputButton.vue";
-import type { ActionPart, FilePart } from "@/features/Conversation/messages/conversation-types";
-import type { SlotResource } from "@/features/Plugin/tree/slot-store";
 import ComposerAttachmentStrip from "./ComposerAttachmentStrip.vue";
 import ConversationComposerEditor from "./ConversationComposerEditor.vue";
 
 const props = withDefaults(
-  defineProps<{
-    modelValue: string;
-    attachments: FilePart[];
-    actions?: SlotResource[];
-    selectedAction?: ActionPart | null;
-    generating?: boolean;
-  }>(),
-  { actions: () => [], selectedAction: null, generating: false },
+	defineProps<{
+		modelValue: string;
+		attachments: FilePart[];
+		actions?: WorldResource[];
+		selectedAction?: ActionPart | null;
+		generating?: boolean;
+	}>(),
+	{ actions: () => [], selectedAction: null, generating: false },
 );
 
 const emit = defineEmits<{
-  "update:modelValue": [value: string];
-  "update:selectedAction": [value: ActionPart | null];
-  submit: [];
-  attach: [];
-  whiteboard: [];
-  removeAttachment: [index: number];
-  openView: [action: SlotResource];
+	"update:modelValue": [value: string];
+	"update:selectedAction": [value: ActionPart | null];
+	submit: [];
+	attach: [];
+	whiteboard: [];
+	removeAttachment: [index: number];
+	openView: [action: WorldResource];
 }>();
 
 const toolsOpen = ref(false);
@@ -41,111 +44,156 @@ const activeIndex = ref(0);
 const liveInput = ref(props.modelValue);
 const menuDismissed = ref(false);
 const token = computed(() => {
-  const input = liveInput.value.replace(/\u200B/g, "");
-  const lineStart = input.lastIndexOf("\n") + 1;
-  const lastLine = input.slice(lineStart);
-  const match = /(^|\s)([@/])([\w-]*)$/u.exec(lastLine);
-  if (!match) return null;
-  return {
-    kind: match[2] === "@" ? "at" as const : "slash" as const,
-    query: match[3].toLocaleLowerCase(),
-    start: lineStart + match.index + match[1].length,
-  };
+	const input = liveInput.value.replace(/\u200B/g, "");
+	const lineStart = input.lastIndexOf("\n") + 1;
+	const lastLine = input.slice(lineStart);
+	const match = /(^|\s)([@/])([\w-]*)$/u.exec(lastLine);
+	if (!match) return null;
+	return {
+		kind: match[2] === "@" ? ("at" as const) : ("slash" as const),
+		query: match[3].toLocaleLowerCase(),
+		start: lineStart + match.index + match[1].length,
+	};
 });
-const menuKind = computed(() => toolsOpen.value ? "at" as const : menuDismissed.value ? null : token.value?.kind ?? null);
+const menuKind = computed(() =>
+	toolsOpen.value
+		? ("at" as const)
+		: menuDismissed.value
+			? null
+			: (token.value?.kind ?? null),
+);
 const atRows = [
-  { key: "attach", title: "附加文件与照片", description: "从设备选择附件", icon: Paperclip },
-  { key: "whiteboard", title: "打开白板", description: "在画布中整理想法", icon: PenTool },
+	{
+		key: "attach",
+		title: "附加文件与照片",
+		description: "从设备选择附件",
+		icon: Paperclip,
+	},
+	{
+		key: "whiteboard",
+		title: "打开白板",
+		description: "在画布中整理想法",
+		icon: PenTool,
+	},
 ] as const;
-const actionRows = computed(() => props.actions.filter(
-  (action) => action.name.toLocaleLowerCase().includes(token.value?.query ?? ""),
-));
-const menuRows = computed(() => menuKind.value === "at"
-  ? atRows
-  : menuKind.value === "slash" ? actionRows.value : []);
+const actionRows = computed(() =>
+	props.actions.filter((action) =>
+		action.file.name.toLocaleLowerCase().includes(token.value?.query ?? ""),
+	),
+);
+const menuRows = computed(() =>
+	menuKind.value === "at"
+		? atRows
+		: menuKind.value === "slash"
+			? actionRows.value
+			: [],
+);
 const canSubmit = computed(
-  () => Boolean(props.modelValue.trim() || props.selectedAction || props.attachments.length) && !props.generating,
+	() =>
+		Boolean(
+			props.modelValue.trim() ||
+				props.selectedAction ||
+				props.attachments.length,
+		) && !props.generating,
 );
 
-watch([menuKind, () => token.value?.query], () => { activeIndex.value = 0; });
-watch(() => props.modelValue, (value) => {
-  if (typeof document !== "undefined" && document.activeElement?.closest(".conversation-composer-editor")) return;
-  liveInput.value = value;
+watch([menuKind, () => token.value?.query], () => {
+	activeIndex.value = 0;
 });
+watch(
+	() => props.modelValue,
+	(value) => {
+		if (
+			typeof document !== "undefined" &&
+			document.activeElement?.closest(".conversation-composer-editor")
+		)
+			return;
+		liveInput.value = value;
+	},
+);
 
 function updateLiveInput(value: string) {
-  liveInput.value = value;
-  toolsOpen.value = false;
-  menuDismissed.value = false;
+	liveInput.value = value;
+	toolsOpen.value = false;
+	menuDismissed.value = false;
 }
 
 function insertDictation(text: string) {
-  emit("update:modelValue", `${props.modelValue}${props.modelValue ? " " : ""}${text}`);
+	emit(
+		"update:modelValue",
+		`${props.modelValue}${props.modelValue ? " " : ""}${text}`,
+	);
 }
 
 function clearActiveToken() {
-  const activeToken = token.value;
-  if (!activeToken) return;
-  const nextValue = liveInput.value.slice(0, activeToken.start);
-  liveInput.value = nextValue;
-  emit("update:modelValue", nextValue);
+	const activeToken = token.value;
+	if (!activeToken) return;
+	const nextValue = liveInput.value.slice(0, activeToken.start);
+	liveInput.value = nextValue;
+	emit("update:modelValue", nextValue);
 }
 
-function runAtTool(key: typeof atRows[number]["key"]) {
-  clearActiveToken();
-  if (key === "attach") emit("attach");
-  if (key === "whiteboard") emit("whiteboard");
-  toolsOpen.value = false;
-  menuDismissed.value = false;
+function runAtTool(key: (typeof atRows)[number]["key"]) {
+	clearActiveToken();
+	if (key === "attach") emit("attach");
+	if (key === "whiteboard") emit("whiteboard");
+	toolsOpen.value = false;
+	menuDismissed.value = false;
 }
 
-function pickAction(action: SlotResource) {
-  if (action.type === "markdown") {
-    const nextValue = typeof action.file.content === "string" ? action.file.content : JSON.stringify(action.file.content, null, 2);
-    liveInput.value = nextValue;
-    emit("update:modelValue", nextValue);
-  } else if (action.type === "component") {
-    clearActiveToken();
-    emit("openView", action);
-  } else {
-    emit("update:selectedAction", {
-      type: "action",
-      actionId: action.file.id,
-      pluginId: action.pluginId,
-      pluginName: action.pluginName,
-      name: action.name.replace(/\.[^.]+$/, ""),
-      description: "",
-    });
-    liveInput.value = "";
-    emit("update:modelValue", "");
-  }
-  toolsOpen.value = false;
-  menuDismissed.value = false;
+function pickAction(action: WorldResource) {
+	if (action.file.name.endsWith(".md")) {
+		const nextValue =
+			typeof action.file.content === "string"
+				? action.file.content
+				: JSON.stringify(action.file.content, null, 2);
+		liveInput.value = nextValue;
+		emit("update:modelValue", nextValue);
+	} else if (action.file.name.endsWith(".vue")) {
+		clearActiveToken();
+		emit("openView", action);
+	} else {
+		emit("update:selectedAction", {
+			type: "action",
+			actionId: action.file.id,
+			sourcePath: action.path,
+			sourceName: action.scope === "global" ? "共享世界" : "角色世界",
+			name: action.file.name.replace(/\.[^.]+$/, ""),
+			description: "",
+		});
+		liveInput.value = "";
+		emit("update:modelValue", "");
+	}
+	toolsOpen.value = false;
+	menuDismissed.value = false;
 }
 
 function handleKeydown(event: KeyboardEvent) {
-  const count = menuRows.value.length;
-  if (menuKind.value && count) {
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      event.preventDefault();
-      event.stopPropagation();
-      activeIndex.value = (activeIndex.value + (event.key === "ArrowDown" ? 1 : -1) + count) % count;
-      return;
-    }
-    if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") {
-      event.preventDefault();
-      event.stopPropagation();
-      const item = menuRows.value[activeIndex.value];
-      if (!item) return;
-      if (menuKind.value === "at") runAtTool((item as typeof atRows[number]).key);
-      else pickAction(item as SlotResource);
-      return;
-    }
-  }
-  if (event.key === "Escape") {
-    toolsOpen.value = false;
-    menuDismissed.value = true;
-  }
+	const count = menuRows.value.length;
+	if (menuKind.value && count) {
+		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+			event.preventDefault();
+			event.stopPropagation();
+			activeIndex.value =
+				(activeIndex.value + (event.key === "ArrowDown" ? 1 : -1) + count) %
+				count;
+			return;
+		}
+		if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") {
+			event.preventDefault();
+			event.stopPropagation();
+			const item = menuRows.value[activeIndex.value];
+			if (!item) return;
+			if (menuKind.value === "at")
+				runAtTool((item as (typeof atRows)[number]).key);
+			else pickAction(item as WorldResource);
+			return;
+		}
+	}
+	if (event.key === "Escape") {
+		toolsOpen.value = false;
+		menuDismissed.value = true;
+	}
 }
 </script>
 
@@ -174,13 +222,13 @@ function handleKeydown(event: KeyboardEvent) {
           <template v-else>
             <button
               v-for="item in actionRows"
-              :key="`${item.pluginId}:${item.file.id}`"
+              :key="item.file.id"
               type="button"
               class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-xs transition-colors hover:bg-accent/60"
               @mousedown.prevent
               @click="pickAction(item)"
             >
-              <span class="min-w-0"><span class="block font-mono font-medium text-primary">/{{ item.name.replace(/\.[^.]+$/, '') }}</span><span class="mt-0.5 block truncate text-[11px] text-muted-foreground">{{ item.pluginName }}</span></span>
+              <span class="min-w-0"><span class="block font-mono font-medium text-primary">/{{ item.file.name.replace(/\.[^.]+$/, '') }}</span><span class="mt-0.5 block truncate text-[11px] text-muted-foreground">{{ item.scope === 'global' ? '共享世界' : '角色世界' }}</span></span>
             </button>
             <p v-if="actionRows.length === 0" class="px-3 py-8 text-center text-xs text-muted-foreground">暂无匹配的插件动作</p>
           </template>

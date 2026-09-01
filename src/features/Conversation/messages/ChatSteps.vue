@@ -1,16 +1,20 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Check, ChevronRight, Loader2, Sparkles } from "lucide-vue-next";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useMessageScrollerContext } from "@/components/ui/message-scroller/useMessageScroller";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
-import type { ThinkingStep, ToolCallResult, ToolCallStep } from "./conversation-types";
+import type {
+	ThinkingStep,
+	ToolCallResult,
+	ToolCallStep,
+} from "./conversation-types";
 
 const props = defineProps<{
-  steps: Array<ThinkingStep | ToolCallStep | ToolCallResult>;
-  working?: boolean;
-  startedAt?: string;
-  elapsedMs?: number;
+	steps: Array<ThinkingStep | ToolCallStep | ToolCallResult>;
+	working?: boolean;
+	startedAt?: string;
+	elapsedMs?: number;
 }>();
 const emit = defineEmits<{ interaction: [] }>();
 
@@ -20,95 +24,118 @@ const elapsedTenths = ref(0);
 const appearance = useAppearanceStore();
 const { userScrollIntent } = useMessageScrollerContext();
 const loadingPatterns = {
-  drive: { delays: [90, 180, 270, 0, 90, 180, 90, 180, 270], duration: 650, round: false },
-  dots: { delays: [90, 180, 270, 0, 90, 180, 90, 180, 270], duration: 650, round: true },
-  orbit: { delays: [0, 110, 220, 770, null, 330, 660, 550, 440], duration: 950, round: false },
+	drive: {
+		delays: [90, 180, 270, 0, 90, 180, 90, 180, 270],
+		duration: 650,
+		round: false,
+	},
+	dots: {
+		delays: [90, 180, 270, 0, 90, 180, 90, 180, 270],
+		duration: 650,
+		round: true,
+	},
+	orbit: {
+		delays: [0, 110, 220, 770, null, 330, 660, 550, 440],
+		duration: 950,
+		round: false,
+	},
 } as const;
 let elapsedTimer: ReturnType<typeof setInterval> | null = null;
-const rows = computed(() => props.steps.map((step) => step.type === "thinking"
-  ? {
-      id: step.id,
-      title: "思考",
-      chip: oneLine(step.message, "正在整理思路…"),
-      detail: step.message,
-      mono: false,
-      input: undefined,
-      output: undefined,
-    }
-  : {
-      id: step.toolCallId,
-      title: step.type === "tool-call" ? "调用" : "完成",
-      chip: oneLine(step.toolName, "codeAct"),
-      detail: JSON.stringify(step, null, 2),
-      mono: true,
-      input: step.input,
-      output: step.type === "tool-result" ? step.output : undefined,
-    }));
-const loadingPattern = computed(() => loadingPatterns[appearance.agentLoadingStyle]);
+const rows = computed(() =>
+	props.steps.map((step) =>
+		step.type === "thinking"
+			? {
+					id: step.id,
+					title: "思考",
+					chip: oneLine(step.message, "正在整理思路…"),
+					detail: step.message,
+					mono: false,
+					input: undefined,
+					output: undefined,
+				}
+			: {
+					id: step.toolCallId,
+					title: step.type === "tool-call" ? "调用" : "完成",
+					chip: oneLine(step.toolName, "codeAct"),
+					detail: JSON.stringify(step, null, 2),
+					mono: true,
+					input: step.input,
+					output: step.type === "tool-result" ? step.output : undefined,
+				},
+	),
+);
+const loadingPattern = computed(
+	() => loadingPatterns[appearance.agentLoadingStyle],
+);
 const elapsed = computed(() => {
-  const seconds = elapsedTenths.value / 10;
-  return seconds < 60
-    ? `${seconds.toFixed(1)}s`
-    : `${Math.floor(seconds / 60)}m ${(seconds % 60).toFixed(1)}s`;
+	const seconds = elapsedTenths.value / 10;
+	return seconds < 60
+		? `${seconds.toFixed(1)}s`
+		: `${Math.floor(seconds / 60)}m ${(seconds % 60).toFixed(1)}s`;
 });
 
 function elapsedTenthsNow(working: boolean) {
-  if (Number.isFinite(props.elapsedMs))
-    return Math.max(0, Math.floor((props.elapsedMs ?? 0) / 100));
-  const startedAt = Date.parse(props.startedAt ?? "");
-  return working && Number.isFinite(startedAt)
-    ? Math.max(0, Math.floor((Date.now() - startedAt) / 100))
-    : 0;
+	if (Number.isFinite(props.elapsedMs))
+		return Math.max(0, Math.floor((props.elapsedMs ?? 0) / 100));
+	const startedAt = Date.parse(props.startedAt ?? "");
+	return working && Number.isFinite(startedAt)
+		? Math.max(0, Math.floor((Date.now() - startedAt) / 100))
+		: 0;
 }
 
 watch(
-  () => [props.working, props.startedAt, props.elapsedMs] as const,
-  ([working]) => {
-    if (elapsedTimer) clearInterval(elapsedTimer);
-    elapsedTimer = null;
-    elapsedTenths.value = elapsedTenthsNow(Boolean(working));
-    if (!working) return;
-    elapsedTimer = setInterval(() => {
-      elapsedTenths.value = elapsedTenthsNow(true);
-    }, 100);
-  },
-  { immediate: true },
+	() => [props.working, props.startedAt, props.elapsedMs] as const,
+	([working]) => {
+		if (elapsedTimer) clearInterval(elapsedTimer);
+		elapsedTimer = null;
+		elapsedTenths.value = elapsedTenthsNow(Boolean(working));
+		if (!working) return;
+		elapsedTimer = setInterval(() => {
+			elapsedTenths.value = elapsedTenthsNow(true);
+		}, 100);
+	},
+	{ immediate: true },
 );
 
-onBeforeUnmount(() => { if (elapsedTimer) clearInterval(elapsedTimer); });
+onBeforeUnmount(() => {
+	if (elapsedTimer) clearInterval(elapsedTimer);
+});
 
 function toggleRow(index: number) {
-  userScrollIntent();
-  emit("interaction");
-  if (expandedRows.value.has(index)) expandedRows.value.delete(index);
-  else expandedRows.value.add(index);
+	userScrollIntent();
+	emit("interaction");
+	if (expandedRows.value.has(index)) expandedRows.value.delete(index);
+	else expandedRows.value.add(index);
 }
 function toggleOpen() {
-  userScrollIntent();
-  emit("interaction");
-  open.value = !open.value;
+	userScrollIntent();
+	emit("interaction");
+	open.value = !open.value;
 }
 
 function oneLine(value: string, fallback: string) {
-  const text = value.replace(/\s+/g, " ").trim();
-  return text.length > 72 ? `${text.slice(0, 72)}...` : text || fallback;
+	const text = value.replace(/\s+/g, " ").trim();
+	return text.length > 72 ? `${text.slice(0, 72)}...` : text || fallback;
 }
 
 function formatStepValue(value: unknown) {
-  if (value === undefined) return "等待返回…";
-  if (typeof value === "string") return value;
-  try {
-    return unescapeDisplayText(JSON.stringify(value, null, 2) ?? "null");
-  } catch {
-    return String(value);
-  }
+	if (value === undefined) return "等待返回…";
+	if (typeof value === "string") return value;
+	try {
+		return unescapeDisplayText(JSON.stringify(value, null, 2) ?? "null");
+	} catch {
+		return String(value);
+	}
 }
 
 function unescapeDisplayText(value: string) {
-  return value
-    .split("\\r\\n").join("\n")
-    .split("\\n").join("\n")
-    .split("\\t").join("\t");
+	return value
+		.split("\\r\\n")
+		.join("\n")
+		.split("\\n")
+		.join("\n")
+		.split("\\t")
+		.join("\t");
 }
 </script>
 

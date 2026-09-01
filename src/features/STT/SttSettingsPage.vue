@@ -1,42 +1,47 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { push } from "notivue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import SettingForm from "@/features/Setting/components/SettingForm.vue";
-import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
+import {
+	getDefaultConfig,
+	setDefaultConfig,
+	setTranscriptionModel,
+} from "@/features/defaultConfigs/default-config-service";
 import ModelCapabilityProviderForm from "@/features/ModelConnection/components/ModelCapabilityProviderForm.vue";
 import ServiceProviderSettingsLayout from "@/features/ModelConnection/components/ServiceProviderSettingsLayout.vue";
-import { useModelCapabilityProviders } from "@/features/ModelConnection/services/use-model-capability-providers";
 import type { ServiceProviderView } from "@/features/ModelConnection/service-provider";
-import { getDefaultConfig, setDefaultConfig } from "@/features/defaultConfigs/default-config-service";
-import { setTranscriptionModel } from "@/features/defaultConfigs/default-config-service";
+import { useModelCapabilityProviders } from "@/features/ModelConnection/services/use-model-capability-providers";
+import SettingForm from "@/features/Setting/components/SettingForm.vue";
+import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
+import {
+	deleteWhisperModel,
+	downloadWhisperModel,
+	listWhisperModels,
+	WHISPER_CANDLE_PROVIDER_ID,
+	type WhisperModelPack,
+} from "./providers/whisper-candle-client";
 import { transcribe } from "./speech-to-text";
 import {
-  SYSTEM_STT_SERVICE_ID,
-  getSystemSttAvailability,
-  getSystemSttPermission,
-  onSystemSttError,
-  onSystemSttResult,
-  requestSystemSttPermission,
-  startSystemStt,
-  stopSystemStt,
-  supportsSystemStt,
+	getSystemSttAvailability,
+	getSystemSttPermission,
+	onSystemSttError,
+	onSystemSttResult,
+	requestSystemSttPermission,
+	SYSTEM_STT_SERVICE_ID,
+	startSystemStt,
+	stopSystemStt,
+	supportsSystemStt,
 } from "./system-speech-to-text";
-import {
-  deleteWhisperModel,
-  downloadWhisperModel,
-  listWhisperModels,
-  type WhisperModelPack,
-  WHISPER_CANDLE_PROVIDER_ID,
-} from "./providers/whisper-candle-client";
 
 const SYSTEM_ENABLED_KEY = "stt.system.enabled";
 const service = useModelCapabilityProviders("asr");
 const systemSupported = supportsSystemStt();
 const search = ref("");
-const activeServiceId = ref(systemSupported ? SYSTEM_STT_SERVICE_ID : WHISPER_CANDLE_PROVIDER_ID);
+const activeServiceId = ref(
+	systemSupported ? SYSTEM_STT_SERVICE_ID : WHISPER_CANDLE_PROVIDER_ID,
+);
 const systemEnabled = ref(true);
 const audio = ref<Uint8Array>();
 const audioName = ref("");
@@ -49,228 +54,271 @@ const whisperModels = ref<WhisperModelPack[]>([]);
 const whisperSelectedModelId = ref("");
 const whisperDownloading = ref(false);
 const whisperForm = reactive({
-  id: "",
-  version: "",
-  url: "",
-  sha256: "",
-  size: "",
-  language: "",
+	id: "",
+	version: "",
+	url: "",
+	sha256: "",
+	size: "",
+	language: "",
 });
 let removeResultListener: (() => void) | undefined;
 let removeErrorListener: (() => void) | undefined;
 
 const providers = computed<ServiceProviderView[]>(() => [
-  ...(systemSupported
-    ? [{
-        id: SYSTEM_STT_SERVICE_ID,
-        name: "系统 STT",
-        description: "使用 iOS/Android 系统语音识别；桌面 Whisper 路径已拦截。",
-        enabled: systemEnabled.value,
-        source: "feature" as const,
-      }]
-    : []),
-  {
-    id: WHISPER_CANDLE_PROVIDER_ID,
-    name: "Whisper Candle 本地高质量转写",
-    description: "下载并校验 ZIP 模型包，在本机 CPU 上处理 WAV PCM 音频。",
-    enabled: true,
-    source: "feature" as const,
-  },
-  ...service.providerViews.value,
+	...(systemSupported
+		? [
+				{
+					id: SYSTEM_STT_SERVICE_ID,
+					name: "系统 STT",
+					description:
+						"使用 iOS/Android 系统语音识别；桌面 Whisper 路径已拦截。",
+					enabled: systemEnabled.value,
+					source: "feature" as const,
+				},
+			]
+		: []),
+	{
+		id: WHISPER_CANDLE_PROVIDER_ID,
+		name: "Whisper Candle 本地高质量转写",
+		description: "下载并校验 ZIP 模型包，在本机 CPU 上处理 WAV PCM 音频。",
+		enabled: true,
+		source: "feature" as const,
+	},
+	...service.providerViews.value,
 ]);
-const isSystem = computed(() => activeServiceId.value === SYSTEM_STT_SERVICE_ID);
-const isWhisper = computed(() => activeServiceId.value === WHISPER_CANDLE_PROVIDER_ID);
-const selectedWhisperModel = computed(() => whisperModels.value.find((model) => model.id === whisperSelectedModelId.value));
-const whisperStorageBytes = computed(() => whisperModels.value.reduce((total, model) => total + (model.diskSize ?? model.size), 0));
+const isSystem = computed(
+	() => activeServiceId.value === SYSTEM_STT_SERVICE_ID,
+);
+const isWhisper = computed(
+	() => activeServiceId.value === WHISPER_CANDLE_PROVIDER_ID,
+);
+const selectedWhisperModel = computed(() =>
+	whisperModels.value.find(
+		(model) => model.id === whisperSelectedModelId.value,
+	),
+);
+const whisperStorageBytes = computed(() =>
+	whisperModels.value.reduce(
+		(total, model) => total + (model.diskSize ?? model.size),
+		0,
+	),
+);
 
 onMounted(async () => {
-  systemEnabled.value = await getDefaultConfig(SYSTEM_ENABLED_KEY, true);
-  await service.initialize();
-  await refreshWhisperModels();
-  if (!activeServiceId.value) activeServiceId.value = service.providerViews.value[0]?.id ?? "";
+	systemEnabled.value = await getDefaultConfig(SYSTEM_ENABLED_KEY, true);
+	await service.initialize();
+	await refreshWhisperModels();
+	if (!activeServiceId.value)
+		activeServiceId.value = service.providerViews.value[0]?.id ?? "";
 });
 
 onBeforeUnmount(() => {
-  if (recording.value) void stopSystemStt();
-  cleanupSystemListeners();
+	if (recording.value) void stopSystemStt();
+	cleanupSystemListeners();
 });
 
 async function activateProvider(providerId: string) {
-  activeServiceId.value = providerId;
-  if (providerId !== SYSTEM_STT_SERVICE_ID && providerId !== WHISPER_CANDLE_PROVIDER_ID) {
-    await service.activateProvider(providerId);
-  }
+	activeServiceId.value = providerId;
+	if (
+		providerId !== SYSTEM_STT_SERVICE_ID &&
+		providerId !== WHISPER_CANDLE_PROVIDER_ID
+	) {
+		await service.activateProvider(providerId);
+	}
 }
 
 async function toggleProvider(providerId: string, enabled: boolean) {
-  if (providerId === SYSTEM_STT_SERVICE_ID) {
-    systemEnabled.value = enabled;
-    await setDefaultConfig(SYSTEM_ENABLED_KEY, enabled);
-    if (!enabled && recording.value) await stopRecording();
-    return;
-  }
-  if (providerId === WHISPER_CANDLE_PROVIDER_ID) return;
-  await service.toggleProvider(providerId, enabled);
+	if (providerId === SYSTEM_STT_SERVICE_ID) {
+		systemEnabled.value = enabled;
+		await setDefaultConfig(SYSTEM_ENABLED_KEY, enabled);
+		if (!enabled && recording.value) await stopRecording();
+		return;
+	}
+	if (providerId === WHISPER_CANDLE_PROVIDER_ID) return;
+	await service.toggleProvider(providerId, enabled);
 }
 
 async function refreshWhisperModels() {
-  try {
-    whisperModels.value = await listWhisperModels();
-    if (!whisperModels.value.some((model) => model.id === whisperSelectedModelId.value)) {
-      whisperSelectedModelId.value = whisperModels.value[0]?.id ?? "";
-    }
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "无法读取本地 Whisper 模型包");
-  }
+	try {
+		whisperModels.value = await listWhisperModels();
+		if (
+			!whisperModels.value.some(
+				(model) => model.id === whisperSelectedModelId.value,
+			)
+		) {
+			whisperSelectedModelId.value = whisperModels.value[0]?.id ?? "";
+		}
+	} catch (error) {
+		push.error(
+			error instanceof Error ? error.message : "无法读取本地 Whisper 模型包",
+		);
+	}
 }
 
 async function addWhisperModel() {
-  const id = whisperForm.id.trim();
-  const version = whisperForm.version.trim();
-  const url = whisperForm.url.trim();
-  const sha256 = whisperForm.sha256.trim();
-  const size = Number(whisperForm.size);
-  if (!id || !version || !url || !sha256 || !Number.isSafeInteger(size) || size <= 0) {
-    push.warning("请填写模型 ID、版本、下载地址、SHA-256 和准确的字节大小。");
-    return;
-  }
-  whisperDownloading.value = true;
-  try {
-    const model = await downloadWhisperModel({
-      id,
-      version,
-      sha256,
-      size,
-      language: whisperForm.language.trim() || undefined,
-      runtime: "whisper-candle-core",
-    }, url);
-    await refreshWhisperModels();
-    whisperSelectedModelId.value = model.id;
-    push.success("Whisper 模型已下载并校验。");
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "Whisper 模型下载失败");
-  } finally {
-    whisperDownloading.value = false;
-  }
+	const id = whisperForm.id.trim();
+	const version = whisperForm.version.trim();
+	const url = whisperForm.url.trim();
+	const sha256 = whisperForm.sha256.trim();
+	const size = Number(whisperForm.size);
+	if (
+		!id ||
+		!version ||
+		!url ||
+		!sha256 ||
+		!Number.isSafeInteger(size) ||
+		size <= 0
+	) {
+		push.warning("请填写模型 ID、版本、下载地址、SHA-256 和准确的字节大小。");
+		return;
+	}
+	whisperDownloading.value = true;
+	try {
+		const model = await downloadWhisperModel(
+			{
+				id,
+				version,
+				sha256,
+				size,
+				language: whisperForm.language.trim() || undefined,
+				runtime: "whisper-candle-core",
+			},
+			url,
+		);
+		await refreshWhisperModels();
+		whisperSelectedModelId.value = model.id;
+		push.success("Whisper 模型已下载并校验。");
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "Whisper 模型下载失败");
+	} finally {
+		whisperDownloading.value = false;
+	}
 }
 
 async function removeWhisperModel(id: string) {
-  try {
-    await deleteWhisperModel(id);
-    await refreshWhisperModels();
-    push.success("Whisper 模型已删除。");
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "Whisper 模型删除失败");
-  }
+	try {
+		await deleteWhisperModel(id);
+		await refreshWhisperModels();
+		push.success("Whisper 模型已删除。");
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "Whisper 模型删除失败");
+	}
 }
 
 function formatBytes(size: number) {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+	if (size < 1024) return `${size} B`;
+	if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+	return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function cleanupSystemListeners() {
-  removeResultListener?.();
-  removeErrorListener?.();
-  removeResultListener = undefined;
-  removeErrorListener = undefined;
+	removeResultListener?.();
+	removeErrorListener?.();
+	removeResultListener = undefined;
+	removeErrorListener = undefined;
 }
 
 async function refreshPermission(request = false) {
-  try {
-    const permission = request ? await requestSystemSttPermission() : await getSystemSttPermission();
-    permissionStatus.value = `麦克风：${permission.microphone}；语音识别：${permission.speechRecognition}`;
-    return permission.microphone === "granted" && permission.speechRecognition === "granted";
-  } catch (error) {
-    permissionStatus.value = error instanceof Error ? error.message : "权限检查失败";
-    return false;
-  }
+	try {
+		const permission = request
+			? await requestSystemSttPermission()
+			: await getSystemSttPermission();
+		permissionStatus.value = `麦克风：${permission.microphone}；语音识别：${permission.speechRecognition}`;
+		return (
+			permission.microphone === "granted" &&
+			permission.speechRecognition === "granted"
+		);
+	} catch (error) {
+		permissionStatus.value =
+			error instanceof Error ? error.message : "权限检查失败";
+		return false;
+	}
 }
 
 async function startRecording() {
-  if (!systemEnabled.value) return;
-  transcript.value = "";
-  try {
-    const availability = await getSystemSttAvailability();
-    if (!availability.available) throw new Error(availability.reason || "系统语音识别不可用。");
-    if (!(await refreshPermission(false)) && !(await refreshPermission(true))) {
-      throw new Error("系统语音识别权限未授予。");
-    }
-    cleanupSystemListeners();
-    removeResultListener = await onSystemSttResult((result) => {
-      transcript.value = result.transcript;
-      if (result.isFinal) {
-        recording.value = false;
-        cleanupSystemListeners();
-      }
-    });
-    removeErrorListener = await onSystemSttError((error) => {
-      recording.value = false;
-      transcript.value = `${error.code}: ${error.message}`;
-      cleanupSystemListeners();
-      push.error(error.message);
-    });
-    await startSystemStt({
-      language: language.value.trim() || undefined,
-      maxDuration: 60_000,
-      onDevice: true,
-    });
-    recording.value = true;
-  } catch (error) {
-    cleanupSystemListeners();
-    push.error(error instanceof Error ? error.message : "系统语音识别启动失败");
-  }
+	if (!systemEnabled.value) return;
+	transcript.value = "";
+	try {
+		const availability = await getSystemSttAvailability();
+		if (!availability.available)
+			throw new Error(availability.reason || "系统语音识别不可用。");
+		if (!(await refreshPermission(false)) && !(await refreshPermission(true))) {
+			throw new Error("系统语音识别权限未授予。");
+		}
+		cleanupSystemListeners();
+		removeResultListener = await onSystemSttResult((result) => {
+			transcript.value = result.transcript;
+			if (result.isFinal) {
+				recording.value = false;
+				cleanupSystemListeners();
+			}
+		});
+		removeErrorListener = await onSystemSttError((error) => {
+			recording.value = false;
+			transcript.value = `${error.code}: ${error.message}`;
+			cleanupSystemListeners();
+			push.error(error.message);
+		});
+		await startSystemStt({
+			language: language.value.trim() || undefined,
+			maxDuration: 60_000,
+			onDevice: true,
+		});
+		recording.value = true;
+	} catch (error) {
+		cleanupSystemListeners();
+		push.error(error instanceof Error ? error.message : "系统语音识别启动失败");
+	}
 }
 
 async function stopRecording() {
-  try {
-    await stopSystemStt();
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "停止识别失败");
-  } finally {
-    recording.value = false;
-    cleanupSystemListeners();
-  }
+	try {
+		await stopSystemStt();
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "停止识别失败");
+	} finally {
+		recording.value = false;
+		cleanupSystemListeners();
+	}
 }
 
 async function selectAudio(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0];
-  if (!file) return;
-  audio.value = new Uint8Array(await file.arrayBuffer());
-  audioName.value = file.name;
+	const file = (event.target as HTMLInputElement).files?.[0];
+	if (!file) return;
+	audio.value = new Uint8Array(await file.arrayBuffer());
+	audioName.value = file.name;
 }
 
 async function runTest() {
-  const selectedModel = isWhisper.value
-    ? selectedWhisperModel.value && `${WHISPER_CANDLE_PROVIDER_ID}/${selectedWhisperModel.value.id}`
-    : service.selectedModelRef.value;
-  if (!audio.value || !selectedModel) {
-    push.warning("请选择音频和转写模型。");
-    return;
-  }
-  testing.value = true;
-  transcript.value = "";
-  try {
-    const providerId = typeof selectedModel === "string"
-      ? selectedModel.split("/")[0]
-      : "";
-    const requestedLanguage = language.value.trim();
-    const result = await transcribe({
-      model: selectedModel,
-      audio: audio.value,
-      ...(requestedLanguage && providerId
-        ? { providerOptions: { [providerId]: { language: requestedLanguage } } }
-        : {}),
-    });
-    transcript.value = result.text;
-    push.success("语音转写完成");
-  } catch (error) {
-    transcript.value = error instanceof Error ? error.message : "语音转写失败";
-    push.error("语音转写失败");
-  } finally {
-    testing.value = false;
-  }
+	const selectedModel = isWhisper.value
+		? selectedWhisperModel.value &&
+			`${WHISPER_CANDLE_PROVIDER_ID}/${selectedWhisperModel.value.id}`
+		: service.selectedModelRef.value;
+	if (!audio.value || !selectedModel) {
+		push.warning("请选择音频和转写模型。");
+		return;
+	}
+	testing.value = true;
+	transcript.value = "";
+	try {
+		const providerId =
+			typeof selectedModel === "string" ? selectedModel.split("/")[0] : "";
+		const requestedLanguage = language.value.trim();
+		const result = await transcribe({
+			model: selectedModel,
+			audio: audio.value,
+			...(requestedLanguage && providerId
+				? { providerOptions: { [providerId]: { language: requestedLanguage } } }
+				: {}),
+		});
+		transcript.value = result.text;
+		push.success("语音转写完成");
+	} catch (error) {
+		transcript.value = error instanceof Error ? error.message : "语音转写失败";
+		push.error("语音转写失败");
+	} finally {
+		testing.value = false;
+	}
 }
 </script>
 

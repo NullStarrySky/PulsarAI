@@ -1,28 +1,35 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { Check, FileCode2, Import, Monitor, Moon, Sun, Type } from "lucide-vue-next";
+import { Check, FileCode2, Monitor, Moon, Sun, Type } from "lucide-vue-next";
 import { push } from "notivue";
+import { computed, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+	Select,
+	SelectContent,
+	SelectGroup,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { isAndroidPlatform } from "@/features/Misc/platform";
 import SettingForm from "@/features/Setting/components/SettingForm.vue";
 import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
-import { isAndroidPlatform } from "@/features/Misc/platform";
 
 const appearance = useAppearanceStore();
 const themeFileInput = ref<HTMLInputElement | null>(null);
@@ -35,76 +42,77 @@ const showMobileNavigationBar = isAndroidPlatform();
 
 const activeAccent = computed(() => appearance.activeTheme.accent);
 const fontSizeValue = computed({
-  get: () => [appearance.fontSize],
-  set: (value: number[]) => {
-    appearance.fontSize = value[0] ?? appearance.fontSize;
-  },
+	get: () => [appearance.fontSize],
+	set: (value: number[]) => {
+		appearance.fontSize = value[0] ?? appearance.fontSize;
+	},
 });
 const uiScaleValue = computed({
-  get: () => [appearance.uiScale],
-  set: (value: number[]) => {
-    appearance.uiScale = value[0] ?? appearance.uiScale;
-  },
+	get: () => [appearance.uiScale],
+	set: (value: number[]) => {
+		appearance.uiScale = value[0] ?? appearance.uiScale;
+	},
 });
 const editorFontSizeValue = computed({
-  get: () => [appearance.editorFontSize],
-  set: (value: number[]) => {
-    appearance.editorFontSize = value[0] ?? appearance.editorFontSize;
-  },
+	get: () => [appearance.editorFontSize],
+	set: (value: number[]) => {
+		appearance.editorFontSize = value[0] ?? appearance.editorFontSize;
+	},
 });
 const editorLineHeightValue = computed({
-  get: () => [appearance.editorLineHeight],
-  set: (value: number[]) => {
-    appearance.editorLineHeight = value[0] ?? appearance.editorLineHeight;
-  },
+	get: () => [appearance.editorLineHeight],
+	set: (value: number[]) => {
+		appearance.editorLineHeight = value[0] ?? appearance.editorLineHeight;
+	},
 });
 const themeModeOptions = [
-  { id: "light", label: "浅色", icon: Sun },
-  { id: "dark", label: "深色", icon: Moon },
-  { id: "system", label: "系统", icon: Monitor },
+	{ id: "light", label: "浅色", icon: Sun },
+	{ id: "dark", label: "深色", icon: Moon },
+	{ id: "system", label: "系统", icon: Monitor },
 ] as const;
 
 function themeDescription(themeId: string) {
-  if (appearance.customThemes.some((theme) => theme.id === themeId)) return "导入的自定义配色";
-  return "内置配色方案";
+	if (appearance.customThemes.some((theme) => theme.id === themeId))
+		return "导入的自定义配色";
+	return "内置配色方案";
 }
 
 function openThemeImport() {
-  themeCss.value = "";
-  themeFileName.value = "";
-  themeImportOpen.value = true;
+	themeCss.value = "";
+	themeFileName.value = "";
+	themeImportOpen.value = true;
 }
 
 async function readThemeCss(event: Event) {
-  const file = (event.target as HTMLInputElement).files?.[0];
-  if (!file) {
-    return;
-  }
-  themeCss.value = await file.text();
-  themeFileName.value = file.name;
-  (event.target as HTMLInputElement).value = "";
+	const file = (event.target as HTMLInputElement).files?.[0];
+	if (!file) {
+		return;
+	}
+	themeCss.value = await file.text();
+	themeFileName.value = file.name;
+	(event.target as HTMLInputElement).value = "";
 }
 
 function importTheme() {
-  if (!themeCss.value.trim()) return;
-  try {
-    const theme = appearance.importThemeCss(themeCss.value);
-    push.success(`已导入主题：${theme.name}`);
-    themeImportOpen.value = false;
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "主题导入失败");
-  }
+	if (!themeCss.value.trim()) return;
+	try {
+		const theme = appearance.importThemeCss(themeCss.value);
+		push.success(`已导入主题：${theme.name}`);
+		themeImportOpen.value = false;
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "主题导入失败");
+	}
 }
 
 function importFont() {
-  const name = fontName.value.trim();
-  const family = fontFamily.value.trim();
-  if (!name || !family) {
-    return;
-  }
-  appearance.importFont(name, family);
-  fontName.value = "";
-  fontFamily.value = "";
+	const name = fontName.value.trim();
+	const family = fontFamily.value.trim();
+	if (!name || !family) {
+		return;
+	}
+	appearance.importFont(name, family);
+	fontName.value = "";
+	fontFamily.value = "";
 }
 </script>
 

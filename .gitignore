@@ -18,7 +18,8 @@ src-tauri/target
 /.playwright-cli/
 .vscode
 apikeys
-todo.todo
+todo.txt
+queued_prompt.txt
 
 refs/
 

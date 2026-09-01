@@ -1,88 +1,95 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useDebounceFn } from "@vueuse/core";
 import { push } from "notivue";
+import {
+	computed,
+	onBeforeUnmount,
+	onMounted,
+	reactive,
+	ref,
+	watch,
+} from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+	Select,
+	SelectContent,
+	SelectGroup,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import SettingForm from "@/features/Setting/components/SettingForm.vue";
-import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
+import {
+	getDefaultConfig,
+	setDefaultConfig,
+	setSpeechModel,
+} from "@/features/defaultConfigs/default-config-service";
 import ModelCapabilityProviderForm from "@/features/ModelConnection/components/ModelCapabilityProviderForm.vue";
 import ServiceProviderSettingsLayout from "@/features/ModelConnection/components/ServiceProviderSettingsLayout.vue";
-import { useModelCapabilityProviders } from "@/features/ModelConnection/services/use-model-capability-providers";
 import type { ServiceProviderView } from "@/features/ModelConnection/service-provider";
+import { useModelCapabilityProviders } from "@/features/ModelConnection/services/use-model-capability-providers";
+import SettingForm from "@/features/Setting/components/SettingForm.vue";
+import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
 import {
-  getDefaultConfig,
-  setDefaultConfig,
-  setSpeechModel,
-} from "@/features/defaultConfigs/default-config-service";
-import { generateSpeech, listTextToSpeechVoices } from "./text-to-speech";
-import { EDGE_TTS_MODEL_REF } from "./providers/edge-tts-speech-model";
-import {
-  createDefaultVolcengineTtsSettings,
-  createDefaultElevenLabsTtsSettings,
-  createDefaultAzureTtsSettings,
-  createElevenLabsTtsModelRef,
-  createVolcengineTtsModelRef,
-  AZURE_TTS_MODEL_REF,
-  AZURE_TTS_PROVIDER_ID,
-  ELEVENLABS_TTS_PROVIDER_ID,
-  VOLCENGINE_TTS_PROVIDER_ID,
-  type SystemSpeechVoice,
-} from "./tts";
-import {
-  SYSTEM_TTS_SERVICE_ID,
-  getSystemTtsStatus,
-  listSystemTtsVoices,
-  previewSystemTtsVoice,
-  speakWithSystemTts,
-  stopSystemTts,
-} from "./system-text-to-speech";
-import {
-  getVolcengineTtsCredentialStatus,
-  loadVolcengineTtsSettings,
-  saveVolcengineTtsAccessKey,
-  saveVolcengineTtsAppId,
-  saveVolcengineTtsSettings,
-} from "./volcengine-tts-settings";
-import {
-  hasElevenLabsTtsApiKey,
-  loadElevenLabsTtsSettings,
-  saveElevenLabsTtsApiKey,
-  saveElevenLabsTtsSettings,
-} from "./elevenlabs-tts-settings";
-import {
-  hasAzureTtsApiKey,
-  loadAzureTtsSettings,
-  saveAzureTtsApiKey,
-  saveAzureTtsSettings,
+	hasAzureTtsApiKey,
+	loadAzureTtsSettings,
+	saveAzureTtsApiKey,
+	saveAzureTtsSettings,
 } from "./azure-tts-settings";
 import {
-  listElevenLabsModels,
-  listElevenLabsVoices,
-  type ElevenLabsModel,
-  type ElevenLabsVoice,
+	hasElevenLabsTtsApiKey,
+	loadElevenLabsTtsSettings,
+	saveElevenLabsTtsApiKey,
+	saveElevenLabsTtsSettings,
+} from "./elevenlabs-tts-settings";
+import {
+	type AzureSpeechVoice,
+	listAzureSpeechVoices,
+} from "./providers/azure-tts-client";
+import { EDGE_TTS_MODEL_REF } from "./providers/edge-tts-speech-model";
+import {
+	type ElevenLabsModel,
+	type ElevenLabsVoice,
+	listElevenLabsModels,
+	listElevenLabsVoices,
 } from "./providers/elevenlabs-tts-client";
 import {
-  listAzureSpeechVoices,
-  type AzureSpeechVoice,
-} from "./providers/azure-tts-client";
-import {
-  deletePiperModel,
-  downloadPiperModel,
-  listPiperModels,
-  PIPER_TTS_PROVIDER_ID,
-  type PiperModelPack,
+	deletePiperModel,
+	downloadPiperModel,
+	listPiperModels,
+	PIPER_TTS_PROVIDER_ID,
+	type PiperModelPack,
 } from "./providers/piper-tts-client";
+import {
+	getSystemTtsStatus,
+	listSystemTtsVoices,
+	previewSystemTtsVoice,
+	SYSTEM_TTS_SERVICE_ID,
+	speakWithSystemTts,
+	stopSystemTts,
+} from "./system-text-to-speech";
+import { generateSpeech, listTextToSpeechVoices } from "./text-to-speech";
+import {
+	AZURE_TTS_MODEL_REF,
+	AZURE_TTS_PROVIDER_ID,
+	createDefaultAzureTtsSettings,
+	createDefaultElevenLabsTtsSettings,
+	createDefaultVolcengineTtsSettings,
+	createElevenLabsTtsModelRef,
+	createVolcengineTtsModelRef,
+	ELEVENLABS_TTS_PROVIDER_ID,
+	type SystemSpeechVoice,
+	VOLCENGINE_TTS_PROVIDER_ID,
+} from "./tts";
+import {
+	getVolcengineTtsCredentialStatus,
+	loadVolcengineTtsSettings,
+	saveVolcengineTtsAccessKey,
+	saveVolcengineTtsAppId,
+	saveVolcengineTtsSettings,
+} from "./volcengine-tts-settings";
 
 const EDGE_ENABLED_KEY = "tts.edgeTts.enabled";
 const SYSTEM_ENABLED_KEY = "tts.system.enabled";
@@ -111,12 +118,12 @@ const piperSelectedModelId = ref("");
 const piperDownloading = ref(false);
 const piperSpeaker = ref(0);
 const piperForm = reactive({
-  id: "",
-  version: "",
-  url: "",
-  sha256: "",
-  size: "",
-  language: "",
+	id: "",
+	version: "",
+	url: "",
+	sha256: "",
+	size: "",
+	language: "",
 });
 const text = ref("你好，这是一段 Pulsar TTS 服务测试语音。");
 const systemLanguage = ref("");
@@ -132,424 +139,522 @@ const edgeVolume = ref("+0%");
 const edgePitch = ref("+0Hz");
 const modelSpeed = ref(1);
 const voices = ref([
-  { value: "zh-CN-XiaoxiaoNeural", label: "zh-CN · XiaoxiaoNeural" },
-  { value: "en-US-EmmaMultilingualNeural", label: "en-US · EmmaMultilingualNeural" },
+	{ value: "zh-CN-XiaoxiaoNeural", label: "zh-CN · XiaoxiaoNeural" },
+	{
+		value: "en-US-EmmaMultilingualNeural",
+		label: "en-US · EmmaMultilingualNeural",
+	},
 ]);
 const loadingVoices = ref(false);
 const testing = ref(false);
 const audioUrl = ref("");
 
 const providers = computed<ServiceProviderView[]>(() => [
-  {
-    id: SYSTEM_TTS_SERVICE_ID,
-    name: "系统 TTS",
-    description: "直接使用操作系统语音合成器并播放，不生成音频文件。",
-    enabled: systemEnabled.value,
-    source: "feature",
-  },
-  {
-    id: "edge-tts",
-    name: "Edge TTS",
-    description: "Microsoft Edge 在线语音专用服务，无需 API Key。",
-    enabled: edgeEnabled.value,
-    source: "feature",
-  },
-  {
-    id: ELEVENLABS_TTS_PROVIDER_ID,
-    name: "ElevenLabs",
-    description: "远程专业语音服务，动态读取模型与账户声音。",
-    enabled: elevenLabsSettings.value.enabled,
-    source: "feature",
-  },
-  {
-    id: AZURE_TTS_PROVIDER_ID,
-    name: "Azure Speech",
-    description: "Microsoft Azure 区域化语音合成与 SSML 服务。",
-    enabled: azureSettings.value.enabled,
-    source: "feature",
-  },
-  {
-    id: VOLCENGINE_TTS_PROVIDER_ID,
-    name: "豆包语音",
-    description: "火山引擎 OpenSpeech 远程语音专用服务。",
-    enabled: volcengineSettings.value.enabled,
-    source: "feature",
-  },
-  {
-    id: PIPER_TTS_PROVIDER_ID,
-    name: "Piper 本地朗读",
-    description: "下载并校验 sherpa-onnx Piper 模型包，在本机 CPU 生成 WAV。",
-    enabled: true,
-    source: "feature",
-  },
-  ...service.providerViews.value,
+	{
+		id: SYSTEM_TTS_SERVICE_ID,
+		name: "系统 TTS",
+		description: "直接使用操作系统语音合成器并播放，不生成音频文件。",
+		enabled: systemEnabled.value,
+		source: "feature",
+	},
+	{
+		id: "edge-tts",
+		name: "Edge TTS",
+		description: "Microsoft Edge 在线语音专用服务，无需 API Key。",
+		enabled: edgeEnabled.value,
+		source: "feature",
+	},
+	{
+		id: ELEVENLABS_TTS_PROVIDER_ID,
+		name: "ElevenLabs",
+		description: "远程专业语音服务，动态读取模型与账户声音。",
+		enabled: elevenLabsSettings.value.enabled,
+		source: "feature",
+	},
+	{
+		id: AZURE_TTS_PROVIDER_ID,
+		name: "Azure Speech",
+		description: "Microsoft Azure 区域化语音合成与 SSML 服务。",
+		enabled: azureSettings.value.enabled,
+		source: "feature",
+	},
+	{
+		id: VOLCENGINE_TTS_PROVIDER_ID,
+		name: "豆包语音",
+		description: "火山引擎 OpenSpeech 远程语音专用服务。",
+		enabled: volcengineSettings.value.enabled,
+		source: "feature",
+	},
+	{
+		id: PIPER_TTS_PROVIDER_ID,
+		name: "Piper 本地朗读",
+		description: "下载并校验 sherpa-onnx Piper 模型包，在本机 CPU 生成 WAV。",
+		enabled: true,
+		source: "feature",
+	},
+	...service.providerViews.value,
 ]);
-const isSystem = computed(() => activeServiceId.value === SYSTEM_TTS_SERVICE_ID);
+const isSystem = computed(
+	() => activeServiceId.value === SYSTEM_TTS_SERVICE_ID,
+);
 const isEdge = computed(() => activeServiceId.value === "edge-tts");
-const isVolcengine = computed(() => activeServiceId.value === VOLCENGINE_TTS_PROVIDER_ID);
-const isElevenLabs = computed(() => activeServiceId.value === ELEVENLABS_TTS_PROVIDER_ID);
+const isVolcengine = computed(
+	() => activeServiceId.value === VOLCENGINE_TTS_PROVIDER_ID,
+);
+const isElevenLabs = computed(
+	() => activeServiceId.value === ELEVENLABS_TTS_PROVIDER_ID,
+);
 const isAzure = computed(() => activeServiceId.value === AZURE_TTS_PROVIDER_ID);
 const isPiper = computed(() => activeServiceId.value === PIPER_TTS_PROVIDER_ID);
-const selectedPiperModel = computed(() => piperModels.value.find((model) => model.id === piperSelectedModelId.value));
-const piperStorageBytes = computed(() => piperModels.value.reduce((total, model) => total + (model.diskSize ?? model.size), 0));
-const activeAzureVoice = computed(() => azureVoices.value.find((voice) => voice.shortName === azureSettings.value.voiceId));
+const selectedPiperModel = computed(() =>
+	piperModels.value.find((model) => model.id === piperSelectedModelId.value),
+);
+const piperStorageBytes = computed(() =>
+	piperModels.value.reduce(
+		(total, model) => total + (model.diskSize ?? model.size),
+		0,
+	),
+);
+const activeAzureVoice = computed(() =>
+	azureVoices.value.find(
+		(voice) => voice.shortName === azureSettings.value.voiceId,
+	),
+);
 const azureStyles = computed(() => activeAzureVoice.value?.styles ?? []);
 
 onMounted(async () => {
-  [edgeEnabled.value, systemEnabled.value, volcengineSettings.value, elevenLabsSettings.value, azureSettings.value] = await Promise.all([
-    getDefaultConfig(EDGE_ENABLED_KEY, true),
-    getDefaultConfig(SYSTEM_ENABLED_KEY, true),
-    loadVolcengineTtsSettings(),
-    loadElevenLabsTtsSettings(),
-    loadAzureTtsSettings(),
-  ]);
-  const [credentials, hasElevenLabsKey, hasAzureKey] = await Promise.all([
-    getVolcengineTtsCredentialStatus(),
-    hasElevenLabsTtsApiKey(),
-    hasAzureTtsApiKey(),
-  ]);
-  volcengineAppId.value = credentials.hasAppId ? secretMask : "";
-  volcengineAccessKey.value = credentials.hasAccessKey ? secretMask : "";
-  elevenLabsApiKey.value = hasElevenLabsKey ? secretMask : "";
-  azureApiKey.value = hasAzureKey ? secretMask : "";
-  volcengineInitialized.value = true;
-  elevenLabsInitialized.value = true;
-  azureInitialized.value = true;
-  await service.initialize();
-  await refreshPiperModels();
+	[
+		edgeEnabled.value,
+		systemEnabled.value,
+		volcengineSettings.value,
+		elevenLabsSettings.value,
+		azureSettings.value,
+	] = await Promise.all([
+		getDefaultConfig(EDGE_ENABLED_KEY, true),
+		getDefaultConfig(SYSTEM_ENABLED_KEY, true),
+		loadVolcengineTtsSettings(),
+		loadElevenLabsTtsSettings(),
+		loadAzureTtsSettings(),
+	]);
+	const [credentials, hasElevenLabsKey, hasAzureKey] = await Promise.all([
+		getVolcengineTtsCredentialStatus(),
+		hasElevenLabsTtsApiKey(),
+		hasAzureTtsApiKey(),
+	]);
+	volcengineAppId.value = credentials.hasAppId ? secretMask : "";
+	volcengineAccessKey.value = credentials.hasAccessKey ? secretMask : "";
+	elevenLabsApiKey.value = hasElevenLabsKey ? secretMask : "";
+	azureApiKey.value = hasAzureKey ? secretMask : "";
+	volcengineInitialized.value = true;
+	elevenLabsInitialized.value = true;
+	azureInitialized.value = true;
+	await service.initialize();
+	await refreshPiperModels();
 });
 
 const persistVolcengineSettings = useDebounceFn(
-  () => saveVolcengineTtsSettings(volcengineSettings.value),
-  400,
+	() => saveVolcengineTtsSettings(volcengineSettings.value),
+	400,
 );
 const persistVolcengineAppId = useDebounceFn((value: string) => {
-  if (value !== secretMask) return saveVolcengineTtsAppId(value);
+	if (value !== secretMask) return saveVolcengineTtsAppId(value);
 }, 600);
 const persistVolcengineAccessKey = useDebounceFn((value: string) => {
-  if (value !== secretMask) return saveVolcengineTtsAccessKey(value);
+	if (value !== secretMask) return saveVolcengineTtsAccessKey(value);
 }, 600);
-const persistElevenLabsSettings = useDebounceFn(() => saveElevenLabsTtsSettings(elevenLabsSettings.value), 400);
+const persistElevenLabsSettings = useDebounceFn(
+	() => saveElevenLabsTtsSettings(elevenLabsSettings.value),
+	400,
+);
 const persistElevenLabsApiKey = useDebounceFn((value: string) => {
-  if (value !== secretMask) return saveElevenLabsTtsApiKey(value);
+	if (value !== secretMask) return saveElevenLabsTtsApiKey(value);
 }, 600);
-const persistAzureSettings = useDebounceFn(() => saveAzureTtsSettings(azureSettings.value), 400);
+const persistAzureSettings = useDebounceFn(
+	() => saveAzureTtsSettings(azureSettings.value),
+	400,
+);
 const persistAzureApiKey = useDebounceFn((value: string) => {
-  if (value !== secretMask) return saveAzureTtsApiKey(value);
+	if (value !== secretMask) return saveAzureTtsApiKey(value);
 }, 600);
 
-watch(volcengineSettings, () => {
-  if (volcengineInitialized.value) void persistVolcengineSettings();
-}, { deep: true });
-watch(elevenLabsSettings, () => {
-  if (elevenLabsInitialized.value) void persistElevenLabsSettings();
-}, { deep: true });
-watch(azureSettings, () => {
-  if (azureInitialized.value) void persistAzureSettings();
-}, { deep: true });
+watch(
+	volcengineSettings,
+	() => {
+		if (volcengineInitialized.value) void persistVolcengineSettings();
+	},
+	{ deep: true },
+);
+watch(
+	elevenLabsSettings,
+	() => {
+		if (elevenLabsInitialized.value) void persistElevenLabsSettings();
+	},
+	{ deep: true },
+);
+watch(
+	azureSettings,
+	() => {
+		if (azureInitialized.value) void persistAzureSettings();
+	},
+	{ deep: true },
+);
 
 onBeforeUnmount(() => {
-  if (audioUrl.value) URL.revokeObjectURL(audioUrl.value);
-  void stopSystemTts().catch(() => undefined);
+	if (audioUrl.value) URL.revokeObjectURL(audioUrl.value);
+	void stopSystemTts().catch(() => undefined);
 });
 
 async function activateProvider(providerId: string) {
-  activeServiceId.value = providerId;
-  if (![SYSTEM_TTS_SERVICE_ID, "edge-tts", VOLCENGINE_TTS_PROVIDER_ID, ELEVENLABS_TTS_PROVIDER_ID, AZURE_TTS_PROVIDER_ID, PIPER_TTS_PROVIDER_ID].includes(providerId)) {
-    await service.activateProvider(providerId);
-  }
+	activeServiceId.value = providerId;
+	if (
+		![
+			SYSTEM_TTS_SERVICE_ID,
+			"edge-tts",
+			VOLCENGINE_TTS_PROVIDER_ID,
+			ELEVENLABS_TTS_PROVIDER_ID,
+			AZURE_TTS_PROVIDER_ID,
+			PIPER_TTS_PROVIDER_ID,
+		].includes(providerId)
+	) {
+		await service.activateProvider(providerId);
+	}
 }
 
 async function toggleProvider(providerId: string, enabled: boolean) {
-  if (providerId === SYSTEM_TTS_SERVICE_ID) {
-    systemEnabled.value = enabled;
-    await setDefaultConfig(SYSTEM_ENABLED_KEY, enabled);
-    if (!enabled) await stopSystemTts();
-    return;
-  }
-  if (providerId === "edge-tts") {
-    edgeEnabled.value = enabled;
-    await setDefaultConfig(EDGE_ENABLED_KEY, enabled);
-    return;
-  }
-  if (providerId === VOLCENGINE_TTS_PROVIDER_ID) {
-    volcengineSettings.value.enabled = enabled;
-    await saveVolcengineTtsSettings(volcengineSettings.value);
-    return;
-  }
-  if (providerId === ELEVENLABS_TTS_PROVIDER_ID) {
-    elevenLabsSettings.value.enabled = enabled;
-    await saveElevenLabsTtsSettings(elevenLabsSettings.value);
-    return;
-  }
-  if (providerId === AZURE_TTS_PROVIDER_ID) {
-    azureSettings.value.enabled = enabled;
-    await saveAzureTtsSettings(azureSettings.value);
-    return;
-  }
-  if (providerId === PIPER_TTS_PROVIDER_ID) return;
-  await service.toggleProvider(providerId, enabled);
+	if (providerId === SYSTEM_TTS_SERVICE_ID) {
+		systemEnabled.value = enabled;
+		await setDefaultConfig(SYSTEM_ENABLED_KEY, enabled);
+		if (!enabled) await stopSystemTts();
+		return;
+	}
+	if (providerId === "edge-tts") {
+		edgeEnabled.value = enabled;
+		await setDefaultConfig(EDGE_ENABLED_KEY, enabled);
+		return;
+	}
+	if (providerId === VOLCENGINE_TTS_PROVIDER_ID) {
+		volcengineSettings.value.enabled = enabled;
+		await saveVolcengineTtsSettings(volcengineSettings.value);
+		return;
+	}
+	if (providerId === ELEVENLABS_TTS_PROVIDER_ID) {
+		elevenLabsSettings.value.enabled = enabled;
+		await saveElevenLabsTtsSettings(elevenLabsSettings.value);
+		return;
+	}
+	if (providerId === AZURE_TTS_PROVIDER_ID) {
+		azureSettings.value.enabled = enabled;
+		await saveAzureTtsSettings(azureSettings.value);
+		return;
+	}
+	if (providerId === PIPER_TTS_PROVIDER_ID) return;
+	await service.toggleProvider(providerId, enabled);
 }
 
 async function refreshPiperModels() {
-  try {
-    piperModels.value = await listPiperModels();
-    if (!piperModels.value.some((model) => model.id === piperSelectedModelId.value)) {
-      piperSelectedModelId.value = piperModels.value[0]?.id ?? "";
-    }
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "无法读取本地 Piper 模型包");
-  }
+	try {
+		piperModels.value = await listPiperModels();
+		if (
+			!piperModels.value.some(
+				(model) => model.id === piperSelectedModelId.value,
+			)
+		) {
+			piperSelectedModelId.value = piperModels.value[0]?.id ?? "";
+		}
+	} catch (error) {
+		push.error(
+			error instanceof Error ? error.message : "无法读取本地 Piper 模型包",
+		);
+	}
 }
 
 async function addPiperModel() {
-  const id = piperForm.id.trim();
-  const version = piperForm.version.trim();
-  const url = piperForm.url.trim();
-  const sha256 = piperForm.sha256.trim();
-  const size = Number(piperForm.size);
-  if (!id || !version || !url || !sha256 || !Number.isSafeInteger(size) || size <= 0) {
-    push.warning("请填写模型 ID、版本、下载地址、SHA-256 和准确的字节大小。");
-    return;
-  }
-  piperDownloading.value = true;
-  try {
-    const model = await downloadPiperModel({
-      id,
-      version,
-      sha256,
-      size,
-      language: piperForm.language.trim() || undefined,
-      runtime: "sherpa-onnx-piper",
-    }, url);
-    await refreshPiperModels();
-    piperSelectedModelId.value = model.id;
-    push.success("Piper 模型已下载并校验。");
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "Piper 模型下载失败");
-  } finally {
-    piperDownloading.value = false;
-  }
+	const id = piperForm.id.trim();
+	const version = piperForm.version.trim();
+	const url = piperForm.url.trim();
+	const sha256 = piperForm.sha256.trim();
+	const size = Number(piperForm.size);
+	if (
+		!id ||
+		!version ||
+		!url ||
+		!sha256 ||
+		!Number.isSafeInteger(size) ||
+		size <= 0
+	) {
+		push.warning("请填写模型 ID、版本、下载地址、SHA-256 和准确的字节大小。");
+		return;
+	}
+	piperDownloading.value = true;
+	try {
+		const model = await downloadPiperModel(
+			{
+				id,
+				version,
+				sha256,
+				size,
+				language: piperForm.language.trim() || undefined,
+				runtime: "sherpa-onnx-piper",
+			},
+			url,
+		);
+		await refreshPiperModels();
+		piperSelectedModelId.value = model.id;
+		push.success("Piper 模型已下载并校验。");
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "Piper 模型下载失败");
+	} finally {
+		piperDownloading.value = false;
+	}
 }
 
 async function removePiperModel(id: string) {
-  try {
-    await deletePiperModel(id);
-    await refreshPiperModels();
-    push.success("Piper 模型已删除。");
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "Piper 模型删除失败");
-  }
+	try {
+		await deletePiperModel(id);
+		await refreshPiperModels();
+		push.success("Piper 模型已删除。");
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "Piper 模型删除失败");
+	}
 }
 
 function formatBytes(size: number) {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+	if (size < 1024) return `${size} B`;
+	if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+	return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function updateVolcengineAppId(value: string) {
-  volcengineAppId.value = value;
-  void persistVolcengineAppId(value);
+	volcengineAppId.value = value;
+	void persistVolcengineAppId(value);
 }
 
 function updateVolcengineAccessKey(value: string) {
-  volcengineAccessKey.value = value;
-  void persistVolcengineAccessKey(value);
+	volcengineAccessKey.value = value;
+	void persistVolcengineAccessKey(value);
 }
 
 function updateElevenLabsApiKey(value: string) {
-  elevenLabsApiKey.value = value;
-  void persistElevenLabsApiKey(value);
+	elevenLabsApiKey.value = value;
+	void persistElevenLabsApiKey(value);
 }
 
 function updateAzureApiKey(value: string) {
-  azureApiKey.value = value;
-  void persistAzureApiKey(value);
+	azureApiKey.value = value;
+	void persistAzureApiKey(value);
 }
 
 function updateAzureStyle(value: unknown) {
-  azureSettings.value.style = value === "__default__" ? "" : String(value ?? "");
+	azureSettings.value.style =
+		value === "__default__" ? "" : String(value ?? "");
 }
 
 async function loadElevenLabsCatalog() {
-  loadingVoices.value = true;
-  try {
-    [elevenLabsModels.value, elevenLabsVoices.value] = await Promise.all([
-      listElevenLabsModels(elevenLabsSettings.value),
-      listElevenLabsVoices(elevenLabsSettings.value),
-    ]);
-    if (!elevenLabsModels.value.some((model) => model.modelId === elevenLabsSettings.value.modelId)) {
-      elevenLabsSettings.value.modelId = elevenLabsModels.value[0]?.modelId ?? elevenLabsSettings.value.modelId;
-    }
-    if (!elevenLabsVoices.value.some((voice) => voice.voiceId === elevenLabsSettings.value.voiceId)) {
-      elevenLabsSettings.value.voiceId = elevenLabsVoices.value[0]?.voiceId ?? "";
-    }
-    push.success(`已加载 ${elevenLabsModels.value.length} 个模型和 ${elevenLabsVoices.value.length} 个声音`);
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "ElevenLabs 目录加载失败");
-  } finally {
-    loadingVoices.value = false;
-  }
+	loadingVoices.value = true;
+	try {
+		[elevenLabsModels.value, elevenLabsVoices.value] = await Promise.all([
+			listElevenLabsModels(elevenLabsSettings.value),
+			listElevenLabsVoices(elevenLabsSettings.value),
+		]);
+		if (
+			!elevenLabsModels.value.some(
+				(model) => model.modelId === elevenLabsSettings.value.modelId,
+			)
+		) {
+			elevenLabsSettings.value.modelId =
+				elevenLabsModels.value[0]?.modelId ?? elevenLabsSettings.value.modelId;
+		}
+		if (
+			!elevenLabsVoices.value.some(
+				(voice) => voice.voiceId === elevenLabsSettings.value.voiceId,
+			)
+		) {
+			elevenLabsSettings.value.voiceId =
+				elevenLabsVoices.value[0]?.voiceId ?? "";
+		}
+		push.success(
+			`已加载 ${elevenLabsModels.value.length} 个模型和 ${elevenLabsVoices.value.length} 个声音`,
+		);
+	} catch (error) {
+		push.error(
+			error instanceof Error ? error.message : "ElevenLabs 目录加载失败",
+		);
+	} finally {
+		loadingVoices.value = false;
+	}
 }
 
 async function loadAzureVoices() {
-  loadingVoices.value = true;
-  try {
-    azureVoices.value = await listAzureSpeechVoices(azureSettings.value);
-    if (!azureVoices.value.some((voice) => voice.shortName === azureSettings.value.voiceId)) {
-      azureSettings.value.voiceId = azureVoices.value[0]?.shortName ?? "";
-    }
-    if (!azureStyles.value.includes(azureSettings.value.style)) azureSettings.value.style = "";
-    push.success(`已加载 ${azureVoices.value.length} 个 Azure 声音`);
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "Azure 声音列表加载失败");
-  } finally {
-    loadingVoices.value = false;
-  }
+	loadingVoices.value = true;
+	try {
+		azureVoices.value = await listAzureSpeechVoices(azureSettings.value);
+		if (
+			!azureVoices.value.some(
+				(voice) => voice.shortName === azureSettings.value.voiceId,
+			)
+		) {
+			azureSettings.value.voiceId = azureVoices.value[0]?.shortName ?? "";
+		}
+		if (!azureStyles.value.includes(azureSettings.value.style))
+			azureSettings.value.style = "";
+		push.success(`已加载 ${azureVoices.value.length} 个 Azure 声音`);
+	} catch (error) {
+		push.error(
+			error instanceof Error ? error.message : "Azure 声音列表加载失败",
+		);
+	} finally {
+		loadingVoices.value = false;
+	}
 }
 
 async function loadSystemVoices() {
-  loadingVoices.value = true;
-  try {
-    const status = await getSystemTtsStatus();
-    if (!status.initialized) throw new Error("系统 TTS 引擎尚未初始化。");
-    systemVoices.value = await listSystemTtsVoices(systemLanguage.value);
-    if (!systemVoices.value.some((voice) => voice.id === systemVoice.value)) {
-      systemVoice.value = systemVoices.value[0]?.id ?? "";
-    }
-    push.success(`已加载 ${systemVoices.value.length} 个系统声音`);
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "系统声音列表加载失败");
-  } finally {
-    loadingVoices.value = false;
-  }
+	loadingVoices.value = true;
+	try {
+		const status = await getSystemTtsStatus();
+		if (!status.initialized) throw new Error("系统 TTS 引擎尚未初始化。");
+		systemVoices.value = await listSystemTtsVoices(systemLanguage.value);
+		if (!systemVoices.value.some((voice) => voice.id === systemVoice.value)) {
+			systemVoice.value = systemVoices.value[0]?.id ?? "";
+		}
+		push.success(`已加载 ${systemVoices.value.length} 个系统声音`);
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "系统声音列表加载失败");
+	} finally {
+		loadingVoices.value = false;
+	}
 }
 
 async function previewSystemVoice() {
-  if (!systemVoice.value) return;
-  try {
-    await previewSystemTtsVoice(systemVoice.value, text.value);
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "声音预览失败");
-  }
+	if (!systemVoice.value) return;
+	try {
+		await previewSystemTtsVoice(systemVoice.value, text.value);
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "声音预览失败");
+	}
 }
 
 async function stopSystemSpeech() {
-  try {
-    await stopSystemTts();
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "停止系统 TTS 失败");
-  }
+	try {
+		await stopSystemTts();
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "停止系统 TTS 失败");
+	}
 }
 
 async function loadVoices() {
-  loadingVoices.value = true;
-  try {
-    const result = await listTextToSpeechVoices();
-    voices.value = result
-      .map((voice) => ({ value: voice.shortName, label: `${voice.locale} · ${voice.shortName} · ${voice.gender}` }))
-      .sort((left, right) => left.label.localeCompare(right.label));
-    push.success(`已加载 ${voices.value.length} 个声音`);
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "声音列表加载失败");
-  } finally {
-    loadingVoices.value = false;
-  }
+	loadingVoices.value = true;
+	try {
+		const result = await listTextToSpeechVoices();
+		voices.value = result
+			.map((voice) => ({
+				value: voice.shortName,
+				label: `${voice.locale} · ${voice.shortName} · ${voice.gender}`,
+			}))
+			.sort((left, right) => left.label.localeCompare(right.label));
+		push.success(`已加载 ${voices.value.length} 个声音`);
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "声音列表加载失败");
+	} finally {
+		loadingVoices.value = false;
+	}
 }
 
 async function runTest() {
-  if (isSystem.value) {
-    if (!text.value.trim()) {
-      push.warning("请输入需要朗读的文本。");
-      return;
-    }
-    testing.value = true;
-    try {
-      await speakWithSystemTts({
-        text: text.value,
-        language: systemLanguage.value.trim() || undefined,
-        voiceId: systemVoice.value || undefined,
-        rate: Number(systemRate.value),
-        pitch: Number(systemPitch.value),
-        volume: Number(systemVolume.value),
-      });
-      push.success("系统 TTS 已开始朗读");
-    } catch (error) {
-      push.error(error instanceof Error ? error.message : "系统 TTS 朗读失败");
-    } finally {
-      testing.value = false;
-    }
-    return;
-  }
+	if (isSystem.value) {
+		if (!text.value.trim()) {
+			push.warning("请输入需要朗读的文本。");
+			return;
+		}
+		testing.value = true;
+		try {
+			await speakWithSystemTts({
+				text: text.value,
+				language: systemLanguage.value.trim() || undefined,
+				voiceId: systemVoice.value || undefined,
+				rate: Number(systemRate.value),
+				pitch: Number(systemPitch.value),
+				volume: Number(systemVolume.value),
+			});
+			push.success("系统 TTS 已开始朗读");
+		} catch (error) {
+			push.error(error instanceof Error ? error.message : "系统 TTS 朗读失败");
+		} finally {
+			testing.value = false;
+		}
+		return;
+	}
 
-  const model = isEdge.value
-    ? EDGE_TTS_MODEL_REF
-    : isElevenLabs.value
-      ? createElevenLabsTtsModelRef(elevenLabsSettings.value.modelId)
-      : isAzure.value
-        ? AZURE_TTS_MODEL_REF
-        : isVolcengine.value
-          ? createVolcengineTtsModelRef(volcengineSettings.value.resourceId)
-          : isPiper.value
-            ? selectedPiperModel.value && `${PIPER_TTS_PROVIDER_ID}/${selectedPiperModel.value.id}`
-            : service.selectedModelRef.value;
-  if (!model || !text.value.trim()) {
-    push.warning("请输入文本并选择语音模型。");
-    return;
-  }
-  testing.value = true;
-  try {
-    const result = await generateSpeech({
-      model,
-      text: text.value.trim(),
-      voice: isEdge.value
-        ? edgeVoice.value
-        : isElevenLabs.value
-          ? elevenLabsSettings.value.voiceId || undefined
-          : isAzure.value
-            ? azureSettings.value.voiceId || undefined
-          : isVolcengine.value
-            ? volcengineSettings.value.speakerId.trim() || undefined
-            : isPiper.value
-              ? String(piperSpeaker.value)
-              : modelVoice.value.trim() || undefined,
-      speed: isEdge.value || isVolcengine.value
-        ? undefined
-        : isElevenLabs.value
-          ? elevenLabsSettings.value.speed
-          : isAzure.value
-            ? azureSettings.value.speed
-            : Number(modelSpeed.value),
-      providerOptions: isEdge.value
-        ? {
-            edgeTts: {
-              rate: edgeRate.value,
-              volume: edgeVolume.value,
-              pitch: edgePitch.value,
-            },
-          }
-        : isAzure.value
-          ? { azureSpeech: { style: azureSettings.value.style || undefined } }
-          : isVolcengine.value
-          ? {
-              volcengineTts: {
-                resourceId: volcengineSettings.value.resourceId,
-                speakerId: volcengineSettings.value.speakerId,
-                sampleRate: volcengineSettings.value.sampleRate,
-                contextText: volcengineContext.value.trim() || undefined,
-              },
-            }
-          : undefined,
-    });
-    if (audioUrl.value) URL.revokeObjectURL(audioUrl.value);
-    audioUrl.value = URL.createObjectURL(new Blob([result.audio.uint8Array], { type: result.audio.mediaType }));
-    push.success("语音生成完成");
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "语音生成失败");
-  } finally {
-    testing.value = false;
-  }
+	const model = isEdge.value
+		? EDGE_TTS_MODEL_REF
+		: isElevenLabs.value
+			? createElevenLabsTtsModelRef(elevenLabsSettings.value.modelId)
+			: isAzure.value
+				? AZURE_TTS_MODEL_REF
+				: isVolcengine.value
+					? createVolcengineTtsModelRef(volcengineSettings.value.resourceId)
+					: isPiper.value
+						? selectedPiperModel.value &&
+							`${PIPER_TTS_PROVIDER_ID}/${selectedPiperModel.value.id}`
+						: service.selectedModelRef.value;
+	if (!model || !text.value.trim()) {
+		push.warning("请输入文本并选择语音模型。");
+		return;
+	}
+	testing.value = true;
+	try {
+		const result = await generateSpeech({
+			model,
+			text: text.value.trim(),
+			voice: isEdge.value
+				? edgeVoice.value
+				: isElevenLabs.value
+					? elevenLabsSettings.value.voiceId || undefined
+					: isAzure.value
+						? azureSettings.value.voiceId || undefined
+						: isVolcengine.value
+							? volcengineSettings.value.speakerId.trim() || undefined
+							: isPiper.value
+								? String(piperSpeaker.value)
+								: modelVoice.value.trim() || undefined,
+			speed:
+				isEdge.value || isVolcengine.value
+					? undefined
+					: isElevenLabs.value
+						? elevenLabsSettings.value.speed
+						: isAzure.value
+							? azureSettings.value.speed
+							: Number(modelSpeed.value),
+			providerOptions: isEdge.value
+				? {
+						edgeTts: {
+							rate: edgeRate.value,
+							volume: edgeVolume.value,
+							pitch: edgePitch.value,
+						},
+					}
+				: isAzure.value
+					? { azureSpeech: { style: azureSettings.value.style || undefined } }
+					: isVolcengine.value
+						? {
+								volcengineTts: {
+									resourceId: volcengineSettings.value.resourceId,
+									speakerId: volcengineSettings.value.speakerId,
+									sampleRate: volcengineSettings.value.sampleRate,
+									contextText: volcengineContext.value.trim() || undefined,
+								},
+							}
+						: undefined,
+		});
+		if (audioUrl.value) URL.revokeObjectURL(audioUrl.value);
+		audioUrl.value = URL.createObjectURL(
+			new Blob([result.audio.uint8Array], { type: result.audio.mediaType }),
+		);
+		push.success("语音生成完成");
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "语音生成失败");
+	} finally {
+		testing.value = false;
+	}
 }
 </script>
 

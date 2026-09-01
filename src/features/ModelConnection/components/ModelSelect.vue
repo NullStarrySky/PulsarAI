@@ -1,87 +1,119 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
 import { Brain, Check, ChevronDown } from "lucide-vue-next";
+import { computed, onMounted } from "vue";
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger,
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuGroup,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
+	DropdownMenuSubTrigger,
+	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Slider } from "@/components/ui/slider";
+import { type ModelApiType, supportsFeatureService } from "../model-provider";
+import {
+	createModelReference,
+	parseModelReference,
+	type ThinkingLevel,
+	thinkingLevelLabel,
+	thinkingLevelOptions,
+} from "../model-reference";
 import { useModelConnectionStore } from "../services/model-connection-store";
 import ProviderAvatar from "./ProviderAvatar.vue";
-import { supportsFeatureService, type ModelApiType } from "../model-provider";
-import {
-  createModelReference,
-  parseModelReference,
-  thinkingLevelLabel,
-  thinkingLevelOptions,
-  type ThinkingLevel,
-} from "../model-reference";
 
-const props = withDefaults(defineProps<{
-  modelValue: string;
-  buttonClass?: string;
-  apiType?: ModelApiType;
-  allowEmpty?: boolean;
-  emptyLabel?: string;
-}>(), {
-  buttonClass: "",
-  allowEmpty: false,
-  emptyLabel: "未设置",
-});
+const props = withDefaults(
+	defineProps<{
+		modelValue: string;
+		buttonClass?: string;
+		apiType?: ModelApiType;
+		allowEmpty?: boolean;
+		emptyLabel?: string;
+	}>(),
+	{
+		buttonClass: "",
+		allowEmpty: false,
+		emptyLabel: "未设置",
+	},
+);
 
 const emit = defineEmits<{
-  "update:modelValue": [value: string];
+	"update:modelValue": [value: string];
 }>();
 
 const store = useModelConnectionStore();
 const parsed = computed(() => parseModelReference(props.modelValue));
-const providers = computed(() => store.providers.filter((provider) =>
-  provider.enabled
-  && (!props.apiType || !["image", "asr", "tts"].includes(props.apiType) || supportsFeatureService(provider))
-  && provider.models.some((model) => model.enabled && model.apiType === (props.apiType ?? "chat")),
-));
+const providers = computed(() =>
+	store.providers.filter(
+		(provider) =>
+			provider.enabled &&
+			(!props.apiType ||
+				!["image", "asr", "tts"].includes(props.apiType) ||
+				supportsFeatureService(provider)) &&
+			provider.models.some(
+				(model) => model.enabled && model.apiType === (props.apiType ?? "chat"),
+			),
+	),
+);
 const selectedProvider = computed(() =>
-  store.providers.find((provider) => provider.id === parsed.value.providerId),
+	store.providers.find((provider) => provider.id === parsed.value.providerId),
 );
 const selectedModel = computed(() =>
-  selectedProvider.value?.models.find((model) => model.id === parsed.value.modelId),
+	selectedProvider.value?.models.find(
+		(model) => model.id === parsed.value.modelId,
+	),
 );
-const selectedThinkingLabel = computed(() => thinkingLevelLabel(parsed.value.thinkingLevel));
-const hasSelection = computed(() => Boolean(parsed.value.providerId && parsed.value.modelId));
-const thinkingIndex = computed(() => Math.max(
-  0,
-  thinkingLevelOptions.findIndex((option) => option.value === parsed.value.thinkingLevel),
-));
+const selectedThinkingLabel = computed(() =>
+	thinkingLevelLabel(parsed.value.thinkingLevel),
+);
+const hasSelection = computed(() =>
+	Boolean(parsed.value.providerId && parsed.value.modelId),
+);
+const thinkingIndex = computed(() =>
+	Math.max(
+		0,
+		thinkingLevelOptions.findIndex(
+			(option) => option.value === parsed.value.thinkingLevel,
+		),
+	),
+);
 
 onMounted(() => void store.initialize());
 
 function modelsForProvider(providerId: string) {
-  return store.providers
-    .find((provider) => provider.id === providerId)
-    ?.models.filter((model) => model.enabled && model.apiType === (props.apiType ?? "chat")) ?? [];
+	return (
+		store.providers
+			.find((provider) => provider.id === providerId)
+			?.models.filter(
+				(model) => model.enabled && model.apiType === (props.apiType ?? "chat"),
+			) ?? []
+	);
 }
 
 function selectModel(providerId: string, modelId: string) {
-  emit("update:modelValue", createModelReference(providerId, modelId, parsed.value.thinkingLevel));
+	emit(
+		"update:modelValue",
+		createModelReference(providerId, modelId, parsed.value.thinkingLevel),
+	);
 }
 
 function clearModel() {
-  emit("update:modelValue", "");
+	emit("update:modelValue", "");
 }
 
 function updateThinking(values: number[] | undefined) {
-  if (!parsed.value.providerId || !parsed.value.modelId) return;
-  const level = thinkingLevelOptions[Math.round(values?.[0] ?? 0)]?.value as ThinkingLevel | undefined;
-  if (!level) return;
-  emit("update:modelValue", createModelReference(parsed.value.providerId, parsed.value.modelId, level));
+	if (!parsed.value.providerId || !parsed.value.modelId) return;
+	const level = thinkingLevelOptions[Math.round(values?.[0] ?? 0)]?.value as
+		| ThinkingLevel
+		| undefined;
+	if (!level) return;
+	emit(
+		"update:modelValue",
+		createModelReference(parsed.value.providerId, parsed.value.modelId, level),
+	);
 }
 </script>
 

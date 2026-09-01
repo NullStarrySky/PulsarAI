@@ -5,22 +5,22 @@ import { Input } from "@/components/ui/input";
 import { normalizeKeyboardEvent } from "./hotkey-store";
 
 defineProps<{
-  modelValue: string;
+	modelValue: string;
 }>();
 
 const emit = defineEmits<{
-  "update:modelValue": [value: string];
-  reset: [];
-  clear: [];
+	"update:modelValue": [value: string];
+	reset: [];
+	clear: [];
 }>();
 
 function record(event: KeyboardEvent) {
-  event.preventDefault();
-  event.stopPropagation();
-  const hotkey = normalizeKeyboardEvent(event);
-  if (hotkey) {
-    emit("update:modelValue", hotkey);
-  }
+	event.preventDefault();
+	event.stopPropagation();
+	const hotkey = normalizeKeyboardEvent(event);
+	if (hotkey) {
+		emit("update:modelValue", hotkey);
+	}
 }
 </script>
 

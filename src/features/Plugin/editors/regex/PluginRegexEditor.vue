@@ -1,24 +1,47 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-vue-next";
+import { computed } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import {
-  createPluginRegexRule,
-  parsePluginRegexRules,
-  type PluginRegexRule,
+	createPluginRegexRule,
+	type PluginRegexRule,
+	parsePluginRegexRules,
 } from "./plugin-regex";
 
 const props = defineProps<{ modelValue: string }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
-
 const rules = computed(() => parsePluginRegexRules(props.modelValue));
-function write(next: PluginRegexRule[]) { emit("update:modelValue", JSON.stringify(next, null, 2)); }
-function update(index: number, patch: Partial<PluginRegexRule>) { const next = structuredClone(rules.value); next[index] = { ...next[index]!, ...patch }; write(next); }
-function remove(index: number) { write(rules.value.filter((_, itemIndex) => itemIndex !== index)); }
-function move(index: number, delta: number) { const target = index + delta; if (target < 0 || target >= rules.value.length) return; const next = structuredClone(rules.value); [next[index], next[target]] = [next[target]!, next[index]!]; write(next); }
+
+function write(next: PluginRegexRule[]) {
+	emit("update:modelValue", JSON.stringify(next, null, 2));
+}
+
+function update(index: number, patch: Partial<PluginRegexRule>) {
+	const next = structuredClone(rules.value);
+	next[index] = { ...next[index]!, ...patch };
+	write(next);
+}
+
+function remove(index: number) {
+	write(rules.value.filter((_, itemIndex) => itemIndex !== index));
+}
+
+function move(index: number, delta: number) {
+	const target = index + delta;
+	if (target < 0 || target >= rules.value.length) return;
+	const next = structuredClone(rules.value);
+	[next[index], next[target]] = [next[target]!, next[index]!];
+	write(next);
+}
 </script>
 
 <template>

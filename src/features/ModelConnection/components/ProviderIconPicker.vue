@@ -1,30 +1,43 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { PaginatedGrid } from "@/components/ui/paginated-grid";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { providerIconIds, providerIconUrl, useProviderIconVariant } from "../services/provider-icons";
+import {
+	providerIconIds,
+	providerIconUrl,
+	useProviderIconVariant,
+} from "../services/provider-icons";
 
 const props = defineProps<{
-  modelValue?: string;
-  name?: string;
+	modelValue?: string;
+	name?: string;
 }>();
 
 const emit = defineEmits<{
-  "update:modelValue": [iconId: string];
+	"update:modelValue": [iconId: string];
 }>();
 
 const open = ref(false);
 const variant = useProviderIconVariant();
 const selectedIconId = computed(() => props.modelValue || "openai");
-const triggerIconUrl = computed(() => providerIconUrl(selectedIconId.value, undefined, variant.value));
+const triggerIconUrl = computed(() =>
+	providerIconUrl(selectedIconId.value, undefined, variant.value),
+);
 const iconEntries = computed(() =>
-  providerIconIds.map((id) => ({ id, url: providerIconUrl(id, undefined, variant.value) })),
+	providerIconIds.map((id) => ({
+		id,
+		url: providerIconUrl(id, undefined, variant.value),
+	})),
 );
 
 function selectIcon(iconId: string) {
-  emit("update:modelValue", iconId);
-  open.value = false;
+	emit("update:modelValue", iconId);
+	open.value = false;
 }
 </script>
 

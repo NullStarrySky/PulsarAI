@@ -12,17 +12,17 @@ import "@milkdown/kit/prose/view/style/prosemirror.css";
 import "notivue/notification.css";
 import "notivue/animations.css";
 import {
-  enableD2,
-  enableKatex,
-  enableMermaid,
-  setInfographicLoader,
+	enableD2,
+	enableKatex,
+	enableMermaid,
+	setInfographicLoader,
 } from "markstream-vue";
 
 enableMermaid();
 enableKatex();
 enableD2();
 setInfographicLoader(async () => {
-  return await import("@antv/infographic");
+	return await import("@antv/infographic");
 });
 
 const app = createApp(App);

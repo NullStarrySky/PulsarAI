@@ -19,7 +19,6 @@ Feature 不直接导入 Electron、Tauri 或 Tauri plugin。Host API 也不进�
 interface Host {
   target: "desktop-electron" | "mobile-tauri";
   database: HostDatabase;
-  plugins: HostPluginStorage;
   config: HostConfig;
   secrets: HostSecrets;
   dialog: HostDialog;
@@ -62,19 +61,6 @@ interface HostDatabase {
 ```
 
 数据库实现由平台 Host 负责。Feature repository 应继续封装表名和领域对象，不把裸 Host 查询散落到组件。
-
-## Plugin 存储
-
-```ts
-interface HostPluginStorage {
-  load<T>(): Promise<T[]>;
-  save<T>(plugin: T): Promise<void>;
-  remove(pluginId: string): Promise<void>;
-  search<T>(query: string, limit?: number): Promise<T[]>;
-}
-```
-
-Plugin 使用独立存储接口，以便原生端维护内容索引；Renderer 的事实模型仍是 `Plugin.files + emptyFolders`。
 
 ## 配置与 Secret
 

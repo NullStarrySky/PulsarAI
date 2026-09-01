@@ -1,6 +1,6 @@
 # Plugin 资源
 
-World 是当前 Agent 的文件、上下文和可调用能力来源。根 `/config.json` 管理共享插槽与禁用路径，本地资源位于 `/self/`，全局和内置挂载位于 `/global/<pluginId>/`。资源源码中的 `@/path` 始终指向其所属 Plugin 根，并会按来源挂载规范化。
+World 是当前 Agent 的文件、上下文和可调用能力来源。本地资源位于 `/self/`，共享来源位于 `/global/<source-folder>/`，插槽契约是 `/self/slot/` 下的空文件夹。资源源码中的 `@/path` 始终指向其所属来源根，并会按来源挂载规范化。
 
 ## 读取和导入
 
@@ -13,7 +13,7 @@ World 是当前 Agent 的文件、上下文和可调用能力来源。根 `/conf
 
 ## 文件操作
 
-`fs.readMeta`、`ls`、`exists`、`write`、`edit`、`mkdir`、`move`、`remove` 操作当前 World。写入 `/config.json` 或调用 `select(containerId, paths)` 修改共享契约与禁用路径；Plugin 挂载可以作为一个文件夹路径整体禁用。生成中的修改只在当前 Conversation 的消息路径上生效，并以整个 `codeAct` 为事务提交或回滚。
+`fs.readMeta`、`ls`、`exists`、`write`、`edit`、`mkdir`、`move`、`remove` 操作当前 World。插槽属性由 `/self/slot/` 下的契约文件夹维护，资源选择直接写入资源节点。生成中的修改只在当前 Conversation 的消息路径上生效，并以整个 `codeAct` 为事务提交或回滚。
 
 `open(path)`、`close(path)`、`toggle(path)` 打开、关闭或切换统一资产面板及资源编辑器。
 

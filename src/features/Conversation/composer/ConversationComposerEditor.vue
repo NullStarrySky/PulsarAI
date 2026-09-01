@@ -3,162 +3,177 @@ import { Crepe, CrepeFeature } from "@milkdown/crepe";
 import { replaceAll } from "@milkdown/kit/utils";
 import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/vue";
 import { computed, defineComponent, h, ref, watch } from "vue";
-import { conversationCrepeFeatureConfigs, conversationCrepeFeatures } from "@/features/Conversation/stage/milkdown/conversation-crepe";
+import {
+	conversationCrepeFeatureConfigs,
+	conversationCrepeFeatures,
+} from "@/features/Conversation/stage/milkdown/conversation-crepe";
 import { conversationMacroHighlightPlugin } from "@/features/Conversation/stage/milkdown/conversation-plugin-macro-highlight";
-import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
 import { normalizeMarkdownLineBreaks } from "@/features/Misc/markdown";
+import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
 
 const props = withDefaults(
-  defineProps<{
-    modelValue: string;
-    placeholder?: string;
-    enableBlockEdit?: boolean;
-    enableAi?: boolean;
-    enableTopBar?: boolean;
-    compact?: boolean;
-    inlineMessageEdit?: boolean;
-    submitOnEnter?: boolean;
-  }>(),
-  {
-    modelValue: "",
-    placeholder: "输入消息...",
-    enableBlockEdit: false,
-    enableAi: true,
-    enableTopBar: false,
-    compact: false,
-    inlineMessageEdit: false,
-    submitOnEnter: true,
-  },
+	defineProps<{
+		modelValue: string;
+		placeholder?: string;
+		enableBlockEdit?: boolean;
+		enableAi?: boolean;
+		enableTopBar?: boolean;
+		compact?: boolean;
+		inlineMessageEdit?: boolean;
+		submitOnEnter?: boolean;
+	}>(),
+	{
+		modelValue: "",
+		placeholder: "输入消息...",
+		enableBlockEdit: false,
+		enableAi: true,
+		enableTopBar: false,
+		compact: false,
+		inlineMessageEdit: false,
+		submitOnEnter: true,
+	},
 );
 
 const emit = defineEmits<{
-  "update:modelValue": [value: string];
-  rawInput: [value: string];
-  submit: [];
+	"update:modelValue": [value: string];
+	rawInput: [value: string];
+	submit: [];
 }>();
 const appearance = useAppearanceStore();
 
 function handleKeydown(event: KeyboardEvent) {
-  if (!props.submitOnEnter) return;
-  if (event.key !== "Enter" || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) {
-    return;
-  }
-  const shouldSubmit = appearance.composerSendWithEnter
-    ? !event.shiftKey
-    : event.shiftKey;
-  if (!shouldSubmit) return;
-  event.preventDefault();
-  event.stopPropagation();
-  const editor = (event.target as HTMLElement | null)?.closest?.(".ProseMirror");
-  if (!(editor?.textContent ?? props.modelValue).trim()) return;
-  emit("submit");
+	if (!props.submitOnEnter) return;
+	if (
+		event.key !== "Enter" ||
+		event.isComposing ||
+		event.ctrlKey ||
+		event.metaKey ||
+		event.altKey
+	) {
+		return;
+	}
+	const shouldSubmit = appearance.composerSendWithEnter
+		? !event.shiftKey
+		: event.shiftKey;
+	if (!shouldSubmit) return;
+	event.preventDefault();
+	event.stopPropagation();
+	const editor = (event.target as HTMLElement | null)?.closest?.(
+		".ProseMirror",
+	);
+	if (!(editor?.textContent ?? props.modelValue).trim()) return;
+	emit("submit");
 }
 
 function handleInput(event: Event) {
-  const editor = (event.target as HTMLElement | null)?.closest?.(".ProseMirror") as HTMLElement | null;
-  if (editor) emit("rawInput", editor.innerText);
+	const editor = (event.target as HTMLElement | null)?.closest?.(
+		".ProseMirror",
+	) as HTMLElement | null;
+	if (editor) emit("rawInput", editor.innerText);
 }
 
 const ComposerInner = defineComponent({
-  name: "ConversationComposerEditorInner",
-  props: {
-    modelValue: {
-      type: String,
-      default: "",
-    },
-    placeholder: {
-      type: String,
-      default: "输入消息...",
-    },
-    enableBlockEdit: {
-      type: Boolean,
-      default: false,
-    },
-    enableAi: {
-      type: Boolean,
-      default: true,
-    },
-    enableTopBar: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  emits: {
-    "update:modelValue": (_value: string) => true,
-  },
-  setup(innerProps, { emit: innerEmit }) {
-    const currentMarkdown = ref(normalizeMarkdownLineBreaks(innerProps.modelValue));
-    const editorFeatures = computed(() => ({
-      ...conversationCrepeFeatures,
-      [CrepeFeature.BlockEdit]: innerProps.enableBlockEdit,
-      [CrepeFeature.AI]: innerProps.enableAi,
-      [CrepeFeature.TopBar]: innerProps.enableTopBar,
-    }));
-    let applyingExternalValue = false;
-    let pendingExternalValue = false;
-    const { loading, get } = useEditor((root) => {
-      const editor = new Crepe({
-        root,
-        defaultValue: currentMarkdown.value,
-        features: editorFeatures.value,
-        featureConfigs: {
-          ...conversationCrepeFeatureConfigs,
-          [CrepeFeature.Placeholder]: {
-            text: innerProps.placeholder,
-            mode: "block",
-          },
-        },
-      });
-      editor.editor.use(conversationMacroHighlightPlugin);
-      editor.on((listener) => {
-        listener.markdownUpdated((_ctx, nextMarkdown, previousMarkdown) => {
-          if (applyingExternalValue || nextMarkdown === previousMarkdown) {
-            return;
-          }
-          const normalizedMarkdown = normalizeMarkdownLineBreaks(nextMarkdown);
-          currentMarkdown.value = normalizedMarkdown;
-          innerEmit("update:modelValue", normalizedMarkdown);
-        });
-      });
-      return editor;
-    });
+	name: "ConversationComposerEditorInner",
+	props: {
+		modelValue: {
+			type: String,
+			default: "",
+		},
+		placeholder: {
+			type: String,
+			default: "输入消息...",
+		},
+		enableBlockEdit: {
+			type: Boolean,
+			default: false,
+		},
+		enableAi: {
+			type: Boolean,
+			default: true,
+		},
+		enableTopBar: {
+			type: Boolean,
+			default: false,
+		},
+	},
+	emits: {
+		"update:modelValue": (_value: string) => true,
+	},
+	setup(innerProps, { emit: innerEmit }) {
+		const currentMarkdown = ref(
+			normalizeMarkdownLineBreaks(innerProps.modelValue),
+		);
+		const editorFeatures = computed(() => ({
+			...conversationCrepeFeatures,
+			[CrepeFeature.BlockEdit]: innerProps.enableBlockEdit,
+			[CrepeFeature.AI]: innerProps.enableAi,
+			[CrepeFeature.TopBar]: innerProps.enableTopBar,
+		}));
+		let applyingExternalValue = false;
+		let pendingExternalValue = false;
+		const { loading, get } = useEditor((root) => {
+			const editor = new Crepe({
+				root,
+				defaultValue: currentMarkdown.value,
+				features: editorFeatures.value,
+				featureConfigs: {
+					...conversationCrepeFeatureConfigs,
+					[CrepeFeature.Placeholder]: {
+						text: innerProps.placeholder,
+						mode: "block",
+					},
+				},
+			});
+			editor.editor.use(conversationMacroHighlightPlugin);
+			editor.on((listener) => {
+				listener.markdownUpdated((_ctx, nextMarkdown, previousMarkdown) => {
+					if (applyingExternalValue || nextMarkdown === previousMarkdown) {
+						return;
+					}
+					const normalizedMarkdown = normalizeMarkdownLineBreaks(nextMarkdown);
+					currentMarkdown.value = normalizedMarkdown;
+					innerEmit("update:modelValue", normalizedMarkdown);
+				});
+			});
+			return editor;
+		});
 
-    function replaceMarkdown(markdown: string) {
-      const normalizedMarkdown = normalizeMarkdownLineBreaks(markdown);
-      const editor = get();
-      if (!editor || loading.value) {
-        pendingExternalValue = true;
-        return;
-      }
-      applyingExternalValue = true;
-      try {
-        editor.action(replaceAll(normalizedMarkdown, true));
-      } finally {
-        applyingExternalValue = false;
-        pendingExternalValue = false;
-      }
-    }
+		function replaceMarkdown(markdown: string) {
+			const normalizedMarkdown = normalizeMarkdownLineBreaks(markdown);
+			const editor = get();
+			if (!editor || loading.value) {
+				pendingExternalValue = true;
+				return;
+			}
+			applyingExternalValue = true;
+			try {
+				editor.action(replaceAll(normalizedMarkdown, true));
+			} finally {
+				applyingExternalValue = false;
+				pendingExternalValue = false;
+			}
+		}
 
-    watch(
-      () => innerProps.modelValue,
-      (markdown) => {
-        const normalizedMarkdown = normalizeMarkdownLineBreaks(markdown);
-        if (normalizedMarkdown === currentMarkdown.value) {
-          return;
-        }
-        currentMarkdown.value = normalizedMarkdown;
-        replaceMarkdown(normalizedMarkdown);
-      },
-    );
+		watch(
+			() => innerProps.modelValue,
+			(markdown) => {
+				const normalizedMarkdown = normalizeMarkdownLineBreaks(markdown);
+				if (normalizedMarkdown === currentMarkdown.value) {
+					return;
+				}
+				currentMarkdown.value = normalizedMarkdown;
+				replaceMarkdown(normalizedMarkdown);
+			},
+		);
 
-    watch(loading, (isLoading) => {
-      if (!isLoading && pendingExternalValue) {
-        replaceMarkdown(currentMarkdown.value);
-      }
-    });
+		watch(loading, (isLoading) => {
+			if (!isLoading && pendingExternalValue) {
+				replaceMarkdown(currentMarkdown.value);
+			}
+		});
 
-    return () => h(Milkdown);
-  },
+		return () => h(Milkdown);
+	},
 });
 </script>
 

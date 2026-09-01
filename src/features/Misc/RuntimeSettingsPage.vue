@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
 import { push } from "notivue";
+import { computed, onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingItem from "@/features/Setting/components/SettingItem.vue";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
 import SettingSwitch from "@/features/Setting/components/SettingSwitch.vue";
-import { isAndroidPlatform } from "./platform";
 import {
-  getAndroidBatteryOptimizationStatus,
-  openAndroidBatteryOptimizationSettings,
-  requestAndroidBatteryOptimizationExemption,
-  type AndroidBatteryOptimizationStatus,
+	type AndroidBatteryOptimizationStatus,
+	getAndroidBatteryOptimizationStatus,
+	openAndroidBatteryOptimizationSettings,
+	requestAndroidBatteryOptimizationExemption,
 } from "./android-battery-optimization";
+import { isAndroidPlatform } from "./platform";
 import { ensureNotificationPermission } from "./reply-completion-notifier";
 import { useRuntimePreferenceStore } from "./runtime-preference-store";
 
@@ -22,29 +22,33 @@ const checkingBattery = ref(false);
 const android = computed(() => isAndroidPlatform());
 
 onMounted(() => {
-  void refreshBatteryStatus();
+	void refreshBatteryStatus();
 });
 
 async function refreshBatteryStatus() {
-  if (!android.value) {
-    return;
-  }
+	if (!android.value) {
+		return;
+	}
 
-  checkingBattery.value = true;
-  try {
-    batteryStatus.value = await getAndroidBatteryOptimizationStatus();
-  } finally {
-    checkingBattery.value = false;
-  }
+	checkingBattery.value = true;
+	try {
+		batteryStatus.value = await getAndroidBatteryOptimizationStatus();
+	} finally {
+		checkingBattery.value = false;
+	}
 }
 
 async function requestBatteryExemption() {
-  await requestAndroidBatteryOptimizationExemption();
-  await refreshBatteryStatus();
+	await requestAndroidBatteryOptimizationExemption();
+	await refreshBatteryStatus();
 }
 
 async function requestNotificationPermission() {
-  push.success((await ensureNotificationPermission()) ? "通知权限已可用" : "通知权限未授予");
+	push.success(
+		(await ensureNotificationPermission())
+			? "通知权限已可用"
+			: "通知权限未授予",
+	);
 }
 </script>
 

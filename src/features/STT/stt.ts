@@ -1,25 +1,17 @@
-import type { HydratableModel } from "@/features/ModelConnection/services/model-ai";
-
-export interface SpeechToTextServiceOptions {
-  model?: HydratableModel;
-  audio: string | Uint8Array | ArrayBuffer | URL;
-  language?: string;
-}
-
 export interface SystemSpeechRecognitionOptions {
-  language?: string;
-  maxDuration?: number;
-  onDevice?: boolean;
+	language?: string;
+	maxDuration?: number;
+	onDevice?: boolean;
 }
 
 export interface SystemSpeechRecognitionResult {
-  transcript: string;
-  isFinal: boolean;
-  confidence?: number;
+	transcript: string;
+	isFinal: boolean;
+	confidence?: number;
 }
 
 export interface SystemSpeechRecognitionError {
-  code: string;
-  message: string;
-  details?: string;
+	code: string;
+	message: string;
+	details?: string;
 }

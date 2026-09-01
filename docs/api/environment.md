@@ -107,7 +107,7 @@ close(path: string): UiTargetState
 toggle(path: string): UiTargetState
 ```
 
-文件路径操作资源编辑器；World 挂载路径使用 `/self/` 或 `/global/<pluginId>/`。返回值包含 `open`、`kind`、`pluginId`、`path`，文件目标另含 `resourceId`。
+文件路径操作资源编辑器；World 挂载路径使用 `/self/` 或 `/global/<source-folder>/`。返回值包含 `open`、`kind`、`sourceName`、`path`，文件目标另含 `resourceId`。
 
 ## 内置文档
 

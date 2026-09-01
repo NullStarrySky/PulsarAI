@@ -1,36 +1,43 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useDebounceFn } from "@vueuse/core";
-import { push } from "notivue";
 import { Clipboard, Plus, Search } from "lucide-vue-next";
+import { push } from "notivue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import SettingForm from "@/features/Setting/components/SettingForm.vue";
 import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
-import { generateText } from "../services/ai";
-import { fetchOpenAICompatibleModels } from "../services/openai-compatible-models";
-import { modelTypeLabels, useModelConnectionStore } from "../services/model-connection-store";
-import type { ModelApiType, ModelDefinition, ModelPricing } from "../model-provider";
+import { cn } from "@/lib/utils";
+import type {
+	ModelApiType,
+	ModelDefinition,
+	ModelPricing,
+} from "../model-provider";
 import type { ServiceProviderView } from "../service-provider";
+import { generateText } from "../services/ai";
+import {
+	modelTypeLabels,
+	useModelConnectionStore,
+} from "../services/model-connection-store";
+import { fetchOpenAICompatibleModels } from "../services/openai-compatible-models";
 import ProviderAvatar from "./ProviderAvatar.vue";
 import ProviderIconPicker from "./ProviderIconPicker.vue";
 import ServiceProviderSettingsLayout from "./ServiceProviderSettingsLayout.vue";
@@ -47,244 +54,282 @@ const checkingConnectivity = ref(false);
 const fetchingModels = ref(false);
 
 const providerForm = reactive({
-  id: "",
-  name: "",
-  description: "",
-  icon: "",
-  baseUrl: "",
-  apiKey: "",
+	id: "",
+	name: "",
+	description: "",
+	icon: "",
+	baseUrl: "",
+	apiKey: "",
 });
 
 const modelForm = reactive({
-  id: "",
-  name: "",
-  apiType: "chat" as ModelApiType,
-  contextSize: undefined as number | undefined,
-  iconUrl: "",
+	id: "",
+	name: "",
+	apiType: "chat" as ModelApiType,
+	contextSize: undefined as number | undefined,
+	iconUrl: "",
 });
 
 const activeProvider = computed(() => store.activeProvider);
-const activeProviderHasKey = computed(() => Boolean(store.apiKeyStatus[activeProvider.value.apiKeyName]));
-const providerViews = computed<ServiceProviderView[]>(() => store.providers.map((provider) => ({
-  ...provider,
-  source: "model",
-})));
-const providerChatModels = computed(() => activeProvider.value.models.filter((model) => model.enabled && model.apiType === "chat"));
+const activeProviderHasKey = computed(() =>
+	Boolean(store.apiKeyStatus[activeProvider.value.apiKeyName]),
+);
+const providerViews = computed<ServiceProviderView[]>(() =>
+	store.providers.map((provider) => ({
+		...provider,
+		source: "model",
+	})),
+);
+const providerChatModels = computed(() =>
+	activeProvider.value.models.filter(
+		(model) => model.enabled && model.apiType === "chat",
+	),
+);
 
 onMounted(async () => {
-  await store.initialize();
-  await store.refreshSecretStatus(activeProvider.value.id);
-  syncApiKeyDraft();
-  syncConnectivityModel();
+	await store.initialize();
+	await store.refreshSecretStatus(activeProvider.value.id);
+	syncApiKeyDraft();
+	syncConnectivityModel();
 });
 
-watch(() => activeProvider.value.id, async (providerId) => {
-  await store.refreshSecretStatus(providerId);
-  syncApiKeyDraft();
-  syncConnectivityModel();
-});
+watch(
+	() => activeProvider.value.id,
+	async (providerId) => {
+		await store.refreshSecretStatus(providerId);
+		syncApiKeyDraft();
+		syncConnectivityModel();
+	},
+);
 
 function tabLabel(tab: ModelApiType | "all") {
-  return tab === "all" ? "全部" : modelTypeLabels[tab];
+	return tab === "all" ? "全部" : modelTypeLabels[tab];
 }
 
 const capabilityLabels: Record<string, string> = {
-  audio: "音频",
-  files: "文件",
-  functionCall: "函数调用",
-  imageOutput: "图像输出",
-  reasoning: "推理",
-  search: "联网",
-  structuredOutput: "结构化输出",
-  video: "视频",
-  vision: "视觉",
+	audio: "音频",
+	files: "文件",
+	functionCall: "函数调用",
+	imageOutput: "图像输出",
+	reasoning: "推理",
+	search: "联网",
+	structuredOutput: "结构化输出",
+	video: "视频",
+	vision: "视觉",
 };
 
 const priceNames: Record<string, string> = {
-  textInput: "输入",
-  textOutput: "输出",
-  textInput_cacheRead: "缓存读",
-  textInput_cacheWrite: "缓存写",
-  audioInput: "音频输入",
-  audioOutput: "音频输出",
-  imageGeneration: "生成",
-  imageInput: "图像输入",
-  imageOutput: "图像输出",
-  videoGeneration: "生成",
-  videoInput: "视频输入",
+	textInput: "输入",
+	textOutput: "输出",
+	textInput_cacheRead: "缓存读",
+	textInput_cacheWrite: "缓存写",
+	audioInput: "音频输入",
+	audioOutput: "音频输出",
+	imageGeneration: "生成",
+	imageInput: "图像输入",
+	imageOutput: "图像输出",
+	videoGeneration: "生成",
+	videoInput: "视频输入",
 };
 
 const priceUnits: Record<string, string> = {
-  millionTokens: "100万 tokens",
-  millionCharacters: "100万字符",
-  image: "张",
-  video: "段",
-  megapixel: "MP",
-  second: "秒",
+	millionTokens: "100万 tokens",
+	millionCharacters: "100万字符",
+	image: "张",
+	video: "段",
+	megapixel: "MP",
+	second: "秒",
 };
 
 function modelCapabilities(model: ModelDefinition) {
-  return Object.entries(model.capabilities ?? {})
-    .filter(([, supported]) => supported)
-    .map(([name]) => capabilityLabels[name] ?? name);
+	return Object.entries(model.capabilities ?? {})
+		.filter(([, supported]) => supported)
+		.map(([name]) => capabilityLabels[name] ?? name);
 }
 
 function formatRate(rate: number, currency: ModelPricing["currency"]) {
-  const amount = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 4 }).format(rate);
-  return currency === "CNY" ? `¥${amount}` : `$${amount}`;
+	const amount = new Intl.NumberFormat("zh-CN", {
+		maximumFractionDigits: 4,
+	}).format(rate);
+	return currency === "CNY" ? `¥${amount}` : `$${amount}`;
 }
 
 function priceSummary(pricing: ModelPricing | undefined) {
-  if (!pricing?.units.length) return "";
-  return pricing.units.slice(0, 3).map((item) => {
-    const rate = item.strategy === "fixed"
-      ? item.rate
-      : item.strategy === "tiered"
-        ? item.tiers[0]?.rate
-        : undefined;
-    if (rate === undefined) return `${priceNames[item.name] ?? item.name} 按规格计费`;
-    const prefix = item.strategy === "tiered" ? "起" : "";
-    return `${priceNames[item.name] ?? item.name} ${formatRate(rate, pricing.currency)}${prefix}/${priceUnits[item.unit] ?? item.unit}`;
-  }).join(" · ");
+	if (!pricing?.units.length) return "";
+	return pricing.units
+		.slice(0, 3)
+		.map((item) => {
+			const rate =
+				item.strategy === "fixed"
+					? item.rate
+					: item.strategy === "tiered"
+						? item.tiers[0]?.rate
+						: undefined;
+			if (rate === undefined)
+				return `${priceNames[item.name] ?? item.name} 按规格计费`;
+			const prefix = item.strategy === "tiered" ? "起" : "";
+			return `${priceNames[item.name] ?? item.name} ${formatRate(rate, pricing.currency)}${prefix}/${priceUnits[item.unit] ?? item.unit}`;
+		})
+		.join(" · ");
 }
 
 function resetProviderForm() {
-  providerForm.id = "";
-  providerForm.name = "";
-  providerForm.description = "";
-  providerForm.icon = "";
-  providerForm.baseUrl = "";
-  providerForm.apiKey = "";
+	providerForm.id = "";
+	providerForm.name = "";
+	providerForm.description = "";
+	providerForm.icon = "";
+	providerForm.baseUrl = "";
+	providerForm.apiKey = "";
 }
 
 function resetModelForm() {
-  modelForm.id = "";
-  modelForm.name = "";
-  modelForm.apiType = "chat";
-  modelForm.contextSize = undefined;
-  modelForm.iconUrl = "";
+	modelForm.id = "";
+	modelForm.name = "";
+	modelForm.apiType = "chat";
+	modelForm.contextSize = undefined;
+	modelForm.iconUrl = "";
 }
 
 function syncApiKeyDraft() {
-  apiKeyDraft.value = store.apiKeyPreviews[activeProvider.value.apiKeyName] ?? "";
+	apiKeyDraft.value =
+		store.apiKeyPreviews[activeProvider.value.apiKeyName] ?? "";
 }
 
 function syncConnectivityModel() {
-  if (!providerChatModels.value.some((model) => model.id === connectivityModelId.value)) {
-    connectivityModelId.value = providerChatModels.value[0]?.id ?? "";
-  }
+	if (
+		!providerChatModels.value.some(
+			(model) => model.id === connectivityModelId.value,
+		)
+	) {
+		connectivityModelId.value = providerChatModels.value[0]?.id ?? "";
+	}
 }
 
-const saveApiKeyDebounced = useDebounceFn(async (providerId: string, value: string, preview: string) => {
-  if (value === preview) return;
+const saveApiKeyDebounced = useDebounceFn(
+	async (providerId: string, value: string, preview: string) => {
+		if (value === preview) return;
 
-  try {
-    if (value.trim()) {
-      await store.saveProviderApiKey(providerId, value.trim());
-      push.success("API Key 已保存");
-    } else {
-      await store.clearProviderApiKeyValue(providerId);
-      push.success("API Key 已清除");
-    }
-    if (activeProvider.value.id === providerId && apiKeyDraft.value === value) syncApiKeyDraft();
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "API Key 保存失败");
-  }
-}, 600);
+		try {
+			if (value.trim()) {
+				await store.saveProviderApiKey(providerId, value.trim());
+				push.success("API Key 已保存");
+			} else {
+				await store.clearProviderApiKeyValue(providerId);
+				push.success("API Key 已清除");
+			}
+			if (activeProvider.value.id === providerId && apiKeyDraft.value === value)
+				syncApiKeyDraft();
+		} catch (error) {
+			push.error(error instanceof Error ? error.message : "API Key 保存失败");
+		}
+	},
+	600,
+);
 
 function updateApiKey(value: string) {
-  const provider = activeProvider.value;
-  apiKeyDraft.value = value;
-  connectivityResponse.value = "";
-  connectivityFailed.value = false;
-  void saveApiKeyDebounced(provider.id, value, store.apiKeyPreviews[provider.apiKeyName] ?? "");
+	const provider = activeProvider.value;
+	apiKeyDraft.value = value;
+	connectivityResponse.value = "";
+	connectivityFailed.value = false;
+	void saveApiKeyDebounced(
+		provider.id,
+		value,
+		store.apiKeyPreviews[provider.apiKeyName] ?? "",
+	);
 }
 
 function selectApiKey(event: FocusEvent) {
-  (event.target as HTMLInputElement | null)?.select();
+	(event.target as HTMLInputElement | null)?.select();
 }
 
 async function addProvider() {
-  try {
-    await store.addProvider({ ...providerForm });
-    resetProviderForm();
-    providerDialogOpen.value = false;
-    push.success("服务商已添加");
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "服务商添加失败");
-  }
+	try {
+		await store.addProvider({ ...providerForm });
+		resetProviderForm();
+		providerDialogOpen.value = false;
+		push.success("服务商已添加");
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "服务商添加失败");
+	}
 }
 
 async function addModel() {
-  try {
-    await store.addModel(activeProvider.value.id, {
-      ...modelForm,
-      contextSize: modelForm.contextSize ? Number(modelForm.contextSize) : undefined,
-      iconUrl: modelForm.iconUrl.trim() || undefined,
-    });
-    resetModelForm();
-    modelDialogOpen.value = false;
-    push.success("模型已添加");
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "模型添加失败");
-  }
+	try {
+		await store.addModel(activeProvider.value.id, {
+			...modelForm,
+			contextSize: modelForm.contextSize
+				? Number(modelForm.contextSize)
+				: undefined,
+			iconUrl: modelForm.iconUrl.trim() || undefined,
+		});
+		resetModelForm();
+		modelDialogOpen.value = false;
+		push.success("模型已添加");
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "模型添加失败");
+	}
 }
 
 async function activateProvider(providerId: string) {
-  store.activateProvider(providerId);
-  await store.refreshSecretStatus(providerId);
+	store.activateProvider(providerId);
+	await store.refreshSecretStatus(providerId);
 }
 
 async function toggleProviderEnabled(providerId: string, enabled: boolean) {
-  await store.patchProvider(providerId, { enabled });
+	await store.patchProvider(providerId, { enabled });
 }
 
 async function checkConnectivity() {
-  if (!connectivityModelId.value) {
-    push.warning("请先选择一个对话模型。");
-    return;
-  }
+	if (!connectivityModelId.value) {
+		push.warning("请先选择一个对话模型。");
+		return;
+	}
 
-  checkingConnectivity.value = true;
-  connectivityFailed.value = false;
-  connectivityResponse.value = "";
-  try {
-    const result = await generateText({
-      model: `${activeProvider.value.id}/${connectivityModelId.value}`,
-      prompt: connectivityPrompt.value.trim() || "请用一句话回复：连接正常。",
-    });
-    connectivityResponse.value = result.text.trim();
-    push.success(connectivityResponse.value ? "连接可用。" : "请求完成，但模型没有返回内容。");
-  } catch (error) {
-    connectivityFailed.value = true;
-    connectivityResponse.value = error instanceof Error ? error.message : "连接检查失败";
-    push.error("连接检查失败");
-  } finally {
-    checkingConnectivity.value = false;
-  }
+	checkingConnectivity.value = true;
+	connectivityFailed.value = false;
+	connectivityResponse.value = "";
+	try {
+		const result = await generateText({
+			model: `${activeProvider.value.id}/${connectivityModelId.value}`,
+			prompt: connectivityPrompt.value.trim() || "请用一句话回复：连接正常。",
+		});
+		connectivityResponse.value = result.text.trim();
+		push.success(
+			connectivityResponse.value
+				? "连接可用。"
+				: "请求完成，但模型没有返回内容。",
+		);
+	} catch (error) {
+		connectivityFailed.value = true;
+		connectivityResponse.value =
+			error instanceof Error ? error.message : "连接检查失败";
+		push.error("连接检查失败");
+	} finally {
+		checkingConnectivity.value = false;
+	}
 }
 
 async function copyText(value: string) {
-  if (!value) {
-    return;
-  }
+	if (!value) {
+		return;
+	}
 
-  await navigator.clipboard.writeText(value);
-  push.success("已复制");
+	await navigator.clipboard.writeText(value);
+	push.success("已复制");
 }
 
 async function fetchModelList() {
-  fetchingModels.value = true;
-  try {
-    const models = await fetchOpenAICompatibleModels(activeProvider.value);
-    const added = await store.upsertModels(activeProvider.value.id, models);
-    syncConnectivityModel();
-    push.success(added > 0 ? `已添加 ${added} 个模型。` : "模型列表已是最新。");
-  } catch (error) {
-    push.error(error instanceof Error ? error.message : "获取模型列表失败");
-  } finally {
-    fetchingModels.value = false;
-  }
+	fetchingModels.value = true;
+	try {
+		const models = await fetchOpenAICompatibleModels(activeProvider.value);
+		const added = await store.upsertModels(activeProvider.value.id, models);
+		syncConnectivityModel();
+		push.success(added > 0 ? `已添加 ${added} 个模型。` : "模型列表已是最新。");
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "获取模型列表失败");
+	} finally {
+		fetchingModels.value = false;
+	}
 }
 </script>
 

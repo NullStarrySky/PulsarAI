@@ -2,22 +2,22 @@
 import { Maximize2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+	Dialog,
+	DialogContent,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+	DialogTrigger,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
 defineProps<{
-  modelValue: string;
-  placeholder?: string;
+	modelValue: string;
+	placeholder?: string;
 }>();
 
 const emit = defineEmits<{
-  "update:modelValue": [value: string];
+	"update:modelValue": [value: string];
 }>();
 </script>
 

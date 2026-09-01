@@ -1,40 +1,92 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
 import { Grid2X2, List, Plus, Search } from "lucide-vue-next";
+import { computed, ref, watch } from "vue";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { usePackageStore } from "./package-store";
 import type { CharacterPackage } from "./package-types";
 
 const props = defineProps<{ packageId: string; buttonClass?: string }>();
-const emit = defineEmits<{ select: [packageId: string]; "open-change": [open: boolean] }>();
+const emit = defineEmits<{
+	select: [packageId: string];
+	"open-change": [open: boolean];
+}>();
 const packages = usePackageStore();
 const open = ref(false);
 const search = ref("");
 const renaming = ref(false);
 const nameDraft = ref("");
 const view = ref<"list" | "card">("list");
-const selected = computed(() => packages.packages.find((item) => item.id === props.packageId) ?? null);
+const selected = computed(
+	() => packages.packages.find((item) => item.id === props.packageId) ?? null,
+);
 const visiblePackages = computed(() => {
-  const keyword = search.value.trim().toLocaleLowerCase();
-  return packages.sortedPackages.filter((item) => !keyword || item.name.toLocaleLowerCase().includes(keyword) || item.description?.toLocaleLowerCase().includes(keyword));
+	const keyword = search.value.trim().toLocaleLowerCase();
+	return packages.sortedPackages.filter(
+		(item) =>
+			!keyword ||
+			item.name.toLocaleLowerCase().includes(keyword) ||
+			item.description?.toLocaleLowerCase().includes(keyword),
+	);
 });
 
-watch([open, renaming], () => emit("open-change", open.value || renaming.value));
+watch([open, renaming], () =>
+	emit("open-change", open.value || renaming.value),
+);
 function color(item?: CharacterPackage | null) {
-  const source = item?.id ?? "pulsar";
-  const hue = [...source].reduce((hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0, 0);
-  return { background: `linear-gradient(135deg, hsl(${Math.abs(hue) % 360} 45% 38%), hsl(${(Math.abs(hue) + 52) % 360} 60% 58%))` };
+	const source = item?.id ?? "pulsar";
+	const hue = [...source].reduce(
+		(hash, char) => ((hash << 5) - hash + char.charCodeAt(0)) | 0,
+		0,
+	);
+	return {
+		background: `linear-gradient(135deg, hsl(${Math.abs(hue) % 360} 45% 38%), hsl(${(Math.abs(hue) + 52) % 360} 60% 58%))`,
+	};
 }
-async function create() { const item = await packages.create(); open.value = false; emit("select", item.id); }
-function select(item: CharacterPackage) { open.value = false; emit("select", item.id); }
-async function togglePin() { if (selected.value) await packages.update(selected.value.id, { pinned: !selected.value.pinned }); }
-function rename() { if (!selected.value) return; nameDraft.value = selected.value.name; renaming.value = true; }
-async function confirmRename() { const name = nameDraft.value.trim(); const item = selected.value; renaming.value = false; if (item && name && name !== item.name) await packages.update(item.id, { name }); }
-async function removeSelected() { if (!selected.value || !window.confirm(`删除角色包“${selected.value.name}”？`)) return; await packages.remove(selected.value.id); const next = packages.sortedPackages[0] ?? await packages.create(); emit("select", next.id); }
+async function create() {
+	const item = await packages.create();
+	open.value = false;
+	emit("select", item.id);
+}
+function select(item: CharacterPackage) {
+	open.value = false;
+	emit("select", item.id);
+}
+async function togglePin() {
+	if (selected.value)
+		await packages.update(selected.value.id, {
+			pinned: !selected.value.pinned,
+		});
+}
+function rename() {
+	if (!selected.value) return;
+	nameDraft.value = selected.value.name;
+	renaming.value = true;
+}
+async function confirmRename() {
+	const name = nameDraft.value.trim();
+	const item = selected.value;
+	renaming.value = false;
+	if (item && name && name !== item.name)
+		await packages.update(item.id, { name });
+}
+async function removeSelected() {
+	if (
+		!selected.value ||
+		!window.confirm(`删除角色包“${selected.value.name}”？`)
+	)
+		return;
+	await packages.remove(selected.value.id);
+	const next = packages.sortedPackages[0] ?? (await packages.create());
+	emit("select", next.id);
+}
 
 defineExpose({ rename, removeSelected, togglePin });
 </script>

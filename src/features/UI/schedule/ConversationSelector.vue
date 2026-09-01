@@ -3,7 +3,11 @@ import { Check, ChevronsUpDown, Search } from "lucide-vue-next";
 import { computed, onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 
 const props = defineProps<{ modelValue: string }>();
@@ -13,15 +17,17 @@ const query = ref("");
 const open = ref(false);
 
 onMounted(() => {
-  void conversation.initialize();
+	void conversation.initialize();
 });
 
-const selected = computed(() => conversation.conversations.find((item) => item.id === props.modelValue));
+const selected = computed(() =>
+	conversation.conversations.find((item) => item.id === props.modelValue),
+);
 const conversations = computed(() => {
-  const keyword = query.value.trim().toLowerCase();
-  return conversation.conversations
-    .filter((item) => !keyword || item.title.toLowerCase().includes(keyword))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+	const keyword = query.value.trim().toLowerCase();
+	return conversation.conversations
+		.filter((item) => !keyword || item.title.toLowerCase().includes(keyword))
+		.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 });
 </script>
 

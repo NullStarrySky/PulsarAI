@@ -94,7 +94,7 @@ interface Plugin {
 资源区分源码与 World 路径：
 
 - `@/path`：仅在源码内表示当前源码所属 Plugin。
-- `/self/path` 与 `/global/<plugin-id>/path`：World 绝对路径；根 `/config.json` 是共享契约与采用策略。
+- `/self/path` 与 `/global/<source-folder>/path`：World 绝对路径；插槽契约由 `/self/slot/<name>/` 空文件夹表达。
 
 `read` 和 `import` 在返回文本前，会把其中的 `@/` 固定为文件所属 World 挂载的绝对路径。于是两个不同 Plugin 的文档即使都写了 `imports("@/detail.md")`，被同一插槽收集后仍各自指向正确资源。
 
@@ -116,7 +116,7 @@ interface PluginSlot {
 }
 ```
 
-全局插槽只由根 `/config.json` 预定义，且与 Plugin `slots.json` 的本地插槽保持同构。插槽没有父子关系；文件通过 `insertion.slot` 直接导出，并可附带同步 JavaScript 条件与独立排序值。运行时排除 `/config.json.disabled` 命中的文件或 Plugin 挂载，再按 `order`、Plugin ID、资源 ID 得到稳定顺序；`single` 只取得首个启用资源。
+插槽由 `/self/slot/` 下的空文件夹定义，没有父子关系。文件通过自己的绝对 `slot` 路径贡献给契约，并可附带同步 JavaScript 条件与独立排序值。运行时按 `resourceSelected`、`priority` 和稳定资源 ID 得到顺序；`single` 只取得首个已选资源。
 
 插槽 API 返回的是显式资源路径，而不是提前展开后的内容：
 

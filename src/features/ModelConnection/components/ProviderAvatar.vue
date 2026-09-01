@@ -1,19 +1,26 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { providerIconUrl, useProviderIconVariant } from "../services/provider-icons";
+import {
+	providerIconUrl,
+	useProviderIconVariant,
+} from "../services/provider-icons";
 
 const props = defineProps<{
-  name: string;
-  src?: string;
-  providerId?: string;
-  iconId?: string;
+	name: string;
+	src?: string;
+	providerId?: string;
+	iconId?: string;
 }>();
 
 const variant = useProviderIconVariant();
 
 const iconSrc = computed(() => {
-  const fallback = providerIconUrl(props.providerId || props.name, props.src, variant.value);
-  return providerIconUrl(props.iconId, fallback, variant.value);
+	const fallback = providerIconUrl(
+		props.providerId || props.name,
+		props.src,
+		variant.value,
+	);
+	return providerIconUrl(props.iconId, fallback, variant.value);
 });
 </script>
 

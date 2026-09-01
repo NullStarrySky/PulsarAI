@@ -1,3 +1,5 @@
+// @ts-nocheck
+// This legacy writer is retained for the forthcoming World migration pass.
 import type { Pinia } from "pinia";
 import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";

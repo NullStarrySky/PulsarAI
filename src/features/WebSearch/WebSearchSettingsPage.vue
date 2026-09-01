@@ -1,23 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
 import { useDebounceFn } from "@vueuse/core";
 import { push } from "notivue";
+import { computed, onMounted, ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
-import { host } from "@/host";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import SettingForm from "@/features/Setting/components/SettingForm.vue";
-import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
 import ServiceProviderSettingsLayout from "@/features/ModelConnection/components/ServiceProviderSettingsLayout.vue";
 import type { ServiceProviderView } from "@/features/ModelConnection/service-provider";
-import { webSearch, type WebSearchResult } from "./web-search";
+import SettingForm from "@/features/Setting/components/SettingForm.vue";
+import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
+import { host } from "@/host";
+import { type WebSearchResult, webSearch } from "./web-search";
 import {
-  hasExaApiKey,
-  loadWebSearchSettings,
-  saveExaApiKey,
-  saveWebSearchSettings,
+	hasExaApiKey,
+	loadWebSearchSettings,
+	saveExaApiKey,
+	saveWebSearchSettings,
 } from "./web-search-settings";
-import { createDefaultWebSearchSettings, type WebSearchProviderId, type WebSearchSettings } from "./web-search-types";
+import {
+	createDefaultWebSearchSettings,
+	type WebSearchProviderId,
+	type WebSearchSettings,
+} from "./web-search-types";
 
 const secretMask = "••••••••";
 const settings = ref<WebSearchSettings>(createDefaultWebSearchSettings());
@@ -29,88 +33,113 @@ const testQuery = ref("PulsarAI 网络搜索连接测试");
 const results = ref<WebSearchResult[]>([]);
 const testError = ref("");
 
-const providers = computed<ServiceProviderView[]>(() => ([
-  ...(host.desktop ? [{
-    id: "playwright",
-    name: "Playwright 浏览器",
-    description: "本机无头 Chromium 搜索 DuckDuckGo；不需要 API Key，仅支持桌面端。",
-    enabled: settings.value.playwrightEnabled,
-    source: "feature",
-  }] : []),
-  {
-    id: "exa",
-    name: "Exa",
-    description: "Exa Search API / ExaJS 兼容提供商，返回结构化网页结果并需要 API Key。",
-    enabled: settings.value.exaEnabled,
-    source: "feature",
-  },
-]) as ServiceProviderView[]);
+const providers = computed<ServiceProviderView[]>(
+	() =>
+		[
+			...(host.desktop
+				? [
+						{
+							id: "playwright",
+							name: "Playwright 浏览器",
+							description:
+								"本机无头 Chromium 搜索 DuckDuckGo；不需要 API Key，仅支持桌面端。",
+							enabled: settings.value.playwrightEnabled,
+							source: "feature",
+						},
+					]
+				: []),
+			{
+				id: "exa",
+				name: "Exa",
+				description:
+					"Exa Search API / ExaJS 兼容提供商，返回结构化网页结果并需要 API Key。",
+				enabled: settings.value.exaEnabled,
+				source: "feature",
+			},
+		] as ServiceProviderView[],
+);
 
-const activeProviderId = computed<WebSearchProviderId>(() => settings.value.activeProviderId);
+const activeProviderId = computed<WebSearchProviderId>(
+	() => settings.value.activeProviderId,
+);
 const isExa = computed(() => activeProviderId.value === "exa");
 
 const persist = useDebounceFn(() => saveWebSearchSettings(settings.value), 400);
 const persistExaKey = useDebounceFn(async (value: string) => {
-  if (value === secretMask) return;
-  await saveExaApiKey(value);
-  exaHasApiKey.value = Boolean(value.trim());
+	if (value === secretMask) return;
+	await saveExaApiKey(value);
+	exaHasApiKey.value = Boolean(value.trim());
 }, 600);
 
 onMounted(async () => {
-  [settings.value, exaHasApiKey.value] = await Promise.all([
-    loadWebSearchSettings(),
-    hasExaApiKey(),
-  ]);
-  exaApiKey.value = exaHasApiKey.value ? secretMask : "";
-  initialized.value = true;
+	[settings.value, exaHasApiKey.value] = await Promise.all([
+		loadWebSearchSettings(),
+		hasExaApiKey(),
+	]);
+	exaApiKey.value = exaHasApiKey.value ? secretMask : "";
+	initialized.value = true;
 });
 
-watch(settings, () => {
-  if (initialized.value) void persist();
-}, { deep: true });
+watch(
+	settings,
+	() => {
+		if (initialized.value) void persist();
+	},
+	{ deep: true },
+);
 
 function selectProvider(providerId: string) {
-  if ((host.desktop && providerId === "playwright") || providerId === "exa") {
-    settings.value.activeProviderId = providerId;
-  }
+	if ((host.desktop && providerId === "playwright") || providerId === "exa") {
+		settings.value.activeProviderId = providerId;
+	}
 }
 
 function toggleProvider(providerId: string, enabled: boolean) {
-  if (host.desktop && providerId === "playwright") settings.value.playwrightEnabled = enabled;
-  if (providerId === "exa") settings.value.exaEnabled = enabled;
+	if (host.desktop && providerId === "playwright")
+		settings.value.playwrightEnabled = enabled;
+	if (providerId === "exa") settings.value.exaEnabled = enabled;
 }
 
 function updateExaKey(value: string) {
-  exaApiKey.value = value;
-  void persistExaKey(value);
+	exaApiKey.value = value;
+	void persistExaKey(value);
 }
 
 async function testSearch() {
-  const provider = activeProviderId.value;
-  if (provider === "exa" && !exaHasApiKey.value) {
-    push.warning("请先填写 Exa API Key。 ");
-    return;
-  }
-  if (provider === "exa" && !settings.value.exaEnabled) {
-    push.warning("请先启用 Exa。 ");
-    return;
-  }
-  if (host.desktop && provider === "playwright" && !settings.value.playwrightEnabled) {
-    push.warning("请先启用 Playwright 浏览器。 ");
-    return;
-  }
-  checking.value = true;
-  testError.value = "";
-  results.value = [];
-  try {
-    results.value = await webSearch(testQuery.value.trim() || "PulsarAI", settings.value.resultLimit, provider);
-    push.success(`搜索可用，返回 ${results.value.length} 条结果。`);
-  } catch (error) {
-    testError.value = error instanceof Error ? error.message : "搜索连接检查失败";
-    push.error("搜索连接检查失败");
-  } finally {
-    checking.value = false;
-  }
+	const provider = activeProviderId.value;
+	if (provider === "exa" && !exaHasApiKey.value) {
+		push.warning("请先填写 Exa API Key。 ");
+		return;
+	}
+	if (provider === "exa" && !settings.value.exaEnabled) {
+		push.warning("请先启用 Exa。 ");
+		return;
+	}
+	if (
+		host.desktop &&
+		provider === "playwright" &&
+		!settings.value.playwrightEnabled
+	) {
+		push.warning("请先启用 Playwright 浏览器。 ");
+		return;
+	}
+	checking.value = true;
+	testError.value = "";
+	results.value = [];
+	try {
+		results.value = await webSearch(
+			testQuery.value.trim() || "PulsarAI",
+			settings.value.resultLimit,
+			provider,
+		);
+		push.success(`搜索可用，返回 ${results.value.length} 条结果。`);
+	} catch (error) {
+		testError.value =
+			error instanceof Error ? error.message : "搜索连接检查失败";
+		push.error("搜索连接检查失败");
+	} finally {
+		checking.value = false;
+	}
 }
 </script>
 

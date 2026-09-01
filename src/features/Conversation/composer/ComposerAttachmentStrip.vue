@@ -1,16 +1,32 @@
 <script setup lang="ts">
 import { FileText, X } from "lucide-vue-next";
 import { push } from "notivue";
-import { Attachment, AttachmentAction, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentGroup, AttachmentMedia, AttachmentTitle, AttachmentTrigger } from "@/components/ui/attachment";
-import { attachmentPreviewUrl, formatAttachmentSize, openMessageAttachment } from "@/features/Conversation/messages/message-attachment";
+import {
+	AttachmentAction,
+	AttachmentActions,
+	AttachmentContent,
+	AttachmentDescription,
+	AttachmentGroup,
+	AttachmentMedia,
+	AttachmentTitle,
+	AttachmentTrigger,
+} from "@/components/ui/attachment";
 import type { FilePart } from "@/features/Conversation/messages/conversation-types";
+import {
+	attachmentPreviewUrl,
+	formatAttachmentSize,
+	openMessageAttachment,
+} from "@/features/Conversation/messages/message-attachment";
 
 const props = defineProps<{ attachments: FilePart[] }>();
 const emit = defineEmits<{ remove: [index: number] }>();
 
 async function openAttachment(attachment: FilePart) {
-  try { await openMessageAttachment(attachment); }
-  catch (error) { push.error(error instanceof Error ? error.message : "无法打开附件"); }
+	try {
+		await openMessageAttachment(attachment);
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "无法打开附件");
+	}
 }
 </script>
 

@@ -1,36 +1,36 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
 import {
-  ArrowUpRight,
-  Bot,
-  CircleAlert,
-  Settings2,
-  Star,
-  UserRound,
+	ArrowUpRight,
+	Bot,
+	CircleAlert,
+	Settings2,
+	Star,
+	UserRound,
 } from "lucide-vue-next";
+import { computed, onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
+	Empty,
+	EmptyDescription,
+	EmptyHeader,
+	EmptyMedia,
+	EmptyTitle,
 } from "@/components/ui/empty";
+import type {
+	ChatMessage,
+	ChatMessageContainer,
+	Conversation,
+} from "@/features/Conversation/messages/conversation-types";
+import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
 import { useLayoutStore } from "@/features/UI/layout-store";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
-import type {
-  ChatMessage,
-  ChatMessageContainer,
-  Conversation,
-} from "@/features/Conversation/messages/conversation-types";
 
 interface FavoriteMessageEntry {
-  conversation: Conversation;
-  container: ChatMessageContainer;
-  message: ChatMessage;
-  messageIndex: number;
-  containerOrder: number;
+	conversation: Conversation;
+	container: ChatMessageContainer;
+	message: ChatMessage;
+	messageIndex: number;
+	containerOrder: number;
 }
 
 const conversation = useConversationStore();
@@ -38,70 +38,71 @@ const layout = useLayoutStore();
 const navigatingId = ref("");
 
 const favorites = computed<FavoriteMessageEntry[]>(() => {
-  const conversationsById = new Map(
-    conversation.conversations.map((item) => [item.id, item]),
-  );
-  return conversation.containers
-    .flatMap((container, containerOrder) => {
-      const owner = conversationsById.get(container.conversationid);
-      if (!owner) {
-        return [];
-      }
-      return container.content.map((message, messageIndex) => ({
-        conversation: owner,
-        container,
-        message,
-        messageIndex,
-        containerOrder,
-      }));
-    })
-    .filter(({ message }) => Boolean(message.favorite))
-    .sort((left, right) =>
-      left.containerOrder - right.containerOrder
-      || left.messageIndex - right.messageIndex,
-    );
+	const conversationsById = new Map(
+		conversation.conversations.map((item) => [item.id, item]),
+	);
+	return conversation.containers
+		.flatMap((container, containerOrder) => {
+			const owner = conversationsById.get(container.conversationid);
+			if (!owner) {
+				return [];
+			}
+			return container.content.map((message, messageIndex) => ({
+				conversation: owner,
+				container,
+				message,
+				messageIndex,
+				containerOrder,
+			}));
+		})
+		.filter(({ message }) => Boolean(message.favorite))
+		.sort(
+			(left, right) =>
+				left.containerOrder - right.containerOrder ||
+				left.messageIndex - right.messageIndex,
+		);
 });
 
 onMounted(() => conversation.initialize());
 
 function roleLabel(container: ChatMessageContainer) {
-  if (container.role === "user") return "用户";
-  if (container.role === "system") return "系统";
-  return "助手";
+	if (container.role === "user") return "用户";
+	if (container.role === "system") return "系统";
+	return "助手";
 }
 
 function contentPreview(content: string) {
-  const normalized = content
-    .replace(/```[\s\S]*?```/g, " [代码] ")
-    .replace(/[#>*_`~[\]()]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return normalized || "空消息";
+	const normalized = content
+		.replace(/```[\s\S]*?```/g, " [代码] ")
+		.replace(/[#>*_`~[\]()]/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+	return normalized || "空消息";
 }
 
 async function openFavorite(entry: FavoriteMessageEntry) {
-  if (navigatingId.value) {
-    return;
-  }
+	if (navigatingId.value) {
+		return;
+	}
 
-  navigatingId.value = entry.message.id;
-  try {
-    const selected = await conversation.activateMessage(
-      entry.container.id,
-      entry.message.id,
-    );
-    if (!selected) {
-      return;
-    }
+	navigatingId.value = entry.message.id;
+	try {
+		const selected = await conversation.activateMessage(
+			entry.container.id,
+			entry.message.id,
+		);
+		if (!selected) {
+			return;
+		}
 
-    layout.closeSettings();
-    conversation.requestMessageNavigation(
-      entry.conversation.id,
-      entry.container.id,
-    );
-  } finally {
-    navigatingId.value = "";
-  }
+		layout.closeSettings();
+		conversation.requestMessageNavigation(
+			entry.conversation.id,
+			entry.container.id,
+		);
+	} finally {
+		navigatingId.value = "";
+	}
 }
 </script>
 

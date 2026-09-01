@@ -1,38 +1,55 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Input } from "@/components/ui/input";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import ModelSelect from "@/features/ModelConnection/components/ModelSelect.vue";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingItem from "@/features/Setting/components/SettingItem.vue";
-import type { PluginConfig, PluginConfigEntry, PluginConfigValue } from "./plugin-config";
+import type {
+	PluginConfig,
+	PluginConfigEntry,
+	PluginConfigValue,
+} from "./plugin-config";
 
 const props = defineProps<{ modelValue: string }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 const parsed = computed(() => {
-  try {
-    const value = JSON.parse(props.modelValue) as PluginConfig;
-    return value && typeof value === "object" && !Array.isArray(value)
-      ? { value, error: "" }
-      : { value: {} as PluginConfig, error: "config.json 根节点必须是对象。" };
-  } catch (error) {
-    return { value: {} as PluginConfig, error: error instanceof Error ? error.message : "JSON 语法错误。" };
-  }
+	try {
+		const value = JSON.parse(props.modelValue) as PluginConfig;
+		return value && typeof value === "object" && !Array.isArray(value)
+			? { value, error: "" }
+			: { value: {} as PluginConfig, error: "config.json 根节点必须是对象。" };
+	} catch (error) {
+		return {
+			value: {} as PluginConfig,
+			error: error instanceof Error ? error.message : "JSON 语法错误。",
+		};
+	}
 });
 const entries = computed(() => Object.entries(parsed.value.value));
 function update(key: string, value: PluginConfigValue) {
-  const next = structuredClone(parsed.value.value);
-  if (!next[key]) return;
-  next[key].value = value;
-  emit("update:modelValue", JSON.stringify(next, null, 2));
+	const next = structuredClone(parsed.value.value);
+	if (!next[key]) return;
+	next[key].value = value;
+	emit("update:modelValue", JSON.stringify(next, null, 2));
 }
-function title(key: string, entry: PluginConfigEntry) { return entry.renderer.title || key; }
-function numberValue(value: PluginConfigValue, fallback = 0) { return typeof value === "number" ? value : fallback; }
+function title(key: string, entry: PluginConfigEntry) {
+	return entry.renderer.title || key;
+}
+function numberValue(value: PluginConfigValue, fallback = 0) {
+	return typeof value === "number" ? value : fallback;
+}
 function selectOptions(entry: PluginConfigEntry) {
-  return entry.renderer.name === "Select" ? entry.renderer.options : [];
+	return entry.renderer.name === "Select" ? entry.renderer.options : [];
 }
 </script>
 

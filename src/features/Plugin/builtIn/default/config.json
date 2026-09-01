@@ -1,3 +1,10 @@
 {
-  "generation/model": { "renderer": { "name": "ModelSelect", "title": "模型", "description": "留空时继承全局默认模型；引用可附带思考强度。" }, "value": null }
+	"generation/model": {
+		"renderer": {
+			"name": "ModelSelect",
+			"title": "模型",
+			"description": "留空时继承全局默认模型；引用可附带思考强度。"
+		},
+		"value": null
+	}
 }

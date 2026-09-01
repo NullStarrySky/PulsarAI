@@ -2,12 +2,12 @@
 import logoUrl from "../../../assets/logo.svg";
 
 withDefaults(
-  defineProps<{
-    alt?: string;
-  }>(),
-  {
-    alt: "PulsarAI",
-  },
+	defineProps<{
+		alt?: string;
+	}>(),
+	{
+		alt: "PulsarAI",
+	},
 );
 </script>
 

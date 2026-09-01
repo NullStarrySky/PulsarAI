@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
+import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingItem from "@/features/Setting/components/SettingItem.vue";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import { useStatisticStore } from "./statistic-store";
 
 const conversation = useConversationStore();
@@ -12,23 +12,40 @@ const statistic = useStatisticStore();
 const diskMode = ref<"type" | "package">("type");
 
 const heatmap = computed(() => statistic.heatmap);
-const maxHeat = computed(() => Math.max(1, ...heatmap.value.map((day) => day.count)));
-const sizeSegments = computed(() => diskMode.value === "type" ? statistic.sizeByType : statistic.sizeByPackage);
-const totalSize = computed(() => Math.max(1, sizeSegments.value.reduce((total, segment) => total + segment.bytes, 0)));
+const maxHeat = computed(() =>
+	Math.max(1, ...heatmap.value.map((day) => day.count)),
+);
+const sizeSegments = computed(() =>
+	diskMode.value === "type" ? statistic.sizeByType : statistic.sizeByPackage,
+);
+const totalSize = computed(() =>
+	Math.max(
+		1,
+		sizeSegments.value.reduce((total, segment) => total + segment.bytes, 0),
+	),
+);
 
 onMounted(async () => {
-  await Promise.all([conversation.initialize(), statistic.initialize()]);
+	await Promise.all([conversation.initialize(), statistic.initialize()]);
 });
 
 function heatClass(count: number) {
-  const level = Math.ceil((count / maxHeat.value) * 4);
-  return ["bg-muted", "bg-emerald-950", "bg-emerald-800", "bg-emerald-600", "bg-emerald-400"][level] ?? "bg-muted";
+	const level = Math.ceil((count / maxHeat.value) * 4);
+	return (
+		[
+			"bg-muted",
+			"bg-emerald-950",
+			"bg-emerald-800",
+			"bg-emerald-600",
+			"bg-emerald-400",
+		][level] ?? "bg-muted"
+	);
 }
 
 function formatSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 </script>
 

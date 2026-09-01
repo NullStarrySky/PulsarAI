@@ -4,11 +4,11 @@ import { onMounted } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,14 +16,14 @@ import ModelSelect from "@/features/ModelConnection/components/ModelSelect.vue";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingItem from "@/features/Setting/components/SettingItem.vue";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
+import PopableTextarea from "./PopableTextarea.vue";
 import { translateLanguages } from "./translate";
 import { useTranslateStore } from "./translate-store";
-import PopableTextarea from "./PopableTextarea.vue";
 
 const translate = useTranslateStore();
 
 onMounted(() => {
-  void translate.initialize();
+	void translate.initialize();
 });
 </script>
 

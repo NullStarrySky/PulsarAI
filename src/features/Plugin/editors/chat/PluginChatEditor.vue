@@ -1,24 +1,70 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-vue-next";
+import { computed } from "vue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { readPluginChatContext, type PluginChatMessage } from "./plugin-chat";
+import { type PluginChatMessage, readPluginChatContext } from "./plugin-chat";
 
 const props = defineProps<{ modelValue: string }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 const parsed = computed(() => {
-  try { return { value: readPluginChatContext(props.modelValue), error: "" }; }
-  catch (error) { return { value: { message: [] as PluginChatMessage[] }, error: error instanceof Error ? error.message : String(error) }; }
+	try {
+		return { value: readPluginChatContext(props.modelValue), error: "" };
+	} catch (error) {
+		return {
+			value: { message: [] as PluginChatMessage[] },
+			error: error instanceof Error ? error.message : String(error),
+		};
+	}
 });
-function serialize(message: PluginChatMessage[]) { return JSON.stringify({ message: message.map(({ name, enabled, ...item }) => ({ ...item, ...(name?.trim() ? { name: name.trim() } : {}), ...(enabled === false ? { enabled } : {}) })) }, null, 2); }
-function update(index: number, patch: Partial<PluginChatMessage>) { const message = structuredClone(parsed.value.value.message); message[index] = { ...message[index]!, ...patch }; emit("update:modelValue", serialize(message)); }
-function add() { emit("update:modelValue", serialize([...parsed.value.value.message, { role: "system", content: "" }])); }
-function remove(index: number) { emit("update:modelValue", serialize(parsed.value.value.message.filter((_, itemIndex) => itemIndex !== index))); }
-function move(index: number, delta: number) { const target = index + delta; const message = structuredClone(parsed.value.value.message); if (target < 0 || target >= message.length) return; [message[index], message[target]] = [message[target]!, message[index]!]; emit("update:modelValue", serialize(message)); }
+function serialize(message: PluginChatMessage[]) {
+	return JSON.stringify(
+		{
+			message: message.map(({ name, enabled, ...item }) => ({
+				...item,
+				...(name?.trim() ? { name: name.trim() } : {}),
+				...(enabled === false ? { enabled } : {}),
+			})),
+		},
+		null,
+		2,
+	);
+}
+function update(index: number, patch: Partial<PluginChatMessage>) {
+	const message = structuredClone(parsed.value.value.message);
+	message[index] = { ...message[index]!, ...patch };
+	emit("update:modelValue", serialize(message));
+}
+function add() {
+	emit(
+		"update:modelValue",
+		serialize([...parsed.value.value.message, { role: "system", content: "" }]),
+	);
+}
+function remove(index: number) {
+	emit(
+		"update:modelValue",
+		serialize(
+			parsed.value.value.message.filter((_, itemIndex) => itemIndex !== index),
+		),
+	);
+}
+function move(index: number, delta: number) {
+	const target = index + delta;
+	const message = structuredClone(parsed.value.value.message);
+	if (target < 0 || target >= message.length) return;
+	[message[index], message[target]] = [message[target]!, message[index]!];
+	emit("update:modelValue", serialize(message));
+}
 </script>
 
 <template>

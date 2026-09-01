@@ -1,24 +1,31 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ArrowUp, ChevronLeft, ChevronRight } from "lucide-vue-next";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
-  Questionnaire,
-  QuestionnaireChoice,
-  QuestionnaireChoices,
-  QuestionnaireDescription,
-  QuestionnaireItem,
-  QuestionnaireTitle,
+	Questionnaire,
+	QuestionnaireChoice,
+	QuestionnaireChoices,
+	QuestionnaireDescription,
+	QuestionnaireItem,
+	QuestionnaireTitle,
 } from "@/components/ui/questionnaire";
 import {
-  askUserSchema,
-  registerAskUser,
-  type AskUserAnswer,
-  type AskUserInput,
-  type AskUserQuestion,
-  type AskUserResult,
+	type AskUserAnswer,
+	type AskUserInput,
+	type AskUserQuestion,
+	type AskUserResult,
+	askUserSchema,
+	registerAskUser,
 } from "../runtime/ask-user";
 
 const open = ref(false);
@@ -28,58 +35,97 @@ const answers = ref<Record<string, AskUserAnswer>>({});
 let settle: ((value: AskUserResult) => void) | null = null;
 let unregister: (() => void) | null = null;
 
-const currentQuestion = computed(() => request.value?.questions[questionIndex.value] ?? null);
-const isLastQuestion = computed(() => questionIndex.value === (request.value?.questions.length ?? 1) - 1);
-const currentAnswered = computed(() => currentQuestion.value ? hasAnswer(currentQuestion.value) : false);
+const currentQuestion = computed(
+	() => request.value?.questions[questionIndex.value] ?? null,
+);
+const isLastQuestion = computed(
+	() => questionIndex.value === (request.value?.questions.length ?? 1) - 1,
+);
+const currentAnswered = computed(() =>
+	currentQuestion.value ? hasAnswer(currentQuestion.value) : false,
+);
 
 onMounted(() => {
-  unregister = registerAskUser((input) => new Promise((resolve) => {
-    settle?.({ cancelled: true });
-    request.value = askUserSchema.parse(input);
-    questionIndex.value = 0;
-    answers.value = {};
-    settle = resolve;
-    open.value = true;
-  }));
+	unregister = registerAskUser(
+		(input) =>
+			new Promise((resolve) => {
+				settle?.({ cancelled: true });
+				request.value = askUserSchema.parse(input);
+				questionIndex.value = 0;
+				answers.value = {};
+				settle = resolve;
+				open.value = true;
+			}),
+	);
 });
-onBeforeUnmount(() => { unregister?.(); finish({ cancelled: true }); });
+onBeforeUnmount(() => {
+	unregister?.();
+	finish({ cancelled: true });
+});
 
 function finish(value: AskUserResult) {
-  settle?.(value);
-  settle = null;
-  open.value = false;
+	settle?.(value);
+	settle = null;
+	open.value = false;
 }
 function optionValue(option: AskUserQuestion["options"][number]) {
-  return typeof option === "string" ? option : option.value || option.label;
+	return typeof option === "string" ? option : option.value || option.label;
 }
 function hasAnswer(question: AskUserQuestion) {
-  const answer = answers.value[question.id];
-  return Array.isArray(answer) ? answer.length > 0 : answer !== undefined && answer !== "";
+	const answer = answers.value[question.id];
+	return Array.isArray(answer)
+		? answer.length > 0
+		: answer !== undefined && answer !== "";
 }
-function selectOption(question: AskUserQuestion, option: AskUserQuestion["options"][number]) {
-  const value = optionValue(option);
-  if (question.kind === "multi-select") {
-    const current = Array.isArray(answers.value[question.id]) ? answers.value[question.id] as string[] : [];
-    answers.value = { ...answers.value, [question.id]: current.includes(value) ? current.filter((item) => item !== value) : [...current, value] };
-    return;
-  }
-  answers.value = { ...answers.value, [question.id]: value };
+function selectOption(
+	question: AskUserQuestion,
+	option: AskUserQuestion["options"][number],
+) {
+	const value = optionValue(option);
+	if (question.kind === "multi-select") {
+		const current = Array.isArray(answers.value[question.id])
+			? (answers.value[question.id] as string[])
+			: [];
+		answers.value = {
+			...answers.value,
+			[question.id]: current.includes(value)
+				? current.filter((item) => item !== value)
+				: [...current, value],
+		};
+		return;
+	}
+	answers.value = { ...answers.value, [question.id]: value };
 }
-function setText(question: AskUserQuestion, value: string) { answers.value = { ...answers.value, [question.id]: value }; }
-function setBoolean(question: AskUserQuestion, value: boolean) { answers.value = { ...answers.value, [question.id]: value }; }
-function submit() { if (currentAnswered.value) finish({ answers: answers.value, cancelled: false }); }
+function setText(question: AskUserQuestion, value: string) {
+	answers.value = { ...answers.value, [question.id]: value };
+}
+function setBoolean(question: AskUserQuestion, value: boolean) {
+	answers.value = { ...answers.value, [question.id]: value };
+}
+function submit() {
+	if (currentAnswered.value)
+		finish({ answers: answers.value, cancelled: false });
+}
 function nextQuestion() {
-  if (currentAnswered.value && !isLastQuestion.value) questionIndex.value += 1;
+	if (currentAnswered.value && !isLastQuestion.value) questionIndex.value += 1;
 }
-function advance() { if (isLastQuestion.value) submit(); else nextQuestion(); }
-function isOptionSelected(question: AskUserQuestion, option: AskUserQuestion["options"][number]) {
-  const value = optionValue(option);
-  const answer = answers.value[question.id];
-  return question.kind === "multi-select" ? Array.isArray(answer) && answer.includes(value) : answer === value;
+function advance() {
+	if (isLastQuestion.value) submit();
+	else nextQuestion();
+}
+function isOptionSelected(
+	question: AskUserQuestion,
+	option: AskUserQuestion["options"][number],
+) {
+	const value = optionValue(option);
+	const answer = answers.value[question.id];
+	return question.kind === "multi-select"
+		? Array.isArray(answer) && answer.includes(value)
+		: answer === value;
 }
 function textAnswer(question: AskUserQuestion) {
-  const answer = answers.value[question.id];
-  return typeof answer === "string" ? answer : "";
+	const answer = answers.value[question.id];
+	return typeof answer === "string" ? answer : "";
 }
 </script>
 

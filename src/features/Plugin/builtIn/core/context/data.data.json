@@ -1,8 +1,8 @@
 {
-  "version": 1,
-  "isolation": "conversation",
-  "initialValue": {},
-  "enableUpdater": true,
-  "wrapperSource": "",
-  "varName": "data"
+	"version": 1,
+	"isolation": "conversation",
+	"initialValue": {},
+	"enableUpdater": true,
+	"wrapperSource": "",
+	"varName": "data"
 }

@@ -1,8 +1,8 @@
 {
-  "message": [
-    {
-      "role": "system",
-      "content": "本次会话的数据状态可通过 `data` 读取。它是由 Plugin 的 `DATA_INJECT` 插槽提供的 JSON 值；仅在需要持久状态时使用。"
-    }
-  ]
+	"message": [
+		{
+			"role": "system",
+			"content": "本次会话的数据状态可通过 `data` 读取。它是由 Plugin 的 `DATA_INJECT` 插槽提供的 JSON 值；仅在需要持久状态时使用。"
+		}
+	]
 }

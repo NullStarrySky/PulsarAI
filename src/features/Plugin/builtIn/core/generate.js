@@ -3,10 +3,10 @@ const useStreamText = Boolean(config.useStreamText?.value);
 const messages = await parse(slot.paths("CTX_BUILD", "global"), ctx);
 
 if (useStreamText) {
-  await agent.streamText({ container: reply, messages });
+	await agent.streamText({ container: reply, messages });
 } else {
-  const runner = new agent.ToolLoopAgent({ container: reply });
-  await runner.stream({ messages });
+	const runner = new agent.ToolLoopAgent({ container: reply });
+	await runner.stream({ messages });
 }
 
 // 流结束后可读取完整正文，执行正则或其它后处理，再用 setContent 写回。

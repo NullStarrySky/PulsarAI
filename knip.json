@@ -1,0 +1,26 @@
+{
+	"$schema": "https://unpkg.com/knip@6/schema.json",
+	"entry": [
+		"src/main.ts",
+		"vite.config.ts",
+		"scripts/run-electron.ts",
+		"scripts/run-tauri.ts",
+		"host/desktop-electron/main.mjs",
+		"host/desktop-electron/preload.cjs",
+		"host/mobile-tauri/index.ts",
+		"docs/.vitepress/config.ts",
+		"docs/.vitepress/theme/index.ts"
+	],
+	"project": [
+		"src/**/*.{ts,tsx,vue}",
+		"host/**/*.{ts,mjs,cjs}",
+		"scripts/**/*.ts",
+		"docs/.vitepress/**/*.{ts,vue}",
+		"vite.config.ts"
+	],
+	"ignore": [
+		"src/components/ui/**",
+		"src/features/Migrations/**",
+		"src/features/SubWindow/**"
+	]
+}

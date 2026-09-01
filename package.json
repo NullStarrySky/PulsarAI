@@ -15,6 +15,9 @@
 		"mobile:ios:dev": "bun scripts/run-tauri.ts ios dev",
 		"mobile:ios:build": "bun scripts/run-tauri.ts ios build",
 		"test": "vitest run",
+		"lint": "biome check --write --unsafe .",
+		"knip": "knip",
+		"stats:loc": "bun scripts/code-stats.ts",
 		"build": "bun run renderer:build",
 		"preview": "vite preview",
 		"docs:dev": "vitepress dev docs",
@@ -113,9 +116,11 @@
 		"zod": "3.25.76"
 	},
 	"devDependencies": {
+		"@biomejs/biome": "2.5.11",
 		"@tauri-apps/cli": "^2",
 		"@vitejs/plugin-vue": "^5.2.1",
 		"electron": "^43.4.1",
+		"knip": "6.34.0",
 		"tw-animate-css": "^1.4.0",
 		"typescript": "~5.6.2",
 		"vite": "^6.0.3",

@@ -1,41 +1,136 @@
 {
-  "version": 1,
-  "plugin": {
-    "id": "builtin-core-plugin",
-    "packageId": null,
-    "name": "内置插件",
-    "icon": "",
-    "shortDescription": "PulsarAI 默认生成流程与资源",
-    "builtIn": true
-  },
-  "ignore": [".pulsar-plugin.json", "**/.gitkeep"],
-  "nodes": {
-    "/": { "id": "builtin-root", "icon": "", "treeOrder": 0 },
-    "AGENTS.md": { "id": "builtin-agents", "icon": "", "treeOrder": 1, "order": 100 },
-    "config.json": { "id": "builtin-config", "icon": "", "treeOrder": 2, "order": 100 },
-    "default.chat.json": { "id": "builtin-default-chat", "icon": "", "treeOrder": 4, "order": 100, "insertion": { "slot": "chat" } },
-    "prompt.md": { "id": "builtin-prompt", "icon": "", "treeOrder": 5, "order": 100 },
-    "docs/package.md": { "id": "builtin-docs-package", "icon": "", "treeOrder": 0, "order": 100 },
-    "docs/plugin.md": { "id": "builtin-docs-plugin", "icon": "", "treeOrder": 1, "order": 100 },
-    "docs/conversation.md": { "id": "builtin-docs-conversation", "icon": "", "treeOrder": 2, "order": 100 },
-    "generate.js": { "id": "builtin-generate", "icon": "", "treeOrder": 6, "order": 100, "insertion": { "slot": "generatePath" } },
-    "regex.json": { "id": "builtin-regex", "icon": "", "treeOrder": 7, "order": 100, "insertion": { "slot": "REGEX" } },
-    "context": { "id": "builtin-context", "icon": "", "treeOrder": 8 },
-    "context/build.js": { "id": "builtin-context-build", "icon": "", "treeOrder": 0, "order": 100, "insertion": { "slot": "CTX_BUILD" } },
-    "context/before-regex.js": { "id": "builtin-context-before-regex", "icon": "", "treeOrder": 1, "order": 100, "insertion": { "slot": "CTX_PROCESS_BEFORE_REGEX" } },
-    "context/data.data.json": { "id": "builtin-context-data", "icon": "", "treeOrder": 2, "order": 100, "insertion": { "slot": "DATA_INJECT" } },
-    "context/data.chat.json": { "id": "builtin-context-data-prompt", "icon": "", "treeOrder": 3, "order": 100, "insertion": { "slot": "data_prompt" } },
-    "components": { "id": "builtin-components", "icon": "", "treeOrder": 8 },
-    "background": { "id": "builtin-background", "icon": "", "treeOrder": 9 },
-    "background/classroom.png": { "id": "builtin-background-classroom", "icon": "", "treeOrder": 0, "order": 100, "insertion": { "slot": "background" } },
-    "tools": { "id": "builtin-tools", "icon": "", "treeOrder": 10 },
-    "action": { "id": "builtin-action", "icon": "", "treeOrder": 11 },
-    "action/goal.js": { "id": "builtin-action-goal", "icon": "", "treeOrder": 0, "order": 100, "insertion": { "slot": "COMMAND" } },
-    "action/process.js": { "id": "builtin-action-process", "icon": "", "treeOrder": 1, "order": 100, "insertion": { "slot": "COMMAND" } },
-    "goal": { "id": "builtin-goal", "icon": "", "treeOrder": 12 },
-    "goal/goal.data": { "id": "builtin-goal-data", "icon": "", "treeOrder": 0, "order": 100 },
-    "temp": { "id": "builtin-temp", "icon": "", "treeOrder": 13 },
-    "cache": { "id": "builtin-cache", "icon": "", "treeOrder": 14 },
-    "skill": { "id": "builtin-skill", "icon": "", "treeOrder": 15 }
-  }
+	"version": 1,
+	"plugin": {
+		"id": "builtin-core-plugin",
+		"packageId": null,
+		"name": "内置插件",
+		"icon": "",
+		"shortDescription": "PulsarAI 默认生成流程与资源",
+		"builtIn": true
+	},
+	"ignore": [".pulsar-plugin.json", "**/.gitkeep"],
+	"nodes": {
+		"/": { "id": "builtin-root", "icon": "", "treeOrder": 0 },
+		"AGENTS.md": {
+			"id": "builtin-agents",
+			"icon": "",
+			"treeOrder": 1,
+			"order": 100
+		},
+		"config.json": {
+			"id": "builtin-config",
+			"icon": "",
+			"treeOrder": 2,
+			"order": 100
+		},
+		"default.chat.json": {
+			"id": "builtin-default-chat",
+			"icon": "",
+			"treeOrder": 4,
+			"order": 100,
+			"insertion": { "slot": "chat" }
+		},
+		"prompt.md": {
+			"id": "builtin-prompt",
+			"icon": "",
+			"treeOrder": 5,
+			"order": 100
+		},
+		"docs/package.md": {
+			"id": "builtin-docs-package",
+			"icon": "",
+			"treeOrder": 0,
+			"order": 100
+		},
+		"docs/plugin.md": {
+			"id": "builtin-docs-plugin",
+			"icon": "",
+			"treeOrder": 1,
+			"order": 100
+		},
+		"docs/conversation.md": {
+			"id": "builtin-docs-conversation",
+			"icon": "",
+			"treeOrder": 2,
+			"order": 100
+		},
+		"generate.js": {
+			"id": "builtin-generate",
+			"icon": "",
+			"treeOrder": 6,
+			"order": 100,
+			"insertion": { "slot": "generatePath" }
+		},
+		"regex.json": {
+			"id": "builtin-regex",
+			"icon": "",
+			"treeOrder": 7,
+			"order": 100,
+			"insertion": { "slot": "REGEX" }
+		},
+		"context": { "id": "builtin-context", "icon": "", "treeOrder": 8 },
+		"context/build.js": {
+			"id": "builtin-context-build",
+			"icon": "",
+			"treeOrder": 0,
+			"order": 100,
+			"insertion": { "slot": "CTX_BUILD" }
+		},
+		"context/before-regex.js": {
+			"id": "builtin-context-before-regex",
+			"icon": "",
+			"treeOrder": 1,
+			"order": 100,
+			"insertion": { "slot": "CTX_PROCESS_BEFORE_REGEX" }
+		},
+		"context/data.data.json": {
+			"id": "builtin-context-data",
+			"icon": "",
+			"treeOrder": 2,
+			"order": 100,
+			"insertion": { "slot": "DATA_INJECT" }
+		},
+		"context/data.chat.json": {
+			"id": "builtin-context-data-prompt",
+			"icon": "",
+			"treeOrder": 3,
+			"order": 100,
+			"insertion": { "slot": "data_prompt" }
+		},
+		"components": { "id": "builtin-components", "icon": "", "treeOrder": 8 },
+		"background": { "id": "builtin-background", "icon": "", "treeOrder": 9 },
+		"background/classroom.png": {
+			"id": "builtin-background-classroom",
+			"icon": "",
+			"treeOrder": 0,
+			"order": 100,
+			"insertion": { "slot": "background" }
+		},
+		"tools": { "id": "builtin-tools", "icon": "", "treeOrder": 10 },
+		"action": { "id": "builtin-action", "icon": "", "treeOrder": 11 },
+		"action/goal.js": {
+			"id": "builtin-action-goal",
+			"icon": "",
+			"treeOrder": 0,
+			"order": 100,
+			"insertion": { "slot": "COMMAND" }
+		},
+		"action/process.js": {
+			"id": "builtin-action-process",
+			"icon": "",
+			"treeOrder": 1,
+			"order": 100,
+			"insertion": { "slot": "COMMAND" }
+		},
+		"goal": { "id": "builtin-goal", "icon": "", "treeOrder": 12 },
+		"goal/goal.data": {
+			"id": "builtin-goal-data",
+			"icon": "",
+			"treeOrder": 0,
+			"order": 100
+		},
+		"temp": { "id": "builtin-temp", "icon": "", "treeOrder": 13 },
+		"cache": { "id": "builtin-cache", "icon": "", "treeOrder": 14 },
+		"skill": { "id": "builtin-skill", "icon": "", "treeOrder": 15 }
+	}
 }

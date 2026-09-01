@@ -5,17 +5,17 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useHotkeyStore } from "@/features/Hotkey/hotkey-store";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 
 type SearchResult = {
-  id: string;
-  title: string;
-  description: string;
-  icon: Component;
-  hotkey?: string;
-  run: () => unknown;
+	id: string;
+	title: string;
+	description: string;
+	icon: Component;
+	hotkey?: string;
+	run: () => unknown;
 };
 
 const commandStore = useCommandStore();
@@ -25,120 +25,156 @@ const inputRoot = ref<HTMLElement | null>(null);
 const activeIndex = ref(0);
 
 const query = computed({
-  get: () => commandStore.paletteQuery,
-  set: (value: string) => {
-    commandStore.paletteQuery = value;
-  },
+	get: () => commandStore.paletteQuery,
+	set: (value: string) => {
+		commandStore.paletteQuery = value;
+	},
 });
-const isTagSearch = computed(() => query.value.trim().toLowerCase().startsWith("tag:"));
+const isTagSearch = computed(() =>
+	query.value.trim().toLowerCase().startsWith("tag:"),
+);
 const normalizedQuery = computed(() =>
-  (isTagSearch.value ? query.value.trim().slice(4) : query.value)
-    .trim()
-    .toLowerCase(),
+	(isTagSearch.value ? query.value.trim().slice(4) : query.value)
+		.trim()
+		.toLowerCase(),
 );
 
 const commandResults = computed<SearchResult[]>(() => {
-  if (isTagSearch.value) {
-    return [];
-  }
-  const search = normalizedQuery.value;
-  return commandStore.commands
-    .filter((command) =>
-      !search || `${command.title} ${command.description ?? ""} ${command.category}`.toLowerCase().includes(search),
-    )
-    .map((command) => ({
-      id: `command:${command.id}`,
-      title: command.title,
-      description: command.category,
-      icon: command.icon ?? Command,
-      hotkey: hotkeyStore.getHotkey(command.id),
-      run: () => commandStore.executeCommand(command.id),
-    }));
+	if (isTagSearch.value) {
+		return [];
+	}
+	const search = normalizedQuery.value;
+	return commandStore.commands
+		.filter(
+			(command) =>
+				!search ||
+				`${command.title} ${command.description ?? ""} ${command.category}`
+					.toLowerCase()
+					.includes(search),
+		)
+		.map((command) => ({
+			id: `command:${command.id}`,
+			title: command.title,
+			description: command.category,
+			icon: command.icon ?? Command,
+			hotkey: hotkeyStore.getHotkey(command.id),
+			run: () => commandStore.executeCommand(command.id),
+		}));
 });
 
 const packageResults = computed<SearchResult[]>(() => {
-  const search = normalizedQuery.value;
-  return conversation.packages
-    .filter((item) => matchesItem([item.name, item.description, item.id], search, isTagSearch.value))
-    .map((item) => ({
-      id: `package:${item.id}`,
-      title: item.name,
-      description: item.description || "角色包",
-      icon: Package,
-      run: async () => {
-        await conversation.openPackage(item.id);
-        commandStore.closePalette();
-      },
-    }));
+	const search = normalizedQuery.value;
+	return conversation.packages
+		.filter((item) =>
+			matchesItem(
+				[item.name, item.description, item.id],
+				search,
+				isTagSearch.value,
+			),
+		)
+		.map((item) => ({
+			id: `package:${item.id}`,
+			title: item.name,
+			description: item.description || "角色包",
+			icon: Package,
+			run: async () => {
+				await conversation.openPackage(item.id);
+				commandStore.closePalette();
+			},
+		}));
 });
 
 const conversationResults = computed<SearchResult[]>(() => {
-  const search = normalizedQuery.value;
-  return conversation.conversations
-    .filter((item) => matchesItem([item.title, item.id, item.packageId], search, isTagSearch.value))
-    .map((item) => ({
-      id: `conversation:${item.id}`,
-      title: item.title,
-      description: conversation.packages.find((packageItem) => packageItem.id === item.packageId)?.name ?? "对话",
-      icon: MessageSquare,
-      run: () => {
-        conversation.openConversation(item.id);
-        commandStore.closePalette();
-      },
-    }));
+	const search = normalizedQuery.value;
+	return conversation.conversations
+		.filter((item) =>
+			matchesItem(
+				[item.title, item.id, item.packageId],
+				search,
+				isTagSearch.value,
+			),
+		)
+		.map((item) => ({
+			id: `conversation:${item.id}`,
+			title: item.title,
+			description:
+				conversation.packages.find(
+					(packageItem) => packageItem.id === item.packageId,
+				)?.name ?? "对话",
+			icon: MessageSquare,
+			run: () => {
+				conversation.openConversation(item.id);
+				commandStore.closePalette();
+			},
+		}));
 });
 
-const sections = computed(() => [
-  { name: "命令", items: commandResults.value },
-  { name: "角色包", items: packageResults.value },
-  { name: "对话", items: conversationResults.value },
-].filter((section) => section.items.length > 0));
+const sections = computed(() =>
+	[
+		{ name: "命令", items: commandResults.value },
+		{ name: "角色包", items: packageResults.value },
+		{ name: "对话", items: conversationResults.value },
+	].filter((section) => section.items.length > 0),
+);
 
-const flatResults = computed(() => sections.value.flatMap((section) => section.items));
+const flatResults = computed(() =>
+	sections.value.flatMap((section) => section.items),
+);
 
 watch(
-  () => commandStore.paletteOpen,
-  async (open) => {
-    if (!open) {
-      return;
-    }
-    await conversation.initialize();
-    activeIndex.value = 0;
-    await nextTick();
-    inputRoot.value?.querySelector("input")?.focus();
-  },
+	() => commandStore.paletteOpen,
+	async (open) => {
+		if (!open) {
+			return;
+		}
+		await conversation.initialize();
+		activeIndex.value = 0;
+		await nextTick();
+		inputRoot.value?.querySelector("input")?.focus();
+	},
 );
 
 watch(query, () => {
-  activeIndex.value = 0;
+	activeIndex.value = 0;
 });
 
-function matchesItem(values: Array<string | undefined | null>, search: string, tagOnly: boolean) {
-  if (!search) {
-    return true;
-  }
-  if (tagOnly) {
-    return values.some((value) => value?.toLowerCase().split(/\s+/).some((part) => part.includes(search)));
-  }
-  return values.join(" ").toLowerCase().includes(search);
+function matchesItem(
+	values: Array<string | undefined | null>,
+	search: string,
+	tagOnly: boolean,
+) {
+	if (!search) {
+		return true;
+	}
+	if (tagOnly) {
+		return values.some((value) =>
+			value
+				?.toLowerCase()
+				.split(/\s+/)
+				.some((part) => part.includes(search)),
+		);
+	}
+	return values.join(" ").toLowerCase().includes(search);
 }
 
 function runActive() {
-  const item = flatResults.value[activeIndex.value];
-  if (item) {
-    void item.run();
-  }
+	const item = flatResults.value[activeIndex.value];
+	if (item) {
+		void item.run();
+	}
 }
 
 function moveActive(offset: number) {
-  if (!flatResults.value.length) {
-    return;
-  }
-  activeIndex.value = (activeIndex.value + offset + flatResults.value.length) % flatResults.value.length;
+	if (!flatResults.value.length) {
+		return;
+	}
+	activeIndex.value =
+		(activeIndex.value + offset + flatResults.value.length) %
+		flatResults.value.length;
 }
 
 function isActive(id: string) {
-  return flatResults.value[activeIndex.value]?.id === id;
+	return flatResults.value[activeIndex.value]?.id === id;
 }
 </script>
 

@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller";
-import { computed, ref, toRef, watch, type ComponentPublicInstance } from "vue";
+import { type ComponentPublicInstance, computed, ref, toRef, watch } from "vue";
+import {
+	MessageScroller,
+	MessageScrollerButton,
+	MessageScrollerContent,
+	MessageScrollerItem,
+	MessageScrollerProvider,
+	MessageScrollerViewport,
+} from "@/components/ui/message-scroller";
 import { useConversation } from "@/features/Conversation/use-conversation";
 import { usePackageStore } from "@/features/Package/package-store";
 import ChatBubble from "./ChatBubble.vue";
@@ -13,40 +20,57 @@ const packages = usePackageStore();
 const viewport = ref<{ element: HTMLElement | null } | null>(null);
 const loadedChatId = ref("");
 const holdVirtualEnd = ref(false);
-const visibleContainers = computed(() => activePath.value.filter((item) => !item.hidden && (item.role !== "system" || Boolean(messageOf(item)?.content))));
-const virtualizer = useVirtualizer(computed(() => ({
-  count: visibleContainers.value.length,
-  getScrollElement: () => viewport.value?.element ?? null,
-  getItemKey: (index: number) => visibleContainers.value[index]?.id ?? index,
-  estimateSize: () => 240,
-  overscan: 6,
-  anchorTo: holdVirtualEnd.value ? undefined : ("end" as const),
-  followOnAppend: true,
-  scrollEndThreshold: 80,
-})));
+const visibleContainers = computed(() =>
+	activePath.value.filter(
+		(item) =>
+			!item.hidden &&
+			(item.role !== "system" || Boolean(messageOf(item)?.content)),
+	),
+);
+const virtualizer = useVirtualizer(
+	computed(() => ({
+		count: visibleContainers.value.length,
+		getScrollElement: () => viewport.value?.element ?? null,
+		getItemKey: (index: number) => visibleContainers.value[index]?.id ?? index,
+		estimateSize: () => 240,
+		overscan: 6,
+		anchorTo: holdVirtualEnd.value ? undefined : ("end" as const),
+		followOnAppend: true,
+		scrollEndThreshold: 80,
+	})),
+);
 const virtualItems = computed(() => virtualizer.value.getVirtualItems());
 
 function measureRow(element: Element | ComponentPublicInstance | null) {
-  if (element instanceof Element) virtualizer.value.measureElement(element);
+	if (element instanceof Element) virtualizer.value.measureElement(element);
 }
-function pauseVirtualEnd() { holdVirtualEnd.value = true; }
+function pauseVirtualEnd() {
+	holdVirtualEnd.value = true;
+}
 function resumeVirtualEndAtBottom() {
-  const element = viewport.value?.element;
-  if (element && element.scrollTop + element.clientHeight >= element.scrollHeight - 80)
-    holdVirtualEnd.value = false;
+	const element = viewport.value?.element;
+	if (
+		element &&
+		element.scrollTop + element.clientHeight >= element.scrollHeight - 80
+	)
+		holdVirtualEnd.value = false;
 }
 
 async function loadChat(chatId: string) {
-  loadedChatId.value = "";
-  if (!chatId) return;
-  await conversation.ensureLoaded();
-  if (props.chatId === chatId) loadedChatId.value = chatId;
+	loadedChatId.value = "";
+	if (!chatId) return;
+	await conversation.ensureLoaded();
+	if (props.chatId === chatId) loadedChatId.value = chatId;
 }
 
-watch(() => props.chatId, (chatId) => {
-  holdVirtualEnd.value = false;
-  void loadChat(chatId);
-}, { immediate: true });
+watch(
+	() => props.chatId,
+	(chatId) => {
+		holdVirtualEnd.value = false;
+		void loadChat(chatId);
+	},
+	{ immediate: true },
+);
 </script>
 
 <template>

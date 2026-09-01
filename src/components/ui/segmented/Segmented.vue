@@ -3,21 +3,24 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export interface SegmentedOption {
-  value: string;
-  label: string;
-  disabled?: boolean;
+interface SegmentedOption {
+	value: string;
+	label: string;
+	disabled?: boolean;
 }
 
-const props = withDefaults(defineProps<{
-  modelValue: string;
-  options: SegmentedOption[];
-  variant?: "filled" | "outlined" | "borderless";
-  class?: string;
-}>(), {
-  variant: "filled",
-  class: "",
-});
+const props = withDefaults(
+	defineProps<{
+		modelValue: string;
+		options: SegmentedOption[];
+		variant?: "filled" | "outlined" | "borderless";
+		class?: string;
+	}>(),
+	{
+		variant: "filled",
+		class: "",
+	},
+);
 
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 const segmentedRef = ref<HTMLElement | null>(null);
@@ -26,38 +29,42 @@ const indicator = ref({ width: 0, height: 0, x: 0, y: 0, ready: false });
 let observer: ResizeObserver | null = null;
 
 const variantClass = computed(() => {
-  if (props.variant === "outlined") return "border bg-background p-1";
-  if (props.variant === "borderless") return "bg-transparent p-0";
-  return "bg-muted/70 p-1";
+	if (props.variant === "outlined") return "border bg-background p-1";
+	if (props.variant === "borderless") return "bg-transparent p-0";
+	return "bg-muted/70 p-1";
 });
 
 function updateIndicator() {
-  void nextTick(() => {
-    const group = groupRef.value;
-    const selected = Array.from(group?.querySelectorAll<HTMLElement>("[data-segmented-option]") ?? [])
-      .find((item) => item.dataset.segmentedOption === props.modelValue);
-    if (!group || !selected) {
-      indicator.value.ready = false;
-      return;
-    }
-    indicator.value = {
-      width: selected.offsetWidth,
-      height: selected.offsetHeight,
-      x: selected.offsetLeft,
-      y: selected.offsetTop,
-      ready: true,
-    };
-  });
+	void nextTick(() => {
+		const group = groupRef.value;
+		const selected = Array.from(
+			group?.querySelectorAll<HTMLElement>("[data-segmented-option]") ?? [],
+		).find((item) => item.dataset.segmentedOption === props.modelValue);
+		if (!group || !selected) {
+			indicator.value.ready = false;
+			return;
+		}
+		indicator.value = {
+			width: selected.offsetWidth,
+			height: selected.offsetHeight,
+			x: selected.offsetLeft,
+			y: selected.offsetTop,
+			ready: true,
+		};
+	});
 }
 
 onMounted(() => {
-  observer = new ResizeObserver(updateIndicator);
-  if (segmentedRef.value) observer.observe(segmentedRef.value);
-  if (groupRef.value) observer.observe(groupRef.value);
-  updateIndicator();
+	observer = new ResizeObserver(updateIndicator);
+	if (segmentedRef.value) observer.observe(segmentedRef.value);
+	if (groupRef.value) observer.observe(groupRef.value);
+	updateIndicator();
 });
 onUnmounted(() => observer?.disconnect());
-watch(() => [props.modelValue, props.options] as const, updateIndicator, { deep: true, flush: "post" });
+watch(() => [props.modelValue, props.options] as const, updateIndicator, {
+	deep: true,
+	flush: "post",
+});
 </script>
 
 <template>

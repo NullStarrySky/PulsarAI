@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { Notification, Notivue } from "notivue";
 import { onBeforeUnmount, onMounted } from "vue";
+import ConversationStageOnePage from "@/features/Conversation/stage/ConversationStageOnePage.vue";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useHotkeyStore } from "@/features/Hotkey/hotkey-store";
-import ConversationStageOnePage from "@/features/Conversation/stage/ConversationStageOnePage.vue";
-import SettingsDialog from "@/features/Setting/components/SettingsDialog.vue";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
-import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
-import CommandSearchDialog from "@/features/UI/search/CommandSearchDialog.vue";
+import SettingsDialog from "@/features/Setting/components/SettingsDialog.vue";
 import { registerCoreCommands } from "@/features/UI/actions";
+import CommandSearchDialog from "@/features/UI/search/CommandSearchDialog.vue";
+import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
 
 const appearance = useAppearanceStore();
 const responsive = useResponsiveStore();
@@ -16,22 +16,22 @@ const commands = useCommandStore();
 const hotkeys = useHotkeyStore();
 
 function routeHotkey(event: KeyboardEvent) {
-  if (event.defaultPrevented || event.isComposing) return;
-  const commandId = hotkeys.commandIdForEvent(event);
-  if (!commandId) return;
-  event.preventDefault();
-  void commands.executeCommand(commandId);
+	if (event.defaultPrevented || event.isComposing) return;
+	const commandId = hotkeys.commandIdForEvent(event);
+	if (!commandId) return;
+	event.preventDefault();
+	void commands.executeCommand(commandId);
 }
 
 onMounted(() => {
-  registerCoreCommands();
-  window.addEventListener("keydown", routeHotkey, { capture: true });
-  appearance.initialize();
-  responsive.refreshPlatform();
+	registerCoreCommands();
+	window.addEventListener("keydown", routeHotkey, { capture: true });
+	appearance.initialize();
+	responsive.refreshPlatform();
 });
 
 onBeforeUnmount(() => {
-  window.removeEventListener("keydown", routeHotkey, { capture: true });
+	window.removeEventListener("keydown", routeHotkey, { capture: true });
 });
 </script>
 

@@ -1,44 +1,42 @@
 import {
-  pluginFileType,
-  type PluginFile,
-  type PluginFileType,
-} from "@/features/Plugin/tree/plugin-types";
+	type WorldFileNode,
+	type WorldFileType,
+	worldFileType,
+} from "@/features/Plugin/tree/world-types";
 
-export type PluginResourceType = PluginFileType;
-export type PluginResourceValue = string | ArrayBuffer;
+export type PluginResourceType = WorldFileType;
+type PluginResourceValue = string | ArrayBuffer;
+
+export type ResourceFile = Pick<WorldFileNode, "name" | "content">;
 
 export interface PluginResource {
-  file: PluginFile;
-  type: PluginResourceType;
-  read(): PluginResourceValue;
-  import(environment: Record<string, unknown>): unknown | Promise<unknown>;
+	file: ResourceFile;
+	type: PluginResourceType;
+	read(): PluginResourceValue;
+	import(environment: Record<string, unknown>): unknown | Promise<unknown>;
 }
 
-export function resourceType(file: PluginFile): PluginResourceType {
-  return pluginFileType(file.name);
+export function resourceType(file: ResourceFile): PluginResourceType {
+	return worldFileType(file.name);
 }
 
-export function isTextResource(file: PluginFile): boolean {
-  return resourceType(file) !== "media";
+export function textContent(file: ResourceFile): string {
+	if (typeof file.content === "string") return file.content;
+	return JSON.stringify(file.content ?? null, null, 2);
 }
 
-export function textContent(file: PluginFile): string {
-  if (typeof file.content === "string") return file.content;
-  return JSON.stringify(file.content ?? null, null, 2);
-}
-
-export function binaryContent(file: PluginFile): ArrayBuffer {
-  const source = file.content;
-  if (source instanceof ArrayBuffer) return source.slice(0);
-  if (ArrayBuffer.isView(source)) {
-    return source.buffer.slice(
-      source.byteOffset,
-      source.byteOffset + source.byteLength,
-    );
-  }
-  // Persisted media currently keeps an URL/string payload.  Encoding preserves
-  // the byte-oriented API until the database media backend supplies raw bytes.
-  return new TextEncoder().encode(
-    typeof source === "string" ? source : JSON.stringify(source ?? null),
-  ).buffer;
+export function binaryContent(file: ResourceFile): ArrayBuffer {
+	const source = file.content;
+	if (source instanceof ArrayBuffer) return source.slice(0);
+	if (ArrayBuffer.isView(source)) {
+		return source.buffer.slice(
+			source.byteOffset,
+			source.byteOffset + source.byteLength,
+		);
+	}
+	// Persisted media currently keeps an URL/string payload.  Encoding preserves
+	// the byte-oriented API until the database media backend supplies raw bytes.
+	return new TextEncoder().encode(
+		typeof source === "string" ? source : JSON.stringify(source ?? null),
+	).buffer;
 }

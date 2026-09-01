@@ -2,11 +2,11 @@
 import { Switch } from "@/components/ui/switch";
 
 defineProps<{
-  modelValue: boolean;
+	modelValue: boolean;
 }>();
 
 defineEmits<{
-  "update:modelValue": [value: boolean];
+	"update:modelValue": [value: boolean];
 }>();
 </script>
 

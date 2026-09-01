@@ -126,10 +126,10 @@ Feature 按用户可理解的能力组织。小 Feature 保持扁平，大 Featu
 ## 阅读代码的建议顺序
 
 1. `src/features/Sandbox/sandbox.ts`：理解求值和递归宏。
-2. `src/features/Plugin/tree/plugin-types.ts`：理解资源事实模型。
+2. `src/features/Plugin/tree/world-types.ts`：理解嵌套 World 节点模型。
 3. `src/features/Plugin/runtime/self-api.ts`：理解文件与插槽 API。
 4. `src/features/Plugin/runtime/environment.ts`：理解统一环境装配。
-5. `src/features/Conversation/messages/conversation-resource-overlay.ts`：理解操作重放与事务。
+5. `src/features/Plugin/tree/world-update.ts`：理解操作重放与持久化更新。
 6. `src/features/Conversation/messages/conversation-generation.ts`：理解完整生成路径。
 7. `src/features/Plugin/agent/runtime/default-agent.ts`：理解 CodeAct 和 Agent 输出。
 8. `host/contracts.ts` 与 `host/index.ts`：理解平台边界。

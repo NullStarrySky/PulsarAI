@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
 import { Info, RefreshCcw } from "lucide-vue-next";
+import { ref, watch } from "vue";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
@@ -8,22 +8,24 @@ import AppIcon from "@/features/UI/components/AppIcon.vue";
 import { useLayoutStore } from "@/features/UI/layout-store";
 
 const version = "0.1.0";
-const autoCheckUpdates = ref(localStorage.getItem("pulsarai:auto-check-updates") !== "false");
+const autoCheckUpdates = ref(
+	localStorage.getItem("pulsarai:auto-check-updates") !== "false",
+);
 const checking = ref(false);
 const updateStatus = ref("");
 const changelogOpen = ref(false);
 const layout = useLayoutStore();
 
 watch(autoCheckUpdates, (enabled) => {
-  localStorage.setItem("pulsarai:auto-check-updates", String(enabled));
+	localStorage.setItem("pulsarai:auto-check-updates", String(enabled));
 });
 
 async function checkForUpdates() {
-  checking.value = true;
-  updateStatus.value = "";
-  await Promise.resolve();
-  updateStatus.value = "暂未配置更新源";
-  checking.value = false;
+	checking.value = true;
+	updateStatus.value = "";
+	await Promise.resolve();
+	updateStatus.value = "暂未配置更新源";
+	checking.value = false;
 }
 </script>
 

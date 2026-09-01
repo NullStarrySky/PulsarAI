@@ -1,0 +1,68 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.5.11/schema.json",
+	"vcs": {
+		"enabled": true,
+		"clientKind": "git",
+		"useIgnoreFile": true
+	},
+	"files": {
+		"includes": ["**", "!!**/dist", "!!src/features/Plugin/builtIn/**/*.js"]
+	},
+	"formatter": {
+		"enabled": true,
+		"indentStyle": "tab"
+	},
+	"css": {
+		"parser": {
+			"tailwindDirectives": true
+		}
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"preset": "recommended",
+			"correctness": {
+				"noVueDuplicateKeys": "off"
+			},
+			"complexity": {
+				"noBannedTypes": "off"
+			},
+			"style": {
+				"noDescendingSpecificity": "off",
+				"noNonNullAssertion": "off",
+				"useVueMultiWordComponentNames": "off"
+			},
+			"suspicious": {
+				"noAssignInExpressions": "off",
+				"noControlCharactersInRegex": "off",
+				"noExplicitAny": "off"
+			}
+		}
+	},
+	"javascript": {
+		"formatter": {
+			"quoteStyle": "double"
+		}
+	},
+	"overrides": [
+		{
+			"includes": ["**/*.vue"],
+			"linter": {
+				"rules": {
+					"correctness": {
+						"noUnusedImports": "off",
+						"noUnusedVariables": "off"
+					}
+				}
+			}
+		}
+	],
+	"assist": {
+		"enabled": true,
+		"actions": {
+			"source": {
+				"organizeImports": "on"
+			}
+		}
+	}
+}

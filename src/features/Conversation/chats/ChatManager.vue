@@ -1,35 +1,96 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
 import { Plus, Search } from "lucide-vue-next";
+import { computed, ref, watch } from "vue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useChatStore } from "./chat-store";
 
-const props = defineProps<{ packageId: string; chatId: string; buttonClass?: string }>();
-const emit = defineEmits<{ select: [chatId: string]; "open-change": [open: boolean] }>();
+const props = defineProps<{
+	packageId: string;
+	chatId: string;
+	buttonClass?: string;
+}>();
+const emit = defineEmits<{
+	select: [chatId: string];
+	"open-change": [open: boolean];
+}>();
 const chats = useChatStore();
 const open = ref(false);
 const search = ref("");
 const renaming = ref(false);
 const titleDraft = ref("");
 const items = computed(() => chats.chatsForPackage(props.packageId));
-const selected = computed(() => items.value.find((item) => item.id === props.chatId) ?? null);
+const selected = computed(
+	() => items.value.find((item) => item.id === props.chatId) ?? null,
+);
 const visibleChats = computed(() => {
-  const keyword = search.value.trim().toLocaleLowerCase();
-  return items.value.filter((item) => !keyword || item.title.toLocaleLowerCase().includes(keyword));
+	const keyword = search.value.trim().toLocaleLowerCase();
+	return items.value.filter(
+		(item) => !keyword || item.title.toLocaleLowerCase().includes(keyword),
+	);
 });
-watch([open, renaming], () => emit("open-change", open.value || renaming.value));
-watch(() => props.packageId, async (packageId) => { if (packageId) await chats.loadForPackage(packageId); }, { immediate: true });
-async function create() { if (!props.packageId) return; const chat = await chats.create({ packageId: props.packageId, activate: false }); open.value = false; emit("select", chat.id); }
-function select(id: string) { open.value = false; emit("select", id); }
-function updatedAtLabel(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" }); }
-async function togglePin() { if (selected.value) await chats.update(selected.value.id, { pinned: !selected.value.pinned }); }
-function rename() { if (!selected.value) return; titleDraft.value = selected.value.title; renaming.value = true; }
-async function confirmRename() { const title = titleDraft.value.trim(); const item = selected.value; renaming.value = false; if (item && title && title !== item.title) await chats.update(item.id, { title }); }
-async function removeSelected() { if (!selected.value || !window.confirm(`删除会话“${selected.value.title}”？`)) return; const removedId = selected.value.id; await chats.remove(removedId); const next = chats.chatsForPackage(props.packageId)[0] ?? await chats.create({ packageId: props.packageId, activate: false }); emit("select", next.id); }
+watch([open, renaming], () =>
+	emit("open-change", open.value || renaming.value),
+);
+watch(
+	() => props.packageId,
+	async (packageId) => {
+		if (packageId) await chats.loadForPackage(packageId);
+	},
+	{ immediate: true },
+);
+async function create() {
+	if (!props.packageId) return;
+	const chat = await chats.create({
+		packageId: props.packageId,
+		activate: false,
+	});
+	open.value = false;
+	emit("select", chat.id);
+}
+function select(id: string) {
+	open.value = false;
+	emit("select", id);
+}
+function updatedAtLabel(value: string) {
+	const date = new Date(value);
+	return Number.isNaN(date.getTime())
+		? ""
+		: date.toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+}
+async function togglePin() {
+	if (selected.value)
+		await chats.update(selected.value.id, { pinned: !selected.value.pinned });
+}
+function rename() {
+	if (!selected.value) return;
+	titleDraft.value = selected.value.title;
+	renaming.value = true;
+}
+async function confirmRename() {
+	const title = titleDraft.value.trim();
+	const item = selected.value;
+	renaming.value = false;
+	if (item && title && title !== item.title)
+		await chats.update(item.id, { title });
+}
+async function removeSelected() {
+	if (!selected.value || !window.confirm(`删除会话“${selected.value.title}”？`))
+		return;
+	const removedId = selected.value.id;
+	await chats.remove(removedId);
+	const next =
+		chats.chatsForPackage(props.packageId)[0] ??
+		(await chats.create({ packageId: props.packageId, activate: false }));
+	emit("select", next.id);
+}
 
 defineExpose({ rename, removeSelected, togglePin });
 </script>

@@ -1,10 +1,5 @@
 <script setup lang="ts">
-import {
-	ArchiveRestore,
-	Box,
-	MessageSquareText,
-	PlugZap,
-} from "lucide-vue-next";
+import { ArchiveRestore, Box, MessageSquareText } from "lucide-vue-next";
 import { computed, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -42,17 +37,7 @@ const packages = computed(() =>
 			(resource) =>
 				resource.type === "conversation" && resource.packageId === item.id,
 		),
-		plugins: backup.restorableResources.filter(
-			(resource) =>
-				resource.type === "plugin" && resource.packageId === item.id,
-		),
 	})),
-);
-
-const globalPlugins = computed(() =>
-	backup.restorableResources.filter(
-		(resource) => resource.type === "plugin" && resource.packageId === null,
-	),
 );
 
 function isSelected(key: string) {
@@ -90,7 +75,7 @@ async function restore() {
           从历史备份恢复资源
         </DialogTitle>
         <DialogDescription>
-          选择角色包、会话或插件，并决定新增副本或更新同 ID 资源。
+          选择角色包或会话，并决定新增副本或更新同 ID 资源。
         </DialogDescription>
       </DialogHeader>
 
@@ -98,7 +83,7 @@ async function restore() {
         <div>
           <p class="text-sm font-medium">恢复方式</p>
           <p class="text-xs leading-5 text-muted-foreground">
-            更新模式按结构差异合并，并保留冲突消息版本与插件文件副本。
+            更新模式按结构差异合并，并保留冲突消息版本。
           </p>
         </div>
         <Select v-model="restoreMode">
@@ -133,13 +118,13 @@ async function restore() {
             <span class="min-w-0">
               <span class="block font-medium">{{ item.name }}</span>
               <span class="block text-xs text-muted-foreground">
-                恢复角色包时会一并恢复其中的会话与本地插件
+                恢复角色包时会一并恢复其中的会话与本地 World 文档
               </span>
             </span>
           </label>
 
           <div
-            v-if="item.conversations.length || item.plugins.length"
+            v-if="item.conversations.length"
             class="grid gap-1 px-3 py-2"
           >
             <label
@@ -159,52 +144,14 @@ async function restore() {
                 需同时恢复角色包
               </span>
             </label>
-            <label
-              v-for="resource in item.plugins"
-              :key="resource.key"
-              class="flex items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted/50"
-              :class="{ 'cursor-not-allowed opacity-50': !packageAvailable(item.id) }"
-            >
-              <Checkbox
-                :disabled="!packageAvailable(item.id)"
-                :model-value="isSelected(resource.key)"
-                @update:model-value="toggle(resource, Boolean($event))"
-              />
-              <PlugZap class="size-4 text-muted-foreground" />
-              <span class="min-w-0 flex-1 truncate">{{ resource.name }}</span>
-              <span v-if="!packageAvailable(item.id)" class="text-xs text-muted-foreground">
-                需同时恢复角色包
-              </span>
-            </label>
-          </div>
-        </section>
-
-        <section v-if="globalPlugins.length" class="overflow-hidden rounded-lg border">
-          <header class="bg-muted/35 px-4 py-3">
-            <h3 class="font-medium">全局插件</h3>
-            <p class="mt-1 text-xs text-muted-foreground">全局插件不依赖角色包，可以单独恢复。</p>
-          </header>
-          <div class="grid gap-1 px-3 py-2">
-            <label
-              v-for="resource in globalPlugins"
-              :key="resource.key"
-              class="flex items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-muted/50"
-            >
-              <Checkbox
-                :model-value="isSelected(resource.key)"
-                @update:model-value="toggle(resource, Boolean($event))"
-              />
-              <PlugZap class="size-4 text-muted-foreground" />
-              <span class="truncate">{{ resource.name }}</span>
-            </label>
           </div>
         </section>
 
         <div
-          v-if="packages.length === 0 && globalPlugins.length === 0"
+          v-if="packages.length === 0"
           class="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground"
         >
-          这个备份中没有可恢复的角色包、会话或插件。
+          这个备份中没有可恢复的角色包或会话。
         </div>
       </div>
 

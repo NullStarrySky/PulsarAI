@@ -1,29 +1,55 @@
 <script setup lang="ts">
-import { CalendarClock, FolderTree, Maximize2, Minus, MoreHorizontal, Pencil, Pin, PinOff, Search, Settings, Trash2, X } from "lucide-vue-next";
+import {
+	CalendarClock,
+	FolderTree,
+	Maximize2,
+	Minus,
+	MoreHorizontal,
+	Pencil,
+	Pin,
+	PinOff,
+	Search,
+	Settings,
+	Trash2,
+	X,
+} from "lucide-vue-next";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+	Dialog,
+	DialogContent,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import ChatManager from "@/features/Conversation/chats/ChatManager.vue";
+import type ChatManager from "@/features/Conversation/chats/ChatManager.vue";
 import { useChatStore } from "@/features/Conversation/chats/chat-store";
+import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
-import PackageManager from "@/features/Package/PackageManager.vue";
+import type PackageManager from "@/features/Package/PackageManager.vue";
 import { usePackageStore } from "@/features/Package/package-store";
 import { useLayoutStore } from "@/features/UI/layout-store";
-import { host } from "@/host";
-import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
-import { useCommandStore } from "@/features/Hotkey/command-store";
 import SchedulePage from "@/features/UI/schedule/SchedulePage.vue";
+import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
+import { host } from "@/host";
 
-const props = defineProps<{ packageId: string; chatId: string; assetOpen?: boolean }>();
-const emit = defineEmits<{ "update:packageId": [value: string]; "update:chatId": [value: string]; "toggle-assets": [] }>();
+const props = defineProps<{
+	packageId: string;
+	chatId: string;
+	assetOpen?: boolean;
+}>();
+const emit = defineEmits<{
+	"update:packageId": [value: string];
+	"update:chatId": [value: string];
+	"toggle-assets": [];
+}>();
 const layout = useLayoutStore();
 const responsive = useResponsiveStore();
 const appearance = useAppearanceStore();
@@ -39,28 +65,60 @@ const scheduleOpen = ref(false);
 const packageManager = ref<InstanceType<typeof PackageManager> | null>(null);
 const chatManager = ref<InstanceType<typeof ChatManager> | null>(null);
 const topBarHoverBoundary = 56;
-const selectedPackage = computed(() => packages.packages.find((item) => item.id === props.packageId) ?? null);
-const selectedChat = computed(() => chats.chatsForPackage(props.packageId).find((item) => item.id === props.chatId) ?? null);
+const selectedPackage = computed(
+	() => packages.packages.find((item) => item.id === props.packageId) ?? null,
+);
+const selectedChat = computed(
+	() =>
+		chats
+			.chatsForPackage(props.packageId)
+			.find((item) => item.id === props.chatId) ?? null,
+);
 
-const topBarClass = computed(() => !appearance.zenFrameEnabled
-  ? "bg-background text-foreground border-b border-border/80"
-  : appearance.zenFrameIsDark ? "bg-zen-frame-bg text-white" : "bg-zen-frame-bg text-slate-900");
-const buttonClass = computed(() => !appearance.zenFrameEnabled
-  ? "text-muted-foreground/75 hover:bg-muted/60 hover:text-foreground"
-  : appearance.zenFrameIsDark ? "text-white/80 hover:bg-white/15 hover:text-white" : "text-slate-700 hover:bg-black/10 hover:text-slate-950");
-const dividerClass = computed(() => !appearance.zenFrameEnabled
-  ? "bg-border/60"
-  : appearance.zenFrameIsDark ? "bg-white/20" : "bg-black/15");
-const closeClass = computed(() => !appearance.zenFrameEnabled
-  ? "text-muted-foreground/75 hover:bg-destructive hover:text-destructive-foreground"
-  : appearance.zenFrameIsDark ? "text-white/80 hover:bg-red-600 hover:text-white" : "text-slate-700 hover:bg-red-600 hover:text-slate-950");
-const frameBorderClass = computed(() => layout.topBarPinned
-  ? appearance.zenFrameEnabled ? "border-b border-zen-frame-border/80" : "border-b border-border/80"
-  : appearance.zenFrameEnabled ? "border border-zen-frame-border/80" : "border border-border/80");
-const visible = computed(() => layout.topBarPinned || hovered.value || operationsOpen.value);
+const topBarClass = computed(() =>
+	!appearance.zenFrameEnabled
+		? "bg-background text-foreground border-b border-border/80"
+		: appearance.zenFrameIsDark
+			? "bg-zen-frame-bg text-white"
+			: "bg-zen-frame-bg text-slate-900",
+);
+const buttonClass = computed(() =>
+	!appearance.zenFrameEnabled
+		? "text-muted-foreground/75 hover:bg-muted/60 hover:text-foreground"
+		: appearance.zenFrameIsDark
+			? "text-white/80 hover:bg-white/15 hover:text-white"
+			: "text-slate-700 hover:bg-black/10 hover:text-slate-950",
+);
+const dividerClass = computed(() =>
+	!appearance.zenFrameEnabled
+		? "bg-border/60"
+		: appearance.zenFrameIsDark
+			? "bg-white/20"
+			: "bg-black/15",
+);
+const closeClass = computed(() =>
+	!appearance.zenFrameEnabled
+		? "text-muted-foreground/75 hover:bg-destructive hover:text-destructive-foreground"
+		: appearance.zenFrameIsDark
+			? "text-white/80 hover:bg-red-600 hover:text-white"
+			: "text-slate-700 hover:bg-red-600 hover:text-slate-950",
+);
+const frameBorderClass = computed(() =>
+	layout.topBarPinned
+		? appearance.zenFrameEnabled
+			? "border-b border-zen-frame-border/80"
+			: "border-b border-border/80"
+		: appearance.zenFrameEnabled
+			? "border border-zen-frame-border/80"
+			: "border border-border/80",
+);
+const visible = computed(
+	() => layout.topBarPinned || hovered.value || operationsOpen.value,
+);
 
 function onMouseMove(event: MouseEvent) {
-  if (!layout.topBarPinned) hovered.value = event.clientY <= topBarHoverBoundary;
+	if (!layout.topBarPinned)
+		hovered.value = event.clientY <= topBarHoverBoundary;
 }
 onMounted(() => window.addEventListener("mousemove", onMouseMove));
 onUnmounted(() => window.removeEventListener("mousemove", onMouseMove));
