@@ -131,7 +131,7 @@ function textAnswer(question: AskUserQuestion) {
 
 <template>
   <Dialog :open="open" @update:open="value => !value && finish({ cancelled: true })">
-    <DialogContent :show-close-button="false" class="!max-h-[calc(100dvh-2rem)] !w-[calc(100vw-2rem)] !max-w-[38rem] gap-0 overflow-hidden p-0">
+    <DialogContent :show-close-button="false" class="max-h-[calc(100dvh-2rem)]! w-[calc(100vw-2rem)]! max-w-152! gap-0 overflow-hidden p-0">
       <template v-if="request && currentQuestion">
         <DialogHeader class="border-b px-6 py-5 mobile:px-4">
           <div class="flex items-center justify-between gap-3">
@@ -166,7 +166,7 @@ function textAnswer(question: AskUserQuestion) {
             </QuestionnaireItem>
           </div>
 
-          <DialogFooter class="!m-0 !flex-row !items-center !justify-between !rounded-b-xl !border-x-0 !border-b-0 !bg-background !px-6 !py-2.5 mobile:!px-4 sm:!flex-row sm:!justify-between">
+          <DialogFooter class="m-0! flex-row! items-center! justify-between! rounded-b-xl border-x-0 border-b-0 bg-background px-6 py-2.5 mobile:px-4 sm:flex-row sm:justify-between">
             <div class="flex items-center gap-1">
               <Button type="button" variant="ghost" size="icon-sm" title="上一题" :disabled="questionIndex === 0" @click="questionIndex -= 1"><ChevronLeft /></Button>
               <span class="min-w-10 text-center text-xs tabular-nums text-muted-foreground">{{ questionIndex + 1 }}/{{ request.questions.length }}</span>

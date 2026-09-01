@@ -130,7 +130,7 @@ function openActionView(action: WorldResource) {
   </div>
 
   <Dialog v-model:open="whiteboardOpen">
-    <DialogContent class="h-[min(820px,92vh)] w-[min(1200px,calc(100vw-32px))] max-w-none overflow-hidden p-0 sm:max-w-none mobile:h-[100dvh] mobile:w-screen mobile:rounded-none mobile:border-0">
+    <DialogContent class="h-[min(820px,92vh)] w-[min(1200px,calc(100vw-32px))] max-w-none overflow-hidden p-0 sm:max-w-none mobile:h-dvh mobile:w-screen mobile:rounded-none mobile:border-0">
       <DialogHeader class="sr-only"><DialogTitle>白板</DialogTitle></DialogHeader>
       <iframe class="h-full w-full border-0 bg-background" src="https://excalidraw.com/" title="Excalidraw 白板" allow="clipboard-read; clipboard-write" />
     </DialogContent>

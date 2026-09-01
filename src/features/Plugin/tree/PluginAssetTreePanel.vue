@@ -10,7 +10,6 @@ import {
 	ref,
 	watch,
 } from "vue";
-import { Button } from "@/components/ui/button";
 import type {
 	FileTreeAction,
 	FileTreeActions,
@@ -18,6 +17,7 @@ import type {
 } from "@/components/common/file-tree";
 import { FileTree } from "@/components/common/file-tree";
 import { Segmented } from "@/components/common/segmented";
+import { Button } from "@/components/ui/button";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
 import { useWorld, type WorldResource } from "./world-store";
 import type { WorldFileNode, WorldNode } from "./world-types";
@@ -100,15 +100,13 @@ function folderActions(): FileTreeActions {
 					id: "add-file",
 					icon: "file-plus-2",
 					name: "资源文件",
-					type: (node) =>
-						node.type === "folder" && !isSlotPath(node.data.path),
+					type: (node) => node.type === "folder" && !isSlotPath(node.data.path),
 				},
 				{
 					id: "add-folder",
 					icon: "folder-plus",
 					name: "文件夹",
-					type: (node) =>
-						node.type === "folder" && !isSlotPath(node.data.path),
+					type: (node) => node.type === "folder" && !isSlotPath(node.data.path),
 				},
 				{
 					id: "add-slot",
@@ -197,11 +195,11 @@ function treeNode(
 		data:
 			node.type === "file"
 				? { file: node, path: resourcePath, resource }
-			: {
-					path: resourcePath,
-					description: node.description,
-					selectionMode: node.selectionMode,
-				},
+				: {
+						path: resourcePath,
+						description: node.description,
+						selectionMode: node.selectionMode,
+					},
 	};
 }
 
@@ -400,7 +398,7 @@ watch(isMobileLayout, () => {
 </script>
 
 <template>
-  <aside ref="panel" :style="panelStyle" class="absolute bottom-4 right-4 top-4 z-30 flex min-h-0 w-[min(28rem,calc(100%_-_2rem))] min-w-[min(20rem,calc(100%_-_2rem))] flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl transition-shadow mobile:inset-0 mobile:w-full mobile:min-w-0 mobile:rounded-none">
+  <aside ref="panel" :style="panelStyle" class="absolute bottom-4 right-4 top-4 z-30 flex min-h-0 w-[min(28rem,calc(100%-2rem))] min-w-[min(20rem,calc(100%-2rem))] flex-col overflow-hidden rounded-2xl border bg-card shadow-2xl transition-shadow mobile:inset-0 mobile:w-full mobile:min-w-0 mobile:rounded-none">
     <header class="asset-panel-drag-handle flex shrink-0 items-center gap-2 border-b px-2 py-2 cursor-grab active:cursor-grabbing">
       <Segmented v-model="tab" :options="tabOptions" aria-label="World 视图">
         <template #option="{ option }">

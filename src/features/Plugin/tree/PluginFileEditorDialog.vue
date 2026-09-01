@@ -223,7 +223,7 @@ onBeforeUnmount(teardownInteraction);
             </Select>
             <Popover>
               <PopoverTrigger as-child><Button :variant="condition ? 'secondary' : 'outline'" size="sm" class="h-8" title="插入条件"><SlidersHorizontal />条件</Button></PopoverTrigger>
-              <PopoverContent align="end" class="w-[32rem] max-w-[calc(100vw-2rem)] p-3"><PluginResourceConditionEditor :model-value="condition" @update:model-value="updateCondition" /></PopoverContent>
+              <PopoverContent align="end" class="w-lg max-w-[calc(100vw-2rem)] p-3"><PluginResourceConditionEditor :model-value="condition" @update:model-value="updateCondition" /></PopoverContent>
             </Popover>
             <NumberField :model-value="priority" :step="1" class="w-28" @update:model-value="updatePriority">
               <NumberFieldContent><NumberFieldDecrement /><NumberFieldInput aria-label="插槽优先级" class="h-8 text-xs" /><NumberFieldIncrement /></NumberFieldContent>

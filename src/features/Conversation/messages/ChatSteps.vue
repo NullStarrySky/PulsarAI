@@ -162,7 +162,7 @@ function unescapeDisplayText(value: string) {
               <span class="shrink-0 text-[11px] font-medium text-foreground">{{ row.title }}</span>
               <span class="inline-flex h-5 min-w-0 flex-1 items-center truncate rounded-md bg-muted/70 px-1.5 text-[11px] text-muted-foreground shadow-sm" :class="row.mono && 'font-mono'">{{ row.chip }}</span>
             </span>
-            <div class="grid transition-[grid-template-rows,opacity] duration-300 [transition-timing-function:cubic-bezier(0.23,1,0.32,1)]" :class="expandedRows.has(index) ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'">
+            <div class="grid transition-[grid-template-rows,opacity] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)]" :class="expandedRows.has(index) ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'">
               <div class="min-h-0 overflow-hidden">
                 <div v-if="row.input !== undefined || row.output !== undefined" class="mt-1 grid gap-2 mobile:grid-cols-1 sm:grid-cols-2">
                   <section class="min-w-0 overflow-hidden rounded-md border border-border/70 bg-background/60">

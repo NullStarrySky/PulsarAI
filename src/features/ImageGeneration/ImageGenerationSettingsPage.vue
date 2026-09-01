@@ -33,7 +33,7 @@ import {
 	saveComfyUIRunPodApiKey,
 	saveComfyUISettings,
 } from "./comfyui-settings";
-import { generateImage } from "./image-generation";
+import { generateImageTest } from "./generate-image-test";
 import {
 	AUTOMATIC1111_MODEL_REF,
 	AUTOMATIC1111_PROVIDER_ID,
@@ -60,6 +60,7 @@ import {
 	buildComfyUIBaseUrl,
 	testComfyUIConnection,
 } from "./providers/comfyui-image-client";
+import { comfyUISamplers, comfyUISchedulers } from "./comfyui-options";
 import {
 	hasStabilityApiKey,
 	loadStabilitySettings,
@@ -138,26 +139,6 @@ const comfyUIAddress = computed(() => {
 		return "地址配置无效";
 	}
 });
-const comfyUISamplers = [
-	"euler",
-	"euler_ancestral",
-	"heun",
-	"dpm_2",
-	"dpm_2_ancestral",
-	"dpmpp_2m",
-	"dpmpp_2m_sde",
-	"dpmpp_2s_ancestral",
-];
-const comfyUISchedulers = [
-	"normal",
-	"karras",
-	"exponential",
-	"sgm_uniform",
-	"simple",
-	"ddim_uniform",
-	"beta",
-];
-
 onMounted(async () => {
 	[
 		novelAISettings.value,
@@ -366,11 +347,7 @@ async function runTest() {
 			if (novelAIApiKey.value !== apiKeyMask)
 				await saveNovelAIApiKey(novelAIApiKey.value);
 		}
-		const result = await generateImage({
-			model,
-			prompt: prompt.value.trim(),
-		});
-		resultUrl.value = `data:${result.image.mediaType};base64,${result.image.base64}`;
+		resultUrl.value = await generateImageTest(model, prompt.value.trim());
 		push.success("图片生成完成");
 	} catch (error) {
 		push.error(error instanceof Error ? error.message : "图片生成失败");
@@ -503,7 +480,7 @@ async function runTest() {
         <template #bottom>
           <div class="grid gap-3">
             <Textarea v-model="prompt" class="min-h-24 resize-y" placeholder="输入图片提示词" />
-            <img v-if="resultUrl" :src="resultUrl" alt="ComfyUI 图片生成测试结果" class="max-h-[32rem] w-full rounded-lg border object-contain" />
+            <img v-if="resultUrl" :src="resultUrl" alt="ComfyUI 图片生成测试结果" class="max-h-128 w-full rounded-lg border object-contain" />
           </div>
         </template>
       </SettingFormField>
@@ -540,7 +517,7 @@ async function runTest() {
       <SettingFormField title="负向提示词" description="作为 negative_prompt 随请求发送。"><Textarea v-model="automatic1111Settings.negativePrompt" class="min-h-20 resize-y" /></SettingFormField>
       <SettingFormField title="图片生成测试" description="实际调用 txt2img；取消时调用 /sdapi/v1/interrupt。">
         <Button :disabled="testing || !prompt.trim()" @click="runTest">{{ testing ? "生成中…" : "生成图片" }}</Button>
-        <template #bottom><div class="grid gap-3"><Textarea v-model="prompt" class="min-h-24 resize-y" /><img v-if="resultUrl" :src="resultUrl" alt="A1111 图片生成测试结果" class="max-h-[32rem] w-full rounded-lg border object-contain" /></div></template>
+        <template #bottom><div class="grid gap-3"><Textarea v-model="prompt" class="min-h-24 resize-y" /><img v-if="resultUrl" :src="resultUrl" alt="A1111 图片生成测试结果" class="max-h-128 w-full rounded-lg border object-contain" /></div></template>
       </SettingFormField>
     </SettingForm>
 
@@ -561,7 +538,7 @@ async function runTest() {
       <SettingFormField title="负向提示词" description="最大 10,000 字符，与正向提示词一同提交。"><Textarea v-model="stabilitySettings.negativePrompt" class="min-h-20 resize-y" /></SettingFormField>
       <SettingFormField title="图片生成测试" description="实际调用 Stability Stable Image API。">
         <Button :disabled="testing || !prompt.trim()" @click="runTest">{{ testing ? "生成中…" : "生成图片" }}</Button>
-        <template #bottom><div class="grid gap-3"><Textarea v-model="prompt" class="min-h-24 resize-y" /><img v-if="resultUrl" :src="resultUrl" alt="Stability 图片生成测试结果" class="max-h-[32rem] w-full rounded-lg border object-contain" /></div></template>
+        <template #bottom><div class="grid gap-3"><Textarea v-model="prompt" class="min-h-24 resize-y" /><img v-if="resultUrl" :src="resultUrl" alt="Stability 图片生成测试结果" class="max-h-128 w-full rounded-lg border object-contain" /></div></template>
       </SettingFormField>
     </SettingForm>
 
@@ -643,7 +620,7 @@ async function runTest() {
         <template #bottom>
           <div class="grid gap-3">
             <Textarea v-model="prompt" class="min-h-24 resize-y" placeholder="输入图片提示词" />
-            <img v-if="resultUrl" :src="resultUrl" alt="图片生成测试结果" class="max-h-[32rem] w-full rounded-lg border object-contain" />
+            <img v-if="resultUrl" :src="resultUrl" alt="图片生成测试结果" class="max-h-128 w-full rounded-lg border object-contain" />
           </div>
         </template>
       </SettingFormField>
@@ -670,7 +647,7 @@ async function runTest() {
         <template #bottom>
           <div class="grid gap-3">
             <Textarea v-model="prompt" class="min-h-24 resize-y" placeholder="输入图片提示词" />
-            <img v-if="resultUrl" :src="resultUrl" alt="图片生成测试结果" class="max-h-[32rem] w-full rounded-lg border object-contain" />
+            <img v-if="resultUrl" :src="resultUrl" alt="图片生成测试结果" class="max-h-128 w-full rounded-lg border object-contain" />
           </div>
         </template>
       </SettingFormField>
