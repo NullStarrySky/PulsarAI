@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import { ref, watch } from "vue";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/default-config-store";
 import { modelProxyFetch } from "@/features/ModelConnection/providers/model-proxy-fetch";
-import { generateText } from "@/features/ModelConnection/services/ai";
+import { generateText } from "@/features/ModelConnection/services/model-ai";
 import { createDefaultTranslateState, type TranslateState } from "./translate";
 
 const storageKey = "pulsarai:translate:v1";

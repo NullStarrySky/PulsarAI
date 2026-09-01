@@ -32,7 +32,7 @@ import type {
 	ModelPricing,
 } from "../model-provider";
 import type { ServiceProviderView } from "../service-provider";
-import { generateText } from "../services/ai";
+import { generateText } from "../services/model-ai";
 import {
 	modelTypeLabels,
 	useModelConnectionStore,

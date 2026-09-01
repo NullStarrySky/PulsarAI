@@ -2,10 +2,10 @@
 import { push } from "notivue";
 import { computed, onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingItem from "@/features/Setting/components/SettingItem.vue";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
-import SettingSwitch from "@/features/Setting/components/SettingSwitch.vue";
 import {
 	type AndroidBatteryOptimizationStatus,
 	getAndroidBatteryOptimizationStatus,
@@ -56,16 +56,16 @@ async function requestNotificationPermission() {
   <SettingPage title="运行时" description="管理通知、声音和移动端后台运行能力。">
     <SettingGroup title="回复完成">
       <SettingItem title="播放声音" description="回复完成后播放一声简短提示音。">
-        <SettingSwitch v-model="runtime.playSoundOnReplyComplete" />
+        <Switch v-model="runtime.playSoundOnReplyComplete" />
       </SettingItem>
       <SettingItem title="发送通知" description="回复完成后发送系统通知。">
         <div class="flex items-center gap-2">
           <Button variant="outline" size="sm" @click="requestNotificationPermission">授权</Button>
-          <SettingSwitch v-model="runtime.notifyOnReplyComplete" />
+          <Switch v-model="runtime.notifyOnReplyComplete" />
         </div>
       </SettingItem>
       <SettingItem title="仅在后台触发" description="应用不在前台时才播放声音或发送通知。">
-        <SettingSwitch v-model="runtime.replyCompletionOnlyWhenBackground" />
+        <Switch v-model="runtime.replyCompletionOnlyWhenBackground" />
       </SettingItem>
     </SettingGroup>
 

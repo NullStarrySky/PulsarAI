@@ -2,13 +2,15 @@
 import * as LucideIcons from "lucide-vue-next";
 import {
 	ChevronRight,
+	Check,
 	File,
 	Folder,
 	FolderOpen,
 	MoreHorizontal,
 	Plus,
 } from "lucide-vue-next";
-import { type Component, computed } from "vue";
+import { type Component, computed, ref } from "vue";
+import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -18,6 +20,7 @@ import {
 	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import type { FileTreeAction, FileTreeNode } from "./FileTree.vue";
 import FileTreeBranch from "./FileTreeBranch.vue";
@@ -32,7 +35,7 @@ const emit = defineEmits<{
 	select: [node: FileTreeNode];
 	toggle: [node: FileTreeNode];
 	"toggle-resource": [node: FileTreeNode, selected: boolean];
-	action: [node: FileTreeNode, action: FileTreeAction];
+	action: [node: FileTreeNode, action: FileTreeAction, value?: string];
 }>();
 
 const isFolder = computed(() => props.node.type === "folder");
@@ -41,6 +44,7 @@ const children = computed(() => props.node.children ?? []);
 const actions = computed(() =>
 	Object.values(props.node.action ?? {}).filter(isVisibleAction),
 );
+const inputValues = ref<Record<string, string>>({});
 
 function activate() {
 	emit("select", props.node);
@@ -71,12 +75,29 @@ function isVisibleAction(
 	return action !== undefined && matchesAction(action);
 }
 
-function runAction(action: FileTreeAction) {
-	emit("action", props.node, action);
+function inputKey(action: FileTreeAction) {
+	return `${props.node.id}:${action.id}`;
 }
 
-function forwardAction(node: FileTreeNode, action: FileTreeAction) {
-	emit("action", node, action);
+function inputValue(action: FileTreeAction) {
+	return (
+		inputValues.value[inputKey(action)] ??
+		action.input?.value?.(props.node) ??
+		""
+	);
+}
+
+function setInputValue(action: FileTreeAction, value: string) {
+	inputValues.value[inputKey(action)] = value;
+}
+
+function runAction(action: FileTreeAction, value?: string) {
+	if (action.input) delete inputValues.value[inputKey(action)];
+	emit("action", props.node, action, value);
+}
+
+function forwardAction(node: FileTreeNode, action: FileTreeAction, value?: string) {
+	emit("action", node, action, value);
 }
 </script>
 
@@ -112,6 +133,30 @@ function forwardAction(node: FileTreeNode, action: FileTreeAction) {
               <DropdownMenuSubTrigger><component :is="iconFor(action.icon, Plus)" class="mr-2 size-4" />{{ action.name }}</DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 <DropdownMenuItem v-for="subAction in action.subActions.filter(matchesAction)" :key="subAction.id" @select="runAction(subAction)"><component :is="iconFor(subAction.icon, Plus)" class="mr-2 size-4" />{{ subAction.name }}</DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSub v-else-if="action.input">
+              <DropdownMenuSubTrigger><component :is="iconFor(action.icon, MoreHorizontal)" class="mr-2 size-4" />{{ action.name }}</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent class="w-60 p-2">
+                <div class="grid gap-2" @click.stop @keydown.stop>
+                  <Input
+                    :model-value="inputValue(action)"
+                    :placeholder="action.input.placeholder"
+                    @update:model-value="setInputValue(action, String($event))"
+                    @keydown.enter.prevent="runAction(action, inputValue(action))"
+                  />
+                  <Button size="sm" class="justify-center" @click="runAction(action, inputValue(action))">{{ action.input.submitLabel ?? '保存' }}</Button>
+                </div>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+            <DropdownMenuSub v-else-if="action.choices?.length">
+              <DropdownMenuSubTrigger><component :is="iconFor(action.icon, MoreHorizontal)" class="mr-2 size-4" />{{ action.name }}</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuItem v-for="choice in action.choices" :key="choice.value" @select="runAction(action, choice.value)">
+                  <component :is="iconFor(choice.icon, MoreHorizontal)" class="mr-2 size-4" />
+                  {{ choice.name }}
+                  <Check v-if="action.selected?.(node, choice.value)" class="ml-auto size-4" />
+                </DropdownMenuItem>
               </DropdownMenuSubContent>
             </DropdownMenuSub>
             <DropdownMenuItem v-else @select="runAction(action)"><component :is="iconFor(action.icon, MoreHorizontal)" class="mr-2 size-4" />{{ action.name }}</DropdownMenuItem>

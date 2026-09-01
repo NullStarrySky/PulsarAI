@@ -29,11 +29,11 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type ChatManager from "@/features/Conversation/chats/ChatManager.vue";
+import ChatManager from "@/features/Conversation/chats/ChatManager.vue";
 import { useChatStore } from "@/features/Conversation/chats/chat-store";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
-import type PackageManager from "@/features/Package/PackageManager.vue";
+import PackageManager from "@/features/Package/PackageManager.vue";
 import { usePackageStore } from "@/features/Package/package-store";
 import { useLayoutStore } from "@/features/UI/layout-store";
 import SchedulePage from "@/features/UI/schedule/SchedulePage.vue";

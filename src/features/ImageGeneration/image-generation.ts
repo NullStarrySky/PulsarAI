@@ -74,6 +74,7 @@ export async function generateImage(
 		return {
 			image: result.images[0]!,
 			images: result.images,
+			calls: [],
 			warnings: [],
 			responses: [],
 			providerMetadata: {
@@ -107,6 +108,7 @@ export async function generateImage(
 		return {
 			image: result.images[0]!,
 			images: result.images,
+			calls: [],
 			warnings: [],
 			responses: [],
 			providerMetadata: { novelai: { images: [], seed: result.seed } },
@@ -147,6 +149,7 @@ function specializedResult(
 	return {
 		image: images[0]!,
 		images,
+		calls: [],
 		warnings: [],
 		responses: [],
 		providerMetadata,

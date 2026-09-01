@@ -1,3 +1,4 @@
+import { toRaw } from "vue";
 import type { WorldDocument } from "./world-types";
 
 export const worldNone = { type: "none" } as const;
@@ -21,7 +22,7 @@ export interface WorldJsonPatch {
 }
 
 function clone<T>(value: T): T {
-	return structuredClone(value);
+	return structuredClone(toRaw(value));
 }
 
 function isContainer(

@@ -14,6 +14,13 @@ export interface FileTreeAction {
 	name: string;
 	type?: FileTreeActionTarget;
 	subActions?: FileTreeAction[];
+	input?: {
+		placeholder?: string;
+		value?: (node: FileTreeNode) => string;
+		submitLabel?: string;
+	};
+	choices?: Array<{ value: string; name: string; icon?: string }>;
+	selected?: (node: FileTreeNode, value: string) => boolean;
 }
 
 export interface FileTreeActions {
@@ -52,7 +59,7 @@ const emit = defineEmits<{
 	select: [node: FileTreeNode];
 	toggle: [node: FileTreeNode, expanded: boolean];
 	"toggle-resource": [node: FileTreeNode, selected: boolean];
-	action: [node: FileTreeNode, action: FileTreeAction];
+	action: [node: FileTreeNode, action: FileTreeAction, value?: string];
 }>();
 
 const expandedSet = computed(() => new Set(props.expanded));
@@ -77,8 +84,8 @@ function toggleResource(node: FileTreeNode, selected: boolean) {
 	emit("toggle-resource", node, selected);
 }
 
-function runAction(node: FileTreeNode, action: FileTreeAction) {
-	emit("action", node, action);
+function runAction(node: FileTreeNode, action: FileTreeAction, value?: string) {
+	emit("action", node, action, value);
 }
 </script>
 

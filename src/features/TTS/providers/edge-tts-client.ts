@@ -70,7 +70,9 @@ export async function synthesizeWithEdgeTts(
 	}
 
 	return {
-		audio: new Blob(audioChunks, { type: "audio/mpeg" }),
+		audio: new Blob(audioChunks.map((chunk) => Uint8Array.from(chunk)), {
+			type: "audio/mpeg",
+		}),
 		audioBytes,
 		boundaries,
 	};

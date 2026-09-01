@@ -9,6 +9,7 @@
 		/* Bundler mode */
 		"moduleResolution": "bundler",
 		"baseUrl": ".",
+		"ignoreDeprecations": "6.0",
 		"paths": {
 			"@/*": ["./src/*"],
 			"@/host": ["./host/index.ts"],

@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Segmented } from "@/components/ui/segmented";
+import { Segmented } from "@/components/common/segmented";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
 import { useLayoutStore } from "@/features/UI/layout-store";
 import { cn } from "@/lib/utils";

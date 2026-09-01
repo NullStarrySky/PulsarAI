@@ -15,9 +15,9 @@ import type {
 	FileTreeAction,
 	FileTreeActions,
 	FileTreeNode,
-} from "@/components/ui/file-tree";
-import { FileTree } from "@/components/ui/file-tree";
-import { Segmented } from "@/components/ui/segmented";
+} from "@/components/common/file-tree";
+import { FileTree } from "@/components/common/file-tree";
+import { Segmented } from "@/components/common/segmented";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
 import { useWorld, type WorldResource } from "./world-store";
 import type { WorldFileNode, WorldNode } from "./world-types";
@@ -61,6 +61,20 @@ function isSlotPath(path: string | undefined) {
 	);
 }
 
+function isSlotDefinitionPath(path: string | undefined) {
+	if (!path?.startsWith("/self/slot/")) return false;
+	return !path.slice("/self/slot/".length).includes("/");
+}
+
+function isResourceSelected(resource: WorldResource) {
+	const slot = world.slots.value.find(
+		(item) => item.path === resource.file.slot,
+	);
+	return slot?.selectionMode === "single"
+		? slot.resources.some((item) => item.path === resource.path)
+		: resource.file.resourceSelected;
+}
+
 function folderActions(): FileTreeActions {
 	return {
 		rename: {
@@ -68,41 +82,89 @@ function folderActions(): FileTreeActions {
 			icon: "pencil",
 			name: "重命名",
 			type: (node) => !isSlotPath(node.data.path),
+			input: {
+				placeholder: "名称",
+				value: (node) => node.name,
+				submitLabel: "重命名",
+			},
 		},
 		add: {
 			id: "add",
 			icon: "folder-plus",
 			name: "新建",
-			type: (node) => node.type === "folder" && !isSlotPath(node.data.path),
+			type: (node) =>
+				node.type === "folder" &&
+				(!isSlotPath(node.data.path) || node.data.path === "/self/slot"),
 			subActions: [
 				{
 					id: "add-file",
 					icon: "file-plus-2",
 					name: "资源文件",
-					type: "folder",
+					type: (node) =>
+						node.type === "folder" && !isSlotPath(node.data.path),
 				},
 				{
 					id: "add-folder",
 					icon: "folder-plus",
 					name: "文件夹",
-					type: "folder",
+					type: (node) =>
+						node.type === "folder" && !isSlotPath(node.data.path),
+				},
+				{
+					id: "add-slot",
+					icon: "braces",
+					name: "插槽文件夹",
+					type: (node) => node.data.path === "/self/slot",
 				},
 			],
+		},
+		"slot-description": {
+			id: "slot-description",
+			icon: "text",
+			name: "描述",
+			type: (node) => isSlotDefinitionPath(node.data.path),
+			input: {
+				placeholder: "描述",
+				value: (node) => String(node.data.description ?? ""),
+			},
+		},
+		"slot-selection-mode": {
+			id: "slot-selection-mode",
+			icon: "list-checks",
+			name: "选择方式",
+			type: (node) => isSlotDefinitionPath(node.data.path),
+			choices: [
+				{ value: "none", name: "不参与选择" },
+				{ value: "single", name: "单选" },
+				{ value: "multiple", name: "多选" },
+			],
+			selected: (node, value) => node.data.selectionMode === value,
 		},
 	};
 }
 
 const fileActions: FileTreeActions = {
-	rename: { id: "rename", icon: "pencil", name: "重命名", type: "file" },
+	rename: {
+		id: "rename",
+		icon: "pencil",
+		name: "重命名",
+		type: "file",
+		input: {
+			placeholder: "名称",
+			value: (node) => node.name,
+			submitLabel: "重命名",
+		},
+	},
 };
 
 function treeNode(
 	scope: "global" | "self",
 	node: WorldNode,
 	path: string[],
+	isRoot = false,
 ): FileTreeNode {
-	const nodePath = [...path, node.name];
-	const resourcePath = `/${scope}/${nodePath.join("/")}`;
+	const nodePath = isRoot ? path : [...path, node.name];
+	const resourcePath = `/${scope}${nodePath.length ? `/${nodePath.join("/")}` : ""}`;
 	const resource =
 		node.type === "file"
 			? world.resources.value.find((item) => item.path === resourcePath)
@@ -128,14 +190,18 @@ function treeNode(
 		...(resource
 			? {
 					selectableResource: true,
-					resourceSelected: resource.file.resourceSelected,
+					resourceSelected: isResourceSelected(resource),
 				}
 			: {}),
 		...(node.type === "file" ? { action: fileActions } : {}),
 		data:
 			node.type === "file"
 				? { file: node, path: resourcePath, resource }
-				: { path: resourcePath },
+			: {
+					path: resourcePath,
+					description: node.description,
+					selectionMode: node.selectionMode,
+				},
 	};
 }
 
@@ -143,8 +209,8 @@ const assetNodes = computed<FileTreeNode[]>(() => {
 	const value = world.world.value;
 	if (!value) return [];
 	return [
-		treeNode("global", value.global.root, []),
-		treeNode("self", value.self.root, []),
+		treeNode("global", value.global.root, [], true),
+		treeNode("self", value.self.root, [], true),
 	];
 });
 
@@ -154,6 +220,7 @@ const slotNodes = computed<FileTreeNode[]>(() =>
 		name: slot.name,
 		type: "folder",
 		icon: slot.icon,
+		action: folderActions(),
 		children: slot.allResources.map((resource) => ({
 			id: `${resource.scope}:${resource.file.id}`,
 			name: resource.file.name,
@@ -161,10 +228,14 @@ const slotNodes = computed<FileTreeNode[]>(() =>
 			icon: resource.file.icon || slot.icon,
 			prefix: resource.sourceName,
 			selectableResource: true,
-			resourceSelected: resource.file.resourceSelected,
+			resourceSelected: isResourceSelected(resource),
 			data: { file: resource.file, path: resource.path, resource },
 		})),
-		data: {},
+		data: {
+			path: slot.path,
+			description: slot.description,
+			selectionMode: slot.selectionMode,
+		},
 	})),
 );
 
@@ -204,7 +275,7 @@ const sourceNodes = computed<FileTreeNode[]>(() => {
 					type: "file" as const,
 					icon: resource.file.icon || slot?.icon,
 					selectableResource: true,
-					resourceSelected: resource.file.resourceSelected,
+					resourceSelected: isResourceSelected(resource),
 					data: { file: resource.file, path: resource.path, resource },
 				})),
 		})),
@@ -251,7 +322,11 @@ function toggleNode(node: FileTreeNode, selected: boolean) {
 		void toggle(node.data.resource as WorldResource, selected);
 }
 
-async function runTreeAction(node: FileTreeNode, action: FileTreeAction) {
+async function runTreeAction(
+	node: FileTreeNode,
+	action: FileTreeAction,
+	value?: string,
+) {
 	const path = String(node.data.path ?? "");
 	if (!path) return;
 	if (action.id === "add-file") {
@@ -266,9 +341,27 @@ async function runTreeAction(node: FileTreeNode, action: FileTreeAction) {
 		await world.mkdir(`${path}/folder-${index}`);
 		return;
 	}
+	if (action.id === "add-slot") {
+		await createSlot();
+		return;
+	}
+	if (action.id === "slot-description" && isSlotDefinitionPath(path)) {
+		await world.updateFolder(path, {
+			description: value?.trim() || undefined,
+		});
+		return;
+	}
+	if (action.id === "slot-selection-mode" && isSlotDefinitionPath(path)) {
+		if (value !== "none" && value !== "single" && value !== "multiple") return;
+		await world.updateFolder(path, { selectionMode: value });
+		return;
+	}
 	if (action.id !== "rename" || isSlotPath(path)) return;
-	const nextName = window.prompt("名称", node.name)?.trim();
-	if (!nextName || nextName === node.name || /[\\/]/.test(nextName)) return;
+	const nextName = value?.trim();
+	if (!nextName || /[\\/]/.test(nextName)) return;
+	const pathParts = path.split("/");
+	const currentName = pathParts[pathParts.length - 1];
+	if (nextName === currentName) return;
 	const parent = path.split("/").slice(0, -1).join("/");
 	await world.move(path, `${parent}/${nextName}`);
 }

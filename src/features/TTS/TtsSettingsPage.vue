@@ -647,7 +647,9 @@ async function runTest() {
 		});
 		if (audioUrl.value) URL.revokeObjectURL(audioUrl.value);
 		audioUrl.value = URL.createObjectURL(
-			new Blob([result.audio.uint8Array], { type: result.audio.mediaType }),
+			new Blob([Uint8Array.from(result.audio.uint8Array)], {
+				type: result.audio.mediaType,
+			}),
 		);
 		push.success("语音生成完成");
 	} catch (error) {

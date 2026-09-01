@@ -9,15 +9,20 @@ const devHost = process.env.TAURI_DEV_HOST;
 const hostTarget =
 	process.env.PULSAR_HOST ??
 	(process.env.TAURI_ENV_PLATFORM ? "mobile-tauri" : "desktop-electron");
+const root = import.meta.dirname;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
 	plugins: [vue(), tailwindcss()],
 	resolve: {
 		alias: {
-			"@/host": path.resolve(__dirname, "./host/index.ts"),
-			"@": path.resolve(__dirname, "./src"),
-			"@host-target": path.resolve(__dirname, `./host/${hostTarget}/index.ts`),
+			"@/host": path.resolve(root, "./host/index.ts"),
+			"@": path.resolve(root, "./src"),
+			"@host-target": path.resolve(root, `./host/${hostTarget}/index.ts`),
+			"@ai-sdk/provider-utils": path.resolve(
+				root,
+				"./node_modules/@ai-sdk/provider-utils",
+			),
 		},
 	},
 

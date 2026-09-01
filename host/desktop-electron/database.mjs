@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
-import { surrealdbNodeEngines } from "@surrealdb/node";
-import { RecordId, Surreal } from "surrealdb";
+import { createNodeEngines } from "@surrealdb/node";
+import { RecordId, Surreal, Table } from "surrealdb";
 
 const resourceTables = [
 	"resource_conversation_memory_segments",
@@ -28,8 +28,27 @@ function recordId(table, id) {
 	return new RecordId(assertTable(table), assertId(id));
 }
 
+function tableId(table) {
+	return new Table(assertTable(table));
+}
+
+function embeddedNodeEngines() {
+	return Object.fromEntries(
+		Object.entries(createNodeEngines()).map(([protocol, createEngine]) => [
+			protocol,
+			(context) => {
+				const engine = createEngine(context);
+				engine.ready ??= () => {};
+				return engine;
+			},
+		]),
+	);
+}
+
 function sortRecords(records) {
-	return [...records].sort((a, b) =>
+	return records.filter(
+		(record) => record && typeof record === "object" && "value" in record,
+	).sort((a, b) =>
 		String(a.resource_key).localeCompare(String(b.resource_key)),
 	);
 }
@@ -38,7 +57,7 @@ export async function createDatabase(userDataPath) {
 	await mkdir(userDataPath, { recursive: true });
 	process.chdir(userDataPath);
 
-	const database = new Surreal({ engines: surrealdbNodeEngines() });
+	const database = new Surreal({ engines: embeddedNodeEngines() });
 	await database.connect("surrealkv://surrealdb");
 	await database.use({ namespace: "pulsar", database: "pulsar" });
 
@@ -78,7 +97,7 @@ export async function createDatabase(userDataPath) {
 
 	async function resetCharacterData() {
 		await Promise.all(
-			resourceTables.map((table) => database.delete(assertTable(table))),
+			resourceTables.map((table) => database.delete(tableId(table))),
 		);
 	}
 

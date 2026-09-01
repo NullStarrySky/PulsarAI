@@ -7,7 +7,7 @@ import {
 export type PluginResourceType = WorldFileType;
 type PluginResourceValue = string | ArrayBuffer;
 
-export type ResourceFile = Pick<WorldFileNode, "name" | "content">;
+export type ResourceFile = Pick<WorldFileNode, "name" | "content" | "condition">;
 
 export interface PluginResource {
 	file: ResourceFile;
@@ -27,12 +27,11 @@ export function textContent(file: ResourceFile): string {
 
 export function binaryContent(file: ResourceFile): ArrayBuffer {
 	const source = file.content;
-	if (source instanceof ArrayBuffer) return source.slice(0);
+	if (source instanceof ArrayBuffer) return Uint8Array.from(new Uint8Array(source)).buffer;
 	if (ArrayBuffer.isView(source)) {
-		return source.buffer.slice(
-			source.byteOffset,
-			source.byteOffset + source.byteLength,
-		);
+		return Uint8Array.from(
+			new Uint8Array(source.buffer, source.byteOffset, source.byteLength),
+		).buffer;
 	}
 	// Persisted media currently keeps an URL/string payload.  Encoding preserves
 	// the byte-oriented API until the database media backend supplies raw bytes.

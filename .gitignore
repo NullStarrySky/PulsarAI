@@ -20,6 +20,7 @@ src-tauri/target
 apikeys
 todo.txt
 queued_prompt.txt
+/scripts/code-stats.ts
 
 refs/
 

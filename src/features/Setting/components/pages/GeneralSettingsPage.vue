@@ -7,13 +7,13 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
 import type { WindowCloseBehavior } from "@/features/UI/window-lifecycle-store";
 import { useWindowLifecycleStore } from "@/features/UI/window-lifecycle-store";
 import SettingGroup from "../SettingGroup.vue";
 import SettingItem from "../SettingItem.vue";
 import SettingPage from "../SettingPage.vue";
-import SettingSwitch from "../SettingSwitch.vue";
 
 const compactMode = ref(false);
 const enableAnimations = ref(true);
@@ -31,16 +31,16 @@ function setCloseBehavior(value: unknown) {
   <SettingPage title="通用设置" description="管理 Pulsar 的基础界面行为。">
     <SettingGroup title="界面">
       <SettingItem title="紧凑模式" description="降低侧栏和列表密度，适合更小窗口。">
-        <SettingSwitch v-model="compactMode" />
+        <Switch v-model="compactMode" />
       </SettingItem>
       <SettingItem title="启用动画" description="侧栏、弹窗和交互反馈默认保留平滑过渡。">
-        <SettingSwitch v-model="enableAnimations" />
+        <Switch v-model="enableAnimations" />
       </SettingItem>
       <SettingItem
         title="Enter 发送消息"
         description="开启时 Enter 发送、Shift+Enter 换行；关闭后交换两者的行为。"
       >
-        <SettingSwitch v-model="appearance.composerSendWithEnter" />
+        <Switch v-model="appearance.composerSendWithEnter" />
       </SettingItem>
     </SettingGroup>
 

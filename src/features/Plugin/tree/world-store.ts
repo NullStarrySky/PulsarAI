@@ -1,4 +1,4 @@
-import { computed, type MaybeRefOrGetter, ref, toValue } from "vue";
+import { computed, type MaybeRefOrGetter, ref, toRaw, toValue } from "vue";
 import { useChatStore } from "@/features/Conversation/chats/chat-store";
 import type {
 	ChatMessage,
@@ -78,7 +78,7 @@ const packageDocuments = new Map<string, WorldDocument>();
 const worldRevision = ref(0);
 
 function clone<T>(value: T) {
-	return structuredClone(value);
+	return structuredClone(toRaw(value));
 }
 
 function normalizedScope(
@@ -525,10 +525,23 @@ export function useWorld(
 				| "treeOrder"
 			>
 		>,
-	) {
+	): Promise<void> {
 		await ensureLoaded();
 		const target = resolve(path);
 		if (target.node.type !== "file") throw new Error(`不是文件：${path}`);
+		const file = target.node;
+		if (patch.resourceSelected === true && file.slot) {
+			const slot = slotDefinitions(requireWorld()).find(
+				(item) => item.path === file.slot,
+			);
+			if (slot?.selectionMode === "single") {
+				const { resourceSelected: _resourceSelected, ...remainingPatch } = patch;
+				if (Object.keys(remainingPatch).length)
+					await updateFile(path, remainingPatch);
+				await setSelected(path, true);
+				return;
+			}
+		}
 		const changedAt = new Date().toISOString();
 		await commit([
 			...Object.entries(patch).map(([key, value]) => ({
@@ -575,10 +588,48 @@ export function useWorld(
 				value: { type: "value" as const, value: changedAt },
 			},
 		]);
+		if (patch.selectionMode === "single") {
+			const selected = resources.value.find(
+				(resource) =>
+					resource.file.slot === path && resource.file.resourceSelected,
+			);
+			if (selected) await setSelected(selected.path, true);
+		}
 	}
 
-	async function setSelected(path: string, selected: boolean) {
-		return updateFile(path, { resourceSelected: selected });
+	async function setSelected(path: string, selected: boolean): Promise<void> {
+		await ensureLoaded();
+		const target = resolve(path);
+		if (target.node.type !== "file") throw new Error(`不是文件：${path}`);
+		const slotPath = target.node.slot;
+		const slot = slotPath
+			? slotDefinitions(requireWorld()).find((item) => item.path === slotPath)
+			: undefined;
+		if (!selected || slot?.selectionMode !== "single") {
+			await updateFile(path, { resourceSelected: selected });
+			return;
+		}
+
+		const changedAt = new Date().toISOString();
+		const updates = resources.value
+			.filter((resource) => resource.file.slot === slotPath)
+			.flatMap((resource) => {
+				const resourceSelected = resource.path === target.path;
+				if (resource.file.resourceSelected === resourceSelected) return [];
+				return [
+					{
+						scope: resource.scope,
+						path: [...resource.nodePath, "resourceSelected"],
+						value: { type: "value" as const, value: resourceSelected },
+					},
+					{
+						scope: resource.scope,
+						path: [...resource.nodePath, "updateDate"],
+						value: { type: "value" as const, value: changedAt },
+					},
+				];
+			});
+		if (updates.length) await commit(updates);
 	}
 
 	function read(path: string) {

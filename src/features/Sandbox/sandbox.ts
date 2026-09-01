@@ -40,6 +40,24 @@ export async function executeSandboxCodeAsync(
 	}
 }
 
+/** Runs a synchronous expression or statement block against the supplied environment. */
+export function executeSandboxCode(
+	code: string,
+	environments: SandboxEnvironment[] = [],
+): unknown {
+	try {
+		const environment = mergeEnvironment(environments);
+		const body = buildExecutableBody(code.trim(), environment);
+		const runner = new Function(
+			"environment",
+			`with (environment) {\n${body}\n}`,
+		);
+		return runner.call(environment, environment);
+	} catch (error) {
+		throw sandboxExecutionError(error, code);
+	}
+}
+
 export function createSandboxFunction(
 	code: string,
 	environments: SandboxEnvironment[] = [],

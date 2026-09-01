@@ -4,6 +4,7 @@ import {
 	parsePluginDataDefinition,
 } from "@/features/Plugin/editors/data/plugin-data";
 import { executeSandboxCodeAsync } from "@/features/Sandbox/sandbox";
+import { evaluateResourceCondition } from "./resource-condition";
 import type { ResourceFile } from "./resource-types";
 import {
 	binaryContent,
@@ -31,6 +32,7 @@ export function wrapResource(file: ResourceFile): PluginResource {
 		type,
 		read: () => (type === "media" ? binaryContent(file) : textContent(file)),
 		import(environment: ResourceImportEnvironment) {
+			if (!evaluateResourceCondition(file.condition, environment)) return undefined;
 			const text = textContent(file);
 			if (type === "markdown") return text;
 			if (type === "chat") {
