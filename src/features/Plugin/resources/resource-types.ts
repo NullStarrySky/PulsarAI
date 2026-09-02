@@ -7,7 +7,10 @@ import {
 export type PluginResourceType = WorldFileType;
 type PluginResourceValue = string | ArrayBuffer;
 
-export type ResourceFile = Pick<WorldFileNode, "name" | "content" | "condition">;
+export type ResourceFile = Pick<
+	WorldFileNode,
+	"name" | "content" | "condition" | "conditionEnabled"
+>;
 
 export interface PluginResource {
 	file: ResourceFile;
@@ -27,7 +30,8 @@ export function textContent(file: ResourceFile): string {
 
 export function binaryContent(file: ResourceFile): ArrayBuffer {
 	const source = file.content;
-	if (source instanceof ArrayBuffer) return Uint8Array.from(new Uint8Array(source)).buffer;
+	if (source instanceof ArrayBuffer)
+		return Uint8Array.from(new Uint8Array(source)).buffer;
 	if (ArrayBuffer.isView(source)) {
 		return Uint8Array.from(
 			new Uint8Array(source.buffer, source.byteOffset, source.byteLength),

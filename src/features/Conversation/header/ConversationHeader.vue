@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {
-	CalendarClock,
-	FolderTree,
+	Folder,
 	Maximize2,
 	Minus,
 	MoreHorizontal,
@@ -16,12 +15,6 @@ import {
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
 import {
-	Dialog,
-	DialogContent,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog";
-import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
@@ -29,14 +22,15 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type ChatManager from "@/features/Conversation/chats/ChatManager.vue";
+// biome-ignore lint:style/useImportType
+import ChatManager from "@/features/Conversation/chats/ChatManager.vue";
 import { useChatStore } from "@/features/Conversation/chats/chat-store";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
-import type PackageManager from "@/features/Package/PackageManager.vue";
+// biome-ignore lint:style/useImportType
+import PackageManager from "@/features/Package/PackageManager.vue";
 import { usePackageStore } from "@/features/Package/package-store";
 import { useLayoutStore } from "@/features/UI/layout-store";
-import SchedulePage from "@/features/UI/schedule/SchedulePage.vue";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
 import { host } from "@/host";
 
@@ -61,7 +55,6 @@ const hovered = ref(false);
 const packageMenuOpen = ref(false);
 const chatMenuOpen = ref(false);
 const operationsOpen = ref(false);
-const scheduleOpen = ref(false);
 const packageManager = ref<InstanceType<typeof PackageManager> | null>(null);
 const chatManager = ref<InstanceType<typeof ChatManager> | null>(null);
 const topBarHoverBoundary = 56;
@@ -139,6 +132,7 @@ onUnmounted(() => window.removeEventListener("mousemove", onMouseMove));
     ]"
   >
     <div class="flex min-w-0 flex-1 items-center gap-1.5">
+	  <Button variant="ghost" size="icon-sm" class="rounded-full" :class="[buttonClass, props.assetOpen && 'bg-muted/75 text-foreground']" title="文件" @click="emit('toggle-assets')"><Folder class="size-4" /></Button>
       <PackageManager ref="packageManager" :package-id="props.packageId" :button-class="buttonClass" @open-change="packageMenuOpen = $event" @select="emit('update:packageId', $event)" />
       <span class="h-4 w-px shrink-0" :class="dividerClass" />
       <ChatManager ref="chatManager" :package-id="props.packageId" :chat-id="props.chatId" :button-class="buttonClass" @open-change="chatMenuOpen = $event" @select="emit('update:chatId', $event)" />
@@ -161,9 +155,7 @@ onUnmounted(() => window.removeEventListener("mousemove", onMouseMove));
     </div>
     <div class="flex shrink-0 items-center gap-0.5">
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="设置" @click="layout.openSettings()"><Settings class="size-4" /></Button>
-      <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="定时任务" @click="scheduleOpen = true"><CalendarClock class="size-4" /></Button>
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="搜索" @click="command.openPalette()"><Search class="size-4" /></Button>
-      <Button variant="ghost" size="icon-sm" class="rounded-full" :class="[buttonClass, props.assetOpen && 'bg-muted/75 text-foreground']" title="资产" @click="emit('toggle-assets')"><FolderTree class="size-4" /></Button>
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="[buttonClass, !layout.topBarPinned && 'bg-muted/75 text-foreground']" :title="layout.topBarPinned ? '自动折叠顶栏' : '固定顶栏'" @click="layout.toggleTopBarPinned()"><Pin v-if="layout.topBarPinned" class="size-4" /><PinOff v-else class="size-4" /></Button>
     </div>
     <div v-if="host.desktop && !responsive.isMobileLayout" class="flex shrink-0 items-center gap-0.5">
@@ -173,5 +165,4 @@ onUnmounted(() => window.removeEventListener("mousemove", onMouseMove));
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="closeClass" title="关闭" @click="appWindow?.close()"><X class="size-4" /></Button>
     </div>
   </header>
-  <Dialog v-model:open="scheduleOpen"><DialogContent class="h-[min(46rem,calc(100dvh-2rem))] max-w-5xl overflow-hidden p-0"><DialogHeader class="sr-only"><DialogTitle>定时任务</DialogTitle></DialogHeader><SchedulePage /></DialogContent></Dialog>
 </template>

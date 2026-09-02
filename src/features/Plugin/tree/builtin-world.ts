@@ -36,7 +36,11 @@ type SourceMeta = {
 			icon?: string;
 			treeOrder?: number;
 			order?: number;
-			insertion?: { slot: string; condition?: string };
+			insertion?: {
+				slot: string;
+				condition?: string;
+				conditionEnabled?: boolean;
+			};
 		}
 	>;
 };
@@ -196,6 +200,24 @@ function parseContent(name: string, sourceKey: string) {
 function appendBuiltin(root: WorldFolderNode, folder: string, source: string) {
 	const meta = JSON.parse(source) as SourceMeta;
 	const pluginRoot = folderFor(root, meta.plugin.id, meta.plugin.name);
+	const localSlotRoot = folderFor(
+		pluginRoot,
+		`${meta.plugin.id}:localSlot`,
+		"localSlot",
+		-1,
+	);
+	const localSlotFor = (globalSlotId: string) => {
+		const id = `${meta.plugin.id}:localSlot:${globalSlotId}`;
+		const existing = localSlotRoot.children[id];
+		if (existing?.type === "folder") return existing;
+		const localSlot = createWorldFolder(globalSlotId, {
+			id,
+			parent: `/self/slot/$${globalSlotId}`,
+			treeOrder: Object.keys(localSlotRoot.children).length,
+		});
+		localSlotRoot.children[id] = localSlot;
+		return localSlot;
+	};
 	const paths = Object.keys(meta.nodes)
 		.filter((path) => path !== "/")
 		.sort((a, b) => a.localeCompare(b));
@@ -222,6 +244,9 @@ function appendBuiltin(root: WorldFolderNode, folder: string, source: string) {
 			folderFor(parent, nodeMeta.id, name, nodeMeta.treeOrder ?? 0);
 			continue;
 		}
+		const localSlot = nodeMeta.insertion?.slot
+			? localSlotFor(nodeMeta.insertion.slot)
+			: undefined;
 		parent.children[nodeMeta.id] = createWorldFile(
 			name,
 			parseContent(name, sourceKey),
@@ -231,10 +256,11 @@ function appendBuiltin(root: WorldFolderNode, folder: string, source: string) {
 				treeOrder: nodeMeta.treeOrder ?? 0,
 				priority: nodeMeta.order ?? 100,
 				resourceSelected: meta.plugin.id !== "builtin-blank-plugin",
-				slot: nodeMeta.insertion?.slot
-					? `/self/slot/${nodeMeta.insertion.slot}`
+				slot: localSlot
+					? `/global/$${pluginRoot.id}/$${localSlotRoot.id}/$${localSlot.id}`
 					: undefined,
 				condition: nodeMeta.insertion?.condition,
+				conditionEnabled: nodeMeta.insertion?.conditionEnabled,
 			},
 		);
 	}
@@ -261,5 +287,20 @@ export function createPackageWorld(packageId: string): WorldDocument {
 		});
 	}
 	world.root.children[slotRoot.id] = slotRoot;
+	const localSlotRoot = createWorldFolder("localSlot", {
+		id: "localSlot",
+		treeOrder: 1,
+	});
+	for (const slot of builtinSlots()) {
+		localSlotRoot.children[`localSlot:${slot.id}`] = createWorldFolder(
+			slot.id,
+			{
+				id: `localSlot:${slot.id}`,
+				parent: `/self/slot/$${slot.id}`,
+				treeOrder: Object.keys(localSlotRoot.children).length,
+			},
+		);
+	}
+	world.root.children[localSlotRoot.id] = localSlotRoot;
 	return world;
 }

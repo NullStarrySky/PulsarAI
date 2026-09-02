@@ -25,7 +25,7 @@
 			"order": 100
 		},
 		"default.chat.json": {
-			"id": "builtin-default-chat",
+			"id": "builtin-default-template-chat",
 			"icon": "",
 			"treeOrder": 4,
 			"order": 100,

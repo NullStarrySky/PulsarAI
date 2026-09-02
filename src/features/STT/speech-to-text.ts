@@ -3,6 +3,7 @@ import {
 	type HydratableModel,
 	transcribe as transcribeWithModel,
 } from "@/features/ModelConnection/services/model-ai";
+import { host } from "@/host";
 import {
 	transcribeWithWhisper,
 	WHISPER_CANDLE_PROVIDER_ID,
@@ -25,6 +26,8 @@ export async function transcribe(options: TranscribeOptions) {
 		typeof model === "string" &&
 		model.startsWith(`${WHISPER_CANDLE_PROVIDER_ID}/`)
 	) {
+		if (host.target !== "mobile")
+			throw new Error("Whisper Candle 本地模型仅在移动端可用。");
 		if (!(options.audio instanceof Uint8Array)) {
 			throw new Error(
 				"本地 Whisper 目前仅接收 Uint8Array 格式的 WAV PCM 音频。",

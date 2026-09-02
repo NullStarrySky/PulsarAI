@@ -12,7 +12,7 @@ import {
 import {
 	ensureGlobalWorldDocument,
 	ensurePackageWorldDocument,
-	persistWorldUpdate,
+	persistWorldUpdates,
 } from "./world-persistence";
 import {
 	createWorldFile,
@@ -26,7 +26,12 @@ import {
 	type WorldSlotSelectionMode,
 	worldFileType,
 } from "./world-types";
-import { applyWorldUpdate, type WorldUpdate, worldNone } from "./world-update";
+import {
+	applyWorldUpdates,
+	createWorldNodeIndex,
+	type WorldUpdate,
+	worldNone,
+} from "./world-update";
 
 export interface WorldScope {
 	packageId?: string | null;
@@ -39,7 +44,9 @@ export interface WorldScope {
 
 export interface WorldResource {
 	scope: "global" | "self";
+	/** Stable, unambiguous API path using one or two `$id` anchors. */
 	path: string;
+	displayPath: string;
 	/** The top-level global folder, or the local-world label. */
 	sourceName: string;
 	nodePath: string[];
@@ -47,12 +54,23 @@ export interface WorldResource {
 }
 
 export interface WorldSlotView {
+	id: string;
 	path: string;
 	name: string;
 	icon?: string;
 	description?: string;
 	allowedResourceTypes: WorldFileType[];
 	selectionMode: WorldSlotSelectionMode;
+	allResources: WorldResource[];
+	resources: WorldResource[];
+}
+
+export interface WorldLocalSlotView {
+	path: string;
+	name: string;
+	scope: "global" | "self";
+	sourceName: string;
+	parent?: string;
 	allResources: WorldResource[];
 	resources: WorldResource[];
 }
@@ -99,18 +117,20 @@ function requirePath(path: string) {
 	return parts;
 }
 
-function nodeByName(folder: WorldFolderNode, name: string) {
-	return (
-		folder.children[name] ??
-		Object.values(folder.children).find((child) => child.name === name) ??
-		null
+function nodeByName(folder: WorldFolderNode, name: string, path: string) {
+	const matches = Object.values(folder.children).filter(
+		(child) => child.name === name,
 	);
+	if (matches.length > 1)
+		throw new Error(`World 路径不明确：${path}；请使用 $ID 精确定位。`);
+	return matches[0] ?? null;
 }
 
 function resolveNode(world: World, path: string): ResolvedNode {
 	const parts = requirePath(path);
 	const scope = parts[0] as "global" | "self";
 	const document = world[scope];
+	const index = createWorldNodeIndex(document);
 	let node: WorldNode = document.root;
 	let nodePath = ["root"];
 	let parent: WorldFolderNode | null = null;
@@ -118,12 +138,19 @@ function resolveNode(world: World, path: string): ResolvedNode {
 	for (const segment of parts.slice(1)) {
 		if (node.type !== "folder")
 			throw new Error(`World 路径的父节点不是文件夹：${path}`);
-		const child = nodeByName(node, segment);
+		const child: WorldNode | null = segment.startsWith("$")
+			? (() => {
+					const location = index.get(segment.slice(1));
+					if (!location || !location.ancestors.has(node.id)) return null;
+					return location.node;
+				})()
+			: nodeByName(node, segment, path);
 		if (!child) throw new Error(`World 路径不存在：${path}`);
+		const location = index.get(child.id)!;
 		parent = node;
 		parentPath = nodePath;
 		node = child;
-		nodePath = [...nodePath, "children", child.id];
+		nodePath = location.path;
 	}
 	return {
 		scope,
@@ -141,26 +168,32 @@ function walkFiles(
 	folder: WorldFolderNode,
 	names: string[] = [],
 	nodePath: string[] = ["root"],
+	sourceId?: string,
 ): WorldResource[] {
 	return Object.values(folder.children).flatMap((node) => {
 		const path = [...names, node.name];
 		const pathToNode = [...nodePath, "children", node.id];
+		const nextSourceId = scope === "global" ? (sourceId ?? node.id) : undefined;
 		if (node.type === "file") {
 			return [
 				{
 					scope,
-					path: `/${scope}/${path.join("/")}`,
+					path:
+						scope === "self"
+							? `/self/$${node.id}`
+							: `/global/$${nextSourceId}${nextSourceId === node.id ? "" : `/$${node.id}`}`,
+					displayPath: `/${scope}/${path.join("/")}`,
 					sourceName: scope === "self" ? "本地" : (names[0] ?? "全局"),
 					nodePath: pathToNode,
 					file: node,
 				},
 			];
 		}
-		return walkFiles(scope, node, path, pathToNode);
+		return walkFiles(scope, node, path, pathToNode, nextSourceId);
 	});
 }
 
-function slotDefinitions(
+function globalSlotDefinitions(
 	world: World,
 ): Omit<WorldSlotView, "allResources" | "resources">[] {
 	try {
@@ -169,7 +202,8 @@ function slotDefinitions(
 		return Object.values(node.children)
 			.filter((child): child is WorldFolderNode => child.type === "folder")
 			.map((slot) => ({
-				path: `/self/slot/${slot.name}`,
+				id: slot.id,
+				path: `/self/slot/$${slot.id}`,
 				name: slot.name,
 				...(slot.icon ? { icon: slot.icon } : {}),
 				...(slot.description ? { description: slot.description } : {}),
@@ -179,6 +213,63 @@ function slotDefinitions(
 	} catch {
 		return [];
 	}
+}
+
+type LocalSlotDefinition = Omit<
+	WorldLocalSlotView,
+	"allResources" | "resources"
+>;
+
+function localSlotDefinitions(world: World): LocalSlotDefinition[] {
+	const result: LocalSlotDefinition[] = [];
+	const globalPathsByName = new Map(
+		globalSlotDefinitions(world).map((slot) => [slot.name, slot.path]),
+	);
+	const collect = (
+		scope: "global" | "self",
+		source: WorldFolderNode,
+		sourceName: string,
+		sourcePrefix: string,
+	) => {
+		const localRoot = Object.values(source.children).find(
+			(node): node is WorldFolderNode =>
+				node.type === "folder" && node.name === "localSlot",
+		);
+		if (!localRoot) return;
+		const visit = (folder: WorldFolderNode) => {
+			for (const child of Object.values(folder.children)) {
+				if (child.type !== "folder") continue;
+				result.push({
+					path: `${sourcePrefix}/$${localRoot.id}/$${child.id}`,
+					name: child.name,
+					scope,
+					sourceName,
+					...((child.parent ?? globalPathsByName.get(child.name))
+						? { parent: child.parent ?? globalPathsByName.get(child.name) }
+						: {}),
+				});
+				visit(child);
+			}
+		};
+		visit(localRoot);
+	};
+	collect("self", world.self.root, "本地", "/self");
+	for (const source of Object.values(world.global.root.children)) {
+		if (source.type !== "folder") continue;
+		collect("global", source, source.name, `/global/$${source.id}`);
+	}
+	return result;
+}
+
+function globalSlotForResource(
+	resource: WorldResource,
+	globalSlots: Pick<WorldSlotView, "path" | "selectionMode">[],
+	localSlots: Pick<WorldLocalSlotView, "path" | "parent">[],
+) {
+	const localSlot = localSlots.find((slot) => slot.path === resource.file.slot);
+	return globalSlots.find(
+		(slot) => slot.path === (localSlot?.parent ?? resource.file.slot),
+	);
 }
 
 function selectedResources(
@@ -279,10 +370,8 @@ export function useWorld(
 		const self = packageDocuments.get(packageId.value);
 		if (!self) return null;
 		const value: World = { global: clone(globalDocument), self: clone(self) };
-		if (applyReplay.value && conversationId.value) {
-			for (const update of activeReplayUpdates(conversationId.value))
-				applyWorldUpdate(value[update.scope], update);
-		}
+		if (applyReplay.value && conversationId.value)
+			applyWorldUpdates(value, activeReplayUpdates(conversationId.value));
 		return value;
 	});
 	const resources = computed(() => {
@@ -297,7 +386,32 @@ export function useWorld(
 	const slots = computed<WorldSlotView[]>(() => {
 		const value = world.value;
 		if (!value) return [];
-		return slotDefinitions(value).map((slot) => {
+		const definitions = globalSlotDefinitions(value);
+		const locals = localSlotDefinitions(value);
+		return definitions.map((slot) => {
+			const allResources = resources.value
+				.filter(
+					(resource) =>
+						globalSlotForResource(resource, definitions, locals)?.path ===
+						slot.path,
+				)
+				.sort(
+					(left, right) =>
+						left.file.priority - right.file.priority ||
+						left.file.id.localeCompare(right.file.id),
+				);
+			return {
+				...slot,
+				allResources,
+				resources: selectedResources(slot, allResources),
+			};
+		});
+	});
+	const localSlots = computed<WorldLocalSlotView[]>(() => {
+		const value = world.value;
+		if (!value) return [];
+		const definitions = localSlotDefinitions(value);
+		return definitions.map((slot) => {
 			const allResources = resources.value
 				.filter((resource) => resource.file.slot === slot.path)
 				.sort(
@@ -308,7 +422,7 @@ export function useWorld(
 			return {
 				...slot,
 				allResources,
-				resources: selectedResources(slot, allResources),
+				resources: allResources.filter((item) => item.file.resourceSelected),
 			};
 		});
 	});
@@ -360,34 +474,74 @@ export function useWorld(
 			worldRevision.value += 1;
 			return;
 		}
-		for (const update of updates) {
-			const document =
-				update.scope === "global"
-					? globalDocument
-					: packageDocuments.get(packageId.value);
-			if (!document) throw new Error("World 文档尚未加载。");
-			await persistWorldUpdate(document, update);
-		}
+		const self = packageDocuments.get(packageId.value);
+		if (!globalDocument || !self) throw new Error("World 文档尚未加载。");
+		await persistWorldUpdates({ global: globalDocument, self }, updates);
 		worldRevision.value += 1;
 	}
 
 	async function update(
+		nodeId: string,
 		path: string[],
 		value: WorldUpdate["value"],
 		scopeName: "global" | "self",
 	) {
-		await commit([{ scope: scopeName, path, value }]);
+		await commit([{ scope: scopeName, nodeId, path, value }]);
 	}
 
 	function resolve(path: string) {
 		return resolveNode(requireWorld(), path);
 	}
 
+	function validateNodeName(name: string) {
+		const normalized = name.trim();
+		if (!normalized || /[\\/]/.test(normalized))
+			throw new Error("文件名不能为空或包含路径分隔符。");
+		return normalized;
+	}
+
+	async function createFolder(parentPath: string, name: string) {
+		await ensureLoaded();
+		const parent = resolve(parentPath);
+		if (parent.node.type !== "folder")
+			throw new Error(`父路径不是文件夹：${parentPath}`);
+		const folder = createWorldFolder(validateNodeName(name), {
+			treeOrder: nextTreeOrder(parent.node),
+		});
+		await update(
+			parent.node.id,
+			["children", folder.id],
+			{ type: "value", value: folder },
+			parent.scope,
+		);
+		return `/${parent.scope}/$${folder.id}`;
+	}
+
+	async function createFile(
+		parentPath: string,
+		name: string,
+		content: unknown = "",
+	) {
+		await ensureLoaded();
+		const parent = resolve(parentPath);
+		if (parent.node.type !== "folder")
+			throw new Error(`父路径不是文件夹：${parentPath}`);
+		const file = createWorldFile(validateNodeName(name), content, {
+			treeOrder: nextTreeOrder(parent.node),
+		});
+		await update(
+			parent.node.id,
+			["children", file.id],
+			{ type: "value", value: file },
+			parent.scope,
+		);
+		return `/${parent.scope}/$${file.id}`;
+	}
+
 	async function mkdir(path: string) {
 		await ensureLoaded();
 		const parts = requirePath(path);
-		const scopeName = parts[0] as "global" | "self";
-		let cursor = `/${scopeName}`;
+		let cursor = `/${parts[0]}`;
 		for (const name of parts.slice(1)) {
 			const nextPath = `${cursor}/${name}`;
 			try {
@@ -397,17 +551,7 @@ export function useWorld(
 			} catch (error) {
 				if (!(error instanceof Error) || !error.message.includes("路径不存在"))
 					throw error;
-				const parent = resolve(cursor);
-				if (parent.node.type !== "folder")
-					throw new Error(`父路径不是文件夹：${cursor}`);
-				const folder = createWorldFolder(name, {
-					treeOrder: Object.keys(parent.node.children).length,
-				});
-				await update(
-					[...parent.nodePath, "children", folder.id],
-					{ type: "value", value: folder },
-					scopeName,
-				);
+				await createFolder(cursor, name);
 			}
 			cursor = nextPath;
 		}
@@ -423,12 +567,14 @@ export function useWorld(
 			await commit([
 				{
 					scope: target.scope,
-					path: [...target.nodePath, "content"],
+					nodeId: target.node.id,
+					path: ["content"],
 					value: { type: "value", value: content },
 				},
 				{
 					scope: target.scope,
-					path: [...target.nodePath, "updateDate"],
+					nodeId: target.node.id,
+					path: ["updateDate"],
 					value: { type: "value", value: changedAt },
 				},
 			]);
@@ -440,17 +586,7 @@ export function useWorld(
 		const parts = requirePath(path);
 		const name = parts[parts.length - 1]!;
 		const parentPath = `/${parts.slice(0, -1).join("/")}`;
-		const parent = resolve(parentPath);
-		if (parent.node.type !== "folder")
-			throw new Error(`父路径不是文件夹：${parentPath}`);
-		const file = createWorldFile(name, content, {
-			treeOrder: Object.keys(parent.node.children).length,
-		});
-		await update(
-			[...parent.nodePath, "children", file.id],
-			{ type: "value", value: file },
-			parent.scope,
-		);
+		await createFile(parentPath, name, content);
 	}
 
 	async function edit(path: string, find: string, replace: string) {
@@ -461,12 +597,14 @@ export function useWorld(
 		await commit([
 			{
 				scope: target.scope,
-				path: [...target.nodePath, "content"],
+				nodeId: target.node.id,
+				path: ["content"],
 				value: { type: "replace", find, replace },
 			},
 			{
 				scope: target.scope,
-				path: [...target.nodePath, "updateDate"],
+				nodeId: target.node.id,
+				path: ["updateDate"],
 				value: { type: "value", value: new Date().toISOString() },
 			},
 		]);
@@ -477,37 +615,181 @@ export function useWorld(
 		const target = resolve(path);
 		if (!target.parentPath) throw new Error("不能删除 World 根目录。");
 		await commit([
-			{ scope: target.scope, path: target.nodePath, value: worldNone },
 			{
 				scope: target.scope,
-				path: [...target.parentPath, "updateDate"],
+				nodeId: target.node.id,
+				path: [],
+				value: worldNone,
+			},
+			{
+				scope: target.scope,
+				nodeId: target.parent!.id,
+				path: ["updateDate"],
 				value: { type: "value", value: new Date().toISOString() },
 			},
 		]);
 	}
 
-	async function move(from: string, to: string) {
+	function nextTreeOrder(folder: WorldFolderNode) {
+		return (
+			Math.max(
+				-1,
+				...Object.values(folder.children).map((node) => node.treeOrder),
+			) + 1
+		);
+	}
+
+	function copyIdMap(node: WorldNode, target: WorldDocument) {
+		const existing = createWorldNodeIndex(target);
+		const result: Record<string, string> = {};
+		const assign = (current: WorldNode) => {
+			let id = crypto.randomUUID();
+			while (existing.has(id) || Object.values(result).includes(id))
+				id = crypto.randomUUID();
+			result[current.id] = id;
+			if (current.type === "folder")
+				for (const child of Object.values(current.children)) assign(child);
+		};
+		assign(node);
+		return result;
+	}
+
+	function assertNotDescendant(
+		source: ResolvedNode,
+		target: ResolvedNode,
+		action: "移动" | "复制",
+	) {
+		if (source.scope !== target.scope || source.node.type !== "folder") return;
+		const targetLocation = createWorldNodeIndex(source.document).get(
+			target.node.id,
+		);
+		if (
+			target.node.id === source.node.id ||
+			targetLocation?.ancestors.has(source.node.id)
+		)
+			throw new Error(`不能将文件夹${action}到自身或其子级。`);
+	}
+
+	async function moveTo(
+		from: string,
+		destinationParent: string,
+		name?: string,
+	) {
 		await ensureLoaded();
 		const source = resolve(from);
-		if (!source.parentPath) throw new Error("不能移动 World 根目录。");
-		const parts = requirePath(to);
-		const name = parts[parts.length - 1]!;
-		const targetParent = resolve(`/${parts.slice(0, -1).join("/")}`);
+		const targetParent = resolve(destinationParent);
+		if (!source.parent || !source.parentPath)
+			throw new Error("不能移动 World 根目录。");
 		if (targetParent.node.type !== "folder")
-			throw new Error(`移动目标不是文件夹：${to}`);
-		if (nodeByName(targetParent.node, name))
-			throw new Error(`移动目标已存在：${to}`);
-		const node = clone(source.node);
-		node.name = name;
-		node.updateDate = new Date().toISOString();
+			throw new Error(`移动目标不是文件夹：${destinationParent}`);
+		if (source.scope !== targetParent.scope)
+			throw new Error("暂不支持跨 World 文档移动。");
+		assertNotDescendant(source, targetParent, "移动");
+		const nextName = name?.trim() || source.node.name;
+		if (!nextName || /[\\/]/.test(nextName))
+			throw new Error("文件名不能为空或包含路径分隔符。");
+		if (source.parent.id === targetParent.node.id) {
+			if (nextName === source.node.name) return;
+			await commit([
+				{
+					scope: source.scope,
+					nodeId: source.node.id,
+					path: ["name"],
+					value: { type: "value", value: nextName },
+				},
+				{
+					scope: source.scope,
+					nodeId: source.node.id,
+					path: ["updateDate"],
+					value: { type: "value", value: new Date().toISOString() },
+				},
+			]);
+			return;
+		}
+		const changedAt = new Date().toISOString();
 		await commit([
-			{ scope: source.scope, path: source.nodePath, value: worldNone },
+			{
+				scope: source.scope,
+				nodeId: source.node.id,
+				path: ["name"],
+				value: { type: "value", value: nextName },
+			},
+			{
+				scope: source.scope,
+				nodeId: source.node.id,
+				path: ["treeOrder"],
+				value: { type: "value", value: nextTreeOrder(targetParent.node) },
+			},
+			{
+				scope: source.scope,
+				nodeId: source.node.id,
+				path: ["updateDate"],
+				value: { type: "value", value: changedAt },
+			},
 			{
 				scope: targetParent.scope,
-				path: [...targetParent.nodePath, "children", node.id],
-				value: { type: "value", value: node },
+				nodeId: targetParent.node.id,
+				path: ["children", source.node.id],
+				value: {
+					type: "move",
+					source: { scope: source.scope, id: source.node.id },
+				},
 			},
 		]);
+	}
+
+	async function move(from: string, to: string) {
+		const parts = requirePath(to);
+		const name = parts.pop();
+		if (!name) throw new Error("移动目标不能为空。");
+		await moveTo(from, `/${parts.join("/")}`, name);
+	}
+
+	async function copy(from: string, destinationParent: string, name?: string) {
+		await ensureLoaded();
+		const source = resolve(from);
+		const targetParent = resolve(destinationParent);
+		if (!source.parentPath) throw new Error("不能复制 World 根目录。");
+		if (targetParent.node.type !== "folder")
+			throw new Error(`复制目标不是文件夹：${destinationParent}`);
+		assertNotDescendant(source, targetParent, "复制");
+		const nextName = name?.trim() || source.node.name;
+		if (!nextName || /[\\/]/.test(nextName))
+			throw new Error("文件名不能为空或包含路径分隔符。");
+		const idMap = copyIdMap(source.node, targetParent.document);
+		const id = idMap[source.node.id]!;
+		const changedAt = new Date().toISOString();
+		await commit([
+			{
+				scope: targetParent.scope,
+				nodeId: targetParent.node.id,
+				path: ["children", id],
+				value: {
+					type: "copy",
+					source: { scope: source.scope, id: source.node.id },
+					idMap,
+				},
+			},
+			{
+				scope: targetParent.scope,
+				nodeId: id,
+				path: ["name"],
+				value: { type: "value", value: nextName },
+			},
+			{
+				scope: targetParent.scope,
+				nodeId: id,
+				path: ["treeOrder"],
+				value: { type: "value", value: nextTreeOrder(targetParent.node) },
+			},
+			{
+				scope: targetParent.scope,
+				nodeId: id,
+				path: ["updateDate"],
+				value: { type: "value", value: changedAt },
+			},
+		]);
+		return `/${targetParent.scope}/$${id}`;
 	}
 
 	async function updateFile(
@@ -519,6 +801,7 @@ export function useWorld(
 				| "priority"
 				| "slot"
 				| "condition"
+				| "conditionEnabled"
 				| "resourceSelected"
 				| "icon"
 				| "name"
@@ -531,11 +814,17 @@ export function useWorld(
 		if (target.node.type !== "file") throw new Error(`不是文件：${path}`);
 		const file = target.node;
 		if (patch.resourceSelected === true && file.slot) {
-			const slot = slotDefinitions(requireWorld()).find(
-				(item) => item.path === file.slot,
+			const slot = globalSlotForResource(
+				resources.value.find((item) => item.file.id === file.id) ??
+					({
+						file,
+					} as WorldResource),
+				globalSlotDefinitions(requireWorld()),
+				localSlotDefinitions(requireWorld()),
 			);
 			if (slot?.selectionMode === "single") {
-				const { resourceSelected: _resourceSelected, ...remainingPatch } = patch;
+				const { resourceSelected: _resourceSelected, ...remainingPatch } =
+					patch;
 				if (Object.keys(remainingPatch).length)
 					await updateFile(path, remainingPatch);
 				await setSelected(path, true);
@@ -546,12 +835,14 @@ export function useWorld(
 		await commit([
 			...Object.entries(patch).map(([key, value]) => ({
 				scope: target.scope,
-				path: [...target.nodePath, key],
+				nodeId: target.node.id,
+				path: [key],
 				value: { type: "value" as const, value },
 			})),
 			{
 				scope: target.scope,
-				path: [...target.nodePath, "updateDate"],
+				nodeId: target.node.id,
+				path: ["updateDate"],
 				value: { type: "value" as const, value: changedAt },
 			},
 		]);
@@ -579,20 +870,26 @@ export function useWorld(
 		await commit([
 			...Object.entries(patch).map(([key, value]) => ({
 				scope: target.scope,
-				path: [...target.nodePath, key],
+				nodeId: target.node.id,
+				path: [key],
 				value: { type: "value" as const, value },
 			})),
 			{
 				scope: target.scope,
-				path: [...target.nodePath, "updateDate"],
+				nodeId: target.node.id,
+				path: ["updateDate"],
 				value: { type: "value" as const, value: changedAt },
 			},
 		]);
 		if (patch.selectionMode === "single") {
-			const selected = resources.value.find(
-				(resource) =>
-					resource.file.slot === path && resource.file.resourceSelected,
-			);
+			const selected = resources.value.find((resource) => {
+				const slot = globalSlotForResource(
+					resource,
+					globalSlotDefinitions(requireWorld()),
+					localSlotDefinitions(requireWorld()),
+				);
+				return slot?.path === path && resource.file.resourceSelected;
+			});
 			if (selected) await setSelected(selected.path, true);
 		}
 	}
@@ -601,10 +898,14 @@ export function useWorld(
 		await ensureLoaded();
 		const target = resolve(path);
 		if (target.node.type !== "file") throw new Error(`不是文件：${path}`);
-		const slotPath = target.node.slot;
-		const slot = slotPath
-			? slotDefinitions(requireWorld()).find((item) => item.path === slotPath)
-			: undefined;
+		const slot = globalSlotForResource(
+			resources.value.find((item) => item.file.id === target.node.id) ??
+				({
+					file: target.node,
+				} as WorldResource),
+			globalSlotDefinitions(requireWorld()),
+			localSlotDefinitions(requireWorld()),
+		);
 		if (!selected || slot?.selectionMode !== "single") {
 			await updateFile(path, { resourceSelected: selected });
 			return;
@@ -612,19 +913,28 @@ export function useWorld(
 
 		const changedAt = new Date().toISOString();
 		const updates = resources.value
-			.filter((resource) => resource.file.slot === slotPath)
+			.filter(
+				(resource) =>
+					globalSlotForResource(
+						resource,
+						globalSlotDefinitions(requireWorld()),
+						localSlotDefinitions(requireWorld()),
+					)?.path === slot?.path,
+			)
 			.flatMap((resource) => {
 				const resourceSelected = resource.path === target.path;
 				if (resource.file.resourceSelected === resourceSelected) return [];
 				return [
 					{
 						scope: resource.scope,
-						path: [...resource.nodePath, "resourceSelected"],
+						nodeId: resource.file.id,
+						path: ["resourceSelected"],
 						value: { type: "value" as const, value: resourceSelected },
 					},
 					{
 						scope: resource.scope,
-						path: [...resource.nodePath, "updateDate"],
+						nodeId: resource.file.id,
+						path: ["updateDate"],
 						value: { type: "value" as const, value: changedAt },
 					},
 				];
@@ -658,7 +968,7 @@ export function useWorld(
 	function bind(container: ChatMessageContainer, message: ChatMessage) {
 		const value = clone(requireWorld());
 		const apply = async (updates: WorldUpdate[]) => {
-			for (const item of updates) applyWorldUpdate(value[item.scope], item);
+			applyWorldUpdates(value, updates);
 			message.meta.worldUpdates ??= [];
 			message.meta.worldUpdates.push(...clone(updates));
 			await useMessageStore().persist(container);
@@ -674,6 +984,7 @@ export function useWorld(
 		world,
 		resources,
 		slots,
+		localSlots,
 		sources,
 		resolve,
 		read,
@@ -703,14 +1014,20 @@ export function useWorld(
 			try {
 				resolve(path);
 				return true;
-			} catch {
-				return false;
+			} catch (error) {
+				return (
+					error instanceof Error && error.message.includes("World 路径不明确")
+				);
 			}
 		},
 		write,
 		edit,
 		mkdir,
+		createFile,
+		createFolder,
 		move,
+		moveTo,
+		copy,
 		remove,
 		updateFile,
 		updateFolder,

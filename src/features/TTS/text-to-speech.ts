@@ -3,10 +3,9 @@ import {
 	generateSpeech as generateModelSpeech,
 	type HydratableModel,
 } from "@/features/ModelConnection/services/model-ai";
+import { host } from "@/host";
 import { createAzureTtsSpeechModel } from "./providers/azure-tts-speech-model";
-import {
-	listEdgeTtsVoices,
-} from "./providers/edge-tts-client";
+import { listEdgeTtsVoices } from "./providers/edge-tts-client";
 import {
 	EDGE_TTS_MODEL_REF,
 	edgeTtsSpeechModel,
@@ -17,9 +16,7 @@ import {
 	PIPER_TTS_PROVIDER_ID,
 } from "./providers/piper-tts-speech-model";
 import { createVolcengineTtsSpeechModel } from "./providers/volcengine-tts-speech-model";
-import type {
-	SpeechVoice,
-} from "./tts";
+import type { SpeechVoice } from "./tts";
 import {
 	AZURE_TTS_MODEL_REF,
 	ELEVENLABS_TTS_PROVIDER_ID,
@@ -59,6 +56,7 @@ function resolveSpeechModel(
 	}
 	if (model === AZURE_TTS_MODEL_REF) return createAzureTtsSpeechModel();
 	if (model.startsWith(`${PIPER_TTS_PROVIDER_ID}/`)) {
+		if (host.target !== "mobile") return undefined;
 		return createPiperTtsSpeechModel(
 			model.slice(`${PIPER_TTS_PROVIDER_ID}/`.length),
 		);

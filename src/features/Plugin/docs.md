@@ -5,13 +5,20 @@ nested node shape:
 
 - `resource_worlds:global` is the shared document.
 - `resource_worlds:package:<packageId>` is the character package's local
-  document. Its root contains the `/self/slot/` contract-folder tree.
+  document. Its root contains global `/self/slot/` contracts and a source-local
+  `/self/localSlot/` definition tree.
 
 Every document is a folder tree. Folder and file keys are stable node IDs;
-`name` is only display text. A file owns its content, slot reference, selection
-state, priority and optional condition. Slots are not folders and never own
-resources. Empty folders below `/self/slot/` define the contracts, while a file
-contributes by storing that folder's absolute path in its `slot` field.
+`name` is only display text and ordinary sibling files/folders may share it. A
+name path is a convenience lookup and must resolve exactly one node; use
+`/self/$<id>` or `/global/$<source-id>/$<id>` when a stable reference is
+needed. A file owns its content, slot reference, selection
+state, priority and optional condition. Folders directly below `/self/slot/`
+are global slot contracts. Every source root (`/self/` and each
+`/global/<source>/`) owns a `localSlot/` tree; its descendant folders define
+local slots and may point at a global contract through their stable `parent`
+path. A file stores its local-slot ID path in `slot`, so renaming either folder
+does not invalidate membership.
 
 `useWorld(options)` is the only World API. With `applyReplay: false` it reads
 and edits the stored global/self documents. With a conversation and replay
@@ -21,11 +28,14 @@ composable; they are not stored separately.
 
 ## Updates and replay
 
-Business calls (`write`, `edit`, `mkdir`, `move`, `remove`, `updateFile`) first
-translate their input into `WorldUpdate` items. An update either writes a value,
-removes a value with `none`, or replaces a unique substring. Persistent edits
-patch SurrealDB first and apply that exact update to the in-memory document only
-afterwards. A move is simply remove plus write with the same node ID.
+Business calls (`write`, `edit`, `mkdir`, `move`, `copy`, `remove`,
+`updateFile`) first translate their input into `WorldUpdate` items. Each update
+stores a target node ID plus a short local path. It either writes a value,
+removes a value with `none`, replaces a unique substring, copies from an ID
+reference with a deterministic ID map, or moves an ID reference. Persistent
+edits batch the affected document's JSON patches before applying the same result
+to memory. Move and copy reject a destination below the source folder; move
+keeps IDs while copy regenerates every copied subtree ID.
 
 Conversation edits append the same update items to a hidden system message, or
 to the current message version during generation. Replay only applies those
@@ -43,11 +53,13 @@ no `@pluginId/...` syntax and no runtime Plugin object.
 `PluginAssetTreePanel` renders the same World through the shared generic file
 tree:
 
-- Assets: physical `/global` and `/self` trees.
-- Slots: contracts with their contributed resources, independent of source.
-- Sources: source folder → slot → resource, without metadata files or an
-  exported-slot layer.
+- Assets: physical `/global` and `/self` trees, including each `localSlot/`.
+- Slots: global contracts with their contributed resources, independent of
+  source.
+- Sources: source folder → `slot` (the source's global-slot contributions)
+  and `localSlot` (its local definitions) → local slot → resource.
 
-Only resource rows receive a selection switch. Folder and slot rows do not have
-selection semantics. Slot icons override the normal file icon in the slot and
-source projections, and source labels precede resource names.
+Only Slots and Sources resource rows receive a selection switch and its hover
+icon treatment; Assets stays a pure filesystem view. Slot icons override the
+normal file icon in the slot projection, and source labels precede resource
+names.

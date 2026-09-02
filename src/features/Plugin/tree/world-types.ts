@@ -35,19 +35,23 @@ export interface WorldFolderNode extends WorldNodeBase {
 	type: "folder";
 	openIcon?: string;
 	children: Record<WorldNodeId, WorldNode>;
-	/** Present only on empty folders below /self/slot/. */
+	/** Global-slot behavior, present on folders directly below /self/slot/. */
 	selectionMode?: WorldSlotSelectionMode;
 	allowedResourceTypes?: WorldFileType[];
+	/** Optional global-slot contract contributed by a folder below a source's localSlot/. */
+	parent?: string;
 }
 
 export interface WorldFileNode extends WorldNodeBase {
 	type: "file";
 	content: unknown;
 	resourceSelected: boolean;
-	/** Absolute path of an empty contract folder below /self/slot/. */
+	/** Stable absolute path of a source-local slot below localSlot/. */
 	slot?: string;
 	priority: number;
 	condition?: string;
+	/** Defaults to enabled; false keeps the authored condition without applying it. */
+	conditionEnabled?: boolean;
 }
 
 export type WorldNode = WorldFolderNode | WorldFileNode;
@@ -95,6 +99,7 @@ export function createWorldFolder(
 		...(input.allowedResourceTypes
 			? { allowedResourceTypes: input.allowedResourceTypes }
 			: {}),
+		...(input.parent ? { parent: input.parent } : {}),
 		children: input.children ?? {},
 		createDate: date,
 		updateDate: date,
@@ -126,6 +131,7 @@ export function createWorldFile(
 		...(input.description ? { description: input.description } : {}),
 		...(input.slot ? { slot: input.slot } : {}),
 		...(input.condition ? { condition: input.condition } : {}),
+		...(input.conditionEnabled === false ? { conditionEnabled: false } : {}),
 		createDate: date,
 		updateDate: date,
 	};

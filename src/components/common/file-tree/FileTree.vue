@@ -12,6 +12,7 @@ export interface FileTreeAction {
 	id: string;
 	icon?: string;
 	name: string;
+	separatorBefore?: boolean;
 	type?: FileTreeActionTarget;
 	subActions?: FileTreeAction[];
 	input?: {
@@ -36,6 +37,7 @@ export interface FileTreeNode {
 	icon?: string;
 	openIcon?: string;
 	prefix?: string;
+	suffix?: string;
 	selectableResource?: boolean;
 	resourceSelected?: boolean;
 	action?: FileTreeActions;
@@ -90,13 +92,12 @@ function runAction(node: FileTreeNode, action: FileTreeAction, value?: string) {
 </script>
 
 <template>
-  <ScrollArea class="h-full min-h-0">
-    <div class="file-tree min-h-full p-1.5" :style="{ minWidth: `${minWidth}px` }">
+  <ScrollArea class="min-h-0 max-h-full">
+    <div class="file-tree min-h-0 p-1.5" :style="{ minWidth: `${minWidth}px` }">
       <FileTreeBranch
         v-for="node in nodes"
         :key="node.id"
         :node="node"
-        :depth="0"
         :selected-id="modelValue"
         :expanded="expandedSet"
         @select="select"

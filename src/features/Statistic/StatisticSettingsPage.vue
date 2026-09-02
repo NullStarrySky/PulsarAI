@@ -51,24 +51,24 @@ function formatSize(bytes: number) {
 
 <template>
   <SettingPage title="数据统计" description="查看本地数据规模和最近一年的活动情况。">
-    <section class="grid grid-cols-3 gap-3 mobile:gap-2">
-      <div class="rounded-md border bg-card p-4 mobile:p-3">
+    <section class="grid min-w-0 grid-cols-1 gap-3 min-[420px]:grid-cols-3 mobile:gap-2">
+      <div class="min-w-0 rounded-md border bg-card p-4 mobile:p-3">
         <p class="text-xs text-muted-foreground">角色数</p>
         <p class="mt-2 text-2xl font-semibold">{{ conversation.packages.length }}</p>
       </div>
-      <div class="rounded-md border bg-card p-4 mobile:p-3">
+      <div class="min-w-0 rounded-md border bg-card p-4 mobile:p-3">
         <p class="text-xs text-muted-foreground">对话数</p>
         <p class="mt-2 text-2xl font-semibold">{{ conversation.conversations.length }}</p>
       </div>
-      <div class="rounded-md border bg-card p-4 mobile:p-3">
+      <div class="min-w-0 rounded-md border bg-card p-4 mobile:p-3">
         <p class="text-xs text-muted-foreground">消息数</p>
         <p class="mt-2 text-2xl font-semibold">{{ statistic.messageCount }}</p>
       </div>
     </section>
 
     <SettingGroup title="过去一年热力图">
-      <div class="px-4 py-4">
-        <div class="grid grid-flow-col grid-rows-7 justify-start gap-1 overflow-x-auto pb-1">
+      <div class="min-w-0 max-w-full px-4 py-4">
+        <div class="grid max-w-full grid-flow-col grid-rows-7 justify-start gap-1 overflow-x-auto pb-1">
           <span
             v-for="day in heatmap"
             :key="day.date"
@@ -87,7 +87,7 @@ function formatSize(bytes: number) {
           <Button size="sm" :variant="diskMode === 'package' ? 'secondary' : 'ghost'" @click="diskMode = 'package'">角色</Button>
         </div>
       </SettingItem>
-      <div class="px-4 py-4">
+      <div class="min-w-0 max-w-full px-4 py-4">
         <div class="flex h-4 overflow-hidden rounded-full bg-muted">
           <div
             v-for="segment in sizeSegments"

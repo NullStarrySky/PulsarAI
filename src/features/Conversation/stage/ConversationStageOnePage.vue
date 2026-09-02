@@ -96,5 +96,5 @@ function openPluginFile(value: { file: WorldFileNode; path: string }) {
 
 <style scoped>
 .asset-panel-enter-active, .asset-panel-leave-active { transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease; }
-.asset-panel-enter-from, .asset-panel-leave-to { transform: translateX(calc(100% + 1rem)); opacity: 0; }
+.asset-panel-enter-from, .asset-panel-leave-to { transform: translateX(calc(-100% - 1rem)); opacity: 0; }
 </style>

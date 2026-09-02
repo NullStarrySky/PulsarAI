@@ -32,7 +32,11 @@ export function wrapResource(file: ResourceFile): PluginResource {
 		type,
 		read: () => (type === "media" ? binaryContent(file) : textContent(file)),
 		import(environment: ResourceImportEnvironment) {
-			if (!evaluateResourceCondition(file.condition, environment)) return undefined;
+			if (
+				file.conditionEnabled !== false &&
+				!evaluateResourceCondition(file.condition, environment)
+			)
+				return undefined;
 			const text = textContent(file);
 			if (type === "markdown") return text;
 			if (type === "chat") {

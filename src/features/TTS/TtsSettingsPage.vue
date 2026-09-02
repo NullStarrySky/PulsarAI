@@ -32,6 +32,7 @@ import type { ServiceProviderView } from "@/features/ModelConnection/service-pro
 import { useModelCapabilityProviders } from "@/features/ModelConnection/services/use-model-capability-providers";
 import SettingForm from "@/features/Setting/components/SettingForm.vue";
 import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
+import { host } from "@/host";
 import {
 	hasAzureTtsApiKey,
 	loadAzureTtsSettings,
@@ -95,6 +96,7 @@ const EDGE_ENABLED_KEY = "tts.edgeTts.enabled";
 const SYSTEM_ENABLED_KEY = "tts.system.enabled";
 const secretMask = "••••••••";
 const service = useModelCapabilityProviders("tts");
+const localModelsSupported = host.target === "mobile";
 const search = ref("");
 const activeServiceId = ref(SYSTEM_TTS_SERVICE_ID);
 const edgeEnabled = ref(true);
@@ -185,13 +187,18 @@ const providers = computed<ServiceProviderView[]>(() => [
 		enabled: volcengineSettings.value.enabled,
 		source: "feature",
 	},
-	{
-		id: PIPER_TTS_PROVIDER_ID,
-		name: "Piper 本地朗读",
-		description: "下载并校验 sherpa-onnx Piper 模型包，在本机 CPU 生成 WAV。",
-		enabled: true,
-		source: "feature",
-	},
+	...(localModelsSupported
+		? [
+				{
+					id: PIPER_TTS_PROVIDER_ID,
+					name: "Piper 本地朗读",
+					description:
+						"下载并校验 sherpa-onnx Piper 模型包，在本机 CPU 生成 WAV。",
+					enabled: true,
+					source: "feature",
+				} satisfies ServiceProviderView,
+			]
+		: []),
 	...service.providerViews.value,
 ]);
 const isSystem = computed(
@@ -249,7 +256,7 @@ onMounted(async () => {
 	elevenLabsInitialized.value = true;
 	azureInitialized.value = true;
 	await service.initialize();
-	await refreshPiperModels();
+	if (localModelsSupported) await refreshPiperModels();
 });
 
 const persistVolcengineSettings = useDebounceFn(

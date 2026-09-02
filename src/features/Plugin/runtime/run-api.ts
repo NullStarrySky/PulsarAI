@@ -45,8 +45,8 @@ export async function runWorld(input: RunWorldInput): Promise<RunWorldResult> {
 	const world = useWorld({ conversationId: input.conversationId });
 	const entryPath =
 		input.entryPath ??
-		world.slots.value.find((slot) => slot.path === "/self/slot/generatePath")
-			?.resources[0]?.path;
+		world.slots.value.find((slot) => slot.id === "generatePath")?.resources[0]
+			?.path;
 	if (!entryPath) throw new Error("World 没有选中的生成入口。");
 	const target = world.resolve(entryPath);
 	if (target.node.type !== "file")

@@ -15,6 +15,7 @@ import type { ServiceProviderView } from "@/features/ModelConnection/service-pro
 import { useModelCapabilityProviders } from "@/features/ModelConnection/services/use-model-capability-providers";
 import SettingForm from "@/features/Setting/components/SettingForm.vue";
 import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
+import { host } from "@/host";
 import {
 	deleteWhisperModel,
 	downloadWhisperModel,
@@ -38,10 +39,9 @@ import {
 const SYSTEM_ENABLED_KEY = "stt.system.enabled";
 const service = useModelCapabilityProviders("asr");
 const systemSupported = supportsSystemStt();
+const localModelsSupported = host.target === "mobile";
 const search = ref("");
-const activeServiceId = ref(
-	systemSupported ? SYSTEM_STT_SERVICE_ID : WHISPER_CANDLE_PROVIDER_ID,
-);
+const activeServiceId = ref(systemSupported ? SYSTEM_STT_SERVICE_ID : "");
 const systemEnabled = ref(true);
 const audio = ref<Uint8Array>();
 const audioName = ref("");
@@ -77,13 +77,18 @@ const providers = computed<ServiceProviderView[]>(() => [
 				},
 			]
 		: []),
-	{
-		id: WHISPER_CANDLE_PROVIDER_ID,
-		name: "Whisper Candle 本地高质量转写",
-		description: "下载并校验 ZIP 模型包，在本机 CPU 上处理 WAV PCM 音频。",
-		enabled: true,
-		source: "feature" as const,
-	},
+	...(localModelsSupported
+		? [
+				{
+					id: WHISPER_CANDLE_PROVIDER_ID,
+					name: "Whisper Candle 本地高质量转写",
+					description:
+						"下载并校验 ZIP 模型包，在本机 CPU 上处理 WAV PCM 音频。",
+					enabled: true,
+					source: "feature" as const,
+				} satisfies ServiceProviderView,
+			]
+		: []),
 	...service.providerViews.value,
 ]);
 const isSystem = computed(
@@ -107,7 +112,7 @@ const whisperStorageBytes = computed(() =>
 onMounted(async () => {
 	systemEnabled.value = await getDefaultConfig(SYSTEM_ENABLED_KEY, true);
 	await service.initialize();
-	await refreshWhisperModels();
+	if (localModelsSupported) await refreshWhisperModels();
 	if (!activeServiceId.value)
 		activeServiceId.value = service.providerViews.value[0]?.id ?? "";
 });

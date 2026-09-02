@@ -13,10 +13,12 @@ const props = withDefaults(
 	defineProps<{
 		modelValue: string;
 		options: SegmentedOption[];
+		mode?: "icon" | "text";
 		variant?: "filled" | "outlined" | "borderless";
 		class?: string;
 	}>(),
 	{
+		mode: "text",
 		variant: "filled",
 		class: "",
 	},
@@ -71,7 +73,7 @@ watch(() => [props.modelValue, props.options] as const, updateIndicator, {
   <div
     ref="segmentedRef"
     role="radiogroup"
-    :class="cn('inline-flex max-w-full rounded-lg text-sm', variantClass, props.class)"
+	    :class="cn('inline-flex max-w-full rounded-lg text-sm', variantClass, props.class)"
   >
     <div ref="groupRef" class="relative inline-flex items-center gap-0.5">
       <span
@@ -90,14 +92,17 @@ watch(() => [props.modelValue, props.options] as const, updateIndicator, {
         :data-segmented-option="option.value"
         type="button"
         variant="ghost"
-        size="icon-sm"
+        :size="props.mode === 'icon' ? 'icon-sm' : 'default'"
         role="radio"
         :aria-checked="modelValue === option.value"
         :aria-label="option.label"
         :title="option.label"
         :disabled="option.disabled"
         :class="cn(
-          'relative z-10 min-h-7 min-w-0 rounded-md px-3 text-xs font-medium transition-colors',
+		  'relative z-10',
+          props.mode === 'icon'
+            ? 'size-7 rounded-md p-0'
+            : 'min-h-7 min-w-0 rounded-md px-3 text-xs font-medium transition-colors',
           modelValue === option.value
             ? 'text-foreground'
             : 'text-muted-foreground hover:text-foreground',

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Grid2X2, List, Plus, Search } from "lucide-vue-next";
+import { Grid2X2, List, Pin, Plus, Search } from "lucide-vue-next";
 import { computed, ref, watch } from "vue";
+import Segmented from "@/components/common/segmented/Segmented.vue";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,10 @@ const search = ref("");
 const renaming = ref(false);
 const nameDraft = ref("");
 const view = ref<"list" | "card">("list");
+const viewOptions = [
+	{ value: "list", label: "列表模式" },
+	{ value: "card", label: "卡片模式" },
+];
 const selected = computed(
 	() => packages.packages.find((item) => item.id === props.packageId) ?? null,
 );
@@ -36,6 +41,12 @@ const visiblePackages = computed(() => {
 			item.description?.toLocaleLowerCase().includes(keyword),
 	);
 });
+const pinnedPackages = computed(() =>
+	visiblePackages.value.filter((item) => item.pinned),
+);
+const otherPackages = computed(() =>
+	visiblePackages.value.filter((item) => !item.pinned),
+);
 
 watch([open, renaming], () =>
 	emit("open-change", open.value || renaming.value),
@@ -65,6 +76,10 @@ async function togglePin() {
 			pinned: !selected.value.pinned,
 		});
 }
+async function toggleItemPin(item: CharacterPackage, event: MouseEvent) {
+	event.stopPropagation();
+	await packages.update(item.id, { pinned: !item.pinned });
+}
 function rename() {
 	if (!selected.value) return;
 	nameDraft.value = selected.value.name;
@@ -93,27 +108,17 @@ defineExpose({ rename, removeSelected, togglePin });
 
 <template>
   <div class="relative flex min-w-0 items-center gap-0.5">
-    <Input v-if="renaming" v-model="nameDraft" autofocus class="h-8 min-w-24 max-w-44 px-2 text-sm mobile:max-w-32" @keydown.enter.prevent="confirmRename" @keydown.esc.prevent="renaming = false" @blur="confirmRename" />
+    <Input v-if="renaming" v-model="nameDraft" autofocus class="h-8 min-w-24 max-w-44 px-2 text-sm font-medium mobile:max-w-32" @keydown.enter.prevent="confirmRename" @keydown.esc.prevent="renaming = false" @blur="confirmRename" />
     <Popover v-else v-model:open="open">
       <PopoverTrigger as-child>
-      <button type="button" class="flex h-9 min-w-0 max-w-44 items-center gap-2 rounded-lg px-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mobile:max-w-32" :class="props.buttonClass" data-window-drag-block>
+      <button type="button" class="group flex h-9 min-w-0 max-w-44 items-center gap-2 rounded-lg px-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring mobile:max-w-32" :class="props.buttonClass" data-window-drag-block>
         <Avatar class="size-7 shrink-0"><AvatarImage v-if="selected?.icon" :src="selected.icon" :alt="selected.name" /><AvatarFallback class="font-semibold text-white" :style="color(selected)">{{ selected?.name.slice(0, 1) ?? 'P' }}</AvatarFallback></Avatar>
-        <span class="truncate text-sm font-medium">{{ selected?.name ?? '选择角色' }}</span>
+        <span class="min-w-0 flex-1 truncate text-sm font-medium">{{ selected?.name ?? '选择角色' }}</span>
       </button>
       </PopoverTrigger>
-      <PopoverContent align="start" :side-offset="7" class="w-[min(25rem,calc(100vw-1rem))] gap-0 rounded-xl border border-border/80 p-2 shadow-xl" data-window-drag-block>
-      <div class="flex items-center gap-2 p-1">
-        <div class="relative min-w-0 flex-1"><Search class="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input v-model="search" class="h-9 pl-8 focus-visible:ring-0!" placeholder="搜索角色" /></div>
-        <Button variant="secondary" size="icon-sm" title="新建角色包" @click="create"><Plus class="size-4" /></Button>
-        <div class="flex shrink-0 rounded-lg border bg-muted/20 p-0.5"><Button :variant="view === 'list' ? 'secondary' : 'ghost'" size="icon-sm" title="列表模式" @click="view = 'list'"><List class="size-4" /></Button><Button :variant="view === 'card' ? 'secondary' : 'ghost'" size="icon-sm" title="卡片模式" @click="view = 'card'"><Grid2X2 class="size-4" /></Button></div>
-      </div>
-      <ScrollArea class="mt-1 h-[min(23rem,58vh)]">
-        <div v-if="view === 'list'" class="grid grid-cols-1 gap-1 p-1">
-          <button v-for="item in visiblePackages" :key="item.id" type="button" class="group relative flex min-w-0 items-center gap-2.5 rounded-lg p-2 text-left hover:bg-muted/70" @click="select(item)"><Avatar class="size-10"><AvatarImage v-if="item.icon" :src="item.icon" :alt="item.name" /><AvatarFallback class="font-semibold text-white" :style="color(item)">{{ item.name.slice(0, 1) }}</AvatarFallback></Avatar><span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">{{ item.name }}</span><span class="mt-0.5 block truncate text-xs text-muted-foreground">{{ item.description || '暂无描述' }}</span></span></button>
-        </div>
-        <div v-else class="grid grid-cols-2 gap-2 p-1"><button v-for="item in visiblePackages" :key="item.id" type="button" class="group relative aspect-4/5 overflow-hidden rounded-xl border text-left shadow-sm transition hover:-translate-y-1 hover:shadow-xl" :style="color(item)" @click="select(item)"><span class="absolute inset-0 bg-linear-to-t from-black/90 via-black/10 to-transparent" /><span class="absolute inset-x-0 bottom-0 p-3 text-white"><span class="block text-sm font-semibold">{{ item.name }}</span><span class="mt-1 block max-h-0 overflow-hidden text-xs leading-5 text-white/75 opacity-0 transition-all group-hover:max-h-20 group-hover:opacity-100">{{ item.description || '暂无描述' }}</span></span></button></div>
-        <p v-if="visiblePackages.length === 0" class="py-12 text-center text-sm text-muted-foreground">没有匹配的角色</p>
-      </ScrollArea>
+      <PopoverContent align="start" :side-offset="8" class="w-[min(25rem,calc(100vw-1rem))] gap-0 overflow-hidden rounded-xl border-border/80 bg-popover p-0 shadow-2xl" data-window-drag-block>
+      <div class="flex items-center gap-2 border-b bg-muted/20 p-2"><div class="relative min-w-0 flex-1"><Search class="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input v-model="search" class="h-8 bg-background pl-8 text-xs shadow-none focus-visible:ring-1" placeholder="搜索角色…" /></div><Segmented v-model="view" mode="icon" variant="outlined" :options="viewOptions" class="shrink-0"><template #option="{ option }"><List v-if="option.value === 'list'" class="size-3.5" /><Grid2X2 v-else class="size-3.5" /></template></Segmented><Button size="sm" class="h-8 gap-1.5 px-2.5 text-xs" title="新建角色包" @click="create"><Plus class="size-3.5" />新建</Button></div>
+      <ScrollArea class="h-[min(23rem,58vh)]"><div v-if="view === 'list'" class="space-y-0.5 p-1.5"><p v-if="pinnedPackages.length" class="px-2 pb-1 pt-1 text-[10px] tracking-[0.12em] text-muted-foreground">置顶</p><button v-for="item in pinnedPackages" :key="item.id" type="button" class="group relative flex min-h-14 w-full min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-muted/70" :class="item.id === props.packageId && 'bg-primary/8'" @click="select(item)"><Avatar class="size-10"><AvatarImage v-if="item.icon" :src="item.icon" :alt="item.name" /><AvatarFallback class="font-semibold text-white" :style="color(item)">{{ item.name.slice(0, 1) }}</AvatarFallback></Avatar><span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">{{ item.name }}</span><span class="mt-0.5 block truncate text-[11px] text-muted-foreground">{{ item.description || '置顶角色包' }}</span></span><span class="shrink-0 text-[10px] text-muted-foreground">{{ item.conversations.length }} 会话</span><Button variant="ghost" size="icon-sm" class="size-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" :class="item.pinned && 'text-primary opacity-100'" title="取消置顶" @click="toggleItemPin(item, $event)"><Pin class="size-3.5" /></Button></button><p v-if="otherPackages.length" class="px-2 pb-1 pt-3 text-[10px] tracking-[0.12em] text-muted-foreground">全部角色</p><button v-for="item in otherPackages" :key="item.id" type="button" class="group relative flex min-h-14 w-full min-w-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-muted/70" :class="item.id === props.packageId && 'bg-primary/8'" @click="select(item)"><Avatar class="size-10"><AvatarImage v-if="item.icon" :src="item.icon" :alt="item.name" /><AvatarFallback class="font-semibold text-white" :style="color(item)">{{ item.name.slice(0, 1) }}</AvatarFallback></Avatar><span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">{{ item.name }}</span><span class="mt-0.5 block truncate text-[11px] text-muted-foreground">{{ item.description || '暂无描述' }}</span></span><span class="shrink-0 text-[10px] text-muted-foreground">{{ item.conversations.length }} 会话</span><Button variant="ghost" size="icon-sm" class="size-7 opacity-0 group-hover:opacity-100 focus-visible:opacity-100" title="置顶角色" @click="toggleItemPin(item, $event)"><Pin class="size-3.5" /></Button></button><p v-if="!visiblePackages.length" class="py-12 text-center text-sm text-muted-foreground">没有匹配的角色</p></div><div v-else class="grid grid-cols-2 gap-2 p-2.5"><button v-for="item in visiblePackages" :key="item.id" type="button" class="group relative aspect-4/5 overflow-hidden rounded-xl border text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg" :class="item.id === props.packageId && 'border-primary'" :style="color(item)" @click="select(item)"><span class="absolute inset-0 bg-linear-to-t from-black/90 via-black/10 to-transparent" /><Button variant="ghost" size="icon-sm" class="absolute left-1.5 top-1.5 z-10 size-7 bg-black/25 text-white opacity-0 backdrop-blur-sm group-hover:opacity-100 focus-visible:opacity-100 hover:bg-black/50" :class="item.pinned && 'opacity-100 text-primary'" :title="item.pinned ? '取消置顶' : '置顶角色'" @click="toggleItemPin(item, $event)"><Pin class="size-3.5" /></Button><span class="absolute inset-x-0 bottom-0 p-3 text-white"><span class="block truncate text-sm font-semibold">{{ item.name }}</span><span class="mt-1 block max-h-0 overflow-hidden text-xs leading-5 text-white/75 opacity-0 transition-all group-hover:max-h-20 group-hover:opacity-100">{{ item.description || '暂无描述' }}</span></span></button><p v-if="!visiblePackages.length" class="col-span-2 py-12 text-center text-sm text-muted-foreground">没有匹配的角色</p></div></ScrollArea>
       </PopoverContent>
     </Popover>
   </div>

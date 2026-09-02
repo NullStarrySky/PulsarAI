@@ -30,6 +30,8 @@ function isModelMessage(value: unknown): value is ModelMessage {
 function sourceRoot(path: string) {
 	const parts = path.split("/").filter(Boolean);
 	if (parts[0] === "self") return "/self";
+	if (parts[0] === "global" && parts[1]?.startsWith("$"))
+		return `/global/${parts[1]}`;
 	return parts.length > 2 ? `/${parts.slice(0, 2).join("/")}` : "/global";
 }
 
@@ -73,18 +75,21 @@ export function createWorldSelfApi(
 	const world = useWorld(scope);
 	const logger = options.logger ?? new PluginLogger();
 	const absolute = (path: string) => resolveSourcePath(sourcePath, path);
+	const slotAt = (path: string) => {
+		try {
+			const node = world.resolve(path).node;
+			return world.slots.value.find((item) => item.id === node.id) ?? null;
+		} catch {
+			return world.slots.value.find((item) => item.path === path) ?? null;
+		}
+	};
 	const slot = {
 		list: () => world.slots.value,
-		get: (path: string) =>
-			world.slots.value.find((item) => item.path === path) ?? null,
+		get: slotAt,
 		paths: (path: string) =>
-			(
-				world.slots.value.find((item) => item.path === path)?.resources ?? []
-			).map((item) => item.path),
+			(slotAt(path)?.resources ?? []).map((item) => item.path),
 		import: (path: string) =>
-			(
-				world.slots.value.find((item) => item.path === path)?.resources ?? []
-			).map((item) => item.path),
+			(slotAt(path)?.resources ?? []).map((item) => item.path),
 	};
 	const importResource = (
 		path: string | string[],

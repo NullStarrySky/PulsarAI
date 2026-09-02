@@ -10,6 +10,7 @@ import {
 	watch,
 	watchEffect,
 } from "vue";
+import { Segmented } from "@/components/common/segmented";
 import { Button } from "@/components/ui/button";
 import {
 	Dialog,
@@ -20,7 +21,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Segmented } from "@/components/common/segmented";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
 import { useLayoutStore } from "@/features/UI/layout-store";
 import { cn } from "@/lib/utils";
@@ -101,7 +101,7 @@ watch(
 		);
 		if (!element) return;
 		dialogInteractable = interact(element).draggable({
-			allowFrom: ".settings-dialog-drag-handle",
+			allowFrom: "[data-settings-drag-handle]",
 			ignoreFrom:
 				"button, input, textarea, select, [role='tab'], [role='combobox']",
 			listeners: {
@@ -165,7 +165,8 @@ onBeforeUnmount(teardownDrag);
           )"
         >
           <nav class="flex h-full min-h-0 flex-col">
-            <div class="settings-dialog-drag-handle shrink-0 cursor-grab px-4 pb-3 pt-4 active:cursor-grabbing">
+            <div class="relative shrink-0 px-4 pb-3 pt-4">
+              <div data-settings-drag-handle class="absolute inset-x-0 top-0 h-3 cursor-grab active:cursor-grabbing" />
               <div class="mb-3 flex h-7 items-center gap-2 px-1">
                 <h2 class="text-base font-semibold">设置</h2>
                 <kbd class="rounded-md bg-background/65 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">Ctrl+,</kbd>
@@ -198,7 +199,8 @@ onBeforeUnmount(teardownDrag);
         </aside>
 
         <main class="relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-background/30">
-          <header class="settings-dialog-drag-handle shrink-0 cursor-grab px-7 pb-3 pt-5 active:cursor-grabbing mobile:pl-16 mobile:pr-4">
+          <header class="relative shrink-0 px-7 pb-3 pt-5 mobile:pl-16 mobile:pr-4">
+            <div data-settings-drag-handle class="absolute inset-x-0 top-0 h-3 cursor-grab active:cursor-grabbing" />
             <div class="flex min-h-9 items-center justify-between gap-4">
               <h1 class="truncate text-xl font-semibold tracking-tight">{{ activePage?.meta.title ?? "设置" }}</h1>
               <DialogClose as-child>
@@ -233,7 +235,8 @@ onBeforeUnmount(teardownDrag);
 
           <div
             v-if="!isMobileLayout"
-            class="settings-dialog-drag-handle absolute inset-x-0 bottom-0 z-10 h-4 cursor-grab active:cursor-grabbing"
+            data-settings-drag-handle
+            class="absolute inset-x-0 bottom-0 z-10 h-4 cursor-grab active:cursor-grabbing"
             aria-hidden="true"
           />
         </main>
