@@ -1,9 +1,3 @@
-interface CharacterPackageConversationLink {
-	id: string;
-	lastContainerid: string;
-	title: string;
-}
-
 export interface CharacterPackage {
 	id: string;
 	name: string;
@@ -13,7 +7,6 @@ export interface CharacterPackage {
 	categoryId?: string | null;
 	order: number;
 	pinned?: boolean;
-	conversations: CharacterPackageConversationLink[];
 	syncEnabled?: boolean;
 }
 

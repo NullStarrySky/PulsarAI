@@ -1,6 +1,6 @@
 import { defineStore } from "pinia";
 import { toRaw } from "vue";
-import { remove, upsert } from "@/features/Database/database-service";
+import { remove, selectAll, upsert } from "@/features/Database/database-service";
 import {
 	ensurePackageWorldDocument,
 	packageWorldDocumentId,
@@ -23,17 +23,29 @@ export const usePackageStore = defineStore("conversation-packages", {
 	state: () => ({
 		packages: [] as CharacterPackage[],
 		categories: [] as PackageCategory[],
+		loaded: false,
 	}),
 	getters: {
 		sortedPackages: (state) => [...state.packages].sort(comparePackages),
 	},
 	actions: {
+		async initialize() {
+			if (this.loaded) return;
+			const [pkgRecords, catRecords] = await Promise.all([
+				selectAll<CharacterPackage>(packageTable),
+				selectAll<PackageCategory>(categoryTable),
+			]);
+			this.packages = pkgRecords.map((r) => r.value);
+			this.categories = catRecords.map((r) => r.value);
+			if (this.packages.length === 0) {
+				await this.create({ name: "默认角色包" });
+			}
+			this.loaded = true;
+		},
 		hydrate(packages: CharacterPackage[], categories: PackageCategory[]) {
-			this.packages = packages.map((item) => ({
-				...item,
-				conversations: item.conversations ?? [],
-			}));
+			this.packages = packages;
 			this.categories = categories;
+			this.loaded = true;
 		},
 		async persist(item: CharacterPackage) {
 			await upsert(packageTable, item.id, structuredClone(toRaw(item)));
@@ -49,7 +61,6 @@ export const usePackageStore = defineStore("conversation-packages", {
 				icon: input.icon ?? "",
 				description: input.description,
 				order: Math.max(-1, ...this.packages.map((value) => value.order)) + 1,
-				conversations: [],
 			};
 			this.packages.push(item);
 			await this.persist(item);
@@ -61,7 +72,7 @@ export const usePackageStore = defineStore("conversation-packages", {
 			patch: Partial<
 				Pick<
 					CharacterPackage,
-					"name" | "icon" | "description" | "pinned" | "syncEnabled"
+					"name" | "icon" | "description" | "pinned" | "syncEnabled" | "categoryId" | "nickname"
 				>
 			>,
 		) {
@@ -69,6 +80,18 @@ export const usePackageStore = defineStore("conversation-packages", {
 			if (!item) return;
 			Object.assign(item, patch);
 			await this.persist(item);
+		},
+		async renamePackage(packageId: string, name: string) {
+			await this.update(packageId, { name });
+		},
+		async setPackagePinned(packageId: string, pinned: boolean) {
+			await this.update(packageId, { pinned });
+		},
+		async setPackageDescription(packageId: string, description: string) {
+			await this.update(packageId, { description });
+		},
+		async setPackageIcon(packageId: string, icon: string) {
+			await this.update(packageId, { icon });
 		},
 		async remove(packageId: string) {
 			this.packages = this.packages.filter((item) => item.id !== packageId);

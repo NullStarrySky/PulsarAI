@@ -11,7 +11,8 @@ import type {
 	ThinkingStep,
 	ToolCallResult,
 	ToolCallStep,
-} from "@/features/Conversation/messages/conversation-types";
+} from "@/features/Conversation/messages/message-types";
+
 import { getDefaultChatModel } from "@/features/defaultConfigs/default-config-service";
 import type { ReasoningEffort } from "@/features/ModelConnection/model-reference";
 import { parseModelReference } from "@/features/ModelConnection/model-reference";

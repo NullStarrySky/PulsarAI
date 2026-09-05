@@ -1,15 +1,25 @@
 import { toRaw } from "vue";
-import { useChatStore } from "@/features/Conversation/chats/chat-store";
-import { createComposerApi } from "@/features/Conversation/composer/composer-api";
+import {
+	loadChat,
+	loadChatsForPackage,
+	persistChat,
+} from "@/features/Conversation/chats/chat-service";
+import {
+	type Conversation,
+	createDefaultComposerDraft,
+} from "@/features/Conversation/chats/chat-types";
+import {
+	createContainer,
+	loadContainersForChat,
+	modelMessagesFromPath,
+	pathForTail,
+	persistContainer,
+} from "@/features/Conversation/messages/message-service";
 import type {
 	ChatMessage,
 	ChatMessageContainer,
 	Role,
-} from "@/features/Conversation/messages/conversation-types";
-import {
-	modelMessagesFromPath,
-	useMessageStore,
-} from "@/features/Conversation/messages/message-store";
+} from "@/features/Conversation/messages/message-types";
 import { usePackageStore } from "@/features/Package/package-store";
 import {
 	type AgentOutputContainer,
@@ -49,7 +59,7 @@ export interface CtxBuilderConfig {
 }
 
 export interface CtxBuilderResult {
-	chat?: ReturnType<typeof useChatStore>["chats"][number];
+	chat?: Conversation;
 	activePath?: ChatMessageContainer[];
 	container?: ChatMessageContainer;
 	message?: ChatMessage;
@@ -75,26 +85,17 @@ function snapshot<T>(value: T): T {
 }
 
 function conversationManagementApi(conversationId: string) {
-	const chats = useChatStore();
-	const current = () =>
-		chats.chats.find((item) => item.id === conversationId) ?? null;
 	return Object.freeze({
-		read: () => {
-			const chat = current();
+		read: async () => {
+			const chat = await loadChat(conversationId);
 			return chat ? snapshot(chat) : null;
 		},
-		list: () => {
-			const chat = current();
-			return chat ? chats.chatsForPackage(chat.packageId).map(snapshot) : [];
+		list: async () => {
+			const chat = await loadChat(conversationId);
+			return chat
+				? (await loadChatsForPackage(chat.packageId)).map(snapshot)
+				: [];
 		},
-		create: (
-			input: Parameters<typeof chats.create>[0] = {
-				packageId: current()?.packageId ?? "",
-			},
-		) => chats.create(input),
-		update: (patch: Parameters<typeof chats.update>[1]) =>
-			chats.update(conversationId, patch),
-		remove: () => chats.remove(conversationId),
 	});
 }
 
@@ -130,12 +131,12 @@ function injectSelectedData(
 }
 
 function createReply(container: ChatMessageContainer, message: ChatMessage) {
-	const messages = useMessageStore();
 	let queue = Promise.resolve();
 	const persist = () => {
-		queue = queue.then(() => messages.persist(container));
+		queue = queue.then(() => persistContainer(container));
 		return queue;
 	};
+
 	const reply: AgentOutputContainer & Record<string, unknown> = {
 		read: () => ({
 			container: structuredClone(toRaw(container)),
@@ -195,7 +196,7 @@ function createReply(container: ChatMessageContainer, message: ChatMessage) {
 }
 
 /**
- * Mutates `ctx` with exactly the requested capabilities.  Plugin APIs are
+ * Mutates `ctx` with exactly the requested capabilities. Plugin APIs are
  * deliberately unavailable until a concrete message version is selected.
  */
 export async function ctxbuilder(
@@ -224,11 +225,10 @@ export async function ctxbuilder(
 		inputFeature ||
 		messageFeature
 	) {
-		const chat = useChatStore().chats.find(
-			(item) => item.id === conversationId,
-		);
+		const chat = await loadChat(conversationId);
 		if (!chat) throw new Error("会话不存在。");
-		const activePath = useMessageStore().pathFor(chat.lastContainerId);
+		const containers = await loadContainersForChat(conversationId);
+		const activePath = pathForTail(containers, chat.lastContainerId);
 		result.chat = chat;
 		result.activePath = activePath;
 		if (chatFeature) {
@@ -258,29 +258,39 @@ export async function ctxbuilder(
 				roles: roleManagementApi(role.id),
 			});
 		}
-		if (inputFeature) ctx.input = createComposerApi(conversationId);
+		if (inputFeature) ctx.input = createInputApi(conversationId);
 	}
 
 	if (messageFeature) {
-		const chats = useChatStore();
-		const messages = useMessageStore();
 		const chat = result.chat!;
 		const role = messageFeature.role ?? "assistant";
+		const containers = await loadContainersForChat(conversationId);
 		let container = messageFeature.containerId
-			? messages.containers.find(
-					(item) => item.id === messageFeature.containerId,
-				)
+			? containers.find((item) => item.id === messageFeature.containerId)
 			: null;
 		if (!container && messageFeature.create) {
-			container = await messages.append({
+			const previousId = chat.lastContainerId;
+			container = createContainer({
 				conversationId,
 				role,
 				content: "",
-				previousContainer: chat.lastContainerId,
+				previousContainer: previousId,
 			});
+			if (previousId) {
+				const parent = containers.find((c) => c.id === previousId);
+				if (parent) {
+					parent.availableNextContainer.push(container.id);
+					parent.activeNextContainer = container.id;
+					await persistContainer(parent);
+				}
+			}
+			await persistContainer(container);
+			if (!chat.rootContainerId) {
+				chat.rootContainerId = container.id;
+			}
 			chat.lastContainerId = container.id;
 			chat.updatedAt = new Date().toISOString();
-			await chats.persist(chat);
+			await persistChat(chat);
 		}
 		if (
 			!container ||
@@ -288,7 +298,10 @@ export async function ctxbuilder(
 			container.role !== role
 		)
 			throw new Error("找不到指定角色的消息容器。");
-		const message = messages.currentMessage(container);
+		const message =
+			container.activeMessage === null || container.activeMessage === undefined
+				? null
+				: container.content[container.activeMessage];
 		if (!message) throw new Error("消息容器没有活动版本。");
 		const replyState = createReply(container, message);
 		result.container = container;
@@ -301,9 +314,11 @@ export async function ctxbuilder(
 	if (pluginFeature) {
 		const selfApi = createWorldSelfApi(sourcePath, {
 			conversationId,
+			packageId: result.chat?.packageId,
 			container: result.container,
 			messageVersion: result.message,
 		});
+
 		Object.assign(ctx, {
 			utils: environmentTools,
 			imports: selfApi.import,
@@ -367,4 +382,91 @@ export async function ctxbuilder(
 	}
 
 	return result;
+}
+
+function createInputApi(conversationId: string) {
+	const send = async () => {
+		const target = await loadChat(conversationId);
+		const currentDraft = target?.composerDraft ?? createDefaultComposerDraft();
+		const activeIdx = currentDraft.activeMessage ?? 0;
+		const activeMsg = currentDraft.content[activeIdx];
+		const content = (activeMsg?.content ?? "").trim();
+		const parts = activeMsg?.parts ?? [];
+		const role = currentDraft.role ?? "user";
+		if (!target || (!content && parts.length === 0)) return null;
+		const previousId = target.lastContainerId;
+		const container = createContainer({
+			conversationId,
+			role,
+			content,
+			parts,
+			previousContainer: previousId,
+		});
+		if (previousId) {
+			const containers = await loadContainersForChat(conversationId);
+			const parent = containers.find((c) => c.id === previousId);
+			if (parent) {
+				parent.availableNextContainer.push(container.id);
+				parent.activeNextContainer = container.id;
+				await persistContainer(parent);
+			}
+		}
+		await persistContainer(container);
+		if (!target.rootContainerId) {
+			target.rootContainerId = container.id;
+		}
+		target.lastContainerId = container.id;
+		target.composerDraft = createDefaultComposerDraft();
+		target.lastMessagePreview = content.slice(0, 80);
+		target.updatedAt = new Date().toISOString();
+		await persistChat(target);
+		return { id: container.id, content };
+	};
+	return Object.freeze({
+		read: async () => {
+			const d = (await loadChat(conversationId))?.composerDraft;
+			return d?.content[d.activeMessage ?? 0]?.content ?? "";
+		},
+		write: async (content: string) => {
+			const target = await loadChat(conversationId);
+			if (!target) return;
+			const current = target.composerDraft ?? createDefaultComposerDraft();
+			const activeIdx = current.activeMessage ?? 0;
+			const msg = current.content[activeIdx] ?? {
+				id: "draft-msg",
+				type: "message",
+				content: "",
+				createdAt: new Date().toISOString(),
+				meta: { steps: [] },
+			};
+			const newContent = [...current.content];
+			newContent[activeIdx] = { ...msg, content: String(content) };
+			target.composerDraft = { ...current, content: newContent };
+			await persistChat(target);
+		},
+		edit: async (find: string, replace: string) => {
+			if (!find) throw new Error("input.edit 的 find 不能为空。");
+			const target = await loadChat(conversationId);
+			if (!target) throw new Error("会话不存在。");
+			const current = target.composerDraft ?? createDefaultComposerDraft();
+			const activeIdx = current.activeMessage ?? 0;
+			const msg = current.content[activeIdx] ?? {
+				id: "draft-msg",
+				type: "message",
+				content: "",
+				createdAt: new Date().toISOString(),
+				meta: { steps: [] },
+			};
+			const text = msg.content;
+			const index = text.indexOf(find);
+			if (index < 0) throw new Error("input.edit 未找到要替换的文本。");
+			const next = `${text.slice(0, index)}${replace}${text.slice(index + find.length)}`;
+			const newContent = [...current.content];
+			newContent[activeIdx] = { ...msg, content: next };
+			target.composerDraft = { ...current, content: newContent };
+			await persistChat(target);
+			return next;
+		},
+		send,
+	});
 }

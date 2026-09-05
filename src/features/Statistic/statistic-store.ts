@@ -1,7 +1,11 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
+import { selectAllChats } from "@/features/Conversation/chats/chat-service";
+import type { Conversation } from "@/features/Conversation/chats/chat-types";
+import { selectAllContainers } from "@/features/Conversation/messages/message-service";
+import type { ChatMessageContainer } from "@/features/Conversation/messages/message-types";
 import { selectAll, upsert } from "@/features/Database/database-service";
+import { usePackageStore } from "@/features/Package/package-store";
 import {
 	createStatisticEvent,
 	createYearHeatmap,
@@ -13,55 +17,62 @@ const table = "statistic_events";
 export const useStatisticStore = defineStore("statistic", () => {
 	const events = ref<StatisticEvent[]>([]);
 	const loaded = ref(false);
-	const conversation = useConversationStore();
+	const packages = usePackageStore();
+	const allChats = ref<Conversation[]>([]);
+	const allContainers = ref<ChatMessageContainer[]>([]);
 
+	const packageCount = computed(() => packages.packages.length);
+	const conversationCount = computed(() => allChats.value.length);
 	const messageCount = computed(() =>
-		conversation.containers.reduce(
+		allContainers.value.reduce(
 			(total, container) => total + container.content.length,
 			0,
 		),
 	);
 	const heatmap = computed(() => createYearHeatmap(events.value));
 	const sizeByType = computed(() => {
-		const conversations = byteSize(conversation.conversations);
-		const containers = byteSize(conversation.containers);
-		const packages = byteSize(conversation.packages);
+		const conversationsBytes = byteSize(allChats.value);
+		const containersBytes = byteSize(allContainers.value);
+		const packagesBytes = byteSize(packages.packages);
 		return [
 			{
 				id: "packages",
 				label: "角色包",
-				bytes: packages,
+				bytes: packagesBytes,
 				color: "var(--chart-1)",
 			},
 			{
 				id: "conversations",
 				label: "对话",
-				bytes: conversations,
+				bytes: conversationsBytes,
 				color: "var(--chart-2)",
 			},
 			{
 				id: "messages",
 				label: "消息",
-				bytes: containers,
+				bytes: containersBytes,
 				color: "var(--chart-3)",
 			},
 		];
 	});
 	const sizeByPackage = computed(() =>
-		conversation.packages.map((item, index) => {
-			const conversations = conversation.conversations.filter(
+		packages.packages.map((item, index) => {
+			const pkgConversations = allChats.value.filter(
 				(conversationItem) => conversationItem.packageId === item.id,
 			);
 			const conversationIds = new Set(
-				conversations.map((conversationItem) => conversationItem.id),
+				pkgConversations.map((conversationItem) => conversationItem.id),
 			);
-			const containers = conversation.containers.filter((container) =>
+			const pkgContainers = allContainers.value.filter((container) =>
 				conversationIds.has(container.conversationid),
 			);
 			return {
 				id: item.id,
 				label: item.name,
-				bytes: byteSize(item) + byteSize(conversations) + byteSize(containers),
+				bytes:
+					byteSize(item) +
+					byteSize(pkgConversations) +
+					byteSize(pkgContainers),
 				color: `hsl(${(index * 67) % 360} 70% 55%)`,
 			};
 		}),
@@ -74,6 +85,8 @@ export const useStatisticStore = defineStore("statistic", () => {
 		events.value = (await selectAll<StatisticEvent>(table)).map(
 			(item) => item.value,
 		);
+		allChats.value = await selectAllChats();
+		allContainers.value = await selectAllContainers();
 		loaded.value = true;
 	}
 
@@ -92,6 +105,8 @@ export const useStatisticStore = defineStore("statistic", () => {
 		events,
 		loaded,
 		heatmap,
+		packageCount,
+		conversationCount,
 		messageCount,
 		sizeByPackage,
 		sizeByType,

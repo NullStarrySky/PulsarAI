@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import type {
 	ActionPart,
 	FilePart,
-} from "@/features/Conversation/messages/conversation-types";
+} from "@/features/Conversation/messages/message-types";
 import type { WorldResource } from "@/features/Plugin/tree/world-store";
 import SttInputButton from "@/features/STT/SttInputButton.vue";
 import ComposerAttachmentStrip from "./ComposerAttachmentStrip.vue";
@@ -155,11 +155,9 @@ function pickAction(action: WorldResource) {
 	} else {
 		emit("update:selectedAction", {
 			type: "action",
-			actionId: action.file.id,
-			sourcePath: action.path,
-			sourceName: action.scope === "global" ? "共享世界" : "角色世界",
-			name: action.file.name.replace(/\.[^.]+$/, ""),
-			description: "",
+			id: action.file.id,
+			label: action.file.name.replace(/\.[^.]+$/, ""),
+			action: action.path,
 		});
 		liveInput.value = "";
 		emit("update:modelValue", "");
@@ -238,7 +236,7 @@ function handleKeydown(event: KeyboardEvent) {
 
     <div v-if="selectedAction" class="mb-1.5 flex items-center">
       <div class="flex min-w-0 items-center gap-2 rounded-lg border bg-muted/50 py-1 pl-2.5 pr-1 text-xs">
-        <span class="truncate font-mono font-medium text-primary">/{{ selectedAction.name }}</span>
+        <span class="truncate font-mono font-medium text-primary">/{{ selectedAction.label }}</span>
         <Button size="icon-sm" variant="ghost" class="rounded-full" title="移除动作" @click="emit('update:selectedAction', null)"><X class="size-3" /></Button>
       </div>
     </div>

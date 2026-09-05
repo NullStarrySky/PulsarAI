@@ -10,16 +10,11 @@ import {
 	Languages,
 	MoreHorizontal,
 	Pencil,
-	Plus,
 	RefreshCw,
-	RotateCcw,
-	Star,
-	StarOff,
 	Trash2,
 	Volume2,
 } from "lucide-vue-next";
-import { toRef } from "vue";
-import { BubbleContent } from "@/components/ui/bubble";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -27,7 +22,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MessageContent, MessageFooter } from "@/components/ui/message";
+import { Message, MessageContent, MessageFooter } from "@/components/ui/message";
 import {
 	Popover,
 	PopoverContent,
@@ -35,79 +30,73 @@ import {
 } from "@/components/ui/popover";
 import ConversationComposerEditor from "@/features/Conversation/composer/ConversationComposerEditor.vue";
 import ConversationMarkdown from "@/features/Conversation/stage/markstream/ConversationMarkdown.vue";
+import type { MessageBubbleViewModel } from "../use-conversation";
 import ChatSteps from "./ChatSteps.vue";
-import type { ChatMessage, ChatMessageContainer } from "./conversation-types";
-import { useMessageBubble } from "./use-message-bubble";
 
 const props = defineProps<{
-	container: ChatMessageContainer;
-	message: ChatMessage | null;
+	viewModel: MessageBubbleViewModel;
+	generating?: boolean;
 }>();
-const emit = defineEmits<{ "process-interaction": [] }>();
-const {
-	conversation,
-	editing,
-	thinking,
-	attachments,
-	worldUpdates,
-	hasPluginChanges,
-	agentWorking,
-	hasVisibleMessage,
-	canNavigateNext,
-	resourceSummary,
-	startEdit,
-	saveEdit,
-	exportScreenshot,
-	messageTime,
-	attachmentPreviewUrl,
-	formatAttachmentSize,
-	openMessageAttachment,
-} = useMessageBubble(toRef(props, "container"), toRef(props, "message"));
+
+const emit = defineEmits<{
+	"process-interaction": [];
+	"delete-message": [containerId: string];
+}>();
+
+const actions = props.viewModel.actions;
 </script>
 
 <template>
-  <Message :align="container.role === 'user' ? 'end' : 'start'" class="group/message flex-col gap-1">
-    <MessageContent :class="container.role === 'user' ? 'max-w-[77%] self-end mobile:max-w-[88%]' : 'w-full'">
-      <Bubble :id="`message-bubble-${container.id}`" :align="container.role === 'user' ? 'end' : 'start'" :variant="container.role === 'user' ? 'tinted' : 'ghost'" :class="[container.role === 'user' ? 'max-w-full' : 'w-full p-0', message?.type === 'error' ? 'border border-destructive/30 bg-destructive/10 text-destructive' : '']">
-        <BubbleContent :class="container.role === 'user' ? 'rounded-2xl' : 'w-full bg-transparent p-0'">
+  <Message :align="viewModel.role === 'user' ? 'end' : 'start'" class="group/message flex-col gap-1">
+    <MessageContent :class="viewModel.role === 'user' ? 'max-w-[77%] self-end mobile:max-w-[88%]' : 'w-full'">
+      <Bubble :id="`message-bubble-${viewModel.containerId}`" :align="viewModel.role === 'user' ? 'end' : 'start'" :variant="viewModel.role === 'user' ? 'tinted' : 'ghost'" :class="[viewModel.role === 'user' ? 'max-w-full' : 'w-full p-0', viewModel.message?.type === 'error' ? 'border border-destructive/30 bg-destructive/10 text-destructive' : '']">
+        <BubbleContent :class="viewModel.role === 'user' ? 'rounded-2xl' : 'w-full bg-transparent p-0'">
           <ChatSteps
-            :steps="thinking"
-            :working="agentWorking"
-            :started-at="message?.meta.generateInfo?.startTime"
-            :elapsed-ms="message?.meta.generateInfo?.timeUsed"
+            :steps="viewModel.thinking as any"
+            :working="generating && viewModel.role === 'assistant'"
+            :started-at="viewModel.message?.meta?.generateInfo?.startTime"
             @interaction="emit('process-interaction')"
           />
-          <div v-if="attachments.length" class="mb-2 flex flex-wrap gap-2">
-            <button v-for="attachment in attachments" :key="attachment.filename" type="button" class="rounded-md border px-2 py-1 text-left text-xs" @click="openMessageAttachment(attachment)">
-              <img v-if="attachmentPreviewUrl(attachment)" :src="attachmentPreviewUrl(attachment)" class="mr-1 inline size-5 rounded object-cover" alt="" />{{ attachment.filename }} · {{ formatAttachmentSize(attachment.size) }}
-            </button>
-          </div>
-          <ConversationComposerEditor v-if="editing.active" v-model="editing.content" compact inline-message-edit class="w-full" @submit="saveEdit" />
-          <ConversationMarkdown v-else-if="message?.type === 'error'" :model-value="message.content" />
-          <ConversationMarkdown v-else :model-value="message?.content ?? ''" />
+          <ConversationComposerEditor v-if="actions.editState.isEditing" v-model="actions.editState.draftContent" compact inline-message-edit class="w-full" @submit="actions.saveEdit" />
+          <ConversationMarkdown v-else-if="viewModel.message?.type === 'error'" :model-value="viewModel.message.content" />
+          <ConversationMarkdown v-else :model-value="viewModel.message?.content ?? ''" />
         </BubbleContent>
       </Bubble>
-      <MessageFooter v-if="message && hasVisibleMessage" data-window-drag-block class="mt-1 flex h-7 w-full justify-between gap-2 px-0 transition-opacity" :class="container.role === 'assistant' ? 'opacity-100' : 'opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100 mobile:opacity-100'">
+      <MessageFooter v-if="viewModel.message" data-window-drag-block class="mt-1 flex h-7 w-full justify-between gap-2 px-0 transition-opacity" :class="viewModel.role === 'assistant' ? 'opacity-100' : 'opacity-0 group-hover/message:opacity-100 group-focus-within/message:opacity-100 mobile:opacity-100'">
         <div class="flex min-w-0 items-center gap-0.5">
-          <Button v-if="container.role === 'assistant'" variant="ghost" size="icon-sm" class="rounded-full" title="上一个版本" :disabled="(container.activeMessage ?? 0) <= 0" @click="conversation.navigateAssistantVersion(container.id, -1)"><ChevronLeft class="size-4" /></Button>
-          <span class="px-1 text-xs text-muted-foreground">{{ (container.activeMessage ?? 0) + 1 }}/{{ Math.max(container.content.length, 1) }}</span>
-          <Button v-if="container.role === 'assistant'" variant="ghost" size="icon-sm" class="rounded-full" title="下一个版本；末版时重新生成" :disabled="!canNavigateNext" @click="conversation.navigateAssistantVersion(container.id, 1)"><ChevronRight class="size-4" /></Button>
-          <Button v-if="editing.active" variant="ghost" size="icon-sm" class="rounded-full" title="保存" @click="saveEdit"><Check class="size-4" /></Button>
-          <Button v-else variant="ghost" size="icon-sm" class="rounded-full" title="编辑" @click="startEdit"><Pencil class="size-4" /></Button>
-          <Button variant="ghost" size="icon-sm" class="rounded-full" title="复制" @click="conversation.copyMessage(container.id)"><Copy class="size-4" /></Button>
-          <Button v-if="container.role === 'assistant'" variant="ghost" size="icon-sm" class="rounded-full" title="重新生成" :disabled="conversation.generating.value" @click="conversation.regenerate(container.id)"><RefreshCw class="size-4" /></Button>
-          <slot name="messageAction" :container="container" :message="message" :conversation="conversation" />
-          <Popover v-if="hasPluginChanges">
-            <PopoverTrigger as-child><Button variant="ghost" size="icon-sm" class="h-6 gap-1 rounded-full px-1.5 text-[11px] text-amber-500 hover:bg-amber-500/10 hover:text-amber-600" title="查看消息附属的 World 更新"><Database class="size-3" /><span>{{ resourceSummary }}</span></Button></PopoverTrigger>
+          <Button v-if="viewModel.role === 'assistant'" variant="ghost" size="icon-sm" class="rounded-full" title="上一个版本" :disabled="viewModel.activeVersionIndex <= 0" @click="actions.prevVersion()"><ChevronLeft class="size-4" /></Button>
+          <span v-if="viewModel.role === 'assistant'" class="px-1 text-xs text-muted-foreground">{{ viewModel.activeVersionIndex + 1 }}/{{ viewModel.versionCount }}</span>
+          <Button v-if="viewModel.role === 'assistant'" variant="ghost" size="icon-sm" class="rounded-full" title="下一个版本" :disabled="viewModel.activeVersionIndex >= viewModel.versionCount - 1" @click="actions.nextVersion()"><ChevronRight class="size-4" /></Button>
+          <Button v-if="actions.editState.isEditing" variant="ghost" size="icon-sm" class="rounded-full" title="保存" @click="actions.saveEdit"><Check class="size-4" /></Button>
+          <Button v-else variant="ghost" size="icon-sm" class="rounded-full" title="编辑" @click="actions.startEdit"><Pencil class="size-4" /></Button>
+          <Button variant="ghost" size="icon-sm" class="rounded-full" title="复制" @click="actions.copy()"><Copy class="size-4" /></Button>
+          <Button v-if="viewModel.role === 'assistant'" variant="ghost" size="icon-sm" class="rounded-full" title="重新生成" :disabled="generating" @click="actions.regenerate()"><RefreshCw class="size-4" /></Button>
+          <Popover v-if="viewModel.hasPluginChanges">
+            <PopoverTrigger as-child><Button variant="ghost" size="icon-sm" class="h-6 gap-1 rounded-full px-1.5 text-[11px] text-amber-500 hover:bg-amber-500/10 hover:text-amber-600" title="查看消息附属的 World 更新"><Database class="size-3" /><span>{{ viewModel.resourceSummary }}</span></Button></PopoverTrigger>
             <PopoverContent align="start" class="w-[min(28rem,calc(100vw-1rem))] space-y-3 p-3 text-xs">
               <div class="flex items-center gap-1.5 border-b pb-1.5 font-semibold text-amber-500"><Database class="size-4" />版本 World 更新</div>
-              <div class="rounded-lg bg-muted/50 p-2 font-mono text-[11px]">{{ worldUpdates.length }} 个 update</div>
+              <div class="rounded-lg bg-muted/50 p-2 font-mono text-[11px]">{{ viewModel.worldUpdates.length }} 个 update</div>
             </PopoverContent>
           </Popover>
-          <Popover v-if="container.role !== 'user'"><PopoverTrigger as-child><Button variant="ghost" size="icon-sm" class="rounded-full" title="分支"><GitBranch class="size-4" /></Button></PopoverTrigger><PopoverContent class="w-56 p-2"><Button variant="outline" size="sm" class="mb-2 w-full" :disabled="conversation.generating.value" @click="conversation.createBranch(container.id)"><Plus class="size-4" />新分支</Button><div class="grid grid-cols-5 gap-1"><Button v-for="(branchId, index) in conversation.branchIdsFor(container.id)" :key="branchId" size="icon-sm" :variant="conversation.activeBranchIdFor(container.id) === branchId ? 'default' : 'ghost'" @click="conversation.switchBranch(container.id, branchId)">{{ index + 1 }}</Button></div></PopoverContent></Popover>
-          <DropdownMenu><DropdownMenuTrigger as-child><Button variant="ghost" size="icon-sm" class="rounded-full" title="更多操作"><MoreHorizontal class="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem @click="conversation.speakMessage(container.id)"><Volume2 data-icon="inline-start" />朗读</DropdownMenuItem><DropdownMenuItem @click="exportScreenshot"><Camera data-icon="inline-start" />截图并导出</DropdownMenuItem><DropdownMenuItem @click="conversation.toggleMessageFavorite(container.id)"><StarOff v-if="message.favorite" data-icon="inline-start" /><Star v-else data-icon="inline-start" />{{ message.favorite ? '取消收藏' : '收藏' }}</DropdownMenuItem><DropdownMenuItem v-if="container.role !== 'user'" @click="conversation.translateMessage(container.id)"><RotateCcw v-if="message.meta.translation" data-icon="inline-start" /><Languages v-else data-icon="inline-start" />{{ message.meta.translation ? '还原原文' : '翻译' }}</DropdownMenuItem><DropdownMenuItem class="text-destructive focus:text-destructive" @click="conversation.confirmDeleteMessage(container.id)"><Trash2 data-icon="inline-start" />删除消息</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+          <Popover v-if="viewModel.branchCount > 1">
+            <PopoverTrigger as-child><Button variant="ghost" size="icon-sm" class="rounded-full" title="分支"><GitBranch class="size-4" /></Button></PopoverTrigger>
+            <PopoverContent class="w-56 p-2">
+              <div class="grid grid-cols-5 gap-1">
+                <Button v-for="(branchId, index) in viewModel.branchIds" :key="branchId" size="icon-sm" :variant="viewModel.activeBranchIndex === index ? 'default' : 'ghost'" @click="actions.gotoBranch(branchId)">{{ index + 1 }}</Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+          <DropdownMenu>
+            <DropdownMenuTrigger as-child><Button variant="ghost" size="icon-sm" class="rounded-full" title="更多操作"><MoreHorizontal class="size-4" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem @click="actions.speak()"><Volume2 data-icon="inline-start" />朗读</DropdownMenuItem>
+              <DropdownMenuItem @click="actions.exportScreenshot(null)"><Camera data-icon="inline-start" />截图并导出</DropdownMenuItem>
+              <DropdownMenuItem v-if="viewModel.role !== 'user'" @click="actions.translate()"><Languages data-icon="inline-start" />翻译</DropdownMenuItem>
+              <DropdownMenuItem class="text-destructive focus:text-destructive" @click="emit('delete-message', viewModel.containerId)"><Trash2 data-icon="inline-start" />删除消息</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
-        <div class="flex shrink-0 items-center gap-2 text-xs text-muted-foreground"><span class="tabular-nums">{{ messageTime() }}</span></div>
+        <div class="flex shrink-0 items-center gap-2 text-xs text-muted-foreground"><span class="tabular-nums">{{ viewModel.messageTime }}</span></div>
       </MessageFooter>
     </MessageContent>
   </Message>

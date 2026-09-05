@@ -19,9 +19,13 @@ import {
 import type {
 	ChatMessage,
 	ChatMessageContainer,
-	Conversation,
-} from "@/features/Conversation/messages/conversation-types";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
+} from "@/features/Conversation/messages/message-types";
+import type { Conversation } from "@/features/Conversation/chats/chat-types";
+import { selectAllChats } from "@/features/Conversation/chats/chat-service";
+import {
+	persistContainer,
+	selectAllContainers,
+} from "@/features/Conversation/messages/message-service";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
 import { useLayoutStore } from "@/features/UI/layout-store";
 
@@ -33,15 +37,16 @@ interface FavoriteMessageEntry {
 	containerOrder: number;
 }
 
-const conversation = useConversationStore();
+const allChats = ref<Conversation[]>([]);
+const allContainers = ref<ChatMessageContainer[]>([]);
 const layout = useLayoutStore();
 const navigatingId = ref("");
 
 const favorites = computed<FavoriteMessageEntry[]>(() => {
 	const conversationsById = new Map(
-		conversation.conversations.map((item) => [item.id, item]),
+		allChats.value.map((item) => [item.id, item]),
 	);
-	return conversation.containers
+	return allContainers.value
 		.flatMap((container, containerOrder) => {
 			const owner = conversationsById.get(container.conversationid);
 			if (!owner) {
@@ -63,7 +68,10 @@ const favorites = computed<FavoriteMessageEntry[]>(() => {
 		);
 });
 
-onMounted(() => conversation.initialize());
+onMounted(async () => {
+	allChats.value = await selectAllChats();
+	allContainers.value = await selectAllContainers();
+});
 
 function roleLabel(container: ChatMessageContainer) {
 	if (container.role === "user") return "用户";
@@ -87,19 +95,9 @@ async function openFavorite(entry: FavoriteMessageEntry) {
 
 	navigatingId.value = entry.message.id;
 	try {
-		const selected = await conversation.activateMessage(
-			entry.container.id,
-			entry.message.id,
-		);
-		if (!selected) {
-			return;
-		}
-
+		entry.container.activeMessage = entry.messageIndex;
+		await persistContainer(entry.container);
 		layout.closeSettings();
-		conversation.requestMessageNavigation(
-			entry.conversation.id,
-			entry.container.id,
-		);
 	} finally {
 		navigatingId.value = "";
 	}

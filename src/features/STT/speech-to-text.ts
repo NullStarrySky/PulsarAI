@@ -26,7 +26,7 @@ export async function transcribe(options: TranscribeOptions) {
 		typeof model === "string" &&
 		model.startsWith(`${WHISPER_CANDLE_PROVIDER_ID}/`)
 	) {
-		if (host.target !== "mobile")
+		if (host.target !== "mobile-tauri")
 			throw new Error("Whisper Candle 本地模型仅在移动端可用。");
 		if (!(options.audio instanceof Uint8Array)) {
 			throw new Error(

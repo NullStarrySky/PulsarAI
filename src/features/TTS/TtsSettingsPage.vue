@@ -96,7 +96,7 @@ const EDGE_ENABLED_KEY = "tts.edgeTts.enabled";
 const SYSTEM_ENABLED_KEY = "tts.system.enabled";
 const secretMask = "••••••••";
 const service = useModelCapabilityProviders("tts");
-const localModelsSupported = host.target === "mobile";
+const localModelsSupported = host.target === "mobile-tauri";
 const search = ref("");
 const activeServiceId = ref(SYSTEM_TTS_SERVICE_ID);
 const edgeEnabled = ref(true);

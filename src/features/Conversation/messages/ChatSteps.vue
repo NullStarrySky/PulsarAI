@@ -8,7 +8,7 @@ import type {
 	ThinkingStep,
 	ToolCallResult,
 	ToolCallStep,
-} from "./conversation-types";
+} from "./message-types";
 
 const props = defineProps<{
 	steps: Array<ThinkingStep | ToolCallStep | ToolCallResult>;

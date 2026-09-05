@@ -12,7 +12,7 @@ import {
 	Trash2,
 	X,
 } from "lucide-vue-next";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, toRef } from "vue";
 import { Button } from "@/components/ui/button";
 import {
 	DropdownMenu,
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 // biome-ignore lint:style/useImportType
 import ChatManager from "@/features/Conversation/chats/ChatManager.vue";
-import { useChatStore } from "@/features/Conversation/chats/chat-store";
+import { useConversation } from "@/features/Conversation/use-conversation";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
 // biome-ignore lint:style/useImportType
@@ -49,7 +49,7 @@ const responsive = useResponsiveStore();
 const appearance = useAppearanceStore();
 const command = useCommandStore();
 const packages = usePackageStore();
-const chats = useChatStore();
+const conversation = useConversation(toRef(props, "chatId"));
 const appWindow = host.desktop?.window;
 const hovered = ref(false);
 const packageMenuOpen = ref(false);
@@ -61,12 +61,8 @@ const topBarHoverBoundary = 56;
 const selectedPackage = computed(
 	() => packages.packages.find((item) => item.id === props.packageId) ?? null,
 );
-const selectedChat = computed(
-	() =>
-		chats
-			.chatsForPackage(props.packageId)
-			.find((item) => item.id === props.chatId) ?? null,
-);
+const selectedChat = computed(() => conversation.chat.value);
+
 
 const topBarClass = computed(() =>
 	!appearance.zenFrameEnabled

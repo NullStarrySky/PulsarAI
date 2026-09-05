@@ -11,7 +11,7 @@ import {
 import type {
 	ActionPart,
 	FilePart,
-} from "@/features/Conversation/messages/conversation-types";
+} from "@/features/Conversation/messages/message-types";
 import { fileToMessagePart } from "@/features/Conversation/messages/message-attachment";
 import { useConversation } from "@/features/Conversation/use-conversation";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/default-config-store";
@@ -71,7 +71,7 @@ async function send() {
 }
 
 function useSuggestion(value: string) {
-	chat.draft.value = value;
+	chat.composerDraftContent.value = value;
 }
 
 function openActionView(action: WorldResource) {
@@ -104,7 +104,7 @@ function openActionView(action: WorldResource) {
       </div>
 
       <PromptBar
-        v-model="chat.draft.value"
+        v-model="chat.composerDraftContent.value"
         :attachments="files"
         :actions="actions"
         :selected-action="selectedAction"

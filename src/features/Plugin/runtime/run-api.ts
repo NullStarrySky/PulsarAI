@@ -1,5 +1,5 @@
-import { useChatStore } from "@/features/Conversation/chats/chat-store";
-import type { Role } from "@/features/Conversation/messages/conversation-types";
+import { loadChat } from "@/features/Conversation/chats/chat-service";
+import type { Role } from "@/features/Conversation/messages/message-types";
 import {
 	type CtxBuilderConfig,
 	ctxbuilder,
@@ -35,9 +35,8 @@ export interface RunWorldResult {
  * workspace. Conversation supplies lifecycle/error presentation only.
  */
 export async function runWorld(input: RunWorldInput): Promise<RunWorldResult> {
-	const chat = useChatStore().chats.find(
-		(item) => item.id === input.conversationId,
-	);
+	const chat = await loadChat(input.conversationId);
+
 	if (!chat) throw new Error("会话不存在。");
 	if (input.roleId && input.roleId !== chat.packageId)
 		throw new Error("角色不属于该会话。");

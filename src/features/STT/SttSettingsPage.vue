@@ -39,7 +39,7 @@ import {
 const SYSTEM_ENABLED_KEY = "stt.system.enabled";
 const service = useModelCapabilityProviders("asr");
 const systemSupported = supportsSystemStt();
-const localModelsSupported = host.target === "mobile";
+const localModelsSupported = host.target === "mobile-tauri";
 const search = ref("");
 const activeServiceId = ref(systemSupported ? SYSTEM_STT_SERVICE_ID : "");
 const systemEnabled = ref(true);

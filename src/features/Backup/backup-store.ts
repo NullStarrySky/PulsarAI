@@ -1,11 +1,27 @@
 import { defineStore } from "pinia";
 import type {
 	CharacterPackage,
+	PackageCategory,
+} from "@/features/Package/package-types";
+import { usePackageStore } from "@/features/Package/package-store";
+import type {
 	ChatMessage,
 	ChatMessageContainer,
-	Conversation,
-} from "@/features/Conversation/messages/conversation-types";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
+} from "@/features/Conversation/messages/message-types";
+import {
+	deleteContainer,
+	persistContainer,
+	selectAllContainers,
+} from "@/features/Conversation/messages/message-service";
+import {
+	type Conversation,
+	createDefaultComposerDraft,
+} from "@/features/Conversation/chats/chat-types";
+import {
+	deleteChatCascade,
+	persistChat,
+	selectAllChats,
+} from "@/features/Conversation/chats/chat-service";
 import {
 	remove,
 	selectAll,
@@ -177,22 +193,6 @@ function uniqueRestoredName(name: string, existing: Iterable<string>) {
 	return `${base} ${suffix}`;
 }
 
-function mergeById<T extends { id: string }>(
-	local: T[] = [],
-	remote: T[] = [],
-) {
-	const merged = local.map(clonePlain);
-	for (const remoteItem of remote) {
-		const index = merged.findIndex((item) => item.id === remoteItem.id);
-		if (index < 0) {
-			merged.push(clonePlain(remoteItem));
-		} else {
-			merged[index] = { ...merged[index], ...clonePlain(remoteItem) };
-		}
-	}
-	return merged;
-}
-
 function countDiffPaths(
 	local: unknown,
 	remote: unknown,
@@ -242,6 +242,52 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 	return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+export interface SnapshotContext {
+	packages: CharacterPackage[];
+	categories: PackageCategory[];
+	conversations: Conversation[];
+	containers: ChatMessageContainer[];
+	persistPackage: (item: CharacterPackage) => Promise<void>;
+	deletePackage: (packageId: string) => Promise<void>;
+	persistConversation: (item: Conversation) => Promise<void>;
+	deleteConversation: (conversationId: string) => Promise<void>;
+	persistContainer: (item: ChatMessageContainer) => Promise<void>;
+	deleteContainer: (containerId: string) => Promise<void>;
+}
+
+async function loadSnapshotContext(): Promise<SnapshotContext> {
+	const packageStore = usePackageStore();
+	await packageStore.initialize();
+	const [conversations, containers] = await Promise.all([
+		selectAllChats(),
+		selectAllContainers(),
+	]);
+	return {
+		packages: packageStore.packages,
+		categories: packageStore.categories,
+		conversations,
+		containers,
+		persistPackage: async (item) => {
+			await packageStore.persist(item);
+		},
+		deletePackage: async (packageId) => {
+			await packageStore.remove(packageId);
+		},
+		persistConversation: async (item) => {
+			await persistChat(item);
+		},
+		deleteConversation: async (conversationId) => {
+			await deleteChatCascade(conversationId);
+		},
+		persistContainer: async (item) => {
+			await persistContainer(item);
+		},
+		deleteContainer: async (containerId) => {
+			await deleteContainer(containerId);
+		},
+	};
+}
+
 function mergePackageForUpdate(
 	local: CharacterPackage,
 	remote: CharacterPackage,
@@ -250,7 +296,6 @@ function mergePackageForUpdate(
 		...clonePlain(local),
 		...clonePlain(remote),
 		id: local.id,
-		conversations: mergeById(local.conversations, remote.conversations),
 		syncEnabled: local.syncEnabled ?? remote.syncEnabled ?? true,
 	};
 }
@@ -309,19 +354,19 @@ function safeArchiveFileName(value: string) {
 }
 
 async function syncableSnapshot(
-	conversation: ReturnType<typeof useConversationStore>,
+	ctx: SnapshotContext,
 	deviceName: string,
 ): Promise<LanSyncSnapshot> {
 	const packageIds = new Set(
-		conversation.packages
+		ctx.packages
 			.filter((item) => item.syncEnabled !== false)
 			.map((item) => item.id),
 	);
-	const conversations = conversation.conversations.filter((item) =>
+	const conversations = ctx.conversations.filter((item) =>
 		packageIds.has(item.packageId),
 	);
 	const conversationIds = new Set(conversations.map((item) => item.id));
-	const containers = conversation.containers.filter((item) =>
+	const containers = ctx.containers.filter((item) =>
 		conversationIds.has(item.conversationid),
 	);
 	const worlds = (await selectAll<WorldDocument>(worldTable))
@@ -333,7 +378,7 @@ async function syncableSnapshot(
 		);
 	const currentMetadata = readSyncMetadata().entities;
 	const entities = [
-		...conversation.packages
+		...ctx.packages
 			.filter((item) => packageIds.has(item.id))
 			.map((value) => ({ table: packageTable, id: value.id, value })),
 		...conversations.map((value) => ({
@@ -366,7 +411,7 @@ async function syncableSnapshot(
 		deviceId: getLocalDeviceId(),
 		deviceName,
 		createdAt: new Date().toISOString(),
-		packages: conversation.packages
+		packages: ctx.packages
 			.filter((item) => packageIds.has(item.id))
 			.map(clonePlain),
 		conversations: conversations.map(clonePlain),
@@ -400,7 +445,7 @@ async function syncableSnapshot(
 
 async function persistMergedSnapshot(
 	remote: LanSyncSnapshot,
-	conversation: ReturnType<typeof useConversationStore>,
+	ctx: SnapshotContext,
 ) {
 	const metadata = readSyncMetadata();
 	const localWorlds = new Map(
@@ -431,22 +476,22 @@ async function persistMergedSnapshot(
 			const id = key.slice(separator + 1);
 			if (
 				table === packageTable &&
-				conversation.packages.some((item) => item.id === id)
+				ctx.packages.some((item) => item.id === id)
 			) {
-				await conversation.deletePackage(id);
+				await ctx.deletePackage(id);
 			} else if (
 				table === conversationTable &&
-				conversation.conversations.some((item) => item.id === id)
+				ctx.conversations.some((item) => item.id === id)
 			) {
-				await conversation.deleteConversation(id);
+				await ctx.deleteConversation(id);
 			} else if (
 				table === containerTable &&
-				conversation.containers.some((item) => item.id === id)
+				ctx.containers.some((item) => item.id === id)
 			) {
-				conversation.containers = conversation.containers.filter(
+				ctx.containers = ctx.containers.filter(
 					(item) => item.id !== id,
 				);
-				await remove(containerTable, id);
+				await ctx.deleteContainer(id);
 			} else if (table === worldTable && id !== "global") {
 				await remove(worldTable, id);
 				if (id.startsWith("package:"))
@@ -457,7 +502,7 @@ async function persistMergedSnapshot(
 		}
 
 		for (const remotePackage of remote.packages) {
-			const local = conversation.packages.find(
+			const local = ctx.packages.find(
 				(item) => item.id === remotePackage.id,
 			);
 			const key = syncEntityKey(packageTable, remotePackage.id);
@@ -468,29 +513,24 @@ async function persistMergedSnapshot(
 				remote.metadata[key],
 			);
 			if (!local) {
-				conversation.packages.push({
+				const newPkg = {
 					...clonePlain(remotePackage),
 					syncEnabled: true,
-				});
-				await conversation.persistPackage(remotePackage);
+				};
+				ctx.packages.push(newPkg);
+				await ctx.persistPackage(newPkg);
 				copied += 1;
 			} else if (relation === "remote-newer") {
 				Object.assign(local, clonePlain(remotePackage), {
 					syncEnabled: local.syncEnabled ?? true,
 				});
-				await conversation.persistPackage(local);
+				await ctx.persistPackage(local);
 				copied += 1;
 			} else if (
 				relation === "concurrent" &&
 				!valuesEqual(local, remotePackage)
 			) {
-				local.conversations = [
-					...local.conversations,
-					...remotePackage.conversations.filter(
-						(link) => !local.conversations.some((item) => item.id === link.id),
-					),
-				];
-				await conversation.persistPackage(local);
+				await ctx.persistPackage(local);
 				merged += 1;
 			}
 			metadata.entities[key] = mergeEntitySyncMeta(
@@ -501,13 +541,13 @@ async function persistMergedSnapshot(
 
 		for (const remoteConversation of remote.conversations) {
 			if (
-				!conversation.packages.some(
+				!ctx.packages.some(
 					(item) => item.id === remoteConversation.packageId,
 				)
 			) {
 				continue;
 			}
-			const local = conversation.conversations.find(
+			const local = ctx.conversations.find(
 				(item) => item.id === remoteConversation.id,
 			);
 			const key = syncEntityKey(conversationTable, remoteConversation.id);
@@ -518,28 +558,12 @@ async function persistMergedSnapshot(
 				remote.metadata[key],
 			);
 			if (!local) {
-				conversation.conversations.push(clonePlain(remoteConversation));
-				await conversation.persistConversation(remoteConversation);
-				const parent = conversation.packages.find(
-					(item) => item.id === remoteConversation.packageId,
-				);
-				if (
-					parent &&
-					!parent.conversations.some(
-						(link) => link.id === remoteConversation.id,
-					)
-				) {
-					parent.conversations.push({
-						id: remoteConversation.id,
-						lastContainerid: remoteConversation.lastContainerId ?? "",
-						title: remoteConversation.title,
-					});
-					await conversation.persistPackage(parent);
-				}
+				ctx.conversations.push(clonePlain(remoteConversation));
+				await ctx.persistConversation(remoteConversation);
 				copied += 1;
 			} else if (relation === "remote-newer") {
 				Object.assign(local, clonePlain(remoteConversation));
-				await conversation.persistConversation(local);
+				await ctx.persistConversation(local);
 				copied += 1;
 			} else if (
 				relation === "concurrent" &&
@@ -548,7 +572,7 @@ async function persistMergedSnapshot(
 				if (remoteConversation.updatedAt > local.updatedAt) {
 					Object.assign(local, clonePlain(remoteConversation));
 				}
-				await conversation.persistConversation(local);
+				await ctx.persistConversation(local);
 				merged += 1;
 			}
 			metadata.entities[key] = mergeEntitySyncMeta(
@@ -559,13 +583,13 @@ async function persistMergedSnapshot(
 
 		for (const remoteContainer of remote.containers) {
 			if (
-				!conversation.conversations.some(
+				!ctx.conversations.some(
 					(item) => item.id === remoteContainer.conversationid,
 				)
 			) {
 				continue;
 			}
-			const local = conversation.containers.find(
+			const local = ctx.containers.find(
 				(item) => item.id === remoteContainer.id,
 			);
 			const key = syncEntityKey(containerTable, remoteContainer.id);
@@ -576,19 +600,19 @@ async function persistMergedSnapshot(
 				remote.metadata[key],
 			);
 			if (!local) {
-				conversation.containers.push(clonePlain(remoteContainer));
-				await conversation.persistContainer(remoteContainer);
+				ctx.containers.push(clonePlain(remoteContainer));
+				await ctx.persistContainer(remoteContainer);
 				copied += 1;
 			} else if (relation === "remote-newer") {
 				Object.assign(local, clonePlain(remoteContainer));
-				await conversation.persistContainer(local);
+				await ctx.persistContainer(local);
 				copied += 1;
 			} else if (
 				relation === "concurrent" &&
 				!valuesEqual(local, remoteContainer)
 			) {
 				Object.assign(local, mergeContainer(local, remoteContainer));
-				await conversation.persistContainer(local);
+				await ctx.persistContainer(local);
 				merged += 1;
 			}
 			metadata.entities[key] = mergeEntitySyncMeta(
@@ -603,7 +627,7 @@ async function persistMergedSnapshot(
 				: null;
 			if (
 				packageId &&
-				!conversation.packages.some((item) => item.id === packageId)
+				!ctx.packages.some((item) => item.id === packageId)
 			) {
 				continue;
 			}
@@ -643,7 +667,7 @@ async function persistMergedSnapshot(
 	writeSyncMetadata(metadata);
 	await initializeWorlds();
 	await Promise.all(
-		conversation.packages.map((item) => initializeWorlds(item.id)),
+		ctx.packages.map((item) => initializeWorlds(item.id)),
 	);
 	return { copied, merged };
 }
@@ -751,9 +775,9 @@ export const useBackupStore = defineStore("backup", {
 			this.persist();
 		},
 		async setPackageSyncEnabled(packageId: string, enabled: boolean) {
-			const conversation = useConversationStore();
-			await conversation.initialize();
-			await conversation.updatePackage(packageId, { syncEnabled: enabled });
+			const packageStore = usePackageStore();
+			await packageStore.initialize();
+			await packageStore.update(packageId, { syncEnabled: enabled });
 			if (this.serverRunning) {
 				await this.publishSnapshot();
 			}
@@ -774,8 +798,7 @@ export const useBackupStore = defineStore("backup", {
 				this.status = "请选择要导出的资源";
 				return;
 			}
-			const conversation = useConversationStore();
-			await conversation.initialize();
+			const ctx = await loadSnapshotContext();
 
 			let name = "pulsar-resource";
 			let packages: CharacterPackage[] = [];
@@ -784,15 +807,15 @@ export const useBackupStore = defineStore("backup", {
 			let worlds: WorldDocument[] = [];
 
 			if (type === "package") {
-				const root = conversation.packages.find((item) => item.id === id);
+				const root = ctx.packages.find((item) => item.id === id);
 				if (!root) throw new Error("角色包不存在");
 				name = root.name;
 				packages = [clonePlain(root)];
-				conversations = conversation.conversations
+				conversations = ctx.conversations
 					.filter((item) => item.packageId === id)
 					.map(clonePlain);
 				const conversationIds = new Set(conversations.map((item) => item.id));
-				containers = conversation.containers
+				containers = ctx.containers
 					.filter((item) => conversationIds.has(item.conversationid))
 					.map(clonePlain);
 				worlds = (await selectAll<WorldDocument>(worldTable))
@@ -800,15 +823,15 @@ export const useBackupStore = defineStore("backup", {
 					.filter((world) => world.id === `package:${id}`)
 					.map(clonePlain);
 			} else if (type === "conversation") {
-				const root = conversation.conversations.find((item) => item.id === id);
+				const root = ctx.conversations.find((item) => item.id === id);
 				if (!root) throw new Error("会话不存在");
 				name = root.title;
-				const parent = conversation.packages.find(
+				const parent = ctx.packages.find(
 					(item) => item.id === root.packageId,
 				);
-				packages = parent ? [{ ...clonePlain(parent), conversations: [] }] : [];
+				packages = parent ? [clonePlain(parent)] : [];
 				conversations = [clonePlain(root)];
-				containers = conversation.containers
+				containers = ctx.containers
 					.filter((item) => item.conversationid === id)
 					.map(clonePlain);
 			}
@@ -844,8 +867,8 @@ export const useBackupStore = defineStore("backup", {
 				throw new Error("资源归档的根类型不受支持");
 			}
 
-			const conversation = useConversationStore();
-			await conversation.initialize();
+			const packageStore = usePackageStore();
+			await packageStore.initialize();
 			setBackupResources(this, payload.snapshot);
 			this.selectedResourceKeys = [`${payload.rootType}:${payload.rootId}`];
 			const root = this.restorableResources.find(
@@ -854,7 +877,7 @@ export const useBackupStore = defineStore("backup", {
 			if (
 				root?.type !== "package" &&
 				root?.packageId &&
-				!conversation.packages.some((item) => item.id === root.packageId)
+				!packageStore.packages.some((item) => item.id === root.packageId)
 			) {
 				this.selectedResourceKeys.push(`package:${root.packageId}`);
 			}
@@ -935,8 +958,7 @@ export const useBackupStore = defineStore("backup", {
 				return this.updateSelectedResources(resourceArchivePath);
 			}
 
-			const conversation = useConversationStore();
-			await conversation.initialize();
+			const ctx = await loadSnapshotContext();
 			const selected = new Set(this.selectedResourceKeys);
 			const selectedPackageIds = new Set(
 				source.packages
@@ -949,7 +971,7 @@ export const useBackupStore = defineStore("backup", {
 					selected.has(item.key) &&
 					item.packageId &&
 					!selectedPackageIds.has(item.packageId) &&
-					!conversation.packages.some(
+					!ctx.packages.some(
 						(current) => current.id === item.packageId,
 					)
 				) {
@@ -966,7 +988,7 @@ export const useBackupStore = defineStore("backup", {
 			for (const sourcePackage of source.packages.filter((item) =>
 				selectedPackageIds.has(item.id),
 			)) {
-				const collision = conversation.packages.some(
+				const collision = ctx.packages.some(
 					(item) => item.id === sourcePackage.id,
 				);
 				const id = collision ? crypto.randomUUID() : sourcePackage.id;
@@ -976,25 +998,24 @@ export const useBackupStore = defineStore("backup", {
 					name: collision
 						? uniqueRestoredName(
 								sourcePackage.name,
-								conversation.packages.map((value) => value.name),
+								ctx.packages.map((value) => value.name),
 							)
 						: sourcePackage.name,
-					categoryId: conversation.categories.some(
+					categoryId: ctx.categories.some(
 						(category) => category.id === sourcePackage.categoryId,
 					)
 						? sourcePackage.categoryId
 						: null,
-					conversations: [],
 					syncEnabled: sourcePackage.syncEnabled ?? true,
 					order:
 						Math.max(
 							-1,
-							...conversation.packages.map((value) => value.order ?? -1),
+							...ctx.packages.map((value) => value.order ?? -1),
 						) + 1,
 				};
 				packageIdMap.set(sourcePackage.id, id);
-				conversation.packages.push(item);
-				await conversation.persistPackage(item);
+				ctx.packages.push(item);
+				await ctx.persistPackage(item);
 				restored += 1;
 			}
 
@@ -1007,10 +1028,10 @@ export const useBackupStore = defineStore("backup", {
 				const packageId =
 					packageIdMap.get(sourceConversation.packageId) ??
 					sourceConversation.packageId;
-				if (!conversation.packages.some((item) => item.id === packageId)) {
+				if (!ctx.packages.some((item) => item.id === packageId)) {
 					continue;
 				}
-				const collision = conversation.conversations.some(
+				const collision = ctx.conversations.some(
 					(item) => item.id === sourceConversation.id,
 				);
 				const id = collision ? crypto.randomUUID() : sourceConversation.id;
@@ -1019,26 +1040,19 @@ export const useBackupStore = defineStore("backup", {
 					...clonePlain(sourceConversation),
 					id,
 					packageId,
-					binding: sourceConversation.binding
-						? {
-								...clonePlain(sourceConversation.binding),
-								resourceId:
-									packageIdMap.get(sourceConversation.binding.resourceId) ??
-									sourceConversation.binding.resourceId,
-							}
-						: undefined,
 					title: collision
 						? uniqueRestoredName(
 								sourceConversation.title,
-								conversation.conversations.map((value) => value.title),
+								ctx.conversations.map((value) => value.title),
 							)
 						: sourceConversation.title,
 					rootContainerId: null,
 					lastContainerId: null,
+					composerDraft: sourceConversation.composerDraft ?? createDefaultComposerDraft(id),
 					updatedAt: new Date().toISOString(),
 				};
-				conversation.conversations.push(item);
-				await conversation.persistConversation(item);
+				ctx.conversations.push(item);
+				await ctx.persistConversation(item);
 				restored += 1;
 			}
 
@@ -1050,7 +1064,7 @@ export const useBackupStore = defineStore("backup", {
 			)) {
 				containerIdMap.set(
 					container.id,
-					conversation.containers.some((item) => item.id === container.id)
+					ctx.containers.some((item) => item.id === container.id)
 						? crypto.randomUUID()
 						: container.id,
 				);
@@ -1072,14 +1086,14 @@ export const useBackupStore = defineStore("backup", {
 						: null,
 					content: sourceContainer.content.map(clonePlain),
 				};
-				conversation.containers.push(item);
-				await conversation.persistContainer(item);
+				ctx.containers.push(item);
+				await ctx.persistContainer(item);
 			}
 
 			for (const sourceConversation of conversationsToRestore) {
 				const id =
 					conversationIdMap.get(sourceConversation.id) ?? sourceConversation.id;
-				const item = conversation.conversations.find(
+				const item = ctx.conversations.find(
 					(value) => value.id === id,
 				);
 				if (!item) {
@@ -1091,21 +1105,7 @@ export const useBackupStore = defineStore("backup", {
 				item.lastContainerId = sourceConversation.lastContainerId
 					? (containerIdMap.get(sourceConversation.lastContainerId) ?? null)
 					: null;
-				await conversation.persistConversation(item);
-				const parent = conversation.packages.find(
-					(value) => value.id === item.packageId,
-				);
-				if (
-					parent &&
-					!parent.conversations.some((link) => link.id === item.id)
-				) {
-					parent.conversations.push({
-						id: item.id,
-						lastContainerid: item.lastContainerId ?? "",
-						title: item.title,
-					});
-					await conversation.persistPackage(parent);
-				}
+				await ctx.persistConversation(item);
 			}
 
 			for (const sourceWorld of source.worlds) {
@@ -1150,8 +1150,7 @@ export const useBackupStore = defineStore("backup", {
 				this.status = "请选择要更新的资源";
 				return false;
 			}
-			const conversation = useConversationStore();
-			await conversation.initialize();
+			const ctx = await loadSnapshotContext();
 			const selected = new Set(this.selectedResourceKeys);
 			const selectedPackageIds = new Set(
 				source.packages
@@ -1165,33 +1164,33 @@ export const useBackupStore = defineStore("backup", {
 			for (const incoming of source.packages.filter((item) =>
 				selectedPackageIds.has(item.id),
 			)) {
-				const local = conversation.packages.find(
+				const local = ctx.packages.find(
 					(item) => item.id === incoming.id,
 				);
 				if (!local) {
 					const item = {
 						...clonePlain(incoming),
-						categoryId: conversation.categories.some(
+						categoryId: ctx.categories.some(
 							(category) => category.id === incoming.categoryId,
 						)
 							? incoming.categoryId
 							: null,
 						syncEnabled: incoming.syncEnabled ?? true,
 					};
-					conversation.packages.push(item);
-					await conversation.persistPackage(item);
+					ctx.packages.push(item);
+					await ctx.persistPackage(item);
 					added += 1;
 					continue;
 				}
 				resolvedDiffs += countDiffPaths(local, incoming).size;
 				const item = mergePackageForUpdate(local, incoming);
-				item.categoryId = conversation.categories.some(
+				item.categoryId = ctx.categories.some(
 					(category) => category.id === item.categoryId,
 				)
 					? item.categoryId
 					: local.categoryId;
 				Object.assign(local, item);
-				await conversation.persistPackage(local);
+				await ctx.persistPackage(local);
 				updated += 1;
 			}
 
@@ -1202,20 +1201,20 @@ export const useBackupStore = defineStore("backup", {
 			);
 			for (const incoming of conversationsToUpdate) {
 				if (
-					!conversation.packages.some((item) => item.id === incoming.packageId)
+					!ctx.packages.some((item) => item.id === incoming.packageId)
 				) {
 					this.status = `无法更新“${incoming.title}”：当前不存在它所属的角色包`;
 					return false;
 				}
-				const local = conversation.conversations.find(
+				const local = ctx.conversations.find(
 					(item) => item.id === incoming.id,
 				);
 				if (!local) {
 					const item = {
 						...clonePlain(incoming),
 					};
-					conversation.conversations.push(item);
-					await conversation.persistConversation(item);
+					ctx.conversations.push(item);
+					await ctx.persistConversation(item);
 					added += 1;
 				} else {
 					resolvedDiffs += countDiffPaths(local, incoming).size;
@@ -1223,7 +1222,7 @@ export const useBackupStore = defineStore("backup", {
 						id: local.id,
 						packageId: local.packageId,
 					});
-					await conversation.persistConversation(local);
+					await ctx.persistConversation(local);
 					updated += 1;
 				}
 			}
@@ -1234,43 +1233,19 @@ export const useBackupStore = defineStore("backup", {
 			for (const incoming of source.containers.filter((item) =>
 				updatedConversationIds.has(item.conversationid),
 			)) {
-				const local = conversation.containers.find(
+				const local = ctx.containers.find(
 					(item) => item.id === incoming.id,
 				);
 				if (!local) {
 					const item = clonePlain(incoming);
-					conversation.containers.push(item);
-					await conversation.persistContainer(item);
+					ctx.containers.push(item);
+					await ctx.persistContainer(item);
 					added += 1;
 					continue;
 				}
 				resolvedDiffs += countDiffPaths(local, incoming).size;
 				Object.assign(local, mergeContainer(local, incoming));
-				await conversation.persistContainer(local);
-			}
-
-			for (const incoming of conversationsToUpdate) {
-				const current = conversation.conversations.find(
-					(item) => item.id === incoming.id,
-				);
-				const parent = conversation.packages.find(
-					(item) => item.id === current?.packageId,
-				);
-				if (!parent || !current) continue;
-				const link = parent.conversations.find(
-					(item) => item.id === current.id,
-				);
-				const nextLink = {
-					id: current.id,
-					lastContainerid: current.lastContainerId ?? "",
-					title: current.title,
-				};
-				if (link) {
-					Object.assign(link, nextLink);
-				} else {
-					parent.conversations.push(nextLink);
-				}
-				await conversation.persistPackage(parent);
+				await ctx.persistContainer(local);
 			}
 
 			const localWorlds = new Map(
@@ -1340,9 +1315,8 @@ export const useBackupStore = defineStore("backup", {
 			this.persist();
 		},
 		async buildSyncSnapshot() {
-			const conversation = useConversationStore();
-			await conversation.initialize();
-			return syncableSnapshot(conversation, this.lan.deviceName);
+			const ctx = await loadSnapshotContext();
+			return syncableSnapshot(ctx, this.lan.deviceName);
 		},
 		async startLanServer() {
 			try {
@@ -1402,9 +1376,8 @@ export const useBackupStore = defineStore("backup", {
 				if (remote.protocolVersion !== 1) {
 					throw new Error("对端同步协议版本不兼容");
 				}
-				const conversation = useConversationStore();
-				await conversation.initialize();
-				const result = await persistMergedSnapshot(remote, conversation);
+				const ctx = await loadSnapshotContext();
+				const result = await persistMergedSnapshot(remote, ctx);
 				const mergedSnapshot = await this.buildSyncSnapshot();
 				await host.backup.invoke("lan_sync_push", {
 					address: this.lan.peerAddress.trim(),
@@ -1442,10 +1415,9 @@ export const useBackupStore = defineStore("backup", {
 				await this.publishSnapshot();
 				return;
 			}
-			const conversation = useConversationStore();
-			await conversation.initialize();
+			const ctx = await loadSnapshotContext();
 			for (const snapshot of snapshots) {
-				await persistMergedSnapshot(snapshot, conversation);
+				await persistMergedSnapshot(snapshot, ctx);
 				this.lastSyncByDevice[snapshot.deviceId] = new Date().toISOString();
 			}
 			localStorage.setItem(

@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { useChatStore } from "@/features/Conversation/chats/chat-store";
+import {
+	createChat,
+	loadChat,
+	loadChatsForPackage,
+} from "@/features/Conversation/chats/chat-service";
 import ChatComposer from "@/features/Conversation/composer/ChatComposer.vue";
-import { initializeConversation } from "@/features/Conversation/conversation-runtime";
 import ConversationHeader from "@/features/Conversation/header/ConversationHeader.vue";
 import ChatThread from "@/features/Conversation/messages/ChatThread.vue";
 import { usePackageStore } from "@/features/Package/package-store";
@@ -18,7 +21,6 @@ const ready = ref(false);
 const packageId = ref("");
 const localChatId = ref("");
 const packages = usePackageStore();
-const chats = useChatStore();
 const assetPanelOpen = ref(false);
 const activeEditor = ref<{ file: WorldFileNode; path: string } | null>(null);
 const fileEditorOpen = computed({
@@ -34,18 +36,20 @@ const chatId = computed({
 		else emit("update:chatId", value);
 	},
 });
+
 watch(
 	chatId,
-	(value) => {
-		const chat = chats.chats.find((item) => item.id === value);
+	async (value) => {
+		if (!value) return;
+		const chat = await loadChat(value);
 		if (chat) packageId.value = chat.packageId;
 	},
 	{ immediate: true },
 );
 
 onMounted(async () => {
-	await initializeConversation();
-	const suppliedChat = chatId.value ? await chats.load(chatId.value) : null;
+	await packages.initialize();
+	const suppliedChat = chatId.value ? await loadChat(chatId.value) : null;
 	if (suppliedChat) {
 		packageId.value = suppliedChat.packageId;
 		await initializeWorlds(packageId.value);
@@ -55,11 +59,10 @@ onMounted(async () => {
 	const firstPackage = packages.sortedPackages[0];
 	if (firstPackage) {
 		packageId.value = firstPackage.id;
-		await chats.loadForPackage(firstPackage.id);
-		chatId.value = (
-			chats.chatsForPackage(firstPackage.id)[0] ??
-			(await chats.create({ packageId: firstPackage.id, activate: false }))
-		).id;
+		const pkgChats = await loadChatsForPackage(firstPackage.id);
+		const targetChat =
+			pkgChats[0] ?? (await createChat({ packageId: firstPackage.id }));
+		chatId.value = targetChat.id;
 		await initializeWorlds(firstPackage.id);
 	}
 	ready.value = true;
@@ -70,10 +73,9 @@ async function selectPackage(nextPackageId: string) {
 	chatId.value = "";
 	packageId.value = nextPackageId;
 	await initializeWorlds(nextPackageId);
-	await chats.loadForPackage(nextPackageId);
+	const pkgChats = await loadChatsForPackage(nextPackageId);
 	const nextChat =
-		chats.chatsForPackage(nextPackageId)[0] ??
-		(await chats.create({ packageId: nextPackageId, activate: false }));
+		pkgChats[0] ?? (await createChat({ packageId: nextPackageId }));
 	chatId.value = nextChat.id;
 }
 

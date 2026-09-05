@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { Button } from "@/components/ui/button";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingItem from "@/features/Setting/components/SettingItem.vue";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
 import { useStatisticStore } from "./statistic-store";
 
-const conversation = useConversationStore();
 const statistic = useStatisticStore();
 const diskMode = ref<"type" | "package">("type");
 
@@ -26,7 +24,7 @@ const totalSize = computed(() =>
 );
 
 onMounted(async () => {
-	await Promise.all([conversation.initialize(), statistic.initialize()]);
+	await statistic.initialize();
 });
 
 function heatClass(count: number) {
@@ -54,12 +52,13 @@ function formatSize(bytes: number) {
     <section class="grid min-w-0 grid-cols-1 gap-3 min-[420px]:grid-cols-3 mobile:gap-2">
       <div class="min-w-0 rounded-md border bg-card p-4 mobile:p-3">
         <p class="text-xs text-muted-foreground">角色数</p>
-        <p class="mt-2 text-2xl font-semibold">{{ conversation.packages.length }}</p>
+        <p class="mt-2 text-2xl font-semibold">{{ statistic.packageCount }}</p>
       </div>
       <div class="min-w-0 rounded-md border bg-card p-4 mobile:p-3">
         <p class="text-xs text-muted-foreground">对话数</p>
-        <p class="mt-2 text-2xl font-semibold">{{ conversation.conversations.length }}</p>
+        <p class="mt-2 text-2xl font-semibold">{{ statistic.conversationCount }}</p>
       </div>
+
       <div class="min-w-0 rounded-md border bg-card p-4 mobile:p-3">
         <p class="text-xs text-muted-foreground">消息数</p>
         <p class="mt-2 text-2xl font-semibold">{{ statistic.messageCount }}</p>

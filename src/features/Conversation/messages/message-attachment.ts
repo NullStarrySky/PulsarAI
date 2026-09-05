@@ -1,37 +1,21 @@
-import type {
-	DataContent,
-	FilePart,
-} from "@/features/Conversation/messages/conversation-types";
+import type { FilePart } from "@/features/Conversation/messages/message-types";
 
 export async function fileToMessagePart(file: File): Promise<FilePart> {
 	return {
 		type: "file",
-		data: await readFileAsBase64(file),
+		url: await readFileAsDataUrl(file),
 		filename: file.name,
 		mediaType: file.type || "application/octet-stream",
 		size: file.size,
 	};
 }
 
-function attachmentDataUrl(part: FilePart) {
-	if (part.data instanceof URL) {
-		return part.data.toString();
-	}
-	if (typeof part.data === "string") {
-		if (/^(data:|https?:|file:|blob:)/i.test(part.data)) {
-			return part.data;
-		}
-		return `data:${part.mediaType};base64,${part.data}`;
-	}
-	return `data:${part.mediaType};base64,${dataContentToBase64(part.data)}`;
-}
-
 export function attachmentPreviewUrl(part: FilePart) {
-	return part.mediaType.startsWith("image/") ? attachmentDataUrl(part) : "";
+	return part.mediaType.startsWith("image/") ? part.url : "";
 }
 
 export async function openMessageAttachment(part: FilePart) {
-	const source = attachmentDataUrl(part);
+	const source = part.url;
 	const response = await fetch(source);
 	const blob = await response.blob();
 	const objectUrl = URL.createObjectURL(blob);
@@ -65,26 +49,14 @@ export function formatAttachmentSize(size?: number) {
 	return `${(size / 1024 / 1024).toFixed(size < 10 * 1024 * 1024 ? 1 : 0)} MB`;
 }
 
-function readFileAsBase64(file: File) {
+function readFileAsDataUrl(file: File) {
 	return new Promise<string>((resolve, reject) => {
 		const reader = new FileReader();
 		reader.onerror = () =>
 			reject(reader.error ?? new Error(`无法读取文件：${file.name}`));
 		reader.onload = () => {
-			const result = typeof reader.result === "string" ? reader.result : "";
-			const separator = result.indexOf(",");
-			resolve(separator >= 0 ? result.slice(separator + 1) : result);
+			resolve(typeof reader.result === "string" ? reader.result : "");
 		};
 		reader.readAsDataURL(file);
 	});
-}
-
-function dataContentToBase64(data: Exclude<DataContent, string>) {
-	const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-	let binary = "";
-	const chunkSize = 0x8000;
-	for (let index = 0; index < bytes.length; index += chunkSize) {
-		binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
-	}
-	return btoa(binary);
 }

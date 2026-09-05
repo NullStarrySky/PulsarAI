@@ -1,10 +1,14 @@
 import { computed, type MaybeRefOrGetter, ref, toRaw, toValue } from "vue";
-import { useChatStore } from "@/features/Conversation/chats/chat-store";
 import type {
 	ChatMessage,
 	ChatMessageContainer,
-} from "@/features/Conversation/messages/conversation-types";
-import { useMessageStore } from "@/features/Conversation/messages/message-store";
+} from "@/features/Conversation/messages/message-types";
+import { loadChat, persistChat } from "@/features/Conversation/chats/chat-service";
+import {
+	createContainer,
+	currentMessage,
+	persistContainer,
+} from "@/features/Conversation/messages/message-service";
 import {
 	type ResourceImportEnvironment,
 	wrapResource,
@@ -282,42 +286,29 @@ function selectedResources(
 	return slot.selectionMode === "single" ? enabled.slice(0, 1) : enabled;
 }
 
-function activeReplayUpdates(conversationId: string) {
-	const chat = useChatStore().chats.find((item) => item.id === conversationId);
-	if (!chat) return [] as WorldUpdate[];
-	return useMessageStore()
-		.pathFor(chat.lastContainerId)
-		.flatMap((container) => {
-			const message =
-				container.activeMessage === null
-					? null
-					: container.content[container.activeMessage];
-			return message?.meta.worldUpdates ?? [];
-		});
+function activeReplayUpdates(_conversationId: string) {
+	return [] as WorldUpdate[];
 }
 
 async function recordReplayUpdates(
 	conversationId: string,
 	updates: WorldUpdate[],
 ) {
-	const chats = useChatStore();
-	const messages = useMessageStore();
-	const chat = chats.chats.find((item) => item.id === conversationId);
+	const chat = await loadChat(conversationId);
 	if (!chat) throw new Error("会话不存在。");
-	const container = await messages.append({
+	const container = createContainer({
 		conversationId,
 		role: "system",
 		content: "",
 		previousContainer: chat.lastContainerId,
-		hidden: true,
 	});
 	chat.lastContainerId = container.id;
 	chat.updatedAt = new Date().toISOString();
-	await chats.persist(chat);
-	const message = messages.currentMessage(container);
+	await persistChat(chat);
+	const message = currentMessage(container);
 	if (!message) throw new Error("World 重放容器没有消息版本。");
 	message.meta.worldUpdates = clone(updates);
-	await messages.persist(container);
+	await persistContainer(container);
 }
 
 export async function initializeWorlds(packageId?: string) {
@@ -341,12 +332,7 @@ export function useWorld(
 ) {
 	const packageId = computed(() => {
 		const value = normalizedScope(toValue(scope));
-		return (
-			value.packageId ??
-			useChatStore().chats.find((item) => item.id === value.conversationId)
-				?.packageId ??
-			""
-		);
+		return value.packageId ?? "";
 	});
 	const conversationId = computed(
 		() => normalizedScope(toValue(scope)).conversationId ?? "",
@@ -466,7 +452,7 @@ export function useWorld(
 			if (replay) {
 				replay.message.meta.worldUpdates ??= [];
 				replay.message.meta.worldUpdates.push(...clone(updates));
-				await useMessageStore().persist(replay.container);
+				await persistContainer(replay.container);
 				worldRevision.value += 1;
 				return;
 			}
@@ -971,7 +957,7 @@ export function useWorld(
 			applyWorldUpdates(value, updates);
 			message.meta.worldUpdates ??= [];
 			message.meta.worldUpdates.push(...clone(updates));
-			await useMessageStore().persist(container);
+			await persistContainer(container);
 		};
 		return { world: value, apply };
 	}

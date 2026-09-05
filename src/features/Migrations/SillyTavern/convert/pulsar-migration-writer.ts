@@ -1,7 +1,9 @@
 // @ts-nocheck
 // This legacy writer is retained for the forthcoming World migration pass.
 import type { Pinia } from "pinia";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
+import { usePackageStore } from "@/features/Package/package-store";
+import { createChat, persistChat } from "@/features/Conversation/chats/chat-service";
+import { persistContainer } from "@/features/Conversation/messages/message-service";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
 import { useModelConnectionStore } from "@/features/ModelConnection/services/model-connection-store";
 import {
@@ -24,7 +26,7 @@ import type { SillyTavernReaderTransport } from "./source-types";
 import type {
   ChatMessage,
   ChatMessageContainer,
-} from "@/features/Conversation/messages/conversation-types";
+} from "@/features/Conversation/messages/message-types";
 
 export interface SillyTavernImportCommitResult {
   planId: string;
@@ -49,17 +51,17 @@ export class PulsarSillyTavernMigrationWriter {
     ) {
       throw new Error("迁移计划仍有阻断错误，请先修复来源或资源对应关系。");
     }
-    const conversation = useConversationStore(this.pinia);
+    const packages = usePackageStore(this.pinia);
     const plugins = usePluginStore(this.pinia);
     const models = useModelConnectionStore(this.pinia);
     await Promise.all([
-      conversation.initialize(),
+      packages.initialize(),
       plugins.initialize(),
       models.initialize(),
     ]);
     this.assertNoExistingConflicts(
       plan,
-      conversation.packages.map((item) => item.id),
+      packages.packages.map((item) => item.id),
       plugins.plugins.map((item) => item.id),
       models.providers.map((item) => item.id),
     );
@@ -158,12 +160,12 @@ export class PulsarSillyTavernMigrationWriter {
   }
 
   private async writePackage(placement: CharacterPackagePlacement) {
-    const conversation = useConversationStore(this.pinia);
+    const packages = usePackageStore(this.pinia);
     const plugins = usePluginStore(this.pinia);
     const icon = placement.artifact.avatarPath
       ? await this.readDataUrl(placement.artifact.avatarPath)
       : "";
-    const packageItem = await conversation.createPackage(
+    const packageItem = await packages.createPackage(
       {
         id: placement.id,
         pluginId: placement.pluginId,
@@ -189,10 +191,10 @@ export class PulsarSillyTavernMigrationWriter {
       ...worldConfig.disabled.filter((path: string) => path !== "/self/generate.js"),
       "/global/builtin-core-plugin/generate.js",
     ])];
-    await conversation.updatePackage(packageItem.id, { worldConfig });
+    await packages.updatePackage(packageItem.id, { worldConfig });
 
     for (const chat of placement.conversations) {
-      await writeConversation(conversation, placement.id, chat, false);
+      await writeConversation(placement.id, chat, false);
     }
     const greetings = [
       placement.artifact.firstMessage,
@@ -220,13 +222,13 @@ export class PulsarSillyTavernMigrationWriter {
           },
         ],
       };
-      await writeConversation(conversation, placement.id, template, true);
+      await writeConversation(placement.id, template, true);
     }
   }
 
   private async writeGlobalPlugin(placement: GlobalPluginPlacement) {
     const plugins = usePluginStore(this.pinia);
-    const conversation = useConversationStore(this.pinia);
+    const packages = usePackageStore(this.pinia);
     let plugin = await plugins.createGlobalPlugin();
     plugin = (await plugins.renamePluginId(plugin.id, placement.id)) ?? plugin;
     plugin.name = placement.name;
@@ -235,14 +237,14 @@ export class PulsarSillyTavernMigrationWriter {
     configureGlobalPlugin(plugin, placement);
     await plugins.persistPlugin(plugin);
     const enabledPackages = new Set(placement.enabledPackageIds ?? []);
-    for (const packageItem of conversation.packages) {
+    for (const packageItem of packages.packages) {
       if (enabledPackages.has(packageItem.id)) continue;
       const worldConfig = structuredClone(packageItem.worldConfig);
       worldConfig.disabled = [...new Set([
         ...worldConfig.disabled,
         `/global/${plugin.id}`,
       ])];
-      await conversation.updatePackage(packageItem.id, {
+      await packages.updatePackage(packageItem.id, {
         worldConfig,
       });
     }
@@ -503,76 +505,59 @@ function writeLorebookEntries(
 }
 
 async function writeConversation(
-  store: ReturnType<typeof useConversationStore>,
   packageId: string,
   artifact: ConversationMigrationArtifact,
   template: boolean,
 ) {
-  const conversation = await store.createConversation(packageId, {
-    activate: false,
+  const conversation = await createChat({
+    packageId,
     title: artifact.title,
-    kind: "chat",
+    isTemplate: template,
+    createdAt: artifact.createdAt,
+    updatedAt: artifact.createdAt,
   });
-  const initial = store.containers.find(
-    (item) => item.conversationid === conversation.id,
-  );
-  if (!initial) throw new Error(`创建会话后没有初始容器：${artifact.title}`);
   const logicalMessages = artifact.messages;
-  const containers: ChatMessageContainer[] = logicalMessages.length
-    ? logicalMessages.map((message, index) => {
-        const id = index === 0 ? initial.id : crypto.randomUUID();
-        return {
-          id,
-          role: message.role,
-          conversationid: conversation.id,
-          content: message.versions.map((version): ChatMessage => ({
-            id: crypto.randomUUID(),
-            type: "message",
-            content: version.content,
-            createdAt: version.createdAt,
-            meta: {
-              ...(version.modelName
-                ? {
-                    generateInfo: {
-                      modelName: version.modelName,
-                      startTime: version.createdAt,
-                    },
-                  }
-                : {}),
-              steps: [],
-            },
-          })),
-          activeMessage: message.activeVersion,
-          availableNextContainer: [],
-          activeNextContainer: null,
-          previousContainer: null,
-        };
-      })
-    : [initial];
+  if (!logicalMessages.length) {
+    return;
+  }
+  const containers: ChatMessageContainer[] = logicalMessages.map((message) => ({
+    id: crypto.randomUUID(),
+    role: message.role,
+    conversationid: conversation.id,
+    currentindex: message.activeVersion,
+    content: message.versions.map((version): ChatMessage => ({
+      id: crypto.randomUUID(),
+      type: "message",
+      content: version.content,
+      createdAt: version.createdAt,
+      meta: {
+        ...(version.modelName
+          ? {
+              generateInfo: {
+                modelName: version.modelName,
+                startTime: version.createdAt,
+              },
+            }
+          : {}),
+        steps: [],
+      },
+    })),
+    availablenextcontainer: [],
+    activenextcontainer: null,
+    previouscontainer: null,
+  }));
   containers.forEach((container, index) => {
     const previous = containers[index - 1];
     const next = containers[index + 1];
-    container.previousContainer = previous?.id ?? null;
-    container.activeNextContainer = next?.id ?? null;
+    container.previouscontainer = previous?.id ?? null;
+    container.activenextcontainer = next?.id ?? null;
   });
-  const initialIndex = store.containers.findIndex(
-    (item) => item.id === initial.id,
-  );
-  if (initialIndex >= 0)
-    store.containers.splice(initialIndex, 1, containers[0]!);
-  store.containers.push(...containers.slice(1));
-  conversation.rootContainerId = containers[0]?.id ?? initial.id;
-  conversation.lastContainerId =
-    containers[containers.length - 1]?.id ?? initial.id;
-  conversation.createdAt = artifact.createdAt;
-  conversation.updatedAt = artifact.createdAt;
-  await Promise.all([
-    ...containers.map((container) => store.persistContainer(container)),
-    store.persistConversation(conversation),
-  ]);
-  store.syncConversationLink(conversation);
-  if (template)
-    await store.updateConversation(conversation.id, { isTemplate: true });
+  for (const container of containers) {
+    await persistContainer(container);
+  }
+  conversation.rootcontainerid = containers[0]!.id;
+  conversation.lastcontainerid = containers[containers.length - 1]!.id;
+  await persistChat(conversation);
 }
 
 function siblingCount(plugin: Plugin, parentPath: string) {

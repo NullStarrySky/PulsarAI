@@ -26,7 +26,9 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
+import type { Conversation } from "@/features/Conversation/chats/chat-types";
+import { selectAllChats } from "@/features/Conversation/chats/chat-service";
+import { usePackageStore } from "@/features/Package/package-store";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingItem from "@/features/Setting/components/SettingItem.vue";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
@@ -41,7 +43,8 @@ import {
 } from "./backup-store";
 
 const backup = useBackupStore();
-const conversation = useConversationStore();
+const packages = usePackageStore();
+const allChats = ref<Conversation[]>([]);
 const restoreDialogOpen = ref(false);
 const selectedExportResource = ref("");
 const resourceImportMode = ref<ResourceImportMode>("copy");
@@ -57,29 +60,30 @@ const syncHistory = computed(() =>
 );
 const selectedSyncPackageCount = computed(
 	() =>
-		conversation.packages.filter((item) => item.syncEnabled !== false).length,
+		packages.packages.filter((item) => item.syncEnabled !== false).length,
 );
 const filteredSyncPackages = computed(() => {
 	const keyword = syncScopeSearch.value.trim().toLocaleLowerCase();
-	return conversation.packages
+	return packages.packages
 		.filter(
 			(item) => !keyword || item.name.toLocaleLowerCase().includes(keyword),
 		)
 		.sort((a, b) => a.name.localeCompare(b.name, "zh-Hans"));
 });
 const exportResourceOptions = computed(() => [
-	...conversation.packages.map((item) => ({
+	...packages.packages.map((item) => ({
 		value: `package:${item.id}`,
 		label: `角色包 · ${item.name}`,
 	})),
-	...conversation.conversations.map((item) => ({
+	...allChats.value.map((item) => ({
 		value: `conversation:${item.id}`,
 		label: `会话 · ${item.title}`,
 	})),
 ]);
 
 onMounted(async () => {
-	await Promise.all([backup.initialize(), conversation.initialize()]);
+	await Promise.all([backup.initialize(), packages.initialize()]);
+	allChats.value = await selectAllChats();
 });
 
 async function openResourceRestore() {
@@ -180,7 +184,7 @@ async function importResourceArchive() {
           <PopoverTrigger as-child>
             <Button variant="outline" class="w-full justify-between font-normal sm:w-80">
               <span class="truncate">
-                已选择 {{ selectedSyncPackageCount }} / {{ conversation.packages.length }} 个角色包
+                已选择 {{ selectedSyncPackageCount }} / {{ packages.packages.length }} 个角色包
               </span>
               <ChevronsUpDown class="size-4 opacity-50" />
             </Button>

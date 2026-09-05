@@ -18,7 +18,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
+import { usePackageStore } from "@/features/Package/package-store";
 import {
 	type ResourceImportMode,
 	type RestorableResource,
@@ -27,7 +27,7 @@ import {
 
 const open = defineModel<boolean>("open", { default: false });
 const backup = useBackupStore();
-const conversation = useConversationStore();
+const packagesStore = usePackageStore();
 const restoreMode = ref<ResourceImportMode>("copy");
 
 const packages = computed(() =>
@@ -46,7 +46,7 @@ function isSelected(key: string) {
 
 function packageAvailable(packageId: string) {
 	return (
-		conversation.packages.some((item) => item.id === packageId) ||
+		packagesStore.packages.some((item) => item.id === packageId) ||
 		isSelected(`package:${packageId}`)
 	);
 }

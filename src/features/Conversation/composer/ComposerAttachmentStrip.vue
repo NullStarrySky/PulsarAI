@@ -11,7 +11,7 @@ import {
 	AttachmentTitle,
 	AttachmentTrigger,
 } from "@/components/ui/attachment";
-import type { FilePart } from "@/features/Conversation/messages/conversation-types";
+import type { FilePart } from "@/features/Conversation/messages/message-types";
 import {
 	attachmentPreviewUrl,
 	formatAttachmentSize,

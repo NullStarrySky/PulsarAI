@@ -1,13 +1,13 @@
 import type { ModelMessage } from "ai";
 import { computed } from "vue";
-import { useChatStore } from "@/features/Conversation/chats/chat-store";
 import type {
 	ChatMessage,
 	ChatMessageContainer,
-} from "@/features/Conversation/messages/conversation-types";
+} from "@/features/Conversation/messages/message-types";
 import type { ResourceImportEnvironment } from "@/features/Plugin/resources/resource-wrapper";
 import { PluginLogger } from "@/features/Plugin/runtime";
 import { useWorld, type WorldScope } from "@/features/Plugin/tree/world-store";
+
 import {
 	resolveSandboxMessagesAsync,
 	resolveSandboxTextAsync,
@@ -54,11 +54,7 @@ export function createWorldSelfApi(
 	options: WorldSelfApiOptions = {},
 ) {
 	const conversationId = options.conversationId ?? "";
-	const packageId =
-		options.packageId ??
-		useChatStore().chats.find((item) => item.id === conversationId)
-			?.packageId ??
-		"";
+	const packageId = options.packageId ?? "";
 	const scope = computed<WorldScope>(() => ({
 		packageId,
 		conversationId,

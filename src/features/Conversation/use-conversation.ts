@@ -1,325 +1,465 @@
-import { toBlob } from "html-to-image";
-import { push } from "notivue";
-import { computed, type MaybeRef, unref } from "vue";
-import { useTranslateStore } from "@/features/Translate/translate-store";
-import { playMessageSpeech } from "@/features/TTS/message-speech-cache";
-import { useChatStore } from "./chats/chat-store";
-import { generateRequestedAssistantReply } from "./messages/conversation-generation";
+import {
+	computed,
+	type MaybeRefOrGetter,
+	ref,
+	toValue,
+	watch,
+} from "vue";
+import {
+	isChatGenerating,
+	loadChat,
+	persistChat,
+	setChatGenerating,
+} from "./chats/chat-service";
+import {
+	type ComposerDraft,
+	type Conversation,
+	createDefaultComposerDraft,
+} from "./chats/chat-types";
+import {
+	createContainer,
+	createMessage,
+	currentMessage,
+	deleteContainer,
+	loadContainersForChat,
+	pathForTail,
+	persistContainer,
+} from "./messages/message-service";
 import type {
 	AdditionalParts,
+	ChatMessage,
 	ChatMessageContainer,
-} from "./messages/conversation-types";
-import { useMessageStore } from "./messages/message-store";
+	Role,
+} from "./messages/message-types";
+import { useMessageContainer } from "./messages/use-message-container";
 
-/**
- * A chat-bound UI/runtime contract.  There is intentionally no global
- * "active conversation": each mounted tab supplies its own chat id.
- */
-export function useConversation(chatId: MaybeRef<string | null | undefined>) {
-	const chats = useChatStore();
-	const messages = useMessageStore();
-	const translate = useTranslateStore();
-	const id = computed(() => unref(chatId) ?? "");
-	const chat = computed(
-		() => chats.chats.find((item) => item.id === id.value) ?? null,
+export interface MessageBubbleViewModel {
+	containerId: string;
+	container: ChatMessageContainer;
+	message: ChatMessage | null;
+	role: Role;
+	versionCount: number;
+	activeVersionIndex: number;
+	branchIds: string[];
+	activeBranchIndex: number;
+	branchCount: number;
+	thinking: unknown[];
+	attachments: unknown[];
+	worldUpdates: unknown[];
+	hasPluginChanges: boolean;
+	resourceSummary: string;
+	messageTime: string;
+	actions: ReturnType<typeof useMessageContainer>;
+}
+
+export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
+	const chat = ref<Conversation | null>(null);
+	const containers = ref<ChatMessageContainer[]>([]);
+	const loading = ref(false);
+
+	const chatId = computed(() => toValue(chatIdSource));
+	const generating = computed(() => (chatId.value ? isChatGenerating(chatId.value) : false));
+
+	async function ensureLoaded() {
+		const id = chatId.value;
+		if (!id) {
+			chat.value = null;
+			containers.value = [];
+			return;
+		}
+		if (chat.value && chat.value.id === id) return;
+		loading.value = true;
+		try {
+			chat.value = await loadChat(id);
+			containers.value = await loadContainersForChat(id);
+		} finally {
+			loading.value = false;
+		}
+	}
+
+	watch(
+		chatId,
+		() => {
+			void ensureLoaded();
+		},
+		{ immediate: true },
 	);
-	const activePath = computed<ChatMessageContainer[]>(() => {
-		const current = chat.value;
-		return current
-			? messages
-					.pathFor(current.lastContainerId ?? current.rootContainerId)
-					.filter((item) => !item.hidden)
-			: [];
+
+	const activePath = computed(() => {
+		const tailId = chat.value?.lastContainerId;
+		return pathForTail(containers.value, tailId);
 	});
-	const draft = computed({
-		get: () => chat.value?.composerDraft ?? "",
-		set: (content: string) => {
-			void chats.setComposerDraft(content, id.value);
+
+	const activePathView = computed<MessageBubbleViewModel[]>(() => {
+		const pkgId = chat.value?.packageId;
+		const cMap = new Map(containers.value.map((item) => [item.id, item]));
+		return activePath.value.map((container) => {
+			const parent = container.previousContainer
+				? cMap.get(container.previousContainer) ?? null
+				: null;
+			const actions = useMessageContainer(container, {
+				packageId: pkgId,
+				parentContainer: parent,
+				onSwitchVersion: async (cId, idx) => switchVersion(cId, idx),
+				onUpdateContent: async (content) => updateMessage(container.id, content),
+				onRegenerate: async (cId) => {
+					await regenerate(cId);
+				},
+				onSwitchBranch: async (cId, bId) => switchBranch(cId, bId),
+			});
+			return {
+				containerId: container.id,
+				container,
+				message: actions.currentMessage.value,
+				role: container.role,
+				versionCount: actions.versionCount.value,
+				activeVersionIndex: actions.activeVersionIndex.value,
+				branchIds: actions.availableBranchIds.value,
+				activeBranchIndex: actions.activeBranchIndex.value,
+				branchCount: actions.branchCount.value,
+				thinking: actions.thinking.value,
+				attachments: actions.attachments.value,
+				worldUpdates: actions.worldUpdates.value,
+				hasPluginChanges: actions.hasPluginChanges.value,
+				resourceSummary: actions.resourceSummary.value,
+				messageTime: actions.messageTime.value,
+				actions,
+			};
+		});
+	});
+
+	const composerDraft = computed<ComposerDraft>({
+		get: () => {
+			return (
+				chat.value?.composerDraft ?? createDefaultComposerDraft(chatId.value)
+			);
+		},
+		set: (value: ComposerDraft) => {
+			if (!chat.value) return;
+			chat.value.composerDraft = value;
+			void persistChat(chat.value);
 		},
 	});
 
-	async function ensureLoaded() {
-		const currentId = id.value;
-		if (!currentId) return null;
-		const current = await chats.load(currentId);
-		if (!current) return null;
-		await messages.loadForChat(current.id);
-		return current;
+	const composerDraftContent = computed<string>({
+		get: () => {
+			const draft = composerDraft.value;
+			const activeIdx = draft.activeMessage ?? 0;
+			return draft.content[activeIdx]?.content ?? "";
+		},
+		set: (content: string) => {
+			const current = composerDraft.value;
+			const activeIdx = current.activeMessage ?? 0;
+			const currentMsg = current.content[activeIdx] ?? {
+				id: "draft-message",
+				type: "message",
+				content: "",
+				parts: [],
+				createdAt: new Date().toISOString(),
+				meta: { steps: [] },
+			};
+			const newContent = [...current.content];
+			newContent[activeIdx] = {
+				...currentMsg,
+				content,
+			};
+			composerDraft.value = {
+				...current,
+				content: newContent,
+			};
+		},
+	});
+
+	async function append(input: {
+		conversationId: string;
+		role: Role;
+		content?: string;
+		parts?: AdditionalParts[];
+		previousContainer?: string | null;
+	}) {
+		const container = createContainer(input);
+		containers.value.push(container);
+		if (input.previousContainer) {
+			const parent = containers.value.find(
+				(item) => item.id === input.previousContainer,
+			);
+			if (parent) {
+				parent.availableNextContainer.push(container.id);
+				parent.activeNextContainer = container.id;
+				await persistContainer(parent);
+			}
+		}
+		await persistContainer(container);
+		return container;
 	}
 
-	async function send(parts: AdditionalParts[] = []) {
+	async function requestAssistantContainer(input: {
+		conversationId: string;
+		previousContainer?: string | null;
+	}) {
+		return append({
+			conversationId: input.conversationId,
+			role: "assistant",
+			content: "",
+			previousContainer: input.previousContainer,
+		});
+	}
+
+	async function appendAssistantVersion(containerId: string) {
+		const target = containers.value.find((item) => item.id === containerId);
+		if (!target || target.role !== "assistant") return null;
+		const version = createMessage();
+		target.content.push(version);
+		target.activeMessage = target.content.length - 1;
+		await persistContainer(target);
+		return version;
+	}
+
+	async function switchVersion(containerId: string, index: number) {
+		const target = containers.value.find((item) => item.id === containerId);
+		if (!target || index < 0 || index >= target.content.length) return;
+		target.activeMessage = index;
+		await persistContainer(target);
+	}
+
+	async function updateMessage(containerId: string, content: string) {
+		const target = containers.value.find((item) => item.id === containerId);
+		if (!target) return;
+		const msg = target.content[target.activeMessage ?? 0];
+		if (msg) {
+			msg.content = content;
+			if (msg.meta) delete msg.meta.translation;
+			await persistContainer(target);
+		}
+	}
+
+	async function send(
+		extraParts: AdditionalParts[] = [],
+		overrideRole?: Role,
+	) {
 		const current = chat.value;
-		const content = draft.value.trim();
-		if (!current || (!content && parts.length === 0)) return null;
-		const container = await messages.append({
+		const currentDraft = composerDraft.value;
+		const activeIdx = currentDraft.activeMessage ?? 0;
+		const activeMsg = currentDraft.content[activeIdx];
+		const content = (activeMsg?.content ?? "").trim();
+		const allParts = [...(activeMsg?.parts ?? []), ...extraParts];
+		const role = overrideRole ?? currentDraft.role ?? "user";
+
+		if (!current || (!content && allParts.length === 0)) return null;
+
+		const container = await append({
 			conversationId: current.id,
-			role: "user",
+			role,
 			content,
-			parts,
+			parts: allParts,
 			previousContainer: current.lastContainerId,
 		});
-		const requestedReply = await messages.requestAssistantContainer({
-			conversationId: current.id,
-			previousContainer: container.id,
-		});
-		current.lastContainerId = requestedReply.id;
-		current.composerDraft = "";
+
+		if (!current.rootContainerId) {
+			current.rootContainerId = container.id;
+		}
+		current.composerDraft = createDefaultComposerDraft(current.id);
+		current.lastMessagePreview = content.slice(0, 80);
 		current.updatedAt = new Date().toISOString();
-		await chats.persist(current);
-		await generateRequestedAssistantReply({
-			chatId: current.id,
-			containerId: requestedReply.id,
-			activePath: messages.pathFor(container.id),
-			prompt: content,
-		});
+
+		if (role === "user") {
+			const requestedReply = await requestAssistantContainer({
+				conversationId: current.id,
+				previousContainer: container.id,
+			});
+			current.lastContainerId = requestedReply.id;
+			await persistChat(current);
+
+			await generateRequestedAssistantReply({
+				chatId: current.id,
+				containerId: requestedReply.id,
+				activePath: pathForTail(containers.value, container.id),
+				prompt: content,
+			});
+		} else {
+			current.lastContainerId = container.id;
+			await persistChat(current);
+		}
+
 		return container;
+	}
+
+	async function pushContainer(
+		container: ChatMessageContainer,
+		triggerGenerate = false,
+	) {
+		const current = chat.value;
+		if (!current) return;
+		current.lastContainerId = container.id;
+		current.updatedAt = new Date().toISOString();
+		await persistChat(current);
+
+		if (triggerGenerate && container.role === "assistant") {
+			const path = pathForTail(containers.value, container.previousContainer);
+			const promptContainer = path[path.length - 1];
+			await generateRequestedAssistantReply({
+				chatId: current.id,
+				containerId: container.id,
+				activePath: path,
+				prompt: currentMessage(promptContainer ?? container)?.content ?? "",
+			});
+		}
 	}
 
 	async function regenerate(containerId: string) {
 		const current = chat.value;
-		const target = messages.containers.find((item) => item.id === containerId);
+		const target = containers.value.find((item) => item.id === containerId);
 		if (
 			!current ||
-			chats.isGenerating(current.id) ||
+			isChatGenerating(current.id) ||
 			!target ||
 			target.conversationid !== current.id ||
 			target.role !== "assistant"
 		)
 			return null;
-		const version = await messages.appendAssistantVersion(containerId);
+
+		const version = await appendAssistantVersion(containerId);
 		if (!version) return null;
-		const path = messages.pathFor(target.previousContainer);
-		const prompt = path[path.length - 1];
+
+		const path = pathForTail(containers.value, target.previousContainer);
+		const promptContainer = path[path.length - 1];
 		await generateRequestedAssistantReply({
 			chatId: current.id,
 			containerId: target.id,
-			activePath: messages.pathFor(target.previousContainer),
-			prompt: messages.currentMessage(prompt ?? target)?.content ?? "",
+			activePath: path,
+			prompt: currentMessage(promptContainer)?.content ?? "",
 		});
 		return version;
 	}
 
-	async function navigateAssistantVersion(
-		containerId: string,
-		direction: -1 | 1,
-	) {
-		const target = messages.containers.find((item) => item.id === containerId);
-		if (target?.role !== "assistant") return null;
-		const currentVersion = target.activeMessage ?? 0;
-		const nextVersion = currentVersion + direction;
-		if (nextVersion < 0) return null;
-		if (nextVersion >= target.content.length) return regenerate(containerId);
-		await messages.switchVersion(containerId, nextVersion);
-		return messages.currentMessage(target);
-	}
-
-	async function deleteMessage(containerId: string) {
+	async function switchBranch(containerId: string, branchId: string) {
 		const current = chat.value;
-		const target = messages.containers.find((item) => item.id === containerId);
-		if (!current || !target || target.conversationid !== current.id) return;
-		const successor = messages.containers.find(
-			(item) => item.previousContainer === containerId,
+		const target = containers.value.find((item) => item.id === containerId);
+		if (!current || !target || !target.previousContainer) return;
+
+		const parent = containers.value.find(
+			(item) => item.id === target.previousContainer,
 		);
-		await messages.deleteContainer(containerId);
-		if (current.lastContainerId === containerId) {
-			current.lastContainerId =
-				successor?.id ?? target.previousContainer ?? current.rootContainerId;
+		if (!parent || !parent.availableNextContainer.includes(branchId)) return;
+
+		parent.activeNextContainer = branchId;
+		await persistContainer(parent);
+
+		// 遍历到目标分支末端
+		let tail: ChatMessageContainer | undefined = containers.value.find(
+			(item) => item.id === branchId,
+		);
+		while (tail?.activeNextContainer) {
+			const next = containers.value.find(
+				(item) => item.id === tail?.activeNextContainer,
+			);
+			if (!next) break;
+			tail = next;
+		}
+
+		if (tail) {
+			current.lastContainerId = tail.id;
 			current.updatedAt = new Date().toISOString();
-			await chats.persist(current);
+			await persistChat(current);
 		}
-	}
-
-	async function confirmDeleteMessage(containerId: string) {
-		if (!window.confirm("删除这条消息？")) return;
-		await deleteMessage(containerId);
-	}
-
-	function branchIdsFor(containerId: string) {
-		const container = messages.containers.find(
-			(item) => item.id === containerId,
-		);
-		const previous = container?.previousContainer
-			? messages.containers.find(
-					(item) => item.id === container.previousContainer,
-				)
-			: null;
-		return previous?.availableNextContainer ?? [];
-	}
-
-	function activeBranchIdFor(containerId: string) {
-		const container = messages.containers.find(
-			(item) => item.id === containerId,
-		);
-		return container?.previousContainer
-			? (messages.containers.find(
-					(item) => item.id === container.previousContainer,
-				)?.activeNextContainer ?? null)
-			: null;
-	}
-
-	function activeTail(containerId: string) {
-		const seen = new Set<string>();
-		let current =
-			messages.containers.find((item) => item.id === containerId) ?? null;
-		while (current?.activeNextContainer && !seen.has(current.id)) {
-			seen.add(current.id);
-			current =
-				messages.containers.find(
-					(item) => item.id === current?.activeNextContainer,
-				) ?? null;
-		}
-		return current?.id ?? containerId;
 	}
 
 	async function createBranch(containerId: string) {
 		const current = chat.value;
-		const target = messages.containers.find((item) => item.id === containerId);
-		if (
-			!current ||
-			chats.isGenerating(current.id) ||
-			!target ||
-			target.conversationid !== current.id
-		)
-			return null;
-		const branch = await messages.append({
+		const target = containers.value.find((item) => item.id === containerId);
+		if (!current || !target) return null;
+
+		const branch = await append({
 			conversationId: current.id,
 			role: target.role,
-			content: "",
 			previousContainer: target.previousContainer,
 		});
 		current.lastContainerId = branch.id;
 		current.updatedAt = new Date().toISOString();
-		await chats.persist(current);
-		if (branch.role === "assistant") {
-			const path = messages.pathFor(branch.previousContainer);
-			const prompt = path[path.length - 1] ?? branch;
-			await generateRequestedAssistantReply({
-				chatId: current.id,
-				containerId: branch.id,
-				activePath: path,
-				prompt: messages.currentMessage(prompt)?.content ?? "",
-			});
-		}
+		await persistChat(current);
 		return branch;
 	}
 
-	function messageFor(containerId: string) {
-		const container = messages.containers.find(
-			(item) => item.id === containerId,
-		);
-		return container?.conversationid === id.value
-			? messages.currentMessage(container)
-			: null;
-	}
-
-	async function copyMessage(containerId: string) {
-		const message = messageFor(containerId);
-		if (!message?.content) return;
-		await navigator.clipboard.writeText(message.content);
-		push.success("已复制");
-	}
-
-	async function speakMessage(containerId: string) {
-		const message = messageFor(containerId);
-		if (!message?.content.trim()) return;
-		try {
-			await playMessageSpeech(
-				chat.value?.packageId ?? "",
-				message.id,
-				message.content,
-			);
-		} catch (error) {
-			push.error(error instanceof Error ? error.message : "朗读失败");
-		}
-	}
-
-	async function toggleMessageFavorite(containerId: string) {
-		const message = messageFor(containerId);
-		if (!message) return;
-		await messages.setMessageFavorite(containerId, !message.favorite);
-	}
-
-	async function translateMessage(containerId: string) {
-		const message = messageFor(containerId);
-		if (!message?.content.trim() || translate.translating) return;
-		if (message.meta.translation) {
-			await messages.setMessageContent(
-				containerId,
-				message.meta.translation.originalContent,
-			);
-			return;
-		}
-		const originalContent = message.content;
-		try {
-			const content = await translate.translateText(originalContent, true);
-			await messages.setMessageTranslation(containerId, content, {
-				originalContent,
-				translatedAt: new Date().toISOString(),
-			});
-		} catch {
-			push.error(translate.errorText || "翻译失败");
-		}
-	}
-
-	async function exportMessageScreenshot(
-		containerId: string,
-		element: HTMLElement | null,
-	) {
-		if (!messageFor(containerId) || !element) return;
-		try {
-			const blob = await toBlob(element, {
-				cacheBust: true,
-				pixelRatio: 2,
-				style: { borderRadius: "16px" },
-			});
-			if (!blob) throw new Error("生成截图失败");
-			await navigator.clipboard.write([
-				new ClipboardItem({ [blob.type || "image/png"]: blob }),
-			]);
-			push.success("截图已复制到剪切板");
-		} catch (error) {
-			push.error(error instanceof Error ? error.message : "截图导出失败");
-		}
-	}
-
-	async function switchBranch(containerId: string, branchId: string) {
+	async function deleteMessage(containerId: string) {
 		const current = chat.value;
-		const target = messages.containers.find((item) => item.id === containerId);
-		const previous = target?.previousContainer
-			? messages.containers.find((item) => item.id === target.previousContainer)
+		if (!current) return;
+		const target = containers.value.find((item) => item.id === containerId);
+		if (!target) return;
+
+		const parentId = target.previousContainer;
+		const parent = parentId
+			? containers.value.find((item) => item.id === parentId)
 			: null;
-		if (!current || !previous?.availableNextContainer.includes(branchId))
-			return;
-		previous.activeNextContainer = branchId;
-		current.lastContainerId = activeTail(branchId);
-		current.updatedAt = new Date().toISOString();
-		await Promise.all([messages.persist(previous), chats.persist(current)]);
+
+		if (parent) {
+			parent.availableNextContainer = parent.availableNextContainer.filter(
+				(id) => id !== containerId,
+			);
+			if (parent.activeNextContainer === containerId) {
+				parent.activeNextContainer = parent.availableNextContainer[0] ?? null;
+			}
+			await persistContainer(parent);
+		}
+
+		await deleteContainer(containerId);
+		containers.value = containers.value.filter((item) => item.id !== containerId);
+
+		if (current.lastContainerId === containerId) {
+			current.lastContainerId = parentId ?? null;
+			if (current.rootContainerId === containerId) {
+				current.rootContainerId = null;
+			}
+			current.updatedAt = new Date().toISOString();
+			await persistChat(current);
+		}
+	}
+
+	async function generateRequestedAssistantReply(input: {
+		chatId: string;
+		containerId: string;
+		activePath: ChatMessageContainer[];
+		prompt: string;
+	}) {
+		setChatGenerating(input.chatId, true);
+		try {
+			const { runWorld } = await import("@/features/Plugin/runtime/run-api");
+			await runWorld({
+				conversationId: input.chatId,
+				containerId: input.containerId,
+				prompt: input.prompt,
+			});
+		} catch (error) {
+			const target = containers.value.find((item) => item.id === input.containerId);
+			if (target) {
+				const activeMsg = target.content[target.activeMessage ?? 0];
+				if (activeMsg) {
+					activeMsg.type = "error";
+					activeMsg.content = error instanceof Error ? error.message : String(error);
+					await persistContainer(target);
+				}
+			}
+		} finally {
+			setChatGenerating(input.chatId, false);
+		}
 	}
 
 	return {
 		chat,
-		chatId: id,
+		containers,
 		activePath,
-		draft,
-		generating: computed(() => chats.isGenerating(id.value)),
-		messageOf: messages.currentMessage,
+		activePathView,
+		composerDraft,
+		composerDraftContent,
+		generating,
+		loading,
 		ensureLoaded,
 		send,
+		pushContainer,
 		regenerate,
-		navigateAssistantVersion,
-		deleteMessage,
-		confirmDeleteMessage,
-		branchIdsFor,
-		activeBranchIdFor,
 		createBranch,
+		deleteMessage,
+		switchVersion,
 		switchBranch,
-		switchVersion: messages.switchVersion,
-		updateMessage: messages.setMessageContent,
-		copyMessage,
-		speakMessage,
-		toggleMessageFavorite,
-		translateMessage,
-		exportMessageScreenshot,
-		clearDraft: () => chats.setComposerDraft("", id.value),
+		updateMessage,
 	};
 }

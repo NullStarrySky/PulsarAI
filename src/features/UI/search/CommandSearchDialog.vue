@@ -5,7 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useConversationStore } from "@/features/Conversation/store/conversation-store";
+import type { Conversation } from "@/features/Conversation/chats/chat-types";
+import { selectAllChats } from "@/features/Conversation/chats/chat-service";
+import { usePackageStore } from "@/features/Package/package-store";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useHotkeyStore } from "@/features/Hotkey/hotkey-store";
 
@@ -20,7 +22,8 @@ type SearchResult = {
 
 const commandStore = useCommandStore();
 const hotkeyStore = useHotkeyStore();
-const conversation = useConversationStore();
+const packages = usePackageStore();
+const allChats = ref<Conversation[]>([]);
 const inputRoot = ref<HTMLElement | null>(null);
 const activeIndex = ref(0);
 
@@ -64,7 +67,7 @@ const commandResults = computed<SearchResult[]>(() => {
 
 const packageResults = computed<SearchResult[]>(() => {
 	const search = normalizedQuery.value;
-	return conversation.packages
+	return packages.packages
 		.filter((item) =>
 			matchesItem(
 				[item.name, item.description, item.id],
@@ -78,7 +81,6 @@ const packageResults = computed<SearchResult[]>(() => {
 			description: item.description || "角色包",
 			icon: Package,
 			run: async () => {
-				await conversation.openPackage(item.id);
 				commandStore.closePalette();
 			},
 		}));
@@ -86,7 +88,7 @@ const packageResults = computed<SearchResult[]>(() => {
 
 const conversationResults = computed<SearchResult[]>(() => {
 	const search = normalizedQuery.value;
-	return conversation.conversations
+	return allChats.value
 		.filter((item) =>
 			matchesItem(
 				[item.title, item.id, item.packageId],
@@ -98,12 +100,11 @@ const conversationResults = computed<SearchResult[]>(() => {
 			id: `conversation:${item.id}`,
 			title: item.title,
 			description:
-				conversation.packages.find(
+				packages.packages.find(
 					(packageItem) => packageItem.id === item.packageId,
 				)?.name ?? "对话",
 			icon: MessageSquare,
 			run: () => {
-				conversation.openConversation(item.id);
 				commandStore.closePalette();
 			},
 		}));
@@ -127,7 +128,8 @@ watch(
 		if (!open) {
 			return;
 		}
-		await conversation.initialize();
+		await packages.initialize();
+		allChats.value = await selectAllChats();
 		activeIndex.value = 0;
 		await nextTick();
 		inputRoot.value?.querySelector("input")?.focus();

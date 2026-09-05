@@ -56,7 +56,7 @@ function resolveSpeechModel(
 	}
 	if (model === AZURE_TTS_MODEL_REF) return createAzureTtsSpeechModel();
 	if (model.startsWith(`${PIPER_TTS_PROVIDER_ID}/`)) {
-		if (host.target !== "mobile") return undefined;
+		if (host.target !== "mobile-tauri") return undefined;
 		return createPiperTtsSpeechModel(
 			model.slice(`${PIPER_TTS_PROVIDER_ID}/`.length),
 		);
