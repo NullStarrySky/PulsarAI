@@ -1,7 +1,7 @@
 import type { MigrationDiagnostic } from "./migration-diagnostic";
 import type {
   BackgroundMigrationArtifact,
-  CharacterPackageMigrationArtifact,
+  LocalPluginMigrationArtifact,
   ConversationMigrationArtifact,
   PresetMigrationArtifact,
   ProviderMigrationArtifact,
@@ -10,10 +10,10 @@ import type {
   WorldbookMigrationArtifact,
 } from "./migration-artifact";
 
-export interface CharacterPackagePlacement {
+export interface LocalPluginPlacement {
   id: string;
   pluginId: string;
-  artifact: CharacterPackageMigrationArtifact;
+  artifact: LocalPluginMigrationArtifact;
   conversations: ConversationMigrationArtifact[];
   claimedWorldbooks: WorldbookMigrationArtifact[];
   personas: UserPersonaMigrationArtifact[];
@@ -34,7 +34,7 @@ export interface SillyTavernPlacementPlan {
   id: string;
   sourceRoot: string;
   createdAt: string;
-  packages: CharacterPackagePlacement[];
+  packages: LocalPluginPlacement[];
   globalPlugins: GlobalPluginPlacement[];
   providers: ProviderMigrationArtifact[];
   diagnostics: MigrationDiagnostic[];

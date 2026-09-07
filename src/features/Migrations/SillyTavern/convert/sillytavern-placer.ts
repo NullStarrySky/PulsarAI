@@ -1,11 +1,11 @@
 import { migrationDiagnostic, type MigrationDiagnostic } from "./migration-diagnostic";
 import type {
-  CharacterPackageMigrationArtifact,
+  LocalPluginMigrationArtifact,
   SillyTavernConversionResult,
   SillyTavernMigrationArtifact,
 } from "./migration-artifact";
 import type {
-  CharacterPackagePlacement,
+  LocalPluginPlacement,
   GlobalPluginPlacement,
   SillyTavernPlacementPlan,
 } from "./placement-plan";
@@ -28,7 +28,7 @@ export function placeSillyTavernArtifacts(
   const providers = ofKind(conversion, "provider");
   const usedIds = new Set<string>();
 
-  const packages = characters.map((character): CharacterPackagePlacement => ({
+  const packages = characters.map((character): LocalPluginPlacement => ({
     id: uniqueId(`st-package-${slug(character.nickname || character.name)}`, usedIds),
     pluginId: uniqueId(`st-character-${slug(character.nickname || character.name)}`, usedIds),
     artifact: character,
@@ -153,10 +153,10 @@ function ofKind<K extends SillyTavernMigrationArtifact["kind"]>(
 }
 
 function reportDuplicateCharacterNames(
-  packages: CharacterPackagePlacement[],
+  packages: LocalPluginPlacement[],
   conflicts: MigrationDiagnostic[],
 ) {
-  const names = new Map<string, CharacterPackagePlacement[]>();
+  const names = new Map<string, LocalPluginPlacement[]>();
   for (const placement of packages) {
     const key = normalizedName(placement.artifact.name);
     names.set(key, [...(names.get(key) ?? []), placement]);
@@ -168,12 +168,12 @@ function reportDuplicateCharacterNames(
       "error",
       `多个角色卡使用名称“${duplicates[0]?.artifact.name}”，会话关系无法可靠判断。`,
       duplicates[0]?.artifact.source,
-      { packageIds: duplicates.map((item) => item.id) },
+      { localPluginIds: duplicates.map((item) => item.id) },
     ));
   }
 }
 
-function characterMatches(character: CharacterPackageMigrationArtifact, name: string) {
+function characterMatches(character: LocalPluginMigrationArtifact, name: string) {
   const normalized = normalizedName(name);
   return normalizedName(character.name) === normalized || normalizedName(character.nickname) === normalized;
 }

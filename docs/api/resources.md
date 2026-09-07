@@ -6,7 +6,7 @@ description: World 路径、嵌套文件树、资源装配与插槽契约
 # World 资源 API
 
 World 是唯一的资源模型。持久化为两份同构的嵌套文件树：共享
-`resource_worlds:global`，以及每个角色包的 `resource_worlds:package:<packageId>`。
+`resource_worlds:global`，以及每个本地 Plugin 的 `resource_worlds:local:<localPluginId>`。
 `useWorld` 是唯一的读写入口。
 
 ## 路径

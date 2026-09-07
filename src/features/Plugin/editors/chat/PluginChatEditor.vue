@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-vue-next";
 import { computed } from "vue";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+	Button,
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+	Switch,
+} from "@/components/fluid";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { type PluginChatMessage, readPluginChatContext } from "./plugin-chat";
 
 const props = defineProps<{ modelValue: string }>();

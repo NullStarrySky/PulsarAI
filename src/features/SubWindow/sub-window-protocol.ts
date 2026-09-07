@@ -5,7 +5,7 @@ export type SubWindowTarget =
       type: "resource";
       resourceType: string;
       resourceId: string;
-      packageId?: string;
+      localPluginId?: string;
       title?: string;
       resourceParams?: Record<string, unknown>;
     }

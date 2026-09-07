@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	createBuiltinGlobalWorld,
-	createPackageWorld,
+	createLocalPluginWorld,
 } from "../tree/builtin-world";
 import { createWorldNodeIndex } from "../tree/world-update";
 
@@ -40,7 +40,7 @@ describe("built-in World", () => {
 	});
 
 	it("creates both global and local slot roots for a package World", () => {
-		const world = createPackageWorld("test");
+		const world = createLocalPluginWorld("test");
 		expect(world.root.children.slot?.type).toBe("folder");
 		const localRoot = world.root.children.localSlot;
 		expect(localRoot?.type).toBe("folder");

@@ -3,17 +3,17 @@ import { computed, ref } from "vue";
 import { host } from "@/host";
 import { getActivePinia } from "pinia";
 import { AlertCircle, CheckCircle2, FolderOpen, LoaderCircle, ScanSearch, Upload } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Button,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/fluid";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import SettingForm from "@/features/Setting/components/SettingForm.vue";
 import SettingFormField from "@/features/Setting/components/SettingFormField.vue";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
@@ -67,7 +67,7 @@ async function commit() {
   error.value = "";
   try {
     const committed = await importer.commit(preview.value.plan.id);
-    result.value = `已导入 ${committed.packageIds.length} 个角色包、${committed.globalPluginIds.length} 个独立世界书插件和 ${committed.providerIds.length} 个连接。`;
+    result.value = `已导入 ${committed.localPluginIds.length} 个角色、${committed.globalPluginIds.length} 个独立世界书插件和 ${committed.providerIds.length} 个连接。`;
     confirmOpen.value = false;
     preview.value = null;
   } catch (cause) {

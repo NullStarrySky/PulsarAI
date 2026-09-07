@@ -6,8 +6,6 @@ const resourceTables = [
 	"resource_conversation_memory_segments",
 	"resource_message_containers",
 	"resource_conversations",
-	"resource_package_categories",
-	"resource_packages",
 	"resource_worlds",
 ];
 
@@ -61,8 +59,28 @@ export async function createDatabase(userDataPath) {
 	await database.connect("surrealkv://surrealdb");
 	await database.use({ namespace: "pulsar", database: "pulsar" });
 
+	let writeQueue = Promise.resolve();
+
+	function enqueueWrite(operation) {
+		const task = writeQueue.then(async () => {
+			for (let attempt = 0; ; attempt += 1) {
+				try {
+					return await operation();
+				} catch (error) {
+					const message = error instanceof Error ? error.message : String(error);
+					if (attempt >= 2 || !/failed transaction|read or write conflict/i.test(message)) {
+						throw error;
+					}
+					await new Promise((resolve) => setTimeout(resolve, 8 * (attempt + 1)));
+				}
+			}
+		});
+		writeQueue = task.catch(() => undefined);
+		return task;
+	}
+
 	async function selectAll(table) {
-		return sortRecords(await database.select(assertTable(table))).map(
+		return sortRecords(await database.select(tableId(table))).map(
 			({ resource_key, value }) => ({
 				id: resource_key ?? null,
 				value,
@@ -71,7 +89,7 @@ export async function createDatabase(userDataPath) {
 	}
 
 	async function selectByField(table, field, value) {
-		if (field !== "packageId" && field !== "conversationid")
+		if (field !== "localPluginId" && field !== "conversationid")
 			throw new Error("Unsupported resource field.");
 		return (await selectAll(table)).filter(
 			(record) => record.value?.[field] === value,
@@ -84,21 +102,23 @@ export async function createDatabase(userDataPath) {
 	}
 
 	async function upsert(table, id, value) {
-		await database.upsert(recordId(table, id), { resource_key: id, value });
+		await enqueueWrite(() =>
+			database.upsert(recordId(table, id)).content({ resource_key: id, value }),
+		);
 	}
 
 	async function update(table, id, patches) {
-		await database.update(recordId(table, id)).patch(patches);
+		await enqueueWrite(() => database.update(recordId(table, id)).patch(patches));
 	}
 
 	async function remove(table, id) {
-		await database.delete(recordId(table, id));
+		await enqueueWrite(() => database.delete(recordId(table, id)));
 	}
 
 	async function resetCharacterData() {
-		await Promise.all(
-			resourceTables.map((table) => database.delete(tableId(table))),
-		);
+		await enqueueWrite(async () => {
+			for (const table of resourceTables) await database.delete(tableId(table));
+		});
 	}
 
 	return {

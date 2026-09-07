@@ -14,7 +14,7 @@ export async function selectAll<T>(
 
 export async function selectByField<T>(
 	table: string,
-	field: "packageId" | "conversationid",
+	field: "localPluginId" | "conversationid",
 	value: string,
 ): Promise<Array<DatabaseRecord<T>>> {
 	return host.database.selectByField<T>(table, field, value);

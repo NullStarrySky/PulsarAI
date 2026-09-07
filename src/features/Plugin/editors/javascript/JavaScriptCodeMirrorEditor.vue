@@ -146,7 +146,7 @@ onMounted(() => {
 			...(props.language === "json"
 				? [json()]
 				: props.language === "javascript"
-					? [javascript()]
+					? [javascript({ jsx: true })]
 					: props.language === "vue"
 						? [vue()]
 						: []),
@@ -170,7 +170,9 @@ onMounted(() => {
 			EditorView.theme({
 				"&": {
 					height: "100%",
-					backgroundColor: oneDarkProColors.background,
+					backgroundColor: props.frameless
+						? "transparent !important"
+						: oneDarkProColors.background,
 					border: props.frameless ? "0" : "1px solid hsl(var(--border))",
 					borderRadius: props.frameless ? "0" : "0.375rem",
 					fontSize: "0.875rem",
@@ -180,15 +182,18 @@ onMounted(() => {
 					fontFeatureSettings: '"calt" 1, "liga" 1, "zero" 1',
 					fontVariantLigatures: "common-ligatures contextual",
 					fontVariantNumeric: "tabular-nums slashed-zero",
+					backgroundColor: props.frameless ? "transparent !important" : null,
 				},
 				".cm-content": {
 					minHeight: "100%",
-					padding: "0.75rem",
+					padding: "14px 16px !important",
 				},
 				".cm-gutters": {
-					backgroundColor: oneDarkProColors.background,
+					backgroundColor: props.frameless
+						? "transparent !important"
+						: oneDarkProColors.background,
 					borderRight: props.frameless
-						? "0"
+						? "1px solid color-mix(in oklab, var(--foreground) 8%, transparent)"
 						: `1px solid ${oneDarkProColors.activeLine}`,
 				},
 				"&.cm-focused": {

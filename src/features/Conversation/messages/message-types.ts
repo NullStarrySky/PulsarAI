@@ -1,3 +1,6 @@
+import type { Pulse } from "@/features/Plugin/tree/world-update";
+import type { IntervalOperation } from "./interval-service";
+
 export type Role = "user" | "assistant" | "system";
 
 export interface FilePart {
@@ -46,7 +49,10 @@ export interface MessageMeta {
 		finishTime?: string;
 	};
 	steps: (ThinkingStep | ToolCallStep | ToolCallResult)[];
-	worldUpdates?: any[];
+	/** Ordered, replayable World changes created along this message path. */
+	pulses?: Pulse[];
+	/** Ordered Interval operations bound to this concrete message version. */
+	intervalOperations?: IntervalOperation[];
 	translation?: {
 		translatedContent: string;
 		modelName?: string;

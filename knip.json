@@ -19,7 +19,7 @@
 		"vite.config.ts"
 	],
 	"ignore": [
-		"src/components/ui/**",
+		"src/components/**",
 		"src/features/Migrations/**",
 		"src/features/SubWindow/**"
 	]

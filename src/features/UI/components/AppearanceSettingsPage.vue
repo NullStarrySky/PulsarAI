@@ -2,27 +2,26 @@
 import { Check, FileCode2, Monitor, Moon, Sun, Type } from "lucide-vue-next";
 import { push } from "notivue";
 import { computed, ref } from "vue";
-import { Button } from "@/components/ui/button";
 import {
+	Button,
+	ColorPickerPopover,
 	Dialog,
 	DialogContent,
 	DialogDescription,
 	DialogFooter,
 	DialogHeader,
 	DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import {
 	Select,
 	SelectContent,
 	SelectGroup,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-} from "@/components/ui/select";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
+	Slider,
+	Switch,
+} from "@/components/fluid";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { isAndroidPlatform } from "@/features/Misc/platform";
@@ -41,30 +40,6 @@ const fontFamily = ref("");
 const showMobileNavigationBar = isAndroidPlatform();
 
 const activeAccent = computed(() => appearance.activeTheme.accent);
-const fontSizeValue = computed({
-	get: () => [appearance.fontSize],
-	set: (value: number[]) => {
-		appearance.fontSize = value[0] ?? appearance.fontSize;
-	},
-});
-const uiScaleValue = computed({
-	get: () => [appearance.uiScale],
-	set: (value: number[]) => {
-		appearance.uiScale = value[0] ?? appearance.uiScale;
-	},
-});
-const editorFontSizeValue = computed({
-	get: () => [appearance.editorFontSize],
-	set: (value: number[]) => {
-		appearance.editorFontSize = value[0] ?? appearance.editorFontSize;
-	},
-});
-const editorLineHeightValue = computed({
-	get: () => [appearance.editorLineHeight],
-	set: (value: number[]) => {
-		appearance.editorLineHeight = value[0] ?? appearance.editorLineHeight;
-	},
-});
 const themeModeOptions = [
 	{ id: "light", label: "浅色", icon: Sun },
 	{ id: "dark", label: "深色", icon: Moon },
@@ -204,23 +179,31 @@ function importFont() {
         </div>
       </SettingFormField>
 
+      <SettingFormField title="组件圆角" description="全局组件圆角曲率风格（方角、圆角、全圆角）。">
+        <ToggleGroup v-model="appearance.shapeVariant" type="single" variant="outline" :spacing="1" class="ml-auto rounded-full bg-muted/55 p-1">
+          <ToggleGroupItem value="square" class="h-8 rounded-full border-0 px-3 text-xs data-[state=on]:bg-background data-[state=on]:shadow-sm">方角</ToggleGroupItem>
+          <ToggleGroupItem value="rounded" class="h-8 rounded-full border-0 px-3 text-xs data-[state=on]:bg-background data-[state=on]:shadow-sm">圆角</ToggleGroupItem>
+          <ToggleGroupItem value="pill" class="h-8 rounded-full border-0 px-3 text-xs data-[state=on]:bg-background data-[state=on]:shadow-sm">全圆角</ToggleGroupItem>
+        </ToggleGroup>
+      </SettingFormField>
+
       <SettingFormField title="字体大小">
         <div class="ml-auto grid w-full max-w-xl grid-cols-[minmax(0,1fr)_3rem] items-center gap-3">
-          <Slider v-model="fontSizeValue" :min="12" :max="22" :step="1" />
+          <Slider v-model="appearance.fontSize" :min="12" :max="22" :step="1" />
           <span class="text-right text-sm text-muted-foreground">{{ appearance.fontSize }}px</span>
         </div>
       </SettingFormField>
 
       <SettingFormField title="界面缩放">
         <div class="ml-auto grid w-full max-w-xl grid-cols-[minmax(0,1fr)_3rem] items-center gap-3">
-          <Slider v-model="uiScaleValue" :min="80" :max="140" :step="5" />
+          <Slider v-model="appearance.uiScale" :min="80" :max="140" :step="5" />
           <span class="text-right text-sm text-muted-foreground">{{ appearance.uiScale }}%</span>
         </div>
       </SettingFormField>
 
       <SettingFormField title="编辑器段落字号" description="Milkdown 编辑器与消息渲染段落 (.milkdown .ProseMirror p) 的字体大小。">
         <div class="ml-auto grid w-full max-w-xl grid-cols-[minmax(0,1fr)_5rem] items-center gap-3">
-          <Slider v-model="editorFontSizeValue" :min="10" :max="40" :step="1" />
+          <Slider v-model="appearance.editorFontSize" :min="10" :max="40" :step="1" />
           <div class="flex items-center gap-1">
             <Input
               v-model.number="appearance.editorFontSize"
@@ -236,7 +219,7 @@ function importFont() {
 
       <SettingFormField title="编辑器段落行高" description="Milkdown 编辑器与消息渲染段落 (.milkdown .ProseMirror p) 的行高。">
         <div class="ml-auto grid w-full max-w-xl grid-cols-[minmax(0,1fr)_5rem] items-center gap-3">
-          <Slider v-model="editorLineHeightValue" :min="10" :max="60" :step="1" />
+          <Slider v-model="appearance.editorLineHeight" :min="10" :max="60" :step="1" />
           <div class="flex items-center gap-1">
             <Input
               v-model.number="appearance.editorLineHeight"
@@ -297,18 +280,14 @@ function importFont() {
               <SelectItem value="custom">自定义</SelectItem>
             </SelectContent>
           </Select>
-          <div v-if="appearance.frameColorMode === 'custom'" class="flex items-center gap-1.5">
-            <input
-              v-model="appearance.frameCustomColor"
-              type="color"
-              class="size-8 cursor-pointer rounded-lg border border-border bg-transparent p-0.5"
-            />
-            <Input
-              v-model="appearance.frameCustomColor"
-              class="h-8 w-24 text-xs font-mono"
-              placeholder="#1e1e24"
-            />
-          </div>
+          <ColorPickerPopover
+            v-if="appearance.frameColorMode === 'custom'"
+            :value="appearance.frameCustomColor"
+            size="compact"
+            trigger-label="边框颜色"
+            :swatches="['#1e1e24', '#0f172a', '#18181b', '#27272a', '#3f3f46', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899']"
+            @update:value="(val) => appearance.frameCustomColor = val"
+          />
         </div>
       </SettingFormField>
 

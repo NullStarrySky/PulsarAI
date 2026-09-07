@@ -10,8 +10,8 @@
 
 | 来源 | 类型 | 目标 |
 | --- | --- | --- |
-| `characters/*.png` | PNG `tEXt` 中的 `chara`/`ccv3` Base64 JSON | CharacterPackage + 本地 Plugin |
-| `characters/*.json` | V1/V2/V3 角色 JSON | CharacterPackage + 本地 Plugin |
+| `characters/*.png` | PNG `tEXt` 中的 `chara`/`ccv3` Base64 JSON | 本地 Plugin |
+| `characters/*.json` | V1/V2/V3 角色 JSON | 本地 Plugin |
 | `chats/<角色目录>/*.jsonl` | header + 每行一条消息 | Conversation + message-version 分支 |
 | `worlds/*.json` | 世界书，`entries` 可为对象或数组 | 已认领时复制到角色本地 Plugin，否则独立全局 Plugin |
 | `User Avatars/*` 与 `power_user.personas` | 用户角色头像、名称和描述 | 使用该 persona 的角色包本地 `character/user/*.md` |
@@ -86,7 +86,7 @@ OpenAI prompt 中 `injection_position != 1` 的启用正文按角色写入 `*.ch
 
 ## 7. 两阶段提交与恢复
 
-`preview()` 只扫描、判别、转换和放置。`commit(planId)` 只接受最后一次仍有效的预览。任何 error 级解析诊断、关系冲突或已有 package/plugin/provider ID 都会阻止覆盖。提交失败时，Importer 尝试按反序删除本次新建的 provider、全局 Plugin 和 CharacterPackage，并恢复本次修改前的内置 Plugin 快照。数据库和媒体写入目前不具备跨仓储原子事务，因此恢复失败会保留原始异常供人工排查。
+`preview()` 只扫描、判别、转换和放置。`commit(planId)` 只接受最后一次仍有效的预览。任何 error 级解析诊断、关系冲突或已有 local-plugin/plugin/provider ID 都会阻止覆盖。提交失败时，Importer 尝试按反序删除本次新建的 provider、全局 Plugin 和本地 Plugin，并恢复本次修改前的内置 Plugin 快照。数据库和媒体写入目前不具备跨仓储原子事务，因此恢复失败会保留原始异常供人工排查。
 
 ## 8. 宏与 EJS 边界
 

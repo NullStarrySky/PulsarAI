@@ -48,46 +48,81 @@ type SourceMeta = {
 export function builtinSlots(): WorldSlot[] {
 	return [
 		{
+			id: "role",
+			name: "角色",
+			icon: "user-round",
+			allowedResourceTypes: [],
+			selectionMode: "none",
+		},
+		{
+			id: "user",
+			name: "用户角色",
+			parentId: "role",
+			allowedResourceTypes: ["markdown"],
+			selectionMode: "none",
+		},
+		{
+			id: "character",
+			name: "系统角色",
+			parentId: "role",
+			allowedResourceTypes: ["markdown"],
+			selectionMode: "none",
+		},
+		{
+			id: "context",
+			name: "上下文位置",
+			icon: "text-align-left",
+			allowedResourceTypes: [],
+			selectionMode: "none",
+		},
+		{
+			id: "before_char",
+			name: "角色之前",
+			parentId: "context",
+			allowedResourceTypes: ["markdown"],
+			selectionMode: "none",
+		},
+		{
+			id: "after_char",
+			name: "角色之后",
+			parentId: "context",
+			allowedResourceTypes: ["markdown"],
+			selectionMode: "none",
+		},
+		{
+			id: "document",
+			name: "顶部",
+			parentId: "context",
+			allowedResourceTypes: ["markdown"],
+			selectionMode: "none",
+		},
+		{
+			id: "generation",
+			name: "生成流程",
+			icon: "workflow",
+			allowedResourceTypes: [],
+			selectionMode: "none",
+		},
+		{
 			id: "generatePath",
+			name: "主流程",
+			parentId: "generation",
 			icon: "play",
 			description: "注册生成流程入口脚本。",
 			allowedResourceTypes: ["javascript"],
 			selectionMode: "single",
 		},
 		{
-			id: "character",
-			icon: "user-round",
-			description: "汇集角色定义文档。",
-			allowedResourceTypes: ["markdown"],
-			selectionMode: "none",
-		},
-		{
-			id: "user",
-			description: "汇集用户扮演角色的信息说明。",
-			allowedResourceTypes: ["markdown"],
-			selectionMode: "none",
-		},
-		{
-			id: "before_char",
-			description: "插入到角色定义之前的补充文档。",
-			allowedResourceTypes: ["markdown"],
-			selectionMode: "none",
-		},
-		{
-			id: "after_char",
-			description: "插入到角色定义之后的补充文档。",
-			allowedResourceTypes: ["markdown"],
-			selectionMode: "none",
-		},
-		{
-			id: "document",
-			icon: "file-text",
-			description: "汇集可直接进入上下文的普通文档。",
-			allowedResourceTypes: ["markdown"],
+			id: "depth",
+			name: "深度",
+			icon: "list-numbers",
+			allowedResourceTypes: [],
 			selectionMode: "none",
 		},
 		...[0, 1, 2, 3, 4].map((depth) => ({
 			id: `depth:${depth}`,
+			name: String(depth),
+			parentId: "depth",
 			description:
 				depth === 0
 					? "将聊天消息插入到消息列表末尾。"
@@ -97,39 +132,40 @@ export function builtinSlots(): WorldSlot[] {
 		})),
 		{
 			id: "CTX_BUILD",
-			icon: "workflow",
+			name: "上下文构建",
+			parentId: "generation",
 			description: "注册生成流程可调用的上下文构建脚本。",
 			allowedResourceTypes: ["javascript"],
 			selectionMode: "single",
 		},
 		{
 			id: "CTX_PROCESS_BEFORE_REGEX",
+			name: "上下文处理器",
+			parentId: "generation",
 			description: "注册正则执行前上下文处理脚本。",
 			allowedResourceTypes: ["javascript"],
 			selectionMode: "none",
 		},
 		{
 			id: "REGEX",
+			name: "正则",
+			parentId: "generation",
 			icon: "regex",
 			description: "注册可由生成流程读取的正则规则。",
 			allowedResourceTypes: ["json"],
 			selectionMode: "none",
 		},
 		{
-			id: "DATA_INJECT",
-			icon: "database",
-			description: "注册仅由生成流程读取的 .data.json。",
-			allowedResourceTypes: ["data"],
-			selectionMode: "none",
-		},
-		{
-			id: "data_prompt",
-			description: "注册仅由上下文构建读取的 .chat.json 数据说明。",
-			allowedResourceTypes: ["chat"],
+			id: "resource",
+			name: "资源",
+			icon: "files",
+			allowedResourceTypes: [],
 			selectionMode: "none",
 		},
 		{
 			id: "toolFunction",
+			name: "工具",
+			parentId: "document-library",
 			icon: "wrench",
 			description:
 				"tools/<name>/prompt.md 自动进入上下文；同目录 tool.js 以函数名写入 ctx。",
@@ -137,28 +173,86 @@ export function builtinSlots(): WorldSlot[] {
 			selectionMode: "none",
 		},
 		{
+			id: "skill",
+			name: "skill",
+			parentId: "document-library",
+			icon: "book-open",
+			description: "注册可被 Agent 读取的技能文档。",
+			allowedResourceTypes: ["markdown"],
+			selectionMode: "none",
+		},
+		{
+			id: "document-library",
+			name: "文档",
+			icon: "file-text",
+			allowedResourceTypes: [],
+			selectionMode: "none",
+		},
+		{
 			id: "COMMAND",
+			name: "指令",
+			parentId: "resource",
 			icon: "terminal",
 			description: "注册输入框可调用的 JavaScript、Markdown 和 Vue 命令。",
 			allowedResourceTypes: ["javascript", "markdown", "component"],
 			selectionMode: "none",
 		},
 		{
-			id: "LEFTPANEL",
+			id: "panel",
+			name: "面板",
+			icon: "sidebar",
+			allowedResourceTypes: [],
+			selectionMode: "none",
+		},
+		{
+			id: "panel-top",
+			name: "顶部面板",
+			parentId: "panel",
+			icon: "panel-top",
+			description: "注册消息区上方的组件。",
+			allowedResourceTypes: ["component"],
+			selectionMode: "none",
+		},
+		{
+			id: "panel-left",
+			name: "左侧面板",
+			parentId: "panel",
 			icon: "panel-left",
 			description: "注册左侧面板组件。",
 			allowedResourceTypes: ["component"],
 			selectionMode: "none",
 		},
 		{
-			id: "RIGHTPANEL",
+			id: "panel-right",
+			name: "右侧面板",
+			parentId: "panel",
 			icon: "panel-right",
 			description: "注册右侧面板组件。",
 			allowedResourceTypes: ["component"],
 			selectionMode: "none",
 		},
 		{
+			id: "topbar-left",
+			name: "顶栏左侧",
+			parentId: "panel",
+			icon: "panel-top",
+			description: "注册顶栏左侧组件。",
+			allowedResourceTypes: ["component"],
+			selectionMode: "none",
+		},
+		{
+			id: "topbar-right",
+			name: "顶栏右侧",
+			parentId: "panel",
+			icon: "panel-top",
+			description: "注册顶栏右侧组件。",
+			allowedResourceTypes: ["component"],
+			selectionMode: "none",
+		},
+		{
 			id: "background",
+			name: "背景图片",
+			parentId: "resource",
 			icon: "image",
 			description: "注册可供选择的背景媒体。",
 			allowedResourceTypes: ["media"],
@@ -166,12 +260,36 @@ export function builtinSlots(): WorldSlot[] {
 		},
 		{
 			id: "chat",
+			name: "生成入口",
+			parentId: "generation",
 			icon: "messages-square",
 			description: "注册可供选择的聊天上下文入口文件。",
 			allowedResourceTypes: ["chat"],
 			selectionMode: "single",
 		},
 	];
+}
+
+function builtinSlotPaths() {
+	const paths = new Map<string, string>();
+	const slots = builtinSlots();
+	const pending = new Map(slots.map((slot) => [slot.id, slot]));
+	while (pending.size) {
+		for (const [id, slot] of pending) {
+			if (slot.parentId && !paths.has(slot.parentId)) continue;
+			paths.set(
+				id,
+				`${slot.parentId ? paths.get(slot.parentId) : "/self/slot"}/$${id}`,
+			);
+			pending.delete(id);
+		}
+	}
+	return paths;
+}
+
+/** Stable /self/slot contract path of a builtin global slot, e.g. `character`. */
+export function builtinGlobalSlotPath(slotId: string): string | undefined {
+	return builtinSlotPaths().get(slotId);
 }
 
 function folderFor(
@@ -212,7 +330,7 @@ function appendBuiltin(root: WorldFolderNode, folder: string, source: string) {
 		if (existing?.type === "folder") return existing;
 		const localSlot = createWorldFolder(globalSlotId, {
 			id,
-			parent: `/self/slot/$${globalSlotId}`,
+			parent: builtinSlotPaths().get(globalSlotId),
 			treeOrder: Object.keys(localSlotRoot.children).length,
 		});
 		localSlotRoot.children[id] = localSlot;
@@ -274,33 +392,57 @@ export function createBuiltinGlobalWorld() {
 	return world;
 }
 
-export function createPackageWorld(packageId: string): WorldDocument {
-	const world = createWorldDocument(`package:${packageId}`, "self");
+export function createLocalPluginWorld(localPluginId: string): WorldDocument {
+	const world = createWorldDocument(`local:${localPluginId}`, "self");
 	const slotRoot = createWorldFolder("slot", { id: "slot" });
-	for (const slot of builtinSlots()) {
-		slotRoot.children[slot.id] = createWorldFolder(slot.id, {
-			id: slot.id,
-			icon: slot.icon,
-			description: slot.description,
-			selectionMode: slot.selectionMode,
-			allowedResourceTypes: slot.allowedResourceTypes,
-		});
+	const slotFolders = new Map<string, WorldFolderNode>([["", slotRoot]]);
+	const pendingSlots = new Map(builtinSlots().map((slot) => [slot.id, slot]));
+	while (pendingSlots.size) {
+		let created = false;
+		for (const [id, slot] of pendingSlots) {
+			const parent = slotFolders.get(slot.parentId ?? "");
+			if (!parent) continue;
+			const folder = createWorldFolder(slot.name ?? slot.id, {
+				id: slot.id,
+				icon: slot.icon,
+				description: slot.description,
+				selectionMode: slot.selectionMode,
+				allowedResourceTypes: slot.allowedResourceTypes,
+			});
+			parent.children[slot.id] = folder;
+			slotFolders.set(id, folder);
+			pendingSlots.delete(id);
+			created = true;
+		}
+		if (!created) throw new Error("内置插槽层级包含循环。");
 	}
 	world.root.children[slotRoot.id] = slotRoot;
+	// 类型契约根：types/<类型|后缀>/wrapper|renderer|initer，允许覆盖既有包装或注册自定义后缀。
+	const typesRoot = createWorldFolder("types", {
+		id: "slot:types",
+		icon: "stack",
+		description:
+			"按类型覆盖包装、渲染与初始内容；直接子文件夹名注册自定义后缀。",
+		treeOrder: 1,
+	});
+	slotRoot.children[typesRoot.id] = typesRoot;
 	const localSlotRoot = createWorldFolder("localSlot", {
 		id: "localSlot",
 		treeOrder: 1,
 	});
-	for (const slot of builtinSlots()) {
-		localSlotRoot.children[`localSlot:${slot.id}`] = createWorldFolder(
-			slot.id,
-			{
-				id: `localSlot:${slot.id}`,
-				parent: `/self/slot/$${slot.id}`,
-				treeOrder: Object.keys(localSlotRoot.children).length,
-			},
-		);
-	}
 	world.root.children[localSlotRoot.id] = localSlotRoot;
+	world.root.children.definition = createWorldFile(
+		"definition.package.json",
+		{ schemaVersion: 1, name: "新角色", tags: [] },
+		{ id: "definition", treeOrder: -2 },
+	);
+	world.root.children.avatar = createWorldFile("avatar.png", "", {
+		id: "avatar",
+		treeOrder: -1,
+	});
+	world.root.children.cover = createWorldFile("cover.png", "", {
+		id: "cover",
+		treeOrder: 0,
+	});
 	return world;
 }

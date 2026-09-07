@@ -1,7 +1,7 @@
 // @ts-nocheck
 // This legacy writer is retained for the forthcoming World migration pass.
 import type { Pinia } from "pinia";
-import { usePackageStore } from "@/features/Package/package-store";
+import { useLocalPluginStore } from "@/features/Plugin/local-plugin-store";
 import { createChat, persistChat } from "@/features/Conversation/chats/chat-service";
 import { persistContainer } from "@/features/Conversation/messages/message-service";
 import { usePluginStore } from "@/features/Plugin/tree/plugin-store";
@@ -18,7 +18,7 @@ import type {
   MigratedLorebookEntry,
 } from "./migration-artifact";
 import type {
-  CharacterPackagePlacement,
+  LocalPluginPlacement,
   GlobalPluginPlacement,
   SillyTavernPlacementPlan,
 } from "./placement-plan";
@@ -30,7 +30,7 @@ import type {
 
 export interface SillyTavernImportCommitResult {
   planId: string;
-  packageIds: string[];
+  localPluginIds: string[];
   globalPluginIds: string[];
   providerIds: string[];
 }
@@ -51,7 +51,7 @@ export class PulsarSillyTavernMigrationWriter {
     ) {
       throw new Error("迁移计划仍有阻断错误，请先修复来源或资源对应关系。");
     }
-    const packages = usePackageStore(this.pinia);
+    const packages = useLocalPluginStore(this.pinia) as any;
     const plugins = usePluginStore(this.pinia);
     const models = useModelConnectionStore(this.pinia);
     await Promise.all([
@@ -107,7 +107,7 @@ export class PulsarSillyTavernMigrationWriter {
       }
       return {
         planId: plan.id,
-        packageIds: createdPackageIds,
+        localPluginIds: createdPackageIds,
         globalPluginIds: createdGlobalPluginIds,
         providerIds: createdProviderIds,
       };
@@ -118,9 +118,9 @@ export class PulsarSillyTavernMigrationWriter {
       for (const pluginId of createdGlobalPluginIds.reverse()) {
         await plugins.deletePlugin(pluginId).catch(() => undefined);
       }
-      for (const packageId of createdPackageIds.reverse()) {
+      for (const localPluginId of createdPackageIds.reverse()) {
         await conversation
-          .deletePackage(packageId, { activateFallback: false })
+          .removeLocalPlugin(localPluginId)
           .catch(() => undefined);
       }
       for (const snapshot of builtinSnapshots.values()) {
@@ -137,13 +137,13 @@ export class PulsarSillyTavernMigrationWriter {
 
   private assertNoExistingConflicts(
     plan: SillyTavernPlacementPlan,
-    packageIds: string[],
+    localPluginIds: string[],
     pluginIds: string[],
     providerIds: string[],
   ) {
     const conflicts = [
       ...plan.packages
-        .filter((item) => packageIds.includes(item.id))
+        .filter((item) => localPluginIds.includes(item.id))
         .map((item) => `角色包 ${item.id}`),
       ...plan.packages
         .filter((item) => pluginIds.includes(item.pluginId))
@@ -159,8 +159,8 @@ export class PulsarSillyTavernMigrationWriter {
       throw new Error(`目标已存在，迁移不会覆盖：${conflicts.join("、")}`);
   }
 
-  private async writePackage(placement: CharacterPackagePlacement) {
-    const packages = usePackageStore(this.pinia);
+  private async writePackage(placement: LocalPluginPlacement) {
+    const packages = useLocalPluginStore(this.pinia) as any;
     const plugins = usePluginStore(this.pinia);
     const icon = placement.artifact.avatarPath
       ? await this.readDataUrl(placement.artifact.avatarPath)
@@ -228,7 +228,7 @@ export class PulsarSillyTavernMigrationWriter {
 
   private async writeGlobalPlugin(placement: GlobalPluginPlacement) {
     const plugins = usePluginStore(this.pinia);
-    const packages = usePackageStore(this.pinia);
+    const packages = useLocalPluginStore(this.pinia) as any;
     let plugin = await plugins.createGlobalPlugin();
     plugin = (await plugins.renamePluginId(plugin.id, placement.id)) ?? plugin;
     plugin.name = placement.name;
@@ -364,7 +364,7 @@ export class PulsarSillyTavernMigrationWriter {
 
 function configureLocalPlugin(
   plugin: Plugin,
-  placement: CharacterPackagePlacement,
+  placement: LocalPluginPlacement,
 ) {
   const characterFolder = ensureFolder(plugin, "", "character");
   upsertFile(
@@ -505,12 +505,12 @@ function writeLorebookEntries(
 }
 
 async function writeConversation(
-  packageId: string,
+  localPluginId: string,
   artifact: ConversationMigrationArtifact,
   template: boolean,
 ) {
   const conversation = await createChat({
-    packageId,
+    localPluginId,
     title: artifact.title,
     isTemplate: template,
     createdAt: artifact.createdAt,

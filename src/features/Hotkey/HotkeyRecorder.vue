@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RotateCcw, X } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { normalizeKeyboardEvent } from "./hotkey-store";
 

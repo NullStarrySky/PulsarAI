@@ -2,7 +2,7 @@
 import { Loader2, Mic, Square } from "lucide-vue-next";
 import { push } from "notivue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/fluid";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/default-config-store";
 import { generateText } from "@/features/ModelConnection/services/model-ai";
 import { WebAudioRecorder } from "./providers/audio-recorder";

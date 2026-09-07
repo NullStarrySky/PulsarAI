@@ -178,7 +178,7 @@ pub(crate) async fn backup_read_resources(
     }
     let db = open_database(&path).await?;
     let snapshot = BackupResourceSnapshot {
-        packages: select_database_values(&db, "resource_packages").await?,
+        local_plugins: select_database_values(&db, "resource_worlds").await?,
         conversations: select_database_values(&db, "resource_conversations").await?,
         containers: select_database_values(&db, "resource_message_containers").await?,
         worlds: select_database_values(&db, "resource_worlds").await?,

@@ -48,7 +48,7 @@ async function startPlayback(source: string) {
  * naturally cannot reuse a stale recording.
  */
 export async function playMessageSpeech(
-	packageId: string,
+	localPluginId: string,
 	messageId: string,
 	text: string,
 	voice = "",
@@ -56,8 +56,8 @@ export async function playMessageSpeech(
 	const trimmed = text.trim();
 	if (!trimmed) throw new Error("没有可朗读的内容。");
 
-	if (!packageId) throw new Error("当前会话没有角色包。");
-	const world = useWorld({ packageId, applyReplay: false });
+	if (!localPluginId) throw new Error("当前会话没有本地 Plugin。");
+	const world = useWorld({ localPluginId, applyReplay: false });
 	await world.mkdir("/self/temp");
 
 	const model = String((await getSpeechModel()) ?? "default");

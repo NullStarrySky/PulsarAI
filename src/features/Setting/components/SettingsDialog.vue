@@ -1,29 +1,30 @@
 <script setup lang="ts">
-import interact from "interactjs";
 import { Menu, Search, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import {
 	computed,
-	nextTick,
-	onBeforeUnmount,
 	ref,
-	watch,
 	watchEffect,
 } from "vue";
-import { Segmented } from "@/components/common/segmented";
-import { Button } from "@/components/ui/button";
 import {
+	Button,
 	Dialog,
 	DialogClose,
 	DialogContent,
 	DialogDescription,
 	DialogTitle,
-} from "@/components/ui/dialog";
+	Dropdown,
+	MenuItem,
+	Tabs,
+	TabsList,
+	TabItem,
+} from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
 import { useLayoutStore } from "@/features/UI/layout-store";
 import { cn } from "@/lib/utils";
+import { useFloatingSurface } from "@/features/UI/FloatingSurface";
 import {
 	ensureDefaultSettingPages,
 	getSettingPage,
@@ -40,8 +41,8 @@ const activePageId = ref("");
 const activeTabId = ref("");
 const sidebarOpen = ref(true);
 const settingsSearch = ref("");
-const dialogOffset = ref({ x: 0, y: 0 });
-let dialogInteractable: ReturnType<typeof interact> | null = null;
+const dialog = ref<HTMLElement | { $el?: unknown } | null>(null);
+const floating = useFloatingSurface({ surfaceId: "settings", open: settingsOpen, element: dialog, initialSize: { width: 1040, height: 680 }, minSize: { width: 620, height: 440 } });
 
 const pages = computed(() => getSettingPages());
 const activePage = computed(
@@ -67,14 +68,9 @@ const filteredPages = computed(() => {
 			page.tabs?.some((tab) => tab.title.toLocaleLowerCase().includes(keyword)),
 	);
 });
-const dialogStyle = computed(() => ({
-	top: "50%",
-	left: "50%",
-	translate: "none",
-	width: isMobileLayout.value ? "100vw" : "min(1160px, calc(100vw - 28px))",
-	height: isMobileLayout.value ? "100dvh" : "min(780px, 90vh)",
-	transform: `translate(calc(-50% + ${dialogOffset.value.x}px), calc(-50% + ${dialogOffset.value.y}px))`,
-}));
+const activePageIndex = computed(() =>
+	filteredPages.value.findIndex((p) => p.meta.id === activePage.value?.meta.id),
+);
 
 watchEffect(() => {
 	if (!activePageId.value && pages.value[0])
@@ -89,38 +85,6 @@ watchEffect(() => {
 	if (settingsOpen.value && isMobileLayout.value) sidebarOpen.value = false;
 });
 
-watch(
-	[settingsOpen, isMobileLayout],
-	async ([open, mobile]) => {
-		teardownDrag();
-		dialogOffset.value = { x: 0, y: 0 };
-		if (!open || mobile) return;
-		await nextTick();
-		const element = document.querySelector<HTMLElement>(
-			"[data-settings-dialog]",
-		);
-		if (!element) return;
-		dialogInteractable = interact(element).draggable({
-			allowFrom: "[data-settings-drag-handle]",
-			ignoreFrom:
-				"button, input, textarea, select, [role='tab'], [role='combobox']",
-			listeners: {
-				move(event) {
-					dialogOffset.value = {
-						x: dialogOffset.value.x + event.dx,
-						y: dialogOffset.value.y + event.dy,
-					};
-				},
-			},
-		});
-	},
-	{ immediate: true },
-);
-
-function teardownDrag() {
-	dialogInteractable?.unset();
-	dialogInteractable = null;
-}
 
 function selectPage(pageId: string) {
 	activePageId.value = pageId;
@@ -129,15 +93,16 @@ function selectPage(pageId: string) {
 	if (isMobileLayout.value) sidebarOpen.value = false;
 }
 
-onBeforeUnmount(teardownDrag);
 </script>
 
 <template>
   <Dialog :open="settingsOpen" @update:open="layout.setSettingsOpen">
     <DialogContent
+      ref="dialog"
       data-settings-dialog
+      custom-position
       :show-close-button="false"
-      :style="dialogStyle"
+      :style="floating.style"
       class="flex max-w-none flex-col gap-0 overflow-hidden rounded-2xl border-border/70 bg-popover p-0 shadow-2xl sm:max-w-none mobile:rounded-none mobile:border-0"
       @open-auto-focus.prevent
     >
@@ -166,8 +131,8 @@ onBeforeUnmount(teardownDrag);
         >
           <nav class="flex h-full min-h-0 flex-col">
             <div class="relative shrink-0 px-4 pb-3 pt-4">
-              <div data-settings-drag-handle class="absolute inset-x-0 top-0 h-3 cursor-grab active:cursor-grabbing" />
-              <div class="mb-3 flex h-7 items-center gap-2 px-1">
+              <div data-floating-drag-handle class="absolute inset-x-0 top-0 h-14 cursor-grab active:cursor-grabbing" />
+              <div data-floating-drag-handle class="mb-3 flex h-7 cursor-grab items-center gap-2 px-1 active:cursor-grabbing">
                 <h2 class="text-base font-semibold">设置</h2>
                 <kbd class="rounded-md bg-background/65 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">Ctrl+,</kbd>
               </div>
@@ -178,31 +143,34 @@ onBeforeUnmount(teardownDrag);
             </div>
 
             <ScrollArea class="min-h-0 flex-1">
-              <div class="flex flex-col gap-1 px-3 pb-4">
-                <Button
-                  v-for="page in filteredPages"
-                  :key="page.meta.id"
-                  :class="cn(
-                    'h-10 justify-start rounded-xl px-3 text-sm',
-                    activePage?.meta.id === page.meta.id && 'bg-background text-foreground shadow-sm hover:bg-background',
-                  )"
-                  :variant="activePage?.meta.id === page.meta.id ? 'secondary' : 'ghost'"
-                  @click="selectPage(page.meta.id)"
+              <div class="px-2 pb-4">
+                <Dropdown
+                  v-if="filteredPages.length > 0"
+                  :checked-index="activePageIndex"
+                  :shadow-level="0"
+                  class="w-full bg-transparent border-0 shadow-none gap-0.5"
                 >
-                  <component :is="page.meta.icon" data-icon="inline-start" />
-                  {{ page.meta.title }}
-                </Button>
-                <p v-if="filteredPages.length === 0" class="px-3 py-10 text-center text-xs text-muted-foreground">没有匹配的设置</p>
+                  <MenuItem
+                    v-for="(page, idx) in filteredPages"
+                    :key="page.meta.id"
+                    :index="idx"
+                    :icon="page.meta.icon"
+                    :label="page.meta.title"
+                    :checked="activePage?.meta.id === page.meta.id"
+                    @select="selectPage(page.meta.id)"
+                  />
+                </Dropdown>
+                <p v-else class="px-3 py-10 text-center text-xs text-muted-foreground">没有匹配的设置</p>
               </div>
             </ScrollArea>
           </nav>
         </aside>
 
         <main class="relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-background/30">
-          <header class="relative shrink-0 px-7 pb-3 pt-5 mobile:pl-16 mobile:pr-4">
-            <div data-settings-drag-handle class="absolute inset-x-0 top-0 h-3 cursor-grab active:cursor-grabbing" />
+          <header data-floating-drag-handle class="relative shrink-0 cursor-grab px-7 pb-3 pt-5 active:cursor-grabbing mobile:pl-16 mobile:pr-4">
+            <div data-floating-drag-handle class="absolute inset-x-0 top-0 h-14 cursor-grab active:cursor-grabbing" />
             <div class="flex min-h-9 items-center justify-between gap-4">
-              <h1 class="truncate text-xl font-semibold tracking-tight">{{ activePage?.meta.title ?? "设置" }}</h1>
+              <h1 data-floating-drag-handle class="truncate text-xl font-semibold tracking-tight cursor-grab active:cursor-grabbing">{{ activePage?.meta.title ?? "设置" }}</h1>
               <DialogClose as-child>
                 <Button variant="ghost" size="icon" class="size-9 rounded-full text-muted-foreground" title="关闭设置">
                   <X />
@@ -210,12 +178,20 @@ onBeforeUnmount(teardownDrag);
               </DialogClose>
             </div>
 
-            <Segmented
+            <Tabs
               v-if="activeTabs.length > 1"
               v-model="activeTabId"
               class="mt-4"
-              :options="activeTabs.map((tab) => ({ value: tab.id, label: tab.title }))"
-            />
+            >
+              <TabsList>
+                <TabItem
+                  v-for="tab in activeTabs"
+                  :key="tab.id"
+                  :value="tab.id"
+                  :label="tab.title"
+                />
+              </TabsList>
+            </Tabs>
           </header>
 
           <Button
@@ -235,7 +211,7 @@ onBeforeUnmount(teardownDrag);
 
           <div
             v-if="!isMobileLayout"
-            data-settings-drag-handle
+            data-floating-drag-handle
             class="absolute inset-x-0 bottom-0 z-10 h-4 cursor-grab active:cursor-grabbing"
             aria-hidden="true"
           />

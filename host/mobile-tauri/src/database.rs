@@ -217,7 +217,7 @@ pub(crate) async fn database_select_by_field(
     let db = app_db(&app, &state).await?;
     let table = normalize_table_name(&table)?;
     let field = match field.as_str() {
-        "packageId" | "conversationid" => field,
+        "localPluginId" | "conversationid" => field,
         _ => return Err("unsupported resource field".to_owned()),
     };
     let sql = format!("SELECT resource_key, value FROM {table} WHERE value.{field} = $value ORDER BY resource_key");
@@ -333,8 +333,6 @@ pub(crate) async fn database_reset_character_data(
          DELETE resource_conversation_memory_segments; \
          DELETE resource_message_containers; \
          DELETE resource_conversations; \
-         DELETE resource_package_categories; \
-         DELETE resource_packages; \
          DELETE resource_worlds; \
          COMMIT TRANSACTION;",
         )

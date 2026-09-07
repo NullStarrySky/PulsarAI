@@ -36,6 +36,7 @@ interface AppearanceSnapshot {
 	frameCustomColor: string;
 	editorFontSize: number;
 	editorLineHeight: number;
+	shapeVariant: "square" | "rounded" | "pill";
 }
 
 const storageKey = "pulsarai:appearance:v1";
@@ -64,6 +65,9 @@ export const useAppearanceStore = defineStore("appearance", () => {
 	const frameCustomColor = ref(snapshot.frameCustomColor ?? "#1e1e24");
 	const editorFontSize = ref(snapshot.editorFontSize ?? 14);
 	const editorLineHeight = ref(snapshot.editorLineHeight ?? 16);
+	const shapeVariant = ref<"square" | "rounded" | "pill">(
+		snapshot.shapeVariant ?? "rounded",
+	);
 
 	const themes = computed(() => [...builtInThemes, ...customThemes.value]);
 	const fonts = computed(() => [...builtInFonts, ...customFonts.value]);
@@ -98,6 +102,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
 			frameCustomColor,
 			editorFontSize,
 			editorLineHeight,
+			shapeVariant,
 		],
 		() => {
 			persistSnapshot({
@@ -118,6 +123,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
 				frameCustomColor: frameCustomColor.value,
 				editorFontSize: editorFontSize.value,
 				editorLineHeight: editorLineHeight.value,
+				shapeVariant: shapeVariant.value,
 			});
 			applyAppearance();
 		},
@@ -214,6 +220,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
 		frameCustomColor,
 		editorFontSize,
 		editorLineHeight,
+		shapeVariant,
 		themes,
 		uiScale,
 		importFont,
@@ -340,6 +347,7 @@ function readSnapshot(): AppearanceSnapshot {
 		frameCustomColor: "#1e1e24",
 		editorFontSize: 14,
 		editorLineHeight: 16,
+		shapeVariant: "rounded",
 	};
 	if (typeof localStorage === "undefined") {
 		return fallback;
@@ -384,6 +392,12 @@ function readSnapshot(): AppearanceSnapshot {
 				typeof parsed.editorLineHeight === "number"
 					? parsed.editorLineHeight
 					: fallback.editorLineHeight,
+			shapeVariant:
+				parsed.shapeVariant === "square" ||
+				parsed.shapeVariant === "pill" ||
+				parsed.shapeVariant === "rounded"
+					? parsed.shapeVariant
+					: "rounded",
 		};
 	} catch {
 		return fallback;

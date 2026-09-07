@@ -25,6 +25,16 @@ import {
 	pathForTail,
 	persistContainer,
 } from "./messages/message-service";
+import {
+	closeInterval as persistIntervalClose,
+	evaluateIntervals,
+	getIntervalProjection,
+	getIntervalSpans,
+	getOpenIntervals,
+	openInterval as persistIntervalOpen,
+	type IntervalProjection,
+	type OpenIntervalInput,
+} from "./messages/interval-service";
 import type {
 	AdditionalParts,
 	ChatMessage,
@@ -45,7 +55,7 @@ export interface MessageBubbleViewModel {
 	branchCount: number;
 	thinking: unknown[];
 	attachments: unknown[];
-	worldUpdates: unknown[];
+	pulses: import("@/features/Plugin/tree/world-update").Pulse[];
 	hasPluginChanges: boolean;
 	resourceSummary: string;
 	messageTime: string;
@@ -59,6 +69,8 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 
 	const chatId = computed(() => toValue(chatIdSource));
 	const generating = computed(() => (chatId.value ? isChatGenerating(chatId.value) : false));
+	const currentContainers = () =>
+		containers.value as unknown as ChatMessageContainer[];
 
 	async function ensureLoaded() {
 		const id = chatId.value;
@@ -85,20 +97,23 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		{ immediate: true },
 	);
 
-	const activePath = computed(() => {
+	const activePath = computed<ChatMessageContainer[]>(() => {
 		const tailId = chat.value?.lastContainerId;
-		return pathForTail(containers.value, tailId);
+		return pathForTail(currentContainers(), tailId);
 	});
+	const intervalProjection = computed<IntervalProjection>(() =>
+		evaluateIntervals(activePath.value),
+	);
 
 	const activePathView = computed<MessageBubbleViewModel[]>(() => {
-		const pkgId = chat.value?.packageId;
-		const cMap = new Map(containers.value.map((item) => [item.id, item]));
+		const localPluginId = chat.value?.localPluginId;
+		const cMap = new Map(currentContainers().map((item) => [item.id, item]));
 		return activePath.value.map((container) => {
 			const parent = container.previousContainer
 				? cMap.get(container.previousContainer) ?? null
 				: null;
 			const actions = useMessageContainer(container, {
-				packageId: pkgId,
+				localPluginId,
 				parentContainer: parent,
 				onSwitchVersion: async (cId, idx) => switchVersion(cId, idx),
 				onUpdateContent: async (content) => updateMessage(container.id, content),
@@ -119,7 +134,7 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 				branchCount: actions.branchCount.value,
 				thinking: actions.thinking.value,
 				attachments: actions.attachments.value,
-				worldUpdates: actions.worldUpdates.value,
+				pulses: actions.pulses.value,
 				hasPluginChanges: actions.hasPluginChanges.value,
 				resourceSummary: actions.resourceSummary.value,
 				messageTime: actions.messageTime.value,
@@ -130,14 +145,16 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 
 	const composerDraft = computed<ComposerDraft>({
 		get: () => {
+			const current = chat.value as unknown as Conversation | null;
 			return (
-				chat.value?.composerDraft ?? createDefaultComposerDraft(chatId.value)
+				current?.composerDraft ?? createDefaultComposerDraft(chatId.value)
 			);
 		},
 		set: (value: ComposerDraft) => {
-			if (!chat.value) return;
-			chat.value.composerDraft = value;
-			void persistChat(chat.value);
+			const current = chat.value as unknown as Conversation | null;
+			if (!current) return;
+			current.composerDraft = value;
+			void persistChat(current);
 		},
 	});
 
@@ -178,9 +195,9 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		previousContainer?: string | null;
 	}) {
 		const container = createContainer(input);
-		containers.value.push(container);
+		currentContainers().push(container);
 		if (input.previousContainer) {
-			const parent = containers.value.find(
+			const parent = currentContainers().find(
 				(item) => item.id === input.previousContainer,
 			);
 			if (parent) {
@@ -206,7 +223,7 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 	}
 
 	async function appendAssistantVersion(containerId: string) {
-		const target = containers.value.find((item) => item.id === containerId);
+		const target = currentContainers().find((item) => item.id === containerId);
 		if (!target || target.role !== "assistant") return null;
 		const version = createMessage();
 		target.content.push(version);
@@ -216,14 +233,14 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 	}
 
 	async function switchVersion(containerId: string, index: number) {
-		const target = containers.value.find((item) => item.id === containerId);
+		const target = currentContainers().find((item) => item.id === containerId);
 		if (!target || index < 0 || index >= target.content.length) return;
 		target.activeMessage = index;
 		await persistContainer(target);
 	}
 
 	async function updateMessage(containerId: string, content: string) {
-		const target = containers.value.find((item) => item.id === containerId);
+		const target = currentContainers().find((item) => item.id === containerId);
 		if (!target) return;
 		const msg = target.content[target.activeMessage ?? 0];
 		if (msg) {
@@ -233,11 +250,19 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		}
 	}
 
+	async function openInterval(messageVersion: ChatMessage, input: OpenIntervalInput) {
+		return persistIntervalOpen(currentContainers(), messageVersion, input);
+	}
+
+	async function closeInterval(messageVersion: ChatMessage, intervalId: string) {
+		return persistIntervalClose(currentContainers(), messageVersion, intervalId);
+	}
+
 	async function send(
 		extraParts: AdditionalParts[] = [],
 		overrideRole?: Role,
 	) {
-		const current = chat.value;
+		const current = chat.value as unknown as Conversation | null;
 		const currentDraft = composerDraft.value;
 		const activeIdx = currentDraft.activeMessage ?? 0;
 		const activeMsg = currentDraft.content[activeIdx];
@@ -273,7 +298,7 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 			await generateRequestedAssistantReply({
 				chatId: current.id,
 				containerId: requestedReply.id,
-				activePath: pathForTail(containers.value, container.id),
+				activePath: pathForTail(currentContainers(), container.id),
 				prompt: content,
 			});
 		} else {
@@ -288,14 +313,14 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		container: ChatMessageContainer,
 		triggerGenerate = false,
 	) {
-		const current = chat.value;
+		const current = chat.value as unknown as Conversation | null;
 		if (!current) return;
 		current.lastContainerId = container.id;
 		current.updatedAt = new Date().toISOString();
 		await persistChat(current);
 
 		if (triggerGenerate && container.role === "assistant") {
-			const path = pathForTail(containers.value, container.previousContainer);
+			const path = pathForTail(currentContainers(), container.previousContainer);
 			const promptContainer = path[path.length - 1];
 			await generateRequestedAssistantReply({
 				chatId: current.id,
@@ -307,8 +332,8 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 	}
 
 	async function regenerate(containerId: string) {
-		const current = chat.value;
-		const target = containers.value.find((item) => item.id === containerId);
+		const current = chat.value as unknown as Conversation | null;
+		const target = currentContainers().find((item) => item.id === containerId);
 		if (
 			!current ||
 			isChatGenerating(current.id) ||
@@ -321,7 +346,7 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		const version = await appendAssistantVersion(containerId);
 		if (!version) return null;
 
-		const path = pathForTail(containers.value, target.previousContainer);
+		const path = pathForTail(currentContainers(), target.previousContainer);
 		const promptContainer = path[path.length - 1];
 		await generateRequestedAssistantReply({
 			chatId: current.id,
@@ -333,11 +358,11 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 	}
 
 	async function switchBranch(containerId: string, branchId: string) {
-		const current = chat.value;
-		const target = containers.value.find((item) => item.id === containerId);
+		const current = chat.value as unknown as Conversation | null;
+		const target = currentContainers().find((item) => item.id === containerId);
 		if (!current || !target || !target.previousContainer) return;
 
-		const parent = containers.value.find(
+		const parent = currentContainers().find(
 			(item) => item.id === target.previousContainer,
 		);
 		if (!parent || !parent.availableNextContainer.includes(branchId)) return;
@@ -346,11 +371,11 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		await persistContainer(parent);
 
 		// 遍历到目标分支末端
-		let tail: ChatMessageContainer | undefined = containers.value.find(
+		let tail: ChatMessageContainer | undefined = currentContainers().find(
 			(item) => item.id === branchId,
 		);
 		while (tail?.activeNextContainer) {
-			const next = containers.value.find(
+			const next = currentContainers().find(
 				(item) => item.id === tail?.activeNextContainer,
 			);
 			if (!next) break;
@@ -365,8 +390,8 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 	}
 
 	async function createBranch(containerId: string) {
-		const current = chat.value;
-		const target = containers.value.find((item) => item.id === containerId);
+		const current = chat.value as unknown as Conversation | null;
+		const target = currentContainers().find((item) => item.id === containerId);
 		if (!current || !target) return null;
 
 		const branch = await append({
@@ -381,14 +406,14 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 	}
 
 	async function deleteMessage(containerId: string) {
-		const current = chat.value;
+		const current = chat.value as unknown as Conversation | null;
 		if (!current) return;
-		const target = containers.value.find((item) => item.id === containerId);
+		const target = currentContainers().find((item) => item.id === containerId);
 		if (!target) return;
 
 		const parentId = target.previousContainer;
 		const parent = parentId
-			? containers.value.find((item) => item.id === parentId)
+			? currentContainers().find((item) => item.id === parentId)
 			: null;
 
 		if (parent) {
@@ -402,7 +427,8 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		}
 
 		await deleteContainer(containerId);
-		containers.value = containers.value.filter((item) => item.id !== containerId);
+		(containers as unknown as { value: ChatMessageContainer[] }).value =
+			currentContainers().filter((item) => item.id !== containerId);
 
 		if (current.lastContainerId === containerId) {
 			current.lastContainerId = parentId ?? null;
@@ -429,7 +455,7 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 				prompt: input.prompt,
 			});
 		} catch (error) {
-			const target = containers.value.find((item) => item.id === input.containerId);
+			const target = currentContainers().find((item) => item.id === input.containerId);
 			if (target) {
 				const activeMsg = target.content[target.activeMessage ?? 0];
 				if (activeMsg) {
@@ -447,6 +473,7 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		chat,
 		containers,
 		activePath,
+		intervalProjection,
 		activePathView,
 		composerDraft,
 		composerDraftContent,
@@ -461,5 +488,10 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		switchVersion,
 		switchBranch,
 		updateMessage,
+		openInterval,
+		closeInterval,
+		getOpenIntervals,
+		getIntervalSpans,
+		getIntervalProjection,
 	};
 }

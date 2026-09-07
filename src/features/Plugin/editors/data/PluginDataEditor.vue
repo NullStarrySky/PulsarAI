@@ -7,8 +7,8 @@ import {
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+	Switch,
+} from "@/components/fluid";
 import { Textarea } from "@/components/ui/textarea";
 import {
 	type PluginDataDefinition,

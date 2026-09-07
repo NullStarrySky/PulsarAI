@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Brain, Check, ChevronDown } from "lucide-vue-next";
 import { computed, onMounted } from "vue";
-import { Button } from "@/components/ui/button";
 import {
+	Button,
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuGroup,
@@ -12,8 +12,8 @@ import {
 	DropdownMenuSubContent,
 	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Slider } from "@/components/ui/slider";
+	Slider,
+} from "@/components/fluid";
 import { type ModelApiType, supportsFeatureService } from "../model-provider";
 import {
 	createModelReference,
@@ -104,9 +104,10 @@ function clearModel() {
 	emit("update:modelValue", "");
 }
 
-function updateThinking(values: number[] | undefined) {
+function updateThinking(values: number[] | number | undefined) {
 	if (!parsed.value.providerId || !parsed.value.modelId) return;
-	const level = thinkingLevelOptions[Math.round(values?.[0] ?? 0)]?.value as
+	const index = Array.isArray(values) ? values[0] : values;
+	const level = thinkingLevelOptions[Math.round(index ?? 0)]?.value as
 		| ThinkingLevel
 		| undefined;
 	if (!level) return;

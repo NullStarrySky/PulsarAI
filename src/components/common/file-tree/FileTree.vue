@@ -40,6 +40,8 @@ export interface FileTreeNode {
 	suffix?: string;
 	selectableResource?: boolean;
 	resourceSelected?: boolean;
+	selectionMode?: "none" | "single" | "multiple";
+	disableRowOpen?: boolean;
 	action?: FileTreeActions;
 	children?: FileTreeNode[];
 	/** Opaque feature data; the tree itself never interprets it. */
@@ -59,6 +61,7 @@ const emit = defineEmits<{
 	"update:modelValue": [value: string];
 	"update:expanded": [value: string[]];
 	select: [node: FileTreeNode];
+	open: [node: FileTreeNode];
 	toggle: [node: FileTreeNode, expanded: boolean];
 	"toggle-resource": [node: FileTreeNode, selected: boolean];
 	action: [node: FileTreeNode, action: FileTreeAction, value?: string];
@@ -101,6 +104,7 @@ function runAction(node: FileTreeNode, action: FileTreeAction, value?: string) {
         :selected-id="modelValue"
         :expanded="expandedSet"
         @select="select"
+        @open="emit('open', $event)"
         @toggle="toggle"
         @toggle-resource="toggleResource"
         @action="runAction"

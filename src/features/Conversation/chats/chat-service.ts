@@ -35,13 +35,13 @@ export async function loadChat(id: string): Promise<Conversation | null> {
 	return selectOne<Conversation>(chatTable, id);
 }
 
-export async function loadChatsForPackage(
-	packageId: string,
+export async function loadChatsForLocalPlugin(
+	localPluginId: string,
 ): Promise<Conversation[]> {
 	const records = await selectByField<Conversation>(
 		chatTable,
-		"packageId",
-		packageId,
+		"localPluginId",
+		localPluginId,
 	);
 	return records.map((record) => record.value);
 }
@@ -56,21 +56,23 @@ export async function persistChat(chat: Conversation): Promise<void> {
 }
 
 export async function createChat(options: {
-	packageId: string;
+	localPluginId: string;
 	title?: string;
 	isTemplate?: boolean;
+	lifetime?: Conversation["lifetime"];
 }): Promise<Conversation> {
 	const now = new Date().toISOString();
 	const id = crypto.randomUUID();
 	const chat: Conversation = {
 		id,
-		packageId: options.packageId,
+		localPluginId: options.localPluginId,
 		title: options.title || "新对话",
 		rootContainerId: null,
 		lastContainerId: null,
 		composerDraft: createDefaultComposerDraft(id),
 		createdAt: now,
 		updatedAt: now,
+		lifetime: options.lifetime ?? "persistent",
 		pinned: false,
 		isTemplate: options.isTemplate ?? false,
 	};
@@ -96,4 +98,12 @@ export async function updateChat(
 export async function deleteChatCascade(chatId: string): Promise<void> {
 	await deleteContainersForChat(chatId);
 	await remove(chatTable, chatId);
+}
+
+/** Removes persisted app-lifetime conversations left by a previous process. */
+export async function cleanupAppLifetimeChats(): Promise<number> {
+	const chats = await selectAllChats();
+	const temporary = chats.filter((chat) => chat.lifetime === "app");
+	for (const chat of temporary) await deleteChatCascade(chat.id);
+	return temporary.length;
 }

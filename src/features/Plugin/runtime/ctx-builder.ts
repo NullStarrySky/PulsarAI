@@ -1,7 +1,7 @@
 import { toRaw } from "vue";
 import {
 	loadChat,
-	loadChatsForPackage,
+	loadChatsForLocalPlugin,
 	persistChat,
 } from "@/features/Conversation/chats/chat-service";
 import {
@@ -15,12 +15,16 @@ import {
 	pathForTail,
 	persistContainer,
 } from "@/features/Conversation/messages/message-service";
+import {
+	evaluateIntervals,
+	type IntervalProjection,
+} from "@/features/Conversation/messages/interval-service";
 import type {
 	ChatMessage,
 	ChatMessageContainer,
 	Role,
 } from "@/features/Conversation/messages/message-types";
-import { usePackageStore } from "@/features/Package/package-store";
+import { useLocalPluginStore } from "@/features/Plugin/local-plugin-store";
 import {
 	type AgentOutputContainer,
 	createAgentResourceProvider,
@@ -61,6 +65,7 @@ export interface CtxBuilderConfig {
 export interface CtxBuilderResult {
 	chat?: Conversation;
 	activePath?: ChatMessageContainer[];
+	intervals?: IntervalProjection;
 	container?: ChatMessageContainer;
 	message?: ChatMessage;
 	selfApi?: ReturnType<typeof createWorldSelfApi>;
@@ -93,25 +98,22 @@ function conversationManagementApi(conversationId: string) {
 		list: async () => {
 			const chat = await loadChat(conversationId);
 			return chat
-				? (await loadChatsForPackage(chat.packageId)).map(snapshot)
+				? (await loadChatsForLocalPlugin(chat.localPluginId)).map(snapshot)
 				: [];
 		},
 	});
 }
 
 function roleManagementApi(roleId: string) {
-	const packages = usePackageStore();
+	const localPlugins = useLocalPluginStore();
 	return Object.freeze({
 		read: () => {
-			const role = packages.packages.find((item) => item.id === roleId);
+			const role = localPlugins.localPlugins.find((item) => item.id === roleId);
 			return role ? snapshot(role) : null;
 		},
-		list: () => packages.sortedPackages.map(snapshot),
-		create: (input?: Parameters<typeof packages.create>[0]) =>
-			packages.create(input),
-		update: (patch: Parameters<typeof packages.update>[1]) =>
-			packages.update(roleId, patch),
-		remove: () => packages.remove(roleId),
+		list: () => localPlugins.localPlugins.map(snapshot),
+		create: () => localPlugins.create(),
+		remove: () => localPlugins.removeLocalPlugin(roleId),
 	});
 }
 
@@ -229,14 +231,17 @@ export async function ctxbuilder(
 		if (!chat) throw new Error("会话不存在。");
 		const containers = await loadContainersForChat(conversationId);
 		const activePath = pathForTail(containers, chat.lastContainerId);
+		const intervals = evaluateIntervals(activePath);
 		result.chat = chat;
 		result.activePath = activePath;
+		result.intervals = intervals;
 		if (chatFeature) {
 			const modelMessages = modelMessagesFromPath(activePath);
 			Object.assign(ctx, {
 				chat: modelMessages,
 				CHAT: modelMessages,
 				activePath,
+				intervals,
 			});
 		}
 		if (conversationFeature)
@@ -245,16 +250,16 @@ export async function ctxbuilder(
 				conversations: conversationManagementApi(conversationId),
 			});
 		if (roleFeature) {
-			const roleId = String(ctx.roleId ?? chat.packageId).trim();
-			const role = usePackageStore().packages.find(
+			const roleId = String(ctx.roleId ?? chat.localPluginId).trim();
+			const role = useLocalPluginStore().localPlugins.find(
 				(item) => item.id === roleId,
 			);
 			if (!role) throw new Error("角色不存在。");
 			Object.assign(ctx, {
 				roleId,
 				role: snapshot(role),
-				packageId: role.id,
-				package: snapshot(role),
+				localPluginId: role.id,
+				plugin: snapshot(role),
 				roles: roleManagementApi(role.id),
 			});
 		}
@@ -314,7 +319,7 @@ export async function ctxbuilder(
 	if (pluginFeature) {
 		const selfApi = createWorldSelfApi(sourcePath, {
 			conversationId,
-			packageId: result.chat?.packageId,
+			localPluginId: result.chat?.localPluginId,
 			container: result.container,
 			messageVersion: result.message,
 		});

@@ -3,16 +3,25 @@ import * as LucideIcons from "lucide-vue-next";
 import {
 	Check,
 	ChevronRight,
-	Circle,
-	CircleCheck,
+	ExternalLink,
 	File,
 	Folder,
 	FolderOpen,
 	MoreHorizontal,
 	Plus,
 } from "lucide-vue-next";
-import { type Component, computed, ref } from "vue";
-import { Button } from "@/components/ui/button";
+import { type Component, computed, nextTick, ref } from "vue";
+import {
+	Button,
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuSeparator,
+	DropdownMenuSub,
+	DropdownMenuSubContent,
+	DropdownMenuSubTrigger,
+	DropdownMenuTrigger,
+} from "@/components/fluid";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -23,16 +32,6 @@ import {
 	ContextMenuSubTrigger,
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuSeparator,
-	DropdownMenuSub,
-	DropdownMenuSubContent,
-	DropdownMenuSubTrigger,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import type { FileTreeAction, FileTreeNode } from "./FileTree.vue";
 import FileTreeBranch from "./FileTreeBranch.vue";
@@ -44,6 +43,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
 	select: [node: FileTreeNode];
+	open: [node: FileTreeNode];
 	toggle: [node: FileTreeNode];
 	"toggle-resource": [node: FileTreeNode, selected: boolean];
 	action: [node: FileTreeNode, action: FileTreeAction, value?: string];
@@ -57,15 +57,14 @@ const actions = computed(() =>
 );
 const resourceMeta = computed(() => {
 	if (!isFolder.value) return null;
-	const childCount = children.value.length;
 	const selectionMode = props.node.data?.selectionMode;
 	if (!selectionMode || selectionMode === "none")
-		return childCount ? `${childCount} 项` : "";
+		return "";
 	const selected = children.value.filter((child) => child.resourceSelected);
 	if (selectionMode === "multiple")
-		return `${childCount} 项 · ${selected.length} 已选`;
+		return selected.length ? `${selected.length} 已选` : "";
 	const selectedNode = selected[0];
-	if (!selectedNode) return "未选择";
+	if (!selectedNode) return "";
 	const duplicateName = children.value.some(
 		(child) => child !== selectedNode && child.name === selectedNode.name,
 	);
@@ -73,11 +72,57 @@ const resourceMeta = computed(() => {
 		? `${selectedNode.prefix} · ${selectedNode.name}`
 		: selectedNode.name;
 });
-const inputValues = ref<Record<string, string>>({});
+
+const isRenaming = ref(false);
+const renameDraft = ref("");
+const renameInputRef = ref<HTMLInputElement | null>(null);
+
+function startRename() {
+	renameDraft.value = props.node.name;
+	isRenaming.value = true;
+	nextTick(() => {
+		if (renameInputRef.value) {
+			renameInputRef.value.focus();
+			const dot = props.node.type === "file" ? props.node.name.lastIndexOf(".") : -1;
+			if (dot > 0) renameInputRef.value.setSelectionRange(0, dot);
+			else renameInputRef.value.select();
+		}
+	});
+}
+
+function commitRename() {
+	if (!isRenaming.value) return;
+	isRenaming.value = false;
+	const name = renameDraft.value.trim();
+	if (name && name !== props.node.name) {
+		const renameAct = props.node.action?.rename ?? { id: "rename", name: "重命名" };
+		emit("action", props.node, renameAct, name);
+	}
+}
+
+function cancelRename() {
+	isRenaming.value = false;
+}
 
 function activate() {
+	if (isRenaming.value) return;
 	emit("select", props.node);
-	if (isFolder.value) emit("toggle", props.node);
+	if (isFolder.value) {
+		emit("toggle", props.node);
+	} else if (props.node.selectableResource) {
+		toggleResource(props.node, !props.node.resourceSelected);
+	} else if (!props.node.disableRowOpen) {
+		emit("open", props.node);
+	}
+}
+
+function handleRowClick(e: MouseEvent) {
+	if (isRenaming.value) return;
+	const target = e.target as HTMLElement | null;
+	if (target?.closest(".file-tree-actions, .file-tree-resource-toggle, .file-tree-open-button, input, button")) {
+		return;
+	}
+	activate();
 }
 
 function iconFor(name: string | undefined, fallback: Component) {
@@ -104,10 +149,10 @@ function isVisibleAction(
 	return action !== undefined && matchesAction(action);
 }
 
+const inputValues = ref<Record<string, string>>({});
 function inputKey(action: FileTreeAction) {
 	return `${props.node.id}:${action.id}`;
 }
-
 function inputValue(action: FileTreeAction) {
 	return (
 		inputValues.value[inputKey(action)] ??
@@ -115,12 +160,15 @@ function inputValue(action: FileTreeAction) {
 		""
 	);
 }
-
 function setInputValue(action: FileTreeAction, value: string) {
 	inputValues.value[inputKey(action)] = value;
 }
 
 function runAction(action: FileTreeAction, value?: string) {
+	if (action.id === "rename") {
+		startRename();
+		return;
+	}
 	if (action.input) delete inputValues.value[inputKey(action)];
 	emit("action", props.node, action, value);
 }
@@ -139,41 +187,115 @@ function forwardAction(
     <ContextMenu>
       <ContextMenuTrigger as-child>
         <div
-          class="file-tree-row group/tree-row"
+          class="file-tree-row group/tree-row cursor-pointer select-none"
           :class="{
             'is-selected': selectedId === node.id,
             'is-resource-selected': node.resourceSelected,
-			'is-open': isExpanded,
+            'is-open': isExpanded,
           }"
+          @click="handleRowClick"
         >
+          <!-- Inline Rename Input -->
+          <div v-if="isRenaming" class="flex h-full min-w-0 flex-1 items-center gap-1.5 py-0.5" @click.stop>
+            <input
+              ref="renameInputRef"
+              v-model="renameDraft"
+              class="h-7 w-full rounded border border-primary/60 bg-background px-2 font-mono text-xs text-foreground outline-none ring-1 ring-primary/40"
+              @blur="commitRename"
+              @keydown.enter.prevent="commitRename"
+              @keydown.esc.prevent="cancelRename"
+            />
+          </div>
+
+          <!-- Normal Row Content -->
           <div
-            class="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+            v-else
+            class="flex h-full min-w-0 flex-1 self-stretch items-center gap-1.5 text-left"
             role="button"
             tabindex="0"
-            @click="activate"
             @keydown.enter="activate"
             @keydown.space.prevent="activate"
           >
-            <ChevronRight v-if="isFolder" class="size-3.5 shrink-0 transition-transform duration-200" :class="{ 'rotate-90': isExpanded }" />
+            <ChevronRight v-if="isFolder" class="size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200" :class="{ 'rotate-90': isExpanded }" />
             <span v-else class="w-3.5 shrink-0" />
-            <component v-if="isFolder" :is="iconFor(isExpanded ? (node.openIcon ?? node.icon) : node.icon, isExpanded ? FolderOpen : Folder)" class="size-4 shrink-0" />
-            <button
-              v-else-if="node.selectableResource"
-              type="button"
-              class="file-tree-resource-toggle grid size-4 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:text-primary"
-              :aria-label="node.resourceSelected ? `取消选择 ${node.name}` : `选择 ${node.name}`"
-              @click.stop="emit('toggle-resource', node, !node.resourceSelected)"
-            >
-              <CircleCheck v-if="node.resourceSelected" class="file-tree-select-indicator size-4" />
-              <Circle v-else class="file-tree-select-indicator size-4" />
-              <component :is="iconFor(node.icon, File)" class="file-tree-file-icon size-4" />
-            </button>
-            <component v-else :is="iconFor(node.icon, File)" class="size-4 shrink-0" />
-            <span v-if="node.prefix" class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{{ node.prefix }}</span>
+
+            <!-- Folder Icon -->
+            <component
+              v-if="isFolder"
+              :is="iconFor(isExpanded ? (node.openIcon ?? node.icon) : node.icon, isExpanded ? FolderOpen : Folder)"
+              class="size-4 shrink-0 text-muted-foreground/80"
+            />
+
+            <!-- Selectable Resource (Slot File): Radio or Checkbox -->
+            <template v-else-if="node.selectableResource">
+              <!-- Single selection: Radio Item style -->
+              <button
+                v-if="node.selectionMode === 'single'"
+                type="button"
+                class="file-tree-resource-toggle relative grid size-4 shrink-0 place-items-center cursor-pointer outline-none"
+                :aria-label="node.resourceSelected ? `已选中 ${node.name}` : `选择 ${node.name}`"
+                @click.stop="toggleResource(node, !node.resourceSelected)"
+              >
+                <div
+                  class="size-3.5 rounded-full border transition-all duration-100"
+                  :class="node.resourceSelected ? 'border-primary' : 'border-muted-foreground/50 group-hover/tree-row:border-foreground/70'"
+                />
+                <div
+                  v-if="node.resourceSelected"
+                  class="absolute size-2 rounded-full bg-primary"
+                />
+              </button>
+
+              <!-- Multiple selection: Checkbox Item style -->
+              <button
+                v-else
+                type="button"
+                class="file-tree-resource-toggle relative grid size-4 shrink-0 place-items-center cursor-pointer outline-none"
+                :aria-label="node.resourceSelected ? `已选中 ${node.name}` : `选择 ${node.name}`"
+                @click.stop="toggleResource(node, !node.resourceSelected)"
+              >
+                <div
+                  class="size-3.5 rounded-[4px] border transition-all duration-100 flex items-center justify-center"
+                  :class="node.resourceSelected ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/50 group-hover/tree-row:border-foreground/70'"
+                >
+                  <Check v-if="node.resourceSelected" class="size-2.5 stroke-[3]" />
+                </div>
+              </button>
+            </template>
+
+            <!-- Regular File (Local / Global Tab): File Icon -->
+            <component v-else :is="iconFor(node.icon, File)" class="size-4 shrink-0 text-muted-foreground/80" />
+
+            <!-- Resource Prefix (e.g. Source Name) -->
+            <span v-if="node.prefix" class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">{{ node.prefix }}</span>
             <span class="min-w-0 truncate">{{ node.name }}</span>
-			<span v-if="node.suffix" class="shrink-0 text-[10px] text-muted-foreground">· {{ node.suffix }}</span>
+            <span v-if="node.suffix" class="shrink-0 text-[10px] text-muted-foreground">· {{ node.suffix }}</span>
           </div>
+
+          <!-- Resource Meta / Badge -->
           <span v-if="resourceMeta" class="file-tree-resource-meta" :title="resourceMeta">{{ resourceMeta }}</span>
+
+          <!-- Folder Items Count -->
+          <span
+            v-if="isFolder && children.length"
+            class="file-tree-count text-[10px] tabular-nums font-mono text-muted-foreground/60 rounded bg-muted/50 px-1 py-0.5 shrink-0"
+          >
+            {{ children.length }}
+          </span>
+
+          <!-- Open file button for slot items -->
+          <button
+            v-if="node.selectableResource || node.disableRowOpen"
+            type="button"
+            class="file-tree-open-button shrink-0 grid size-5 place-items-center rounded text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors"
+            title="在编辑器中打开"
+            aria-label="在编辑器中打开"
+            @click.stop="emit('open', node)"
+          >
+            <ExternalLink class="size-3.5" />
+          </button>
+
+          <!-- Ellipsis Actions Menu -->
           <div v-if="actions.length" class="file-tree-actions shrink-0">
             <DropdownMenu>
               <DropdownMenuTrigger as-child>
@@ -183,13 +305,19 @@ function forwardAction(
                 <template v-for="(action, index) in actions" :key="action.id">
                   <DropdownMenuSeparator v-if="action.separatorBefore && index" />
                   <DropdownMenuSub v-if="action.subActions?.length">
-                    <DropdownMenuSubTrigger><component :is="iconFor(action.icon, Plus)" class="mr-2 size-4" />{{ action.name }}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubTrigger :icon="iconFor(action.icon, Plus)" :label="action.name" />
                     <DropdownMenuSubContent>
-                      <DropdownMenuItem v-for="subAction in action.subActions.filter(matchesAction)" :key="subAction.id" @select="runAction(subAction)"><component :is="iconFor(subAction.icon, Plus)" class="mr-2 size-4" />{{ subAction.name }}</DropdownMenuItem>
+                      <DropdownMenuItem
+                        v-for="subAction in action.subActions.filter(matchesAction)"
+                        :key="subAction.id"
+                        :icon="iconFor(subAction.icon, Plus)"
+                        :label="subAction.name"
+                        @select="runAction(subAction)"
+                      />
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
                   <DropdownMenuSub v-else-if="action.input">
-                    <DropdownMenuSubTrigger><component :is="iconFor(action.icon, MoreHorizontal)" class="mr-2 size-4" />{{ action.name }}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubTrigger :icon="iconFor(action.icon, MoreHorizontal)" :label="action.name" />
                     <DropdownMenuSubContent class="w-60 p-2">
                       <div class="grid gap-2" @click.stop @keydown.stop>
                         <Input :model-value="inputValue(action)" :placeholder="action.input.placeholder" @update:model-value="setInputValue(action, String($event))" @keydown.enter.prevent="runAction(action, inputValue(action))" />
@@ -198,19 +326,32 @@ function forwardAction(
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
                   <DropdownMenuSub v-else-if="action.choices?.length">
-                    <DropdownMenuSubTrigger><component :is="iconFor(action.icon, MoreHorizontal)" class="mr-2 size-4" />{{ action.name }}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubTrigger :icon="iconFor(action.icon, MoreHorizontal)" :label="action.name" />
                     <DropdownMenuSubContent>
-                      <DropdownMenuItem v-for="choice in action.choices" :key="choice.value" @select="runAction(action, choice.value)"><component :is="iconFor(choice.icon, MoreHorizontal)" class="mr-2 size-4" />{{ choice.name }}<Check v-if="action.selected?.(node, choice.value)" class="ml-auto size-4" /></DropdownMenuItem>
+                      <DropdownMenuItem
+                        v-for="choice in action.choices"
+                        :key="choice.value"
+                        :icon="iconFor(choice.icon, MoreHorizontal)"
+                        :label="choice.name"
+                        :checked="action.selected?.(node, choice.value)"
+                        @select="runAction(action, choice.value)"
+                      />
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
-                  <DropdownMenuItem v-else @select="runAction(action)"><component :is="iconFor(action.icon, MoreHorizontal)" class="mr-2 size-4" />{{ action.name }}</DropdownMenuItem>
+                  <DropdownMenuItem
+                    v-else
+                    :class="action.id === 'delete' ? 'text-destructive focus:text-destructive' : ''"
+                    :icon="iconFor(action.icon, MoreHorizontal)"
+                    :label="action.name"
+                    @select="runAction(action)"
+                  />
                 </template>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
       </ContextMenuTrigger>
-	  <ContextMenuContent v-if="actions.length">
+      <ContextMenuContent v-if="actions.length">
         <template v-for="(action, index) in actions" :key="action.id">
           <ContextMenuSeparator v-if="action.separatorBefore && index" />
           <ContextMenuSub v-if="action.subActions?.length">
@@ -234,7 +375,10 @@ function forwardAction(
               <ContextMenuItem v-for="choice in action.choices" :key="choice.value" @select="runAction(action, choice.value)"><component :is="iconFor(choice.icon, MoreHorizontal)" class="mr-2 size-4" />{{ choice.name }}<Check v-if="action.selected?.(node, choice.value)" class="ml-auto size-4" /></ContextMenuItem>
             </ContextMenuSubContent>
           </ContextMenuSub>
-          <ContextMenuItem v-else @select="runAction(action)"><component :is="iconFor(action.icon, MoreHorizontal)" class="mr-2 size-4" />{{ action.name }}</ContextMenuItem>
+          <ContextMenuItem v-else :class="action.id === 'delete' ? 'text-destructive focus:text-destructive' : ''" @select="runAction(action)">
+            <component :is="iconFor(action.icon, MoreHorizontal)" class="mr-2 size-4" />
+            <span class="truncate">{{ action.name }}</span>
+          </ContextMenuItem>
         </template>
       </ContextMenuContent>
     </ContextMenu>
@@ -247,6 +391,7 @@ function forwardAction(
           :selected-id="selectedId"
           :expanded="expanded"
           @select="emit('select', $event)"
+          @open="emit('open', $event)"
           @toggle="emit('toggle', $event)"
           @toggle-resource="toggleResource"
           @action="forwardAction"
@@ -343,6 +488,12 @@ function forwardAction(
 	gap: 2px;
 }
 
+.file-tree-open-button {
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 130ms ease, color 130ms ease, background-color 130ms ease;
+}
+
 .file-tree-action-button {
 	display: grid;
 	width: 20px;
@@ -396,17 +547,17 @@ function forwardAction(
 		display: none;
 	}
 
-	.file-tree-actions {
+	.file-tree-actions,
+	.file-tree-open-button {
 		pointer-events: none;
 		opacity: 0;
-		transform: translateX(3px);
 	}
 
 	.file-tree-row:hover .file-tree-actions,
-	.file-tree-actions:focus-within {
+	.file-tree-actions:focus-within,
+	.file-tree-row:hover .file-tree-open-button {
 		pointer-events: auto;
 		opacity: 1;
-		transform: none;
 	}
 
 	.file-tree-row:hover:not(.is-resource-selected)

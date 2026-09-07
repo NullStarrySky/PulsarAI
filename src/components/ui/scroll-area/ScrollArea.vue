@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils.ts'
 import ScrollBar from './ScrollBar.vue'
 
 const props = withDefaults(defineProps<ScrollAreaRootProps & { class?: HTMLAttributes['class'] }>(), {
-  type: 'auto',
+  type: 'hover',
 })
 
 const delegatedProps = reactiveOmit(props, 'class')
@@ -21,7 +21,7 @@ const delegatedProps = reactiveOmit(props, 'class')
   <ScrollAreaRoot
     data-slot="scroll-area"
     v-bind="delegatedProps"
-    :class="cn('relative', props.class)"
+    :class="cn('relative overflow-hidden', props.class)"
   >
     <ScrollAreaViewport
       data-slot="scroll-area-viewport"

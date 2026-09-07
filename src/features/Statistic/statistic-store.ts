@@ -1,11 +1,11 @@
 import { defineStore } from "pinia";
-import { computed, ref } from "vue";
+import { computed, ref, shallowRef } from "vue";
 import { selectAllChats } from "@/features/Conversation/chats/chat-service";
 import type { Conversation } from "@/features/Conversation/chats/chat-types";
 import { selectAllContainers } from "@/features/Conversation/messages/message-service";
 import type { ChatMessageContainer } from "@/features/Conversation/messages/message-types";
 import { selectAll, upsert } from "@/features/Database/database-service";
-import { usePackageStore } from "@/features/Package/package-store";
+import { useLocalPluginStore } from "@/features/Plugin/local-plugin-store";
 import {
 	createStatisticEvent,
 	createYearHeatmap,
@@ -17,11 +17,11 @@ const table = "statistic_events";
 export const useStatisticStore = defineStore("statistic", () => {
 	const events = ref<StatisticEvent[]>([]);
 	const loaded = ref(false);
-	const packages = usePackageStore();
-	const allChats = ref<Conversation[]>([]);
-	const allContainers = ref<ChatMessageContainer[]>([]);
+	const localPlugins = useLocalPluginStore();
+	const allChats = shallowRef<Conversation[]>([]);
+	const allContainers = shallowRef<ChatMessageContainer[]>([]);
 
-	const packageCount = computed(() => packages.packages.length);
+	const packageCount = computed(() => localPlugins.localPlugins.length);
 	const conversationCount = computed(() => allChats.value.length);
 	const messageCount = computed(() =>
 		allContainers.value.reduce(
@@ -33,7 +33,7 @@ export const useStatisticStore = defineStore("statistic", () => {
 	const sizeByType = computed(() => {
 		const conversationsBytes = byteSize(allChats.value);
 		const containersBytes = byteSize(allContainers.value);
-		const packagesBytes = byteSize(packages.packages);
+		const packagesBytes = byteSize(localPlugins.localPlugins);
 		return [
 			{
 				id: "packages",
@@ -56,9 +56,9 @@ export const useStatisticStore = defineStore("statistic", () => {
 		];
 	});
 	const sizeByPackage = computed(() =>
-		packages.packages.map((item, index) => {
+		localPlugins.localPlugins.map((item, index) => {
 			const pkgConversations = allChats.value.filter(
-				(conversationItem) => conversationItem.packageId === item.id,
+				(conversationItem) => conversationItem.localPluginId === item.id,
 			);
 			const conversationIds = new Set(
 				pkgConversations.map((conversationItem) => conversationItem.id),

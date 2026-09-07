@@ -3,25 +3,23 @@ import { useDebounceFn } from "@vueuse/core";
 import { Clipboard, Plus, Search } from "lucide-vue-next";
 import { push } from "notivue";
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
+	Badge,
+	Button,
 	Dialog,
 	DialogContent,
 	DialogDescription,
 	DialogFooter,
 	DialogHeader,
 	DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import {
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+	Switch,
+} from "@/components/fluid";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import SettingForm from "@/features/Setting/components/SettingForm.vue";
 import SettingFormField from "@/features/Setting/components/SettingFormField.vue";

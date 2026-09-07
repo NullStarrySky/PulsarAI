@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { Box, Command, MessageSquare, Package, Search } from "lucide-vue-next";
-import { type Component, computed, nextTick, ref, watch } from "vue";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { type Component, computed, nextTick, ref, shallowRef, watch } from "vue";
+import { Badge, Dialog, DialogContent, DialogTitle } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Conversation } from "@/features/Conversation/chats/chat-types";
 import { selectAllChats } from "@/features/Conversation/chats/chat-service";
-import { usePackageStore } from "@/features/Package/package-store";
+import { useLocalPluginStore } from "@/features/Plugin/local-plugin-store";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useHotkeyStore } from "@/features/Hotkey/hotkey-store";
 
@@ -22,8 +21,8 @@ type SearchResult = {
 
 const commandStore = useCommandStore();
 const hotkeyStore = useHotkeyStore();
-const packages = usePackageStore();
-const allChats = ref<Conversation[]>([]);
+const localPlugins = useLocalPluginStore();
+const allChats = shallowRef<Conversation[]>([]);
 const inputRoot = ref<HTMLElement | null>(null);
 const activeIndex = ref(0);
 
@@ -67,7 +66,7 @@ const commandResults = computed<SearchResult[]>(() => {
 
 const packageResults = computed<SearchResult[]>(() => {
 	const search = normalizedQuery.value;
-	return packages.packages
+	return localPlugins.localPlugins
 		.filter((item) =>
 			matchesItem(
 				[item.name, item.description, item.id],
@@ -91,7 +90,7 @@ const conversationResults = computed<SearchResult[]>(() => {
 	return allChats.value
 		.filter((item) =>
 			matchesItem(
-				[item.title, item.id, item.packageId],
+				[item.title, item.id, item.localPluginId],
 				search,
 				isTagSearch.value,
 			),
@@ -100,8 +99,8 @@ const conversationResults = computed<SearchResult[]>(() => {
 			id: `conversation:${item.id}`,
 			title: item.title,
 			description:
-				packages.packages.find(
-					(packageItem) => packageItem.id === item.packageId,
+				localPlugins.localPlugins.find(
+					(pluginItem) => pluginItem.id === item.localPluginId,
 				)?.name ?? "对话",
 			icon: MessageSquare,
 			run: () => {
@@ -128,7 +127,7 @@ watch(
 		if (!open) {
 			return;
 		}
-		await packages.initialize();
+		await localPlugins.refresh();
 		allChats.value = await selectAllChats();
 		activeIndex.value = 0;
 		await nextTick();

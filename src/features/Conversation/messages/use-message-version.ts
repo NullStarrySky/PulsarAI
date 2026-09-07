@@ -10,7 +10,7 @@ import {
 import type { ChatMessage, FilePart } from "./message-types";
 
 export interface MessageVersionOptions {
-	packageId?: string;
+	localPluginId?: string;
 	onUpdateContent?: (content: string) => Promise<void> | void;
 	onUpdateTranslation?: (
 		content: string,
@@ -40,23 +40,24 @@ export function useMessageVersion(
 		return parts.filter((part): part is FilePart => part.type === "file");
 	});
 
-	const worldUpdates = computed(() => {
+	const pulses = computed(() => {
+		if (message.value?.meta.pulses?.length) return message.value.meta.pulses;
 		const steps = message.value?.meta?.steps ?? [];
 		return steps.flatMap((step) => {
 			if (step.type !== "tool-result" || !step.output) return [];
 			const out = step.output as Record<string, unknown>;
-			if (Array.isArray(out.updates)) {
-				return out.updates;
+			if (Array.isArray(out.pulses)) {
+				return out.pulses;
 			}
 			return [];
 		});
 	});
 
-	const hasPluginChanges = computed(() => worldUpdates.value.length > 0);
+	const hasPluginChanges = computed(() => pulses.value.length > 0);
 
 	const resourceSummary = computed(() => {
 		if (!hasPluginChanges.value) return "";
-		return `修改了 ${worldUpdates.value.length} 处资源`;
+		return `修改了 ${pulses.value.length} 项资源`;
 	});
 
 	const messageTime = computed(() => {
@@ -108,7 +109,7 @@ export function useMessageVersion(
 		message,
 		thinking,
 		attachments,
-		worldUpdates,
+		pulses,
 		hasPluginChanges,
 		resourceSummary,
 		messageTime,

@@ -8,7 +8,7 @@ import {
 	X,
 } from "lucide-vue-next";
 import { computed, ref, watch } from "vue";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/fluid";
 import type {
 	ActionPart,
 	FilePart,
@@ -242,7 +242,7 @@ function handleKeydown(event: KeyboardEvent) {
     </div>
 
     <div
-      class="rounded-2xl border border-border/80 bg-background/95 p-1.5 shadow-[0_8px_26px_-18px_hsl(var(--foreground)/0.55)] transition-[border-color,box-shadow] duration-150 focus-within:border-ring/55 focus-within:shadow-[0_10px_30px_-18px_hsl(var(--ring)/0.45)]"
+      class="rounded-2xl border border-border/80 bg-background/95 p-1.5 shadow-[0_8px_26px_-18px_hsl(var(--foreground)/0.55)] transition-[border-color,box-shadow] duration-150"
     >
       <ComposerAttachmentStrip
         v-if="attachments.length"

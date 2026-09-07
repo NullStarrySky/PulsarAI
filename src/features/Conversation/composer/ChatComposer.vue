@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { push } from "notivue";
 import { type Component, computed, onMounted, ref, toRef } from "vue";
-import { Button } from "@/components/ui/button";
 import {
+	Button,
 	Dialog,
 	DialogContent,
 	DialogHeader,
 	DialogTitle,
-} from "@/components/ui/dialog";
+} from "@/components/fluid";
 import type {
 	ActionPart,
 	FilePart,

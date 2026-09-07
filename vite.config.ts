@@ -24,6 +24,13 @@ export default defineConfig(async () => ({
 				"./node_modules/@ai-sdk/provider-utils",
 			),
 		},
+		dedupe: [
+			"@codemirror/state",
+			"@codemirror/view",
+			"@codemirror/language",
+			"@lezer/common",
+			"@lezer/highlight",
+		],
 	},
 
 	// Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

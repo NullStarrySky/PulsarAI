@@ -2,7 +2,7 @@ export interface EntitySyncMeta {
 	vector: Record<string, number>;
 	updatedAt: string;
 	deleted?: boolean;
-	scopePackageId?: string | null;
+	scopeLocalPluginId?: string | null;
 	parentConversationId?: string;
 	syncable?: boolean;
 }
@@ -16,11 +16,35 @@ const deviceIdKey = "pulsar:sync:device-id";
 const metadataKey = "pulsar:sync:entity-metadata:v1";
 let remoteWriteDepth = 0;
 
+const memoryStore = new Map<string, string>();
+const storage = {
+	getItem(key: string): string | null {
+		if (typeof localStorage !== "undefined") {
+			return localStorage.getItem(key);
+		}
+		return memoryStore.get(key) ?? null;
+	},
+	setItem(key: string, value: string): void {
+		if (typeof localStorage !== "undefined") {
+			localStorage.setItem(key, value);
+		} else {
+			memoryStore.set(key, value);
+		}
+	},
+	removeItem(key: string): void {
+		if (typeof localStorage !== "undefined") {
+			localStorage.removeItem(key);
+		} else {
+			memoryStore.delete(key);
+		}
+	},
+};
+
 export function getLocalDeviceId() {
-	let deviceId = localStorage.getItem(deviceIdKey);
+	let deviceId = storage.getItem(deviceIdKey);
 	if (!deviceId) {
 		deviceId = crypto.randomUUID();
-		localStorage.setItem(deviceIdKey, deviceId);
+		storage.setItem(deviceIdKey, deviceId);
 	}
 	return deviceId;
 }
@@ -30,7 +54,7 @@ export function syncEntityKey(table: string, id: string) {
 }
 
 export function readSyncMetadata(): SyncMetadataSnapshot {
-	const raw = localStorage.getItem(metadataKey);
+	const raw = storage.getItem(metadataKey);
 	if (!raw) {
 		return { counter: 0, entities: {} };
 	}
@@ -49,11 +73,11 @@ export function readSyncMetadata(): SyncMetadataSnapshot {
 }
 
 export function writeSyncMetadata(snapshot: SyncMetadataSnapshot) {
-	localStorage.setItem(metadataKey, JSON.stringify(snapshot));
+	storage.setItem(metadataKey, JSON.stringify(snapshot));
 }
 
 export function clearResourceSyncMetadata() {
-	localStorage.removeItem(metadataKey);
+	storage.removeItem(metadataKey);
 }
 
 export function markLocalDatabaseChange(
@@ -74,12 +98,12 @@ export function markLocalDatabaseChange(
 		value && typeof value === "object"
 			? (value as Record<string, unknown>)
 			: {};
-	const scopePackageId =
-		table === "resource_packages"
-			? id
-			: typeof record.packageId === "string" || record.packageId === null
-				? (record.packageId as string | null)
-				: previous?.scopePackageId;
+	const scopeLocalPluginId =
+		table === "resource_worlds" && id.startsWith("local:")
+			? id.slice("local:".length)
+			: typeof record.localPluginId === "string" || record.localPluginId === null
+				? (record.localPluginId as string | null)
+				: previous?.scopeLocalPluginId;
 	const parentConversationId =
 		typeof record.conversationid === "string"
 			? record.conversationid
@@ -91,12 +115,9 @@ export function markLocalDatabaseChange(
 		},
 		updatedAt: new Date().toISOString(),
 		deleted,
-		scopePackageId,
+		scopeLocalPluginId,
 		parentConversationId,
-		syncable:
-			table === "resource_packages"
-				? record.syncEnabled !== false
-				: (previous?.syncable ?? true),
+		syncable: previous?.syncable ?? true,
 	};
 	writeSyncMetadata(snapshot);
 }
@@ -129,7 +150,7 @@ export function mergeEntitySyncMeta(
 				.sort()
 				.slice(-1)[0] ?? new Date().toISOString(),
 		deleted: Boolean(local?.deleted && remote?.deleted),
-		scopePackageId: local?.scopePackageId ?? remote?.scopePackageId,
+		scopeLocalPluginId: local?.scopeLocalPluginId ?? remote?.scopeLocalPluginId,
 		parentConversationId:
 			local?.parentConversationId ?? remote?.parentConversationId,
 		syncable: local?.syncable ?? remote?.syncable,

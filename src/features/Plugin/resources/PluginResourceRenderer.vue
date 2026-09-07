@@ -39,7 +39,12 @@ const codeLanguage = computed(() =>
   <div class="h-full min-h-0 overflow-hidden">
     <ConversationComposerEditor
       v-if="type === 'markdown' && preview"
-      :model-value="modelValue" placeholder="输入 Markdown 内容" enable-block-edit :enable-ai="false" :submit-on-enter="false"
+      :model-value="modelValue"
+      placeholder="输入 Markdown 内容"
+      :enable-ai="false"
+      :submit-on-enter="false"
+      full-height
+      class="h-full"
       @update:model-value="emit('update:modelValue', $event)"
     />
     <PluginConfigEditor v-else-if="path?.endsWith('/config.json') && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />

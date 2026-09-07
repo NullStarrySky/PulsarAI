@@ -2,25 +2,27 @@ import {
 	computed,
 	type MaybeRefOrGetter,
 	ref,
+	shallowRef,
 	toValue,
 	watch,
 } from "vue";
 import {
 	createChat,
 	deleteChatCascade,
-	loadChatsForPackage,
+	loadChatsForLocalPlugin,
 	updateChat,
 } from "./chat-service";
 import type { Conversation } from "./chat-types";
 
 export function useConversationMetaList(
-	packageIdSource: MaybeRefOrGetter<string>,
+	localPluginIdSource: MaybeRefOrGetter<string>,
 ) {
-	const conversations = ref<Conversation[]>([]);
+	const conversations = shallowRef<Conversation[]>([]);
 	const loading = ref(false);
+	const currentConversations = () => conversations.value as unknown as Conversation[];
 
 	const sortedConversations = computed(() => {
-		return [...conversations.value].sort((a, b) => {
+		return [...currentConversations()].sort((a, b) => {
 			if (Boolean(a.pinned) !== Boolean(b.pinned)) {
 				return a.pinned ? -1 : 1;
 			}
@@ -29,73 +31,80 @@ export function useConversationMetaList(
 	});
 
 	async function load() {
-		const pkgId = toValue(packageIdSource);
-		if (!pkgId) {
-			conversations.value = [];
+		const localPluginId = toValue(localPluginIdSource);
+		if (!localPluginId) {
+			(conversations as unknown as { value: Conversation[] }).value = [];
 			return;
 		}
 		loading.value = true;
 		try {
-			conversations.value = await loadChatsForPackage(pkgId);
+			(conversations as unknown as { value: Conversation[] }).value =
+				await loadChatsForLocalPlugin(localPluginId);
 		} finally {
 			loading.value = false;
 		}
 	}
 
-	watch(() => toValue(packageIdSource), () => {
+	watch(() => toValue(localPluginIdSource), () => {
 		void load();
 	}, { immediate: true });
 
-	async function create(title?: string, isTemplate?: boolean) {
-		const pkgId = toValue(packageIdSource);
-		if (!pkgId) throw new Error("缺少 packageId");
+	async function create(
+		title?: string,
+		isTemplate?: boolean,
+		lifetime: Conversation["lifetime"] = "persistent",
+	) {
+		const localPluginId = toValue(localPluginIdSource);
+		if (!localPluginId) throw new Error("缺少 localPluginId");
 		const chat = await createChat({
-			packageId: pkgId,
+			localPluginId,
 			title,
 			isTemplate,
+			lifetime,
 		});
-		conversations.value.unshift(chat);
+		conversations.value = [chat, ...currentConversations()];
 		return chat;
 	}
 
 	async function rename(id: string, title: string) {
-		const chat = conversations.value.find((item) => item.id === id);
+		const chat = currentConversations().find((item) => item.id === id);
 		if (!chat) return;
 		chat.title = title;
 		chat.updatedAt = new Date().toISOString();
 		await updateChat(id, { title });
+		conversations.value = [...currentConversations()];
 	}
 
 	async function setPinned(id: string, pinned: boolean) {
-		const chat = conversations.value.find((item) => item.id === id);
+		const chat = currentConversations().find((item) => item.id === id);
 		if (!chat) return;
 		chat.pinned = pinned;
 		chat.updatedAt = new Date().toISOString();
 		await updateChat(id, { pinned });
+		conversations.value = [...currentConversations()];
 	}
 
 	async function setTemplate(id: string, isTemplate: boolean) {
-		const chat = conversations.value.find((item) => item.id === id);
+		const chat = currentConversations().find((item) => item.id === id);
 		if (!chat) return;
 		chat.isTemplate = isTemplate;
 		chat.updatedAt = new Date().toISOString();
 		await updateChat(id, { isTemplate });
+		conversations.value = [...currentConversations()];
 	}
 
 	async function remove(id: string) {
-		const index = conversations.value.findIndex((item) => item.id === id);
-		if (index >= 0) {
-			conversations.value.splice(index, 1);
-		}
+		conversations.value = currentConversations().filter((item) => item.id !== id);
 		await deleteChatCascade(id);
 	}
 
 	async function updatePreview(id: string, preview: string) {
-		const chat = conversations.value.find((item) => item.id === id);
+		const chat = currentConversations().find((item) => item.id === id);
 		if (!chat) return;
 		chat.lastMessagePreview = preview.slice(0, 80);
 		chat.updatedAt = new Date().toISOString();
 		await updateChat(id, { lastMessagePreview: chat.lastMessagePreview });
+		conversations.value = [...currentConversations()];
 	}
 
 	return {

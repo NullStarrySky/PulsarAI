@@ -13,7 +13,7 @@ description: Sandbox 中可用的上下文、宏解析、草稿、回复与工�
 | --- | --- |
 | `conversationId` | 当前 Conversation 的稳定 ID |
 | `conversation` | 当前 Conversation 记录 |
-| `packageId` | 当前角色包稳定 ID |
+| `localPluginId` | 当前本地 Plugin 稳定 ID |
 | `package` | 当前角色包记录，找不到时为 `null` |
 | `containerId` | 当前助手消息容器 ID |
 | `activePath` | 当前活动消息容器路径 |

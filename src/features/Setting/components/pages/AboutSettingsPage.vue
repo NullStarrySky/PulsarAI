@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { Info, RefreshCcw } from "lucide-vue-next";
 import { ref, watch } from "vue";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
+import { Button, Switch } from "@/components/fluid";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
 import AppIcon from "@/features/UI/components/AppIcon.vue";
 import { useLayoutStore } from "@/features/UI/layout-store";

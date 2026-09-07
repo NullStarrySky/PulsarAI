@@ -11,7 +11,7 @@ export interface RunWorldInput {
 	/** Selected generation container resource in the complete world. */
 	entryPath?: string;
 	conversationId: string;
-	/** Character package ID. When supplied it must own the conversation. */
+	/** Local Plugin ID. When supplied it must own the conversation. */
 	roleId?: string;
 	role?: Role;
 	containerId?: string;
@@ -38,10 +38,10 @@ export async function runWorld(input: RunWorldInput): Promise<RunWorldResult> {
 	const chat = await loadChat(input.conversationId);
 
 	if (!chat) throw new Error("会话不存在。");
-	if (input.roleId && input.roleId !== chat.packageId)
+	if (input.roleId && input.roleId !== chat.localPluginId)
 		throw new Error("角色不属于该会话。");
 
-	const world = useWorld({ conversationId: input.conversationId });
+	const world = useWorld({ localPluginId: chat.localPluginId, conversationId: input.conversationId });
 	const entryPath =
 		input.entryPath ??
 		world.slots.value.find((slot) => slot.id === "generatePath")?.resources[0]
@@ -54,7 +54,7 @@ export async function runWorld(input: RunWorldInput): Promise<RunWorldResult> {
 	const context: SandboxEnvironment = {
 		conversationId: chat.id,
 		sourcePath: entryPath,
-		roleId: input.roleId ?? chat.packageId,
+		roleId: input.roleId ?? chat.localPluginId,
 		prompt: input.prompt ?? "",
 		now: () => new Date().toISOString(),
 	};

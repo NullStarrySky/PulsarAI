@@ -14,6 +14,8 @@ export type WorldSlotSelectionMode = "none" | "single" | "multiple";
 
 export interface WorldSlot {
 	id: string;
+	name?: string;
+	parentId?: string;
 	icon?: string;
 	description?: string;
 	allowedResourceTypes: WorldFileType[];
@@ -150,8 +152,17 @@ export function createWorldDocument(
 	};
 }
 
-export function worldFileType(name: string): WorldFileType {
+export function worldFileType(
+	name: string,
+	customSuffixes: string[] = [],
+): WorldFileType {
 	const normalized = name.trim().toLowerCase();
+	for (const suffix of customSuffixes) {
+		const lower = suffix.toLowerCase();
+		if (normalized.endsWith(lower.startsWith(".") ? lower : `.${lower}`)) {
+			return suffix as WorldFileType;
+		}
+	}
 	if (normalized.endsWith(".chat.json")) return "chat";
 	if (normalized.endsWith(".data.json")) return "data";
 	if (/\.(md|markdown)$/i.test(normalized)) return "markdown";

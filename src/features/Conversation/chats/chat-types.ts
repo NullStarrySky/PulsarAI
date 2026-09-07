@@ -30,7 +30,7 @@ export function createDefaultComposerDraft(
 
 export interface Conversation {
 	id: string;
-	packageId: string;
+	localPluginId: string;
 	title: string;
 	rootContainerId: string | null;
 	lastContainerId: string | null;
@@ -38,6 +38,7 @@ export interface Conversation {
 	composerDraft: ComposerDraft;
 	createdAt: string;
 	updatedAt: string;
+	lifetime: "persistent" | "app";
 	pinned?: boolean;
 	isTemplate?: boolean;
 }

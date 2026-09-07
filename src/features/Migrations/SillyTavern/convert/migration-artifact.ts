@@ -28,7 +28,7 @@ export interface MigratedLorebookEntry {
   source: MigrationSourceReference;
 }
 
-export interface CharacterPackageMigrationArtifact extends MigrationArtifactBase {
+export interface LocalPluginMigrationArtifact extends MigrationArtifactBase {
   kind: "character-package";
   name: string;
   nickname: string;
@@ -123,7 +123,7 @@ export interface IgnoredMigrationArtifact extends MigrationArtifactBase {
 }
 
 export type SillyTavernMigrationArtifact =
-  | CharacterPackageMigrationArtifact
+  | LocalPluginMigrationArtifact
   | WorldbookMigrationArtifact
   | ConversationMigrationArtifact
   | PresetMigrationArtifact

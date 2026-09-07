@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { Minus, Plus, Trash2 } from "lucide-vue-next";
 import { computed, ref, watch } from "vue";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
+	Button,
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+	Switch,
+	Tabs,
+	TabsList,
+	TabItem,
+} from "@/components/fluid";
+import { Input } from "@/components/ui/input";
 import JavaScriptCodeMirrorEditor from "@/features/Plugin/editors/javascript/JavaScriptCodeMirrorEditor.vue";
 import {
 	type ResourceConditionFunction,
@@ -139,7 +142,16 @@ function adjustDepth(delta: number) {
   <div class="overflow-hidden bg-popover">
     <div class="flex flex-wrap items-center gap-2 border-b bg-muted/25 px-3 py-2.5">
       <span class="text-xs font-medium text-muted-foreground">当消息满足</span>
-      <div class="flex rounded-lg border bg-background p-0.5"><Button :variant="logic === 'or' ? 'secondary' : 'ghost'" size="sm" class="h-6 px-2 text-[11px]" @click="logic = 'or'; persist()">任一</Button><Button :variant="logic === 'and' ? 'secondary' : 'ghost'" size="sm" class="h-6 px-2 text-[11px]" @click="logic = 'and'; persist()">全部</Button></div>
+      <Tabs
+        :model-value="logic"
+        size="compact"
+        @update:model-value="logic = ($event as 'and' | 'or'); persist()"
+      >
+        <TabsList>
+          <TabItem value="or" class="h-6 px-2.5 text-[11px]">任意</TabItem>
+          <TabItem value="and" class="h-6 px-2.5 text-[11px]">全部</TabItem>
+        </TabsList>
+      </Tabs>
       <span class="text-xs font-medium text-muted-foreground">条件时</span>
       <label class="ml-auto flex items-center gap-1.5 text-[10px] text-muted-foreground">启用<Switch size="sm" :model-value="props.enabled" @update:model-value="emit('update:enabled', Boolean($event))" /></label>
     </div>

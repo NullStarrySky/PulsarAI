@@ -1,25 +1,20 @@
 import { markLocalDatabaseChange } from "@/features/Database/sync-metadata";
 import { host } from "@/host";
-import { createBuiltinGlobalWorld, createPackageWorld } from "./builtin-world";
+import { createBuiltinGlobalWorld, createLocalPluginWorld } from "./builtin-world";
 import {
 	globalWorldDocumentId,
 	type World,
 	type WorldDocument,
 } from "./world-types";
 import {
-	applyWorldUpdate,
-	createWorldIndexes,
-	resolveWorldMoveUpdates,
-	resolveWorldUpdate,
-	valueAt,
-	type WorldUpdate,
-	worldUpdatePatch,
+	applyPulses,
+	type Pulse,
 } from "./world-update";
 
 export const worldTable = "resource_worlds";
 
-export function packageWorldDocumentId(packageId: string) {
-	return `package:${packageId}`;
+export function localPluginWorldDocumentId(localPluginId: string) {
+	return `local:${localPluginId}`;
 }
 
 async function loadWorldDocument(id: string) {
@@ -58,11 +53,11 @@ export async function ensureGlobalWorldDocument() {
 		: document;
 }
 
-export async function ensurePackageWorldDocument(packageId: string) {
-	const id = packageWorldDocumentId(packageId);
+export async function ensureLocalPluginWorldDocument(localPluginId: string) {
+	const id = localPluginWorldDocumentId(localPluginId);
 	return (
 		(await loadWorldDocument(id)) ??
-		createPersistedWorldDocument(createPackageWorld(packageId))
+		createPersistedWorldDocument(createLocalPluginWorld(localPluginId))
 	);
 }
 
@@ -71,39 +66,21 @@ export async function ensurePackageWorldDocument(packageId: string) {
  * affected document in one JSON-patch request, then commits that same result
  * to memory. Cross-document transactions remain a host concern.
  */
-export async function persistWorldUpdates(
+export async function persistPulses(
 	documents: World,
-	updates: WorldUpdate[],
+	pulses: Pulse[],
 ) {
 	const working = structuredClone(documents);
-	const indexes = createWorldIndexes(working);
-	const patches = new Map<
-		"global" | "self",
-		ReturnType<typeof worldUpdatePatch>[]
-	>();
-	for (const update of updates) {
-		const resolved =
-			update.value.type === "move"
-				? resolveWorldMoveUpdates(working, update, indexes)
-				: [resolveWorldUpdate(working, update, indexes)];
-		for (const item of resolved) {
-			const current = valueAt(working[item.scope], item.path);
-			patches.set(item.scope, [
-				...(patches.get(item.scope) ?? []),
-				worldUpdatePatch(["value"], item, current),
-			]);
-		}
-		applyWorldUpdate(working, update, indexes);
-	}
+	applyPulses(working, pulses);
 
 	const changedAt = new Date().toISOString();
-	for (const [scope, items] of patches) {
+	const changedScopes = new Set(pulses.flatMap((pulse) => pulse.operations.map((operation) => operation.scope)));
+	for (const scope of changedScopes) {
 		const document = documents[scope];
-		await host.database.update(worldTable, document.id, [
-			...items,
-			{ op: "replace", path: "/value/updateDate", value: changedAt },
-		]);
 		working[scope].updateDate = changedAt;
+		await host.database.update(worldTable, document.id, [
+			{ op: "replace", path: "/value", value: working[scope] },
+		]);
 		Object.assign(document, working[scope]);
 		markLocalDatabaseChange(worldTable, document.id, false, document);
 	}

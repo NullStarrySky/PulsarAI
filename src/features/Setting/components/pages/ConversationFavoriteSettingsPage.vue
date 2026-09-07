@@ -7,8 +7,8 @@ import {
 	Star,
 	UserRound,
 } from "lucide-vue-next";
-import { computed, onMounted, ref } from "vue";
-import { Button } from "@/components/ui/button";
+import { computed, onMounted, ref, shallowRef } from "vue";
+import { Button } from "@/components/fluid";
 import {
 	Empty,
 	EmptyDescription,
@@ -37,8 +37,8 @@ interface FavoriteMessageEntry {
 	containerOrder: number;
 }
 
-const allChats = ref<Conversation[]>([]);
-const allContainers = ref<ChatMessageContainer[]>([]);
+const allChats = shallowRef<Conversation[]>([]);
+const allContainers = shallowRef<ChatMessageContainer[]>([]);
 const layout = useLayoutStore();
 const navigatingId = ref("");
 

@@ -29,6 +29,7 @@ import TtsSettingsPage from "@/features/TTS/TtsSettingsPage.vue";
 import AppearanceSettingsPage from "@/features/UI/components/AppearanceSettingsPage.vue";
 import WebSearchSettingsPage from "@/features/WebSearch/WebSearchSettingsPage.vue";
 import ConversationFavoriteSettingsPage from "./components/pages/ConversationFavoriteSettingsPage.vue";
+import ConversationPanelSettingsPage from "@/features/Conversation/panels/ConversationPanelSettingsPage.vue";
 import GeneralSettingsPage from "./components/pages/GeneralSettingsPage.vue";
 import SubscriptionSettingsPage from "./components/pages/SubscriptionSettingsPage.vue";
 
@@ -68,10 +69,6 @@ export function ensureDefaultSettingPages() {
 	if (pages.size > 0) return;
 
 	registerSettingPage({
-		meta: { id: "tools.hotkey", icon: Keyboard, title: "快捷键" },
-		component: HotkeySettingsPage,
-	});
-	registerSettingPage({
 		meta: { id: "general", icon: Settings, title: "通用" },
 		tabs: [
 			{ id: "application", title: "应用", component: GeneralSettingsPage },
@@ -86,6 +83,10 @@ export function ensureDefaultSettingPages() {
 	registerSettingPage({
 		meta: { id: "provider.models", icon: Brain, title: "模型" },
 		component: ModelProviderSettingsPage,
+	});
+	registerSettingPage({
+		meta: { id: "tools.hotkey", icon: Keyboard, title: "快捷键" },
+		component: HotkeySettingsPage,
 	});
 	registerSettingPage({
 		meta: { id: "provider.tts", icon: Volume2, title: "语音生成" },
@@ -114,6 +115,10 @@ export function ensureDefaultSettingPages() {
 	registerSettingPage({
 		meta: { id: "conversation.favorites", icon: Star, title: "消息收藏" },
 		component: ConversationFavoriteSettingsPage,
+	});
+	registerSettingPage({
+		meta: { id: "conversation.panels", icon: Settings, title: "会话面板" },
+		component: ConversationPanelSettingsPage,
 	});
 	registerSettingPage({
 		meta: { id: "account.subscription", icon: CreditCard, title: "订阅方案" },

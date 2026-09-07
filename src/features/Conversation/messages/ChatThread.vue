@@ -10,12 +10,12 @@ import {
 	MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
 import { useConversation } from "@/features/Conversation/use-conversation";
-import { usePackageStore } from "@/features/Package/package-store";
+import { useLocalPluginStore } from "@/features/Plugin/local-plugin-store";
 import ChatBubble from "./ChatBubble.vue";
 
 const props = defineProps<{ chatId: string }>();
 const conversation = useConversation(toRef(props, "chatId"));
-const packages = usePackageStore();
+const localPlugins = useLocalPluginStore();
 const viewport = ref<{ element: HTMLElement | null } | null>(null);
 const loadedChatId = ref("");
 const holdVirtualEnd = ref(false);
@@ -75,10 +75,10 @@ watch(
 	{ immediate: true },
 );
 
-const currentPackageName = computed(() => {
-	const pkgId = conversation.chat.value?.packageId;
-	if (!pkgId) return "P";
-	return packages.packages.find((item) => item.id === pkgId)?.name ?? "P";
+const currentPluginName = computed(() => {
+	const localPluginId = conversation.chat.value?.localPluginId;
+	if (!localPluginId) return "P";
+	return localPlugins.localPlugins.find((item) => item.id === localPluginId)?.name ?? "P";
 });
 </script>
 
@@ -103,7 +103,7 @@ const currentPackageName = computed(() => {
                 </div>
               </div>
               <div v-else-if="loadedChatId === props.chatId" class="flex min-h-72 flex-1 flex-col items-center justify-center text-center">
-                <div class="flex size-14 items-center justify-center rounded-2xl bg-muted text-xl font-semibold text-muted-foreground">{{ currentPackageName.slice(0, 1) }}</div>
+                <div class="flex size-14 items-center justify-center rounded-2xl bg-muted text-xl font-semibold text-muted-foreground">{{ currentPluginName.slice(0, 1) }}</div>
                 <h1 class="mt-4 text-lg font-medium">开始新的会话</h1>
                 <p class="mt-1 max-w-sm text-sm text-muted-foreground">输入一条消息开始。</p>
               </div>

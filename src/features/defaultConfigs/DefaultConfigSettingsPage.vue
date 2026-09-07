@@ -6,8 +6,8 @@ import {
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+	Switch,
+} from "@/components/fluid";
 import { Textarea } from "@/components/ui/textarea";
 import ModelSelect from "@/features/ModelConnection/components/ModelSelect.vue";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";

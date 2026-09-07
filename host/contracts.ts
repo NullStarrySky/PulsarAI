@@ -9,7 +9,7 @@ interface HostDatabase {
 	selectAll<T>(table: string): Promise<Array<DatabaseRecord<T>>>;
 	selectByField<T>(
 		table: string,
-		field: "packageId" | "conversationid",
+		field: "localPluginId" | "conversationid",
 		value: string,
 	): Promise<Array<DatabaseRecord<T>>>;
 	selectOne<T>(table: string, id: string): Promise<T | null>;

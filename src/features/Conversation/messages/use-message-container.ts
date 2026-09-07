@@ -38,7 +38,7 @@ export function useMessageContainer(
 	});
 
 	const versionActions = useMessageVersion(currentMessage, {
-		packageId: options.packageId,
+		localPluginId: options.localPluginId,
 		onUpdateContent: (content) => {
 			if (options.onUpdateContent) {
 				return options.onUpdateContent(content);

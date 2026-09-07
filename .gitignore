@@ -14,15 +14,12 @@ docs/.vitepress/cache
 docs/.vitepress/dist
 src-tauri/target
 *.local
-.prompt_history
-/.playwright-cli/
-.vscode
-apikeys
-todo.txt
-queued_prompt.txt
-/scripts/code-stats.ts
-
+temp/
 refs/
+/scripts/code-stats.ts
+react-backup/
+
+
 
 
 

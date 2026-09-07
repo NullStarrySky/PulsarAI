@@ -1,4 +1,5 @@
 import type { Host } from "../contracts";
+import { mockHostDatabase } from "@/features/Database/mock-database";
 
 declare global {
 	interface Window {
@@ -15,16 +16,18 @@ interface ElectronHostBridge {
 	listen(event: string, listener: (payload: unknown) => void): () => void;
 }
 
-const bridge = window.pulsarHost;
-if (!bridge) {
-	throw new Error("Electron preload bridge is unavailable.");
-}
+const bridge = typeof window !== "undefined" ? window.pulsarHost : undefined;
 
 const invoke = <T>(
 	namespace: string,
 	method: string,
 	payload?: Record<string, unknown>,
-) => bridge.invoke<T>(namespace, method, payload);
+): Promise<T> => {
+	if (!bridge) {
+		return Promise.resolve(undefined as T);
+	}
+	return bridge.invoke<T>(namespace, method, payload);
+};
 
 const platform = navigator.userAgent.toLocaleLowerCase().includes("windows")
 	? "windows"
@@ -101,16 +104,34 @@ async function desktopSpeech<T>(
 export const host: Host = {
 	target: "desktop-electron",
 	database: {
-		selectAll: (table) => invoke("database", "selectAll", { table }),
+		selectAll: (table) =>
+			bridge
+				? invoke("database", "selectAll", { table })
+				: mockHostDatabase.selectAll(table),
 		selectByField: (table, field, value) =>
-			invoke("database", "selectByField", { table, field, value }),
-		selectOne: (table, id) => invoke("database", "selectOne", { table, id }),
+			bridge
+				? invoke("database", "selectByField", { table, field, value })
+				: mockHostDatabase.selectByField(table, field, value),
+		selectOne: (table, id) =>
+			bridge
+				? invoke("database", "selectOne", { table, id })
+				: mockHostDatabase.selectOne(table, id),
 		upsert: (table, id, value) =>
-			invoke("database", "upsert", { table, id, value }),
+			bridge
+				? invoke("database", "upsert", { table, id, value })
+				: mockHostDatabase.upsert(table, id, value),
 		update: (table, id, patches) =>
-			invoke("database", "update", { table, id, patches }),
-		remove: (table, id) => invoke("database", "remove", { table, id }),
-		resetCharacterData: () => invoke("database", "resetCharacterData"),
+			bridge
+				? invoke("database", "update", { table, id, patches })
+				: mockHostDatabase.update(table, id, patches),
+		remove: (table, id) =>
+			bridge
+				? invoke("database", "remove", { table, id })
+				: mockHostDatabase.remove(table, id),
+		resetCharacterData: () =>
+			bridge
+				? invoke("database", "resetCharacterData")
+				: mockHostDatabase.resetCharacterData(),
 	},
 	config: {
 		get: (key) => invoke("config", "get", { key }),
@@ -175,7 +196,8 @@ export const host: Host = {
 			create: (input) => invoke("subWindow", "create", input),
 			send: (label, event, payload) =>
 				invoke("subWindow", "send", { label, event, payload }),
-			listen: (event, listener) => bridge.listen(event, listener),
+			listen: (event, listener) =>
+				bridge ? bridge.listen(event, listener) : () => {},
 			close: (label) => invoke("subWindow", "close", { label }),
 		},
 	},

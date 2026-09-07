@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { push } from "notivue";
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {

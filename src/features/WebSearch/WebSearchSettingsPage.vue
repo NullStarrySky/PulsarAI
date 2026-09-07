@@ -2,9 +2,8 @@
 import { useDebounceFn } from "@vueuse/core";
 import { push } from "notivue";
 import { computed, onMounted, ref, watch } from "vue";
-import { Button } from "@/components/ui/button";
+import { Button, Slider } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
 import ServiceProviderSettingsLayout from "@/features/ModelConnection/components/ServiceProviderSettingsLayout.vue";
 import type { ServiceProviderView } from "@/features/ModelConnection/service-provider";
 import SettingForm from "@/features/Setting/components/SettingForm.vue";
@@ -177,7 +176,7 @@ async function testSearch() {
             :max="10"
             :step="1"
             class="flex-1"
-            @update:model-value="settings.resultLimit = $event?.[0] ?? settings.resultLimit"
+            @update:model-value="settings.resultLimit = Array.isArray($event) ? ($event[0] ?? settings.resultLimit) : (Number($event) || settings.resultLimit)"
           />
           <span class="w-8 text-right text-sm tabular-nums">{{ settings.resultLimit }}</span>
         </div>

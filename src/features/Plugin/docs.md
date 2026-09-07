@@ -4,7 +4,7 @@ World is the resource model. It has two persisted documents with the exact same
 nested node shape:
 
 - `resource_worlds:global` is the shared document.
-- `resource_worlds:package:<packageId>` is the character package's local
+- `resource_worlds:local:<localPluginId>` is a local Plugin's World document.
   document. Its root contains global `/self/slot/` contracts and a source-local
   `/self/localSlot/` definition tree.
 
@@ -23,13 +23,13 @@ does not invalidate membership.
 `useWorld(options)` is the only World API. With `applyReplay: false` it reads
 and edits the stored global/self documents. With a conversation and replay
 enabled, it clones those documents and applies the active message path's ordered
-`worldUpdates`. Slot and source views are projections exported by the same
+`pulses`. Slot and source views are projections exported by the same
 composable; they are not stored separately.
 
 ## Updates and replay
 
 Business calls (`write`, `edit`, `mkdir`, `move`, `copy`, `remove`,
-`updateFile`) first translate their input into `WorldUpdate` items. Each update
+`updateFile`) first translates input into one logical `Pulse`. Each Pulse
 stores a target node ID plus a short local path. It either writes a value,
 removes a value with `none`, replaces a unique substring, copies from an ID
 reference with a deterministic ID map, or moves an ID reference. Persistent

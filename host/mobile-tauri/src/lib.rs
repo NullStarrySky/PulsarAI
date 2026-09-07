@@ -122,7 +122,7 @@ struct PendingRestore {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct BackupResourceSnapshot {
-    packages: Vec<serde_json::Value>,
+    local_plugins: Vec<serde_json::Value>,
     conversations: Vec<serde_json::Value>,
     containers: Vec<serde_json::Value>,
     worlds: Vec<serde_json::Value>,

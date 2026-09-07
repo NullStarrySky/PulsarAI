@@ -21,6 +21,7 @@ const props = withDefaults(
 		compact?: boolean;
 		inlineMessageEdit?: boolean;
 		submitOnEnter?: boolean;
+		fullHeight?: boolean;
 	}>(),
 	{
 		modelValue: "",
@@ -31,6 +32,7 @@ const props = withDefaults(
 		compact: false,
 		inlineMessageEdit: false,
 		submitOnEnter: true,
+		fullHeight: false,
 	},
 );
 
@@ -187,6 +189,7 @@ const ComposerInner = defineComponent({
           'conversation-composer-editor--block-edit': props.enableBlockEdit,
           'conversation-composer-editor--compact': props.compact,
           'conversation-composer-editor--inline-edit': props.inlineMessageEdit,
+          'conversation-composer-editor--full-height overflow-y-auto': props.fullHeight,
         },
       ]"
       :style="$attrs.style"
@@ -275,5 +278,32 @@ const ComposerInner = defineComponent({
   min-height: 2.25rem !important;
   padding: 0.1rem 0.25rem 0.2rem !important;
   font-size: var(--editor-font-size, 14px) !important;
+}
+
+.conversation-composer-editor--full-height,
+.conversation-composer-editor--full-height :where(.milkdown, .crepe, .editor),
+.conversation-composer-editor--full-height .ProseMirror,
+.conversation-composer-editor.conversation-composer-editor--full-height .ProseMirror,
+.mobile-layout .conversation-composer-editor.conversation-composer-editor--full-height .ProseMirror {
+  height: 100% !important;
+  max-height: none !important;
+  min-height: 100% !important;
+}
+
+.conversation-composer-editor--full-height {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow-y: auto !important;
+}
+
+.conversation-composer-editor--full-height :where(.milkdown, .crepe, .editor) {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0% !important;
+}
+
+.conversation-composer-editor--full-height .ProseMirror {
+  flex: 1 1 0% !important;
+  padding: 14px 16px 2rem 16px !important;
 }
 </style>

@@ -1,7 +1,7 @@
 import { migrationDiagnostic, type MigrationDiagnostic, type MigrationSourceReference } from "./migration-diagnostic";
 import type {
   BackgroundMigrationArtifact,
-  CharacterPackageMigrationArtifact,
+  LocalPluginMigrationArtifact,
   ConversationMigrationArtifact,
   ConversationMigrationMessage,
   IgnoredMigrationArtifact,
@@ -136,7 +136,7 @@ function appendArtifacts(
   artifacts.forEach((artifact) => diagnostics.push(...artifact.diagnostics));
 }
 
-function convertGlobalRegex(
+export function convertGlobalRegex(
   snapshot: SillyTavernSourceSnapshot,
   diagnostics: MigrationDiagnostic[],
 ) {
@@ -184,7 +184,7 @@ function globallySelectedWorldbooks(settings?: Record<string, unknown> | null) {
 function convertCharacter(
   source: SillyTavernCharacterSource,
   lorebookDefaults: WorldbookDefaults,
-): CharacterPackageMigrationArtifact {
+): LocalPluginMigrationArtifact {
   const card = source.value;
   const data = isRecord(card.data) ? card.data : card;
   const extensions = isRecord(data.extensions) ? data.extensions : {};
@@ -296,7 +296,7 @@ function convertWorldbookValue(
   value: Record<string, unknown>,
   bookName: string,
   source: MigrationSourceReference,
-  embedded: boolean,
+  _embedded: boolean,
   diagnostics: MigrationDiagnostic[],
   templateContext: ExternalTemplateContext,
   defaults: WorldbookDefaults,
@@ -333,12 +333,19 @@ function convertWorldbookValue(
     }
     const position = numberValue(raw.position, 0);
     const depth = clamp(Math.round(numberValue(raw.depth, 4)), 0, 6);
-    const enabled = !embedded && raw.disable !== true && raw.enabled !== false;
+    const enabled = raw.disable !== true && raw.enabled !== false;
     const condition = lorebookCondition(raw, defaults, diagnostics, {
       ...source,
       fieldPath: `entries.${index}`,
     });
-    if (![0, 1, 4].includes(position)) {
+    let insertionTarget = "context";
+    if (position === 0) {
+      insertionTarget = "before_char";
+    } else if (position === 1) {
+      insertionTarget = "after_char";
+    } else if (position === 4) {
+      insertionTarget = `depth:${depth}`;
+    } else {
       diagnostics.push(migrationDiagnostic(
         "sillytavern.worldbook.position-approximated",
         "warning",
@@ -352,7 +359,7 @@ function convertWorldbookValue(
       content,
       enabled,
       order: Math.round(numberValue(raw.order, 100)),
-      insertionTarget: position === 4 ? `depth:${depth}` : "context",
+      insertionTarget,
       condition,
       source: { ...source, fieldPath: `entries.${index}` },
     }];
@@ -577,7 +584,7 @@ function convertRegexCollection(
   });
 }
 
-function convertPersonas(snapshot: SillyTavernSourceSnapshot): UserPersonaMigrationArtifact[] {
+export function convertPersonas(snapshot: SillyTavernSourceSnapshot): UserPersonaMigrationArtifact[] {
   if (!snapshot.settings) return [];
   const powerUser = isRecord(snapshot.settings.power_user) ? snapshot.settings.power_user : {};
   const names = isRecord(powerUser.personas) ? powerUser.personas : {};

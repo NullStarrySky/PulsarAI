@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { ArrowLeftRight, Languages } from "lucide-vue-next";
 import { onMounted } from "vue";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
+	Button,
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+	Switch,
+} from "@/components/fluid";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import ModelSelect from "@/features/ModelConnection/components/ModelSelect.vue";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";

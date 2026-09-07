@@ -14,7 +14,7 @@ import {
 } from "@/features/Sandbox/sandbox";
 
 export interface WorldSelfApiOptions {
-	packageId?: string;
+	localPluginId?: string;
 	conversationId?: string;
 	container?: ChatMessageContainer;
 	messageVersion?: ChatMessage;
@@ -54,9 +54,9 @@ export function createWorldSelfApi(
 	options: WorldSelfApiOptions = {},
 ) {
 	const conversationId = options.conversationId ?? "";
-	const packageId = options.packageId ?? "";
+	const localPluginId = options.localPluginId ?? "";
 	const scope = computed<WorldScope>(() => ({
-		packageId,
+		localPluginId,
 		conversationId,
 		applyReplay: Boolean(conversationId),
 		...(options.container && options.messageVersion
@@ -76,7 +76,9 @@ export function createWorldSelfApi(
 			const node = world.resolve(path).node;
 			return world.slots.value.find((item) => item.id === node.id) ?? null;
 		} catch {
-			return world.slots.value.find((item) => item.path === path) ?? null;
+			const parts = path.split("/").filter(Boolean);
+			const name = parts[parts.length - 1];
+			return world.slots.value.find((item) => item.path === path || item.id === name || item.name === name) ?? null;
 		}
 	};
 	const slot = {
@@ -84,8 +86,10 @@ export function createWorldSelfApi(
 		get: slotAt,
 		paths: (path: string) =>
 			(slotAt(path)?.resources ?? []).map((item) => item.path),
-		import: (path: string) =>
-			(slotAt(path)?.resources ?? []).map((item) => item.path),
+		import: (path: string, environment?: ResourceImportEnvironment) => {
+			const paths = (slotAt(path)?.resources ?? []).map((item) => item.path);
+			return parse(paths, environment);
+		},
 	};
 	const importResource = (
 		path: string | string[],
@@ -110,8 +114,17 @@ export function createWorldSelfApi(
 		const imported = await importResource(path, environment);
 		if (typeof imported === "string")
 			return resolveSandboxTextAsync(imported, [environment], { logger });
-		if (Array.isArray(imported) && imported.every(isModelMessage))
-			return resolveSandboxMessagesAsync(imported, [environment], { logger });
+		if (Array.isArray(imported)) {
+			if (imported.every(isModelMessage))
+				return resolveSandboxMessagesAsync(imported, [environment], { logger });
+			return Promise.all(
+				imported.map((item) =>
+					typeof item === "string"
+						? resolveSandboxTextAsync(item, [environment], { logger })
+						: item,
+				),
+			);
+		}
 		return imported;
 	};
 	return {

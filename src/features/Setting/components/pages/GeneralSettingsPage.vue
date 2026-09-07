@@ -6,8 +6,8 @@ import {
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+	Switch,
+} from "@/components/fluid";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
 import type { WindowCloseBehavior } from "@/features/UI/window-lifecycle-store";
 import { useWindowLifecycleStore } from "@/features/UI/window-lifecycle-store";

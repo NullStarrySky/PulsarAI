@@ -15,9 +15,10 @@ import {
 } from "@/features/Plugin/resources/resource-wrapper";
 import {
 	ensureGlobalWorldDocument,
-	ensurePackageWorldDocument,
-	persistWorldUpdates,
+	ensureLocalPluginWorldDocument,
+	persistPulses,
 } from "./world-persistence";
+import { collectTypeContracts, customTypeSuffixes } from "./type-slots";
 import {
 	createWorldFile,
 	createWorldFolder,
@@ -31,14 +32,16 @@ import {
 	worldFileType,
 } from "./world-types";
 import {
-	applyWorldUpdates,
+	applyPulses,
+	applyPulse,
+	createPulse,
 	createWorldNodeIndex,
-	type WorldUpdate,
-	worldNone,
+	type Pulse,
+	type PulseOperation,
 } from "./world-update";
 
 export interface WorldScope {
-	packageId?: string | null;
+	localPluginId?: string | null;
 	conversationId?: string | null;
 	/** Reads the active message path into the World. Defaults to true for conversations. */
 	applyReplay?: boolean;
@@ -61,6 +64,8 @@ export interface WorldSlotView {
 	id: string;
 	path: string;
 	name: string;
+	parent?: string;
+	hasChildren: boolean;
 	icon?: string;
 	description?: string;
 	allowedResourceTypes: WorldFileType[];
@@ -96,11 +101,57 @@ type ResolvedNode = {
 };
 
 let globalDocument: WorldDocument | null = null;
-const packageDocuments = new Map<string, WorldDocument>();
+const localPluginDocuments = new Map<string, WorldDocument>();
 const worldRevision = ref(0);
 
 function clone<T>(value: T) {
 	return structuredClone(toRaw(value));
+}
+
+type WorldMutationValue =
+	| { type: "none" }
+	| { type: "replace"; find: string; replace: string }
+	| { type: "value"; value: unknown }
+	| { type: "copy"; source: { scope: "global" | "self"; id: string }; idMap: Record<string, string> }
+	| { type: "move"; source: { scope: "global" | "self"; id: string } };
+type WorldMutation = { scope: "global" | "self"; nodeId: string; path: string[]; value: WorldMutationValue };
+
+/** Temporary command input is immediately compiled into one persisted/replayed Pulse. */
+function mutationsToPulse(world: World, mutations: WorldMutation[]): Pulse {
+	const working = clone(world);
+	const operations: PulseOperation[] = [];
+	for (const mutation of mutations) {
+		const index = createWorldNodeIndex(working[mutation.scope]);
+		const target = index.get(mutation.nodeId);
+		if (!target) throw new Error(`World 节点不存在：$${mutation.nodeId}`);
+		const filename = target.node.name;
+		let operation: PulseOperation;
+		if (mutation.value.type === "none") {
+			if (!target.parent) throw new Error("不能删除 World 根目录。");
+			operation = { kind: "node.delete", scope: mutation.scope, nodeId: mutation.nodeId, parentId: target.parent.id, nameAtTime: filename };
+		} else if (mutation.value.type === "move") {
+			const source = createWorldNodeIndex(working[mutation.value.source.scope]).get(mutation.value.source.id);
+			if (!source?.parent) throw new Error("移动源节点不存在。");
+			operation = { kind: "node.move", scope: mutation.scope, nodeId: source.node.id, parentId: source.parent.id, targetParentId: mutation.nodeId, nameAtTime: source.node.name };
+		} else if (mutation.value.type === "copy") {
+			const source = createWorldNodeIndex(working[mutation.value.source.scope]).get(mutation.value.source.id);
+			if (!source) throw new Error("复制源节点不存在。");
+			operation = { kind: "node.copy", scope: mutation.scope, source: mutation.value.source, targetParentId: mutation.nodeId, idMap: mutation.value.idMap, nameAtTime: source.node.name };
+		} else if (mutation.value.type === "replace") {
+			operation = { kind: "file.replace", scope: mutation.scope, nodeId: mutation.nodeId, find: mutation.value.find, replace: mutation.value.replace, filename };
+		} else if (mutation.path[0] === "children" && mutation.path[1] && mutation.value.value && typeof mutation.value.value === "object") {
+			operation = { kind: "node.create", scope: mutation.scope, parentId: mutation.nodeId, node: mutation.value.value as WorldNode, parentNameAtTime: filename };
+		} else if (mutation.path[0] === "content") {
+			operation = { kind: "file.write", scope: mutation.scope, nodeId: mutation.nodeId, content: mutation.value.value, filename };
+		} else {
+			operation = target.node.type === "file"
+				? { kind: "file.meta.patch", scope: mutation.scope, nodeId: mutation.nodeId, patch: { [mutation.path[0]!]: mutation.value.value }, filename }
+				: { kind: "folder.meta.patch", scope: mutation.scope, nodeId: mutation.nodeId, patch: { [mutation.path[0]!]: mutation.value.value }, filename };
+		}
+		operations.push(operation);
+		applyPulse(working, createPulse([operation]));
+	}
+	return createPulse(operations);
 }
 
 function normalizedScope(
@@ -203,17 +254,32 @@ function globalSlotDefinitions(
 	try {
 		const node = resolveNode(world, "/self/slot").node;
 		if (node.type !== "folder") return [];
-		return Object.values(node.children)
-			.filter((child): child is WorldFolderNode => child.type === "folder")
-			.map((slot) => ({
-				id: slot.id,
-				path: `/self/slot/$${slot.id}`,
-				name: slot.name,
-				...(slot.icon ? { icon: slot.icon } : {}),
-				...(slot.description ? { description: slot.description } : {}),
-				allowedResourceTypes: slot.allowedResourceTypes ?? [],
-				selectionMode: slot.selectionMode ?? "multiple",
-			}));
+		const result: Omit<WorldSlotView, "allResources" | "resources">[] = [];
+		const walk = (folder: WorldFolderNode, parentPath?: string) => {
+			for (const child of Object.values(folder.children)) {
+				if (child.type === "folder") {
+					if (child.name === "types") continue;
+					const childPath = `${parentPath ?? "/self/slot"}/$${child.id}`;
+					const hasChildren = Object.values(child.children).some(
+						(c) => c.type === "folder" && c.name !== "types",
+					);
+					result.push({
+						id: child.id,
+						path: childPath,
+						name: child.name,
+						hasChildren,
+						...(child.icon ? { icon: child.icon } : {}),
+						...(child.description ? { description: child.description } : {}),
+						allowedResourceTypes: child.allowedResourceTypes ?? [],
+						selectionMode: child.selectionMode ?? "multiple",
+						...(parentPath ? { parent: parentPath } : {}),
+					});
+					walk(child, childPath);
+				}
+			}
+		};
+		walk(node);
+		return result;
 	} catch {
 		return [];
 	}
@@ -271,8 +337,11 @@ function globalSlotForResource(
 	localSlots: Pick<WorldLocalSlotView, "path" | "parent">[],
 ) {
 	const localSlot = localSlots.find((slot) => slot.path === resource.file.slot);
+	const assigned = localSlot?.parent ?? resource.file.slot;
 	return globalSlots.find(
-		(slot) => slot.path === (localSlot?.parent ?? resource.file.slot),
+		(slot) =>
+			slot.path === assigned ||
+			(Boolean(assigned) && slot.path.endsWith(`/$${assigned!.split("/$").slice(-1)[0]}`)),
 	);
 }
 
@@ -286,14 +355,29 @@ function selectedResources(
 	return slot.selectionMode === "single" ? enabled.slice(0, 1) : enabled;
 }
 
-function activeReplayUpdates(_conversationId: string) {
-	return [] as WorldUpdate[];
+const conversationPulses = new Map<string, Pulse[]>();
+
+export function clearConversationPulses(conversationId?: string) {
+	if (conversationId) {
+		conversationPulses.delete(conversationId);
+	} else {
+		conversationPulses.clear();
+	}
+	worldRevision.value += 1;
 }
 
-async function recordReplayUpdates(
+function activeReplayPulses(conversationId: string) {
+	return conversationPulses.get(conversationId) ?? [];
+}
+
+async function recordReplayPulse(
 	conversationId: string,
-	updates: WorldUpdate[],
+	pulse: Pulse,
 ) {
+	const current = conversationPulses.get(conversationId) ?? [];
+	current.push(clone(pulse));
+	conversationPulses.set(conversationId, current);
+
 	const chat = await loadChat(conversationId);
 	if (!chat) throw new Error("会话不存在。");
 	const container = createContainer({
@@ -307,22 +391,22 @@ async function recordReplayUpdates(
 	await persistChat(chat);
 	const message = currentMessage(container);
 	if (!message) throw new Error("World 重放容器没有消息版本。");
-	message.meta.worldUpdates = clone(updates);
+	message.meta.pulses = [clone(pulse)];
 	await persistContainer(container);
 }
 
-export async function initializeWorlds(packageId?: string) {
+export async function initializeWorlds(localPluginId?: string) {
 	globalDocument = await ensureGlobalWorldDocument();
-	if (packageId)
-		packageDocuments.set(
-			packageId,
-			await ensurePackageWorldDocument(packageId),
+	if (localPluginId)
+		localPluginDocuments.set(
+			localPluginId,
+			await ensureLocalPluginWorldDocument(localPluginId),
 		);
 	worldRevision.value += 1;
 }
 
-export function forgetPackageWorld(packageId: string) {
-	packageDocuments.delete(packageId);
+export function forgetLocalPluginWorld(localPluginId: string) {
+	localPluginDocuments.delete(localPluginId);
 	worldRevision.value += 1;
 }
 
@@ -330,9 +414,9 @@ export function forgetPackageWorld(packageId: string) {
 export function useWorld(
 	scope: MaybeRefOrGetter<WorldScope | string | null | undefined> = undefined,
 ) {
-	const packageId = computed(() => {
+	const localPluginId = computed(() => {
 		const value = normalizedScope(toValue(scope));
-		return value.packageId ?? "";
+		return value.localPluginId ?? "";
 	});
 	const conversationId = computed(
 		() => normalizedScope(toValue(scope)).conversationId ?? "",
@@ -346,18 +430,18 @@ export function useWorld(
 		worldRevision.value;
 		return Boolean(
 			globalDocument &&
-				packageId.value &&
-				packageDocuments.has(packageId.value),
+				localPluginId.value &&
+				localPluginDocuments.has(localPluginId.value),
 		);
 	});
 	const world = computed<World | null>(() => {
 		worldRevision.value;
-		if (!globalDocument || !packageId.value) return null;
-		const self = packageDocuments.get(packageId.value);
+		if (!globalDocument || !localPluginId.value) return null;
+		const self = localPluginDocuments.get(localPluginId.value);
 		if (!self) return null;
 		const value: World = { global: clone(globalDocument), self: clone(self) };
 		if (applyReplay.value && conversationId.value)
-			applyWorldUpdates(value, activeReplayUpdates(conversationId.value));
+			applyPulses(value, activeReplayPulses(conversationId.value));
 		return value;
 	});
 	const resources = computed(() => {
@@ -369,6 +453,11 @@ export function useWorld(
 				]
 			: [];
 	});
+	const resourceOrder = (left: WorldResource, right: WorldResource) =>
+		left.file.priority - right.file.priority ||
+		(left.scope === "global" ? left.nodePath[2] ?? "" : localPluginId.value).localeCompare(
+			right.scope === "global" ? right.nodePath[2] ?? "" : localPluginId.value,
+		) || left.file.id.localeCompare(right.file.id);
 	const slots = computed<WorldSlotView[]>(() => {
 		const value = world.value;
 		if (!value) return [];
@@ -381,11 +470,7 @@ export function useWorld(
 						globalSlotForResource(resource, definitions, locals)?.path ===
 						slot.path,
 				)
-				.sort(
-					(left, right) =>
-						left.file.priority - right.file.priority ||
-						left.file.id.localeCompare(right.file.id),
-				);
+				.sort(resourceOrder);
 			return {
 				...slot,
 				allResources,
@@ -400,11 +485,7 @@ export function useWorld(
 		return definitions.map((slot) => {
 			const allResources = resources.value
 				.filter((resource) => resource.file.slot === slot.path)
-				.sort(
-					(left, right) =>
-						left.file.priority - right.file.priority ||
-						left.file.id.localeCompare(right.file.id),
-				);
+				.sort(resourceOrder);
 			return {
 				...slot,
 				allResources,
@@ -438,38 +519,40 @@ export function useWorld(
 	async function ensureLoaded() {
 		if (
 			!globalDocument ||
-			!packageId.value ||
-			!packageDocuments.has(packageId.value)
+			!localPluginId.value ||
+			!localPluginDocuments.has(localPluginId.value)
 		)
-			await initializeWorlds(packageId.value);
+			await initializeWorlds(localPluginId.value);
 		return requireWorld();
 	}
 
-	async function commit(updates: WorldUpdate[]) {
+	async function commit(updates: WorldMutation[]) {
 		if (!updates.length) return;
+		const pulse = mutationsToPulse(requireWorld(), updates);
+		applyPulses(clone(requireWorld()), [pulse]);
 		if (applyReplay.value && conversationId.value) {
 			const replay = normalizedScope(toValue(scope)).replay;
 			if (replay) {
-				replay.message.meta.worldUpdates ??= [];
-				replay.message.meta.worldUpdates.push(...clone(updates));
+				replay.message.meta.pulses ??= [];
+				replay.message.meta.pulses.push(clone(pulse));
 				await persistContainer(replay.container);
 				worldRevision.value += 1;
 				return;
 			}
-			await recordReplayUpdates(conversationId.value, updates);
+			await recordReplayPulse(conversationId.value, pulse);
 			worldRevision.value += 1;
 			return;
 		}
-		const self = packageDocuments.get(packageId.value);
+		const self = localPluginDocuments.get(localPluginId.value);
 		if (!globalDocument || !self) throw new Error("World 文档尚未加载。");
-		await persistWorldUpdates({ global: globalDocument, self }, updates);
+		await persistPulses({ global: globalDocument, self }, [pulse]);
 		worldRevision.value += 1;
 	}
 
 	async function update(
 		nodeId: string,
 		path: string[],
-		value: WorldUpdate["value"],
+		value: WorldMutationValue,
 		scopeName: "global" | "self",
 	) {
 		await commit([{ scope: scopeName, nodeId, path, value }]);
@@ -491,16 +574,164 @@ export function useWorld(
 		const parent = resolve(parentPath);
 		if (parent.node.type !== "folder")
 			throw new Error(`父路径不是文件夹：${parentPath}`);
+		const currentWorld = requireWorld();
+		const slotRoot = resolveNode(currentWorld, "/self/slot").node;
+		const selfIndex = createWorldNodeIndex(currentWorld.self);
+		const isSlotFolder =
+			parent.scope === "self" &&
+			(parent.node.id === slotRoot.id ||
+				selfIndex.get(parent.node.id)?.ancestors.has(slotRoot.id) === true);
 		const folder = createWorldFolder(validateNodeName(name), {
 			treeOrder: nextTreeOrder(parent.node),
+			...(isSlotFolder && parent.node.selectionMode
+				? { selectionMode: parent.node.selectionMode }
+				: {}),
+			...(isSlotFolder && parent.node.allowedResourceTypes
+				? { allowedResourceTypes: [...parent.node.allowedResourceTypes] }
+				: {}),
 		});
-		await update(
-			parent.node.id,
-			["children", folder.id],
-			{ type: "value", value: folder },
-			parent.scope,
+		const newFolderPath = isSlotFolder
+			? `${parent.path}/$${folder.id}`
+			: `/${parent.scope}/$${folder.id}`;
+		const updates: WorldMutation[] = [
+			{
+				scope: parent.scope,
+				nodeId: parent.node.id,
+				path: ["children", folder.id],
+				value: { type: "value", value: folder },
+			},
+		];
+		if (isSlotFolder && parent.node.id !== slotRoot.id) {
+			// Migrate local slots and direct file slot assignments pointing to parent slot to the new child slot
+			const changedAt = new Date().toISOString();
+			const parentSlotPath = `/self/slot/$${parent.node.id}`;
+			for (const res of resources.value) {
+				if (
+					res.file.slot === parentSlotPath ||
+					res.file.slot === parent.path ||
+					res.file.slot === `/self/$${parent.node.id}`
+				) {
+					updates.push({
+						scope: res.scope,
+						nodeId: res.file.id,
+						path: ["slot"],
+						value: { type: "value", value: newFolderPath },
+					});
+					updates.push({
+						scope: res.scope,
+						nodeId: res.file.id,
+						path: ["updateDate"],
+						value: { type: "value", value: changedAt },
+					});
+				}
+			}
+			for (const lSlot of localSlots.value) {
+				if (
+					lSlot.parent === parentSlotPath ||
+					lSlot.parent === parent.path ||
+					lSlot.parent === `/self/$${parent.node.id}`
+				) {
+					const lSlotNode = resolve(lSlot.path).node;
+					updates.push({
+						scope: lSlot.scope,
+						nodeId: lSlotNode.id,
+						path: ["parent"],
+						value: { type: "value", value: newFolderPath },
+					});
+				}
+			}
+		}
+		await commit(updates);
+		return newFolderPath;
+	}
+
+	async function createChildSlot(parentPath: string, name: string) {
+		await ensureLoaded();
+		const parent = resolve(parentPath);
+		if (parent.scope !== "self" || parent.node.type !== "folder")
+			throw new Error("子插槽必须创建在 /self/slot 中。");
+		const definitions = globalSlotDefinitions(requireWorld());
+		const parentSlot = definitions.find((slot) => slot.path === parent.path);
+		if (!parentSlot) throw new Error(`不是插槽文件夹：${parentPath}`);
+
+		const child = createWorldFolder(validateNodeName(name), {
+			treeOrder: nextTreeOrder(parent.node),
+			selectionMode: parentSlot.selectionMode,
+			allowedResourceTypes: parentSlot.allowedResourceTypes.length
+				? parentSlot.allowedResourceTypes
+				: [
+						"markdown",
+						"chat",
+						"data",
+						"javascript",
+						"json",
+						"media",
+						"component",
+						"text",
+					],
+		});
+		const locals = localSlotDefinitions(requireWorld());
+		const assigned = resources.value.filter(
+			(resource) =>
+				globalSlotForResource(resource, definitions, locals)?.path ===
+				parent.path,
 		);
-		return `/${parent.scope}/$${folder.id}`;
+		const existingDefault = Object.values(parent.node.children).find(
+			(node): node is WorldFolderNode =>
+				node.type === "folder" && node.name === "默认",
+		);
+		const defaultSlot =
+			assigned.length && !existingDefault
+				? createWorldFolder("默认", {
+						treeOrder: nextTreeOrder(parent.node) + 1,
+						selectionMode: parentSlot.selectionMode,
+						allowedResourceTypes: parentSlot.allowedResourceTypes,
+					})
+				: existingDefault;
+		const defaultPath = defaultSlot
+			? `${parent.path}/$${defaultSlot.id}`
+			: undefined;
+		const updates: WorldMutation[] = [
+			{
+				scope: parent.scope,
+				nodeId: parent.node.id,
+				path: ["children", child.id],
+				value: { type: "value", value: child },
+			},
+		];
+		if (defaultSlot && !existingDefault) {
+			updates.push({
+				scope: parent.scope,
+				nodeId: parent.node.id,
+				path: ["children", defaultSlot.id],
+				value: { type: "value", value: defaultSlot },
+			});
+		}
+		if (defaultPath) {
+			const updatedLocals = new Set<string>();
+			for (const resource of assigned) {
+				const local = locals.find((slot) => slot.path === resource.file.slot);
+				if (local && !updatedLocals.has(local.path)) {
+					const node = resolve(local.path).node;
+					updates.push({
+						scope: local.scope,
+						nodeId: node.id,
+						path: ["parent"],
+						value: { type: "value", value: defaultPath },
+					});
+					updatedLocals.add(local.path);
+				} else if (resource.file.slot === parent.path) {
+					updates.push({
+						scope: resource.scope,
+						nodeId: resource.file.id,
+						path: ["slot"],
+						value: { type: "value", value: defaultPath },
+					});
+				}
+			}
+		}
+		await commit(updates);
+		return `/${parent.scope}/$${child.id}`;
 	}
 
 	async function createFile(
@@ -605,7 +836,7 @@ export function useWorld(
 				scope: target.scope,
 				nodeId: target.node.id,
 				path: [],
-				value: worldNone,
+				value: { type: "none" },
 			},
 			{
 				scope: target.scope,
@@ -846,6 +1077,7 @@ export function useWorld(
 				| "treeOrder"
 				| "selectionMode"
 				| "allowedResourceTypes"
+				| "parent"
 			>
 		>,
 	) {
@@ -908,7 +1140,7 @@ export function useWorld(
 					)?.path === slot?.path,
 			)
 			.flatMap((resource) => {
-				const resourceSelected = resource.path === target.path;
+				const resourceSelected = resource.file.id === target.node.id;
 				if (resource.file.resourceSelected === resourceSelected) return [];
 				return [
 					{
@@ -926,6 +1158,13 @@ export function useWorld(
 				];
 			});
 		if (updates.length) await commit(updates);
+	}
+
+	async function assignResourceToSlot(
+		resourcePath: string,
+		slotPath: string,
+	): Promise<void> {
+		await updateFile(resourcePath, { slot: slotPath });
 	}
 
 	function read(path: string) {
@@ -953,17 +1192,96 @@ export function useWorld(
 
 	function bind(container: ChatMessageContainer, message: ChatMessage) {
 		const value = clone(requireWorld());
-		const apply = async (updates: WorldUpdate[]) => {
-			applyWorldUpdates(value, updates);
-			message.meta.worldUpdates ??= [];
-			message.meta.worldUpdates.push(...clone(updates));
+		const apply = async (pulses: Pulse[]) => {
+			applyPulses(value, pulses);
+			message.meta.pulses ??= [];
+			message.meta.pulses.push(...clone(pulses));
 			await persistContainer(container);
 		};
 		return { world: value, apply };
 	}
 
+	const customTypes = computed(() => {
+		if (!world.value) return [];
+		return customTypeSuffixes(collectTypeContracts(world.value.self.root));
+	});
+
+	/** Assigns a resource to a global leaf slot, creating this source's local contribution when needed. */
+	async function assignSlot(path: string, globalSlotPath?: string) {
+		await ensureLoaded();
+		if (!globalSlotPath) {
+			await updateFile(path, { slot: undefined });
+			return;
+		}
+
+		const target = resolve(path);
+		if (target.node.type !== "file") throw new Error(`不是文件：${path}`);
+		const definitions = globalSlotDefinitions(requireWorld());
+		const slot = definitions.find((item) => item.path === globalSlotPath);
+		if (!slot || slot.hasChildren)
+			throw new Error(`不是可分配的插槽：${globalSlotPath}`);
+		const fileType = worldFileType(target.node.name, customTypes.value);
+		if (
+			!slot.allowedResourceTypes.includes(fileType) &&
+			!customTypes.value.includes(fileType)
+		)
+			throw new Error(`资源类型不属于插槽：${slot.name}`);
+
+		const sourceRoot =
+			target.scope === "self"
+				? target.document.root
+				: target.document.root.children[target.nodePath[2] ?? ""];
+		if (!sourceRoot || sourceRoot.type !== "folder")
+			throw new Error("资源所属源不存在。");
+		const localRoot = Object.values(sourceRoot.children).find(
+			(node): node is WorldFolderNode =>
+				node.type === "folder" && node.name === "localSlot",
+		);
+		if (!localRoot) throw new Error("资源所属源缺少 localSlot 文件夹。");
+
+		const locals = localSlotDefinitions(requireWorld());
+		const sourcePrefix =
+			target.scope === "self" ? "/self" : `/global/$${sourceRoot.id}`;
+		const local = locals.find(
+			(item) =>
+				item.parent === slot.path &&
+				item.path.startsWith(`${sourcePrefix}/$${localRoot.id}/`),
+		);
+		if (local) {
+			await updateFile(path, { slot: local.path });
+			return;
+		}
+
+		const contribution = createWorldFolder(slot.name, {
+			parent: slot.path,
+			treeOrder: nextTreeOrder(localRoot),
+		});
+		const localPath = `${sourcePrefix}/$${localRoot.id}/$${contribution.id}`;
+		const changedAt = new Date().toISOString();
+		await commit([
+			{
+				scope: target.scope,
+				nodeId: localRoot.id,
+				path: ["children", contribution.id],
+				value: { type: "value" as const, value: contribution },
+			},
+			{
+				scope: target.scope,
+				nodeId: target.node.id,
+				path: ["slot"],
+				value: { type: "value" as const, value: localPath },
+			},
+			{
+				scope: target.scope,
+				nodeId: target.node.id,
+				path: ["updateDate"],
+				value: { type: "value" as const, value: changedAt },
+			},
+		]);
+	}
+
 	return {
-		packageId,
+		localPluginId,
 		conversationId,
 		applyReplay,
 		ready,
@@ -972,6 +1290,7 @@ export function useWorld(
 		slots,
 		localSlots,
 		sources,
+		customTypes,
 		resolve,
 		read,
 		import: importResource,
@@ -1011,12 +1330,15 @@ export function useWorld(
 		mkdir,
 		createFile,
 		createFolder,
+		createChildSlot,
 		move,
 		moveTo,
 		copy,
 		remove,
 		updateFile,
 		updateFolder,
+		assignSlot,
+		assignResourceToSlot,
 		setSelected,
 		open: (path: string) => setSelected(path, true),
 		close: (path: string) => setSelected(path, false),

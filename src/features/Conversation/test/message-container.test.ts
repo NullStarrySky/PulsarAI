@@ -59,10 +59,11 @@ describe("Conversation composable", () => {
 	it("clears translation metadata when a message is manually edited", async () => {
 		const mockChat: Conversation = {
 			id: "chat-1",
-			packageId: "pkg-1",
+			localPluginId: "plugin-1",
 			title: "测试会话",
 			createdAt: "2026-08-22T00:00:00.000Z",
 			updatedAt: "2026-08-22T00:00:00.000Z",
+			lifetime: "persistent",
 			isTemplate: false,
 			pinned: false,
 			rootContainerId: "c-1",
