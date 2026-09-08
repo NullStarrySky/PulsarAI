@@ -174,7 +174,7 @@ export { default as InputMessage } from "./components/ui/chat/InputMessage.vue";
 export type {
   InputMessageProps,
   InputMessageSlotContext,
-  QueuedMessage,
+  InputMessageSuggestionGroup,
 } from "./components/ui/chat/InputMessage.vue";
 export { default as FileThumbnail } from "./components/ui/chat/FileThumbnail.vue";
 

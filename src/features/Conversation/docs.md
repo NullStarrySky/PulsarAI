@@ -31,3 +31,30 @@ The composer, generator and Sandbox receive a World-scoped API. Reads are from
 the replayed tree; writes use the same update contract, so a generation sees its
 own prior edits immediately. `applyReplay: false` is reserved for editing the
 original package or shared source documents.
+
+## Composer references, modes and token usage
+
+The composer uses the shared fluid `InputMessage`. Its grouped suggestion
+surface appears above the editor: `@` creates immutable file/message reference
+parts beside ordinary attachments, while `/` resolves enabled `COMMAND` slot
+resources. Reference content is snapshotted when attached, so generation does
+not depend on a later rename or edit.
+
+Mode changes are interval operations on hidden system messages, which are
+excluded from model context. Closing a mode closes its interval and the thread
+projects the span as an automatically collapsed inline sub-conversation. The
+built-in edit mode uses `Ctrl+Shift+E`; Plugin-defined modes come from `MODE`.
+
+The compact composer usage value is the AI SDK aggregate usage reported by the
+most recently completed generation and persisted on that message version.
+
+## Binary attachments
+
+Non-text attachments live in the host media container below the app-data
+directory. A message stores only a `media://<uuid>` link; model compilation
+reads its bytes through the host facade when it needs to send the file. The
+renderer resolves the same link before Markdown rendering, so ordinary Markdown
+images and HTML media tags such as `<img src="media://…">` work without putting
+base64 into a message record. Removing a pending attachment or deleting its
+message removes its direct media file; deleting a message branch removes all of
+its descendant message containers first.

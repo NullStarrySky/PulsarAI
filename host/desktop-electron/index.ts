@@ -31,9 +31,20 @@ const invoke = <T>(
 
 const platform = navigator.userAgent.toLocaleLowerCase().includes("windows")
 	? "windows"
-	: navigator.userAgent.toLocaleLowerCase().includes("mac")
-		? "macos"
-		: "linux";
+		: navigator.userAgent.toLocaleLowerCase().includes("mac")
+			? "macos"
+			: "linux";
+
+const fallbackMedia = new Map<
+	string,
+	{ bytes: number[]; mediaType: string }
+>();
+
+function fallbackMediaUrl(bytes: number[], mediaType: string) {
+	let binary = "";
+	for (const byte of bytes) binary += String.fromCharCode(byte);
+	return `data:${mediaType};base64,${btoa(binary)}`;
+}
 
 class DesktopWebSocket extends WebSocket {
 	constructor(
@@ -149,6 +160,31 @@ export const host: Host = {
 		open: (options) => invoke("dialog", "open", { options }),
 		save: (options) => invoke("dialog", "save", { options }),
 	},
+	media: {
+		async write(input) {
+			if (bridge) return invoke("media", "write", input);
+			const id = crypto.randomUUID();
+			const bytes = [...input.bytes];
+			fallbackMedia.set(id, { bytes, mediaType: input.mediaType });
+			return { id, mediaType: input.mediaType, size: bytes.length };
+		},
+		async read(id) {
+			if (bridge) return invoke("media", "read", { id });
+			const file = fallbackMedia.get(id);
+			if (!file) throw new Error("媒体文件不存在。");
+			return { id, ...file, size: file.bytes.length };
+		},
+		async url(id) {
+			if (bridge) return invoke("media", "url", { id });
+			const file = fallbackMedia.get(id);
+			if (!file) throw new Error("媒体文件不存在。");
+			return fallbackMediaUrl(file.bytes, file.mediaType);
+		},
+		async remove(id) {
+			if (bridge) return invoke("media", "remove", { id });
+			fallbackMedia.delete(id);
+		},
+	},
 	platform: {
 		platform: () => platform,
 		osType: () => platform,
@@ -199,6 +235,17 @@ export const host: Host = {
 			listen: (event, listener) =>
 				bridge ? bridge.listen(event, listener) : () => {},
 			close: (label) => invoke("subWindow", "close", { label }),
+		},
+		update: {
+			check: () => invoke("update", "check"),
+			download: () => invoke("update", "download"),
+			install: () => invoke("update", "install"),
+			listen: (listener) =>
+				bridge
+					? bridge.listen("update", (payload) =>
+							listener(payload as Parameters<typeof listener>[0]),
+						)
+					: () => {},
 		},
 	},
 };

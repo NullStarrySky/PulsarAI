@@ -1,6 +1,7 @@
 import {
 	BarChart3,
 	Brain,
+	BookOpen,
 	CreditCard,
 	Globe,
 	History,
@@ -17,6 +18,7 @@ import {
 import type { Component } from "vue";
 import BackupSettingsPage from "@/features/Backup/BackupSettingsPage.vue";
 import DefaultConfigSettingsPage from "@/features/defaultConfigs/DefaultConfigSettingsPage.vue";
+import BuiltInDocsPage from "@/features/Docs/BuiltInDocsPage.vue";
 import HotkeySettingsPage from "@/features/Hotkey/HotkeySettingsPage.vue";
 import ImageGenerationSettingsPage from "@/features/ImageGeneration/ImageGenerationSettingsPage.vue";
 import RuntimeSettingsPage from "@/features/Misc/RuntimeSettingsPage.vue";
@@ -131,6 +133,10 @@ export function ensureDefaultSettingPages() {
 	registerSettingPage({
 		meta: { id: "data.statistic", icon: BarChart3, title: "数据统计" },
 		component: StatisticSettingsPage,
+	});
+	registerSettingPage({
+		meta: { id: "docs.builtin", icon: BookOpen, title: "内置文档" },
+		component: BuiltInDocsPage,
 	});
 	registerSettingPage({
 		meta: { id: "about.app", icon: Info, title: "关于" },

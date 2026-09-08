@@ -91,6 +91,7 @@
         "tauri-plugin-m3": "0.3.2",
         "tauri-plugin-stt-api": "0.2.2",
         "tauri-plugin-tts-api": "0.1.13",
+        "tiktoken": "^1.0.22",
         "vaul-vue": "^0.4.1",
         "vee-validate": "^4.15.1",
         "vue": "^3.5.42",
@@ -2222,6 +2223,8 @@
     "tauri-plugin-tts-api": ["tauri-plugin-tts-api@0.1.13", "https://registry.npmmirror.com/tauri-plugin-tts-api/-/tauri-plugin-tts-api-0.1.13.tgz", { "dependencies": { "@tauri-apps/api": "^2.9.1" } }, "sha512-i/uq68I1OxveTh8nfOi9FRp38UBJtOiMnpMR4lipwdXIbL7ALvAw/30kmtOWiF5IkdBJZDz/PxsoyBmKbbm3VQ=="],
 
     "throttle-debounce": ["throttle-debounce@5.0.2", "https://registry.npmmirror.com/throttle-debounce/-/throttle-debounce-5.0.2.tgz", {}, "sha512-B71/4oyj61iNH0KeCamLuE2rmKuTO5byTOSVwECM5FA7TiAiAW+UqTKZ9ERueC4qvgSttUhdmq1mXC3kJqGX7A=="],
+
+    "tiktoken": ["tiktoken@1.0.22", "https://registry.npmmirror.com/tiktoken/-/tiktoken-1.0.22.tgz", {}, "sha512-PKvy1rVF1RibfF3JlXBSP0Jrcw2uq3yXdgcEXtKTYn3QJ/cBRBHDnrJ5jHky+MENZ6DIPwNUGWpkVx+7joCpNA=="],
 
     "tinybench": ["tinybench@2.9.0", "https://registry.npmmirror.com/tinybench/-/tinybench-2.9.0.tgz", {}, "sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg=="],
 

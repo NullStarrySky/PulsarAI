@@ -15,6 +15,7 @@ import {
 	tryBuildStImportPlan,
 } from "@/features/Migrations/SillyTavern/import/st-import-plan";
 import { createPluginMediaContent } from "@/features/Plugin/editors/media/plugin-media";
+import { mediaLink, writeMedia } from "@/features/Media/media-link";
 import { useLocalStorage } from "@vueuse/core";
 import { host } from "@/host";
 import { locateRequest } from "./file-editor-manager";
@@ -619,8 +620,11 @@ async function importResource(path: string) {
 			const binary = stFile?.base64
 				? { base64: stFile.base64, mediaType: stFile.mediaType ?? "application/octet-stream" }
 				: await host.migration.invoke<{ base64: string; mediaType: string }>("readBinary", { path: picked });
+			const bytes = Uint8Array.from(atob(binary.base64), (character) =>
+				character.charCodeAt(0),
+			);
 			content = createPluginMediaContent(
-				`data:${binary.mediaType};base64,${binary.base64}`,
+				mediaLink((await writeMedia(bytes, binary.mediaType, "assets")).id),
 				binary.mediaType.startsWith("video/") ? "video" : "image",
 			);
 		} else {

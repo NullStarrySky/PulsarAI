@@ -83,7 +83,7 @@ describe("Message container primitives", () => {
 		expect(pathForTail(containers, undefined)).toEqual([]);
 	});
 
-	it("compiles model messages from the active path and skips error versions", () => {
+	it("compiles model messages from the active path and skips error versions", async () => {
 		const user = createContainer({
 			conversationId: "c",
 			role: "user",
@@ -101,7 +101,7 @@ describe("Message container primitives", () => {
 		assistant.content = [createMessage({ content: "ok" }), failed];
 		assistant.activeMessage = 1;
 
-		const messages = modelMessagesFromPath([user, assistant]);
+		const messages = await modelMessagesFromPath([user, assistant]);
 		expect(messages).toEqual([
 			{
 				role: "user",

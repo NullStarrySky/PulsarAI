@@ -1,21 +1,33 @@
 import type { FilePart } from "@/features/Conversation/messages/message-types";
+import {
+	isTextMediaType,
+	mediaLink,
+	resolveMediaUrl,
+	writeMedia,
+} from "@/features/Media/media-link";
 
 export async function fileToMessagePart(file: File): Promise<FilePart> {
+	const mediaType = file.type || "application/octet-stream";
+	const url = isTextMediaType(mediaType)
+		? await readFileAsDataUrl(file)
+		: mediaLink((await writeMedia(new Uint8Array(await file.arrayBuffer()), mediaType, "attachments")).id);
 	return {
 		type: "file",
-		url: await readFileAsDataUrl(file),
+		url,
 		filename: file.name,
-		mediaType: file.type || "application/octet-stream",
+		mediaType,
 		size: file.size,
 	};
 }
 
-export function attachmentPreviewUrl(part: FilePart) {
-	return part.mediaType.startsWith("image/") ? part.url : "";
+export async function attachmentPreviewUrl(part: FilePart) {
+	return part.mediaType.startsWith("image/")
+		? resolveMediaUrl(part.url)
+		: "";
 }
 
 export async function openMessageAttachment(part: FilePart) {
-	const source = part.url;
+	const source = await resolveMediaUrl(part.url);
 	const response = await fetch(source);
 	const blob = await response.blob();
 	const objectUrl = URL.createObjectURL(blob);

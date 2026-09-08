@@ -19,7 +19,23 @@ export interface ActionPart {
 	params?: Record<string, unknown>;
 }
 
-export type AdditionalParts = FilePart | ActionPart;
+export interface ReferencePart {
+	type: "reference";
+	referenceType: "file" | "message";
+	id: string;
+	label: string;
+	path?: string;
+	/** Snapshot used by generation; ids remain available for navigation. */
+	content: string;
+}
+
+export type AdditionalParts = FilePart | ActionPart | ReferencePart;
+
+export interface TokenUsage {
+	inputTokens?: number;
+	outputTokens?: number;
+	totalTokens?: number;
+}
 
 export interface ThinkingStep {
 	type: "thinking";
@@ -47,6 +63,7 @@ export interface MessageMeta {
 		modelName?: string;
 		startTime?: string;
 		finishTime?: string;
+		usage?: TokenUsage;
 	};
 	steps: (ThinkingStep | ToolCallStep | ToolCallResult)[];
 	/** Ordered, replayable World changes created along this message path. */

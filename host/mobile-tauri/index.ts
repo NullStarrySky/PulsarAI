@@ -73,6 +73,12 @@ export const host: Host = {
 		open: (options) => open(options as Parameters<typeof open>[0]),
 		save: (options) => save(options as Parameters<typeof save>[0]),
 	},
+	media: {
+		write: (input) => command("media_write", input),
+		read: (id) => command("media_read", { id }),
+		url: (id) => command("media_url", { id }),
+		remove: (id) => command("media_delete", { id }),
+	},
 	platform: {
 		platform,
 		osType,

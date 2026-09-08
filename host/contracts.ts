@@ -46,6 +46,25 @@ interface HostDialog {
 	save(options: Record<string, unknown>): Promise<string | null>;
 }
 
+export interface HostMediaFile {
+	id: string;
+	mediaType: string;
+	size: number;
+}
+
+interface HostMedia {
+	write(input: {
+		bytes: number[];
+		mediaType: string;
+		/** A private container below the app data directory, such as `temp`. */
+		path?: string;
+	}): Promise<HostMediaFile>;
+	read(id: string): Promise<HostMediaFile & { bytes: number[] }>;
+	/** Converts a stable `media://` link target to a renderer-safe URL. */
+	url(id: string): Promise<string>;
+	remove(id: string): Promise<void>;
+}
+
 interface HostDesktopWindow {
 	minimize(): Promise<void>;
 	toggleMaximize(): Promise<void>;
@@ -72,7 +91,25 @@ interface HostDesktop {
 		listen(event: string, listener: (payload: unknown) => void): () => void;
 		close(label: string): Promise<void>;
 	};
+	update: {
+		check(): Promise<HostUpdateInfo | null>;
+		download(): Promise<{ path: string }>;
+		install(): Promise<void>;
+		listen(listener: (event: HostUpdateEvent) => void): () => void;
+	};
 }
+
+export interface HostUpdateInfo {
+	version: string;
+	name: string;
+	notes: string;
+	publishedAt?: string;
+}
+
+export type HostUpdateEvent =
+	| { type: "download-progress"; percent: number | null }
+	| { type: "downloaded"; path: string }
+	| { type: "error"; message: string };
 
 interface HostMobile {
 	battery: {
@@ -116,6 +153,7 @@ export interface Host {
 	config: HostConfig;
 	secrets: HostSecrets;
 	dialog: HostDialog;
+	media: HostMedia;
 	platform: HostPlatform;
 	notifications: HostNotifications;
 	external: { open(url: string): Promise<void> };

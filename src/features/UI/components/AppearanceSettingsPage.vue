@@ -269,6 +269,17 @@ function importFont() {
 
       <SettingFormField
         v-if="appearance.zenFrameEnabled"
+        title="Zen 边框宽度"
+        description="调整应用内容与窗口边缘之间的包裹宽度。"
+      >
+        <div class="ml-auto flex w-52 items-center gap-3">
+          <Slider v-model="appearance.zenFrameWidth" :min="0" :max="24" :step="1" />
+          <span class="w-10 text-right text-xs tabular-nums text-muted-foreground">{{ appearance.zenFrameWidth }} px</span>
+        </div>
+      </SettingFormField>
+
+      <SettingFormField
+        v-if="appearance.zenFrameEnabled"
         title="Zen 边框颜色"
         description="应用整体包裹边框与顶栏基础底色。默认基于颜色主题自动推断，也可自定义指定。"
       >

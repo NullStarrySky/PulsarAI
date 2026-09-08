@@ -32,6 +32,7 @@ interface AppearanceSnapshot {
 	agentLoadingStyle: AgentLoadingStyle;
 	mobileNavigationBarMode: MobileNavigationBarMode;
 	zenFrameEnabled: boolean;
+	zenFrameWidth: number;
 	frameColorMode: "auto" | "custom";
 	frameCustomColor: string;
 	editorFontSize: number;
@@ -59,6 +60,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
 	const agentLoadingStyle = ref<AgentLoadingStyle>(snapshot.agentLoadingStyle);
 	const mobileNavigationBarMode = ref(snapshot.mobileNavigationBarMode);
 	const zenFrameEnabled = ref<boolean>(snapshot.zenFrameEnabled ?? true);
+	const zenFrameWidth = ref(snapshot.zenFrameWidth ?? 6);
 	const frameColorMode = ref<"auto" | "custom">(
 		snapshot.frameColorMode ?? "auto",
 	);
@@ -98,6 +100,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
 			agentLoadingStyle,
 			mobileNavigationBarMode,
 			zenFrameEnabled,
+			zenFrameWidth,
 			frameColorMode,
 			frameCustomColor,
 			editorFontSize,
@@ -119,6 +122,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
 				agentLoadingStyle: agentLoadingStyle.value,
 				mobileNavigationBarMode: mobileNavigationBarMode.value,
 				zenFrameEnabled: zenFrameEnabled.value,
+				zenFrameWidth: zenFrameWidth.value,
 				frameColorMode: frameColorMode.value,
 				frameCustomColor: frameCustomColor.value,
 				editorFontSize: editorFontSize.value,
@@ -215,6 +219,7 @@ export const useAppearanceStore = defineStore("appearance", () => {
 		themeMode,
 		mobileNavigationBarMode,
 		zenFrameEnabled,
+		zenFrameWidth,
 		zenFrameIsDark,
 		frameColorMode,
 		frameCustomColor,
@@ -343,6 +348,7 @@ function readSnapshot(): AppearanceSnapshot {
 		agentLoadingStyle: "drive",
 		mobileNavigationBarMode: "topbar",
 		zenFrameEnabled: true,
+		zenFrameWidth: 6,
 		frameColorMode: "auto",
 		frameCustomColor: "#1e1e24",
 		editorFontSize: 14,
@@ -379,6 +385,10 @@ function readSnapshot(): AppearanceSnapshot {
 				typeof parsed.zenFrameEnabled === "boolean"
 					? parsed.zenFrameEnabled
 					: fallback.zenFrameEnabled,
+			zenFrameWidth:
+				typeof parsed.zenFrameWidth === "number"
+					? Math.min(24, Math.max(0, parsed.zenFrameWidth))
+					: fallback.zenFrameWidth,
 			frameColorMode: parsed.frameColorMode === "custom" ? "custom" : "auto",
 			frameCustomColor:
 				typeof parsed.frameCustomColor === "string"

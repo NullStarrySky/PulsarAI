@@ -198,6 +198,15 @@ export function builtinSlots(): WorldSlot[] {
 			selectionMode: "none",
 		},
 		{
+			id: "MODE",
+			name: "模式",
+			parentId: "resource",
+			icon: "pencil-line",
+			description: "注册包含进入与退出脚本的自定义输入模式。",
+			allowedResourceTypes: ["json"],
+			selectionMode: "none",
+		},
+		{
 			id: "panel",
 			name: "面板",
 			icon: "sidebar",

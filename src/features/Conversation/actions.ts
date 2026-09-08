@@ -2,6 +2,12 @@ import { push } from "notivue";
 import { resetCharacterData } from "@/features/Database/database-service";
 import { clearResourceSyncMetadata } from "@/features/Database/sync-metadata";
 
+export const toggleEditModeEvent = "pulsarai:conversation-toggle-edit-mode";
+
+export function toggleEditModeAction() {
+	window.dispatchEvent(new CustomEvent(toggleEditModeEvent));
+}
+
 /** Clear only character-owned resources; settings, secrets, and backups remain intact. */
 export async function resetCharacterDataAction() {
 	const confirmed = window.confirm(

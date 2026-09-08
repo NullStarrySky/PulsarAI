@@ -30,6 +30,8 @@ import {
 	createAgentResourceProvider,
 } from "@/features/Plugin/agent/runtime/default-agent";
 import { parsePluginDataDefinition } from "@/features/Plugin/editors/data/plugin-data";
+import { generateImageToPath } from "@/features/ImageGeneration/image-generation";
+import { mediaLink } from "@/features/Media/media-link";
 import { environmentTools } from "@/features/Plugin/runtime";
 import { readBuiltinAgentDocs } from "@/features/Plugin/runtime/environment";
 import { createWorldSelfApi } from "@/features/Plugin/runtime/self-api";
@@ -168,6 +170,16 @@ function createReply(container: ChatMessageContainer, message: ChatMessage) {
 			message.meta.generateInfo.modelName = modelName;
 			await persist();
 		},
+		setTokenUsage: async (usage) => {
+			message.meta.generateInfo ??= {};
+			message.meta.generateInfo.usage = {
+				inputTokens: usage.inputTokens,
+				outputTokens: usage.outputTokens,
+				totalTokens: usage.totalTokens,
+			};
+			message.meta.generateInfo.finishTime = new Date().toISOString();
+			await persist();
+		},
 		appendContent: async (delta) => {
 			message.content += String(delta);
 			await persist();
@@ -236,7 +248,7 @@ export async function ctxbuilder(
 		result.activePath = activePath;
 		result.intervals = intervals;
 		if (chatFeature) {
-			const modelMessages = modelMessagesFromPath(activePath);
+			const modelMessages = await modelMessagesFromPath(activePath);
 			Object.assign(ctx, {
 				chat: modelMessages,
 				CHAT: modelMessages,
@@ -345,6 +357,8 @@ export async function ctxbuilder(
 			skills: selfApi.skills,
 			logger: selfApi.logger,
 			read_docs: readBuiltinAgentDocs,
+			generateImageToPath,
+			media: Object.freeze({ link: mediaLink }),
 			ctx,
 		});
 		injectSelectedData(ctx, selfApi);

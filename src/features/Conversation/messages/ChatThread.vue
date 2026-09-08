@@ -19,18 +19,89 @@ const localPlugins = useLocalPluginStore();
 const viewport = ref<{ element: HTMLElement | null } | null>(null);
 const loadedChatId = ref("");
 const holdVirtualEnd = ref(false);
+const expandedIntervals = ref(new Set<string>());
 
-const visiblePathView = computed(() =>
-	conversation.activePathView.value.filter(
-		(item) => item.role !== "system" || Boolean(item.message?.content),
-	),
-);
+const visiblePathView = computed(() => {
+	const source = conversation.activePathView.value;
+	const closed = new Map(
+		conversation.intervalProjection.value.spans
+			.filter((span) => span.interval.type === "edit")
+			.map((span) => [span.openedAt.containerId, span]),
+	);
+	const open = new Map(
+		conversation.intervalProjection.value.openIntervals
+			.filter((item) => item.interval.type === "edit")
+			.map((item) => [item.openedAt.containerId, item]),
+	);
+	const rows = [] as typeof source;
+	for (let index = 0; index < source.length; index += 1) {
+		const item = source[index]!;
+		const span = closed.get(item.containerId);
+		if (span) {
+			const closeIndex = source.findIndex(
+				(row) => row.containerId === span.closedAt.containerId,
+			);
+			const expanded = expandedIntervals.value.has(span.interval.id);
+			if (!expanded && closeIndex >= index) {
+				rows.push({
+					...source[closeIndex]!,
+					intervalSummary: {
+						id: span.interval.id,
+						count: Math.max(0, closeIndex - index - 1),
+						collapsed: true,
+						open: false,
+					},
+				});
+				index = closeIndex;
+				continue;
+			}
+			rows.push({
+				...item,
+				intervalSummary: {
+					id: span.interval.id,
+					count: Math.max(0, closeIndex - index - 1),
+					collapsed: false,
+					open: false,
+				},
+			});
+			continue;
+		}
+		const opening = open.get(item.containerId);
+		rows.push(
+			opening
+				? {
+						...item,
+						intervalSummary: {
+							id: opening.interval.id,
+							count: opening.visibleContainersAfterOpen,
+							collapsed: false,
+							open: true,
+						},
+					}
+				: item,
+		);
+	}
+	return rows.filter(
+		(item) =>
+			item.role !== "system" ||
+			Boolean(item.intervalSummary) ||
+			Boolean(item.message?.content),
+	);
+});
+
+function toggleInterval(id: string) {
+	const next = new Set(expandedIntervals.value);
+	if (next.has(id)) next.delete(id);
+	else next.add(id);
+	expandedIntervals.value = next;
+}
 
 const virtualizer = useVirtualizer(
 	computed(() => ({
 		count: visiblePathView.value.length,
 		getScrollElement: () => viewport.value?.element ?? null,
-		getItemKey: (index: number) => visiblePathView.value[index]?.containerId ?? index,
+		getItemKey: (index: number) =>
+			visiblePathView.value[index]?.containerId ?? index,
 		estimateSize: () => 240,
 		overscan: 6,
 		anchorTo: holdVirtualEnd.value ? undefined : ("end" as const),
@@ -78,7 +149,10 @@ watch(
 const currentPluginName = computed(() => {
 	const localPluginId = conversation.chat.value?.localPluginId;
 	if (!localPluginId) return "P";
-	return localPlugins.localPlugins.find((item) => item.id === localPluginId)?.name ?? "P";
+	return (
+		localPlugins.localPlugins.find((item) => item.id === localPluginId)?.name ??
+		"P"
+	);
 });
 </script>
 
@@ -98,6 +172,7 @@ const currentPluginName = computed(() => {
                       :generating="conversation.generating.value"
                       @process-interaction="pauseVirtualEnd"
                       @delete-message="conversation.deleteMessage"
+					  @toggle-interval="toggleInterval"
                     />
                   </MessageScrollerItem>
                 </div>

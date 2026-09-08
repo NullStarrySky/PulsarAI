@@ -35,6 +35,7 @@ import { useLayoutStore } from "@/features/UI/layout-store";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
 import PluginSlotComponents from "../panels/PluginSlotComponents.vue";
 import { host } from "@/host";
+import UpdateIndicator from "@/features/UI/components/UpdateIndicator.vue";
 
 const props = defineProps<{
 	localPluginId: string;
@@ -60,14 +61,17 @@ const hovered = ref(false);
 const packageMenuOpen = ref(false);
 const chatMenuOpen = ref(false);
 const operationsOpen = ref(false);
-const localPluginManager = ref<InstanceType<typeof LocalPluginManager> | null>(null);
+const localPluginManager = ref<InstanceType<typeof LocalPluginManager> | null>(
+	null,
+);
 const chatManager = ref<InstanceType<typeof ChatManager> | null>(null);
 const topBarHoverBoundary = 56;
 const selectedPackage = computed(
-	() => localPlugins.localPlugins.find((item) => item.id === props.localPluginId) ?? null,
+	() =>
+		localPlugins.localPlugins.find((item) => item.id === props.localPluginId) ??
+		null,
 );
 const selectedChat = computed(() => conversation.chat.value);
-
 
 const topBarClass = computed(() =>
 	!appearance.zenFrameEnabled
@@ -163,6 +167,7 @@ watch(
       </DropdownMenu>
     </div>
     <div class="flex shrink-0 items-center gap-0.5">
+      <UpdateIndicator :button-class="buttonClass" />
       <PluginSlotComponents slot-id="topbar-right" direction="horizontal" class="hidden max-w-60 overflow-hidden xl:flex" />
       <DropdownMenu>
         <DropdownMenuTrigger as-child><Button variant="ghost" size="icon-sm" class="rounded-full xl:hidden" :class="buttonClass" title="更多顶栏组件"><MoreHorizontal class="size-4" /></Button></DropdownMenuTrigger>

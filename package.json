@@ -110,6 +110,7 @@
 		"tauri-plugin-m3": "0.3.2",
 		"tauri-plugin-stt-api": "0.2.2",
 		"tauri-plugin-tts-api": "0.1.13",
+		"tiktoken": "^1.0.22",
 		"vaul-vue": "^0.4.1",
 		"vee-validate": "^4.15.1",
 		"vue": "^3.5.42",

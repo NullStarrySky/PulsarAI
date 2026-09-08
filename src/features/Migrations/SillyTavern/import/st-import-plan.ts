@@ -23,6 +23,7 @@ export type StImportKind =
   | "character"
   | "worldbook"
   | "preset"
+  | "conversation"
   | "persona"
   | "regex";
 

@@ -26,6 +26,7 @@ import { generateComfyUIImages } from "./providers/comfyui-image-client";
 import { generateNovelAIImages } from "./providers/novelai-image-client";
 import { generateStabilityImages } from "./providers/stability-image-client";
 import { loadStabilitySettings } from "./stability-settings";
+import { writeMedia } from "@/features/Media/media-link";
 
 export type GenerateImageOptions = Omit<
 	Parameters<typeof generateImageWithModel>[0],
@@ -140,6 +141,15 @@ export async function generateImage(
 		});
 	}
 	return generateImageWithModel({ ...options, model });
+}
+
+/** Generates one image into the host media container and returns its stable ID. */
+export async function generateImageToPath(
+	options: GenerateImageOptions & { path?: string },
+): Promise<string> {
+	const { path = "temp", ...input } = options;
+	const result = await generateImage(input);
+	return (await writeMedia(result.image.uint8Array, result.image.mediaType, path)).id;
 }
 
 function specializedResult(

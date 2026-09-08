@@ -38,7 +38,8 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="flex h-[100dvh] min-w-0 flex-col overflow-hidden text-foreground"
-    :class="appearance.zenFrameEnabled ? 'bg-zen-frame-bg p-1.5 mobile:p-1' : 'bg-background'"
+    :class="appearance.zenFrameEnabled ? 'bg-zen-frame-bg' : 'bg-background'"
+    :style="appearance.zenFrameEnabled ? { padding: `${appearance.zenFrameWidth}px` } : undefined"
   >
     <div
       class="min-h-0 flex-1"

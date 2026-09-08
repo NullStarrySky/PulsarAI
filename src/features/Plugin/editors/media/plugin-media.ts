@@ -1,4 +1,4 @@
-export type PluginMediaType = "image" | "video";
+export type PluginMediaType = "image" | "video" | "audio";
 
 export interface PluginMediaContent {
 	kind: "media";
@@ -24,16 +24,15 @@ export function pluginMediaType(
 ): PluginMediaType {
 	if (content && typeof content === "object") {
 		const explicit = (content as { mediaType?: unknown }).mediaType;
-		if (explicit === "video" || explicit === "image") {
+		if (explicit === "video" || explicit === "image" || explicit === "audio") {
 			return explicit;
 		}
 	}
 
 	const normalized = source.split(/[?#]/, 1)[0]?.toLowerCase() ?? "";
-	return normalized.startsWith("data:video/") ||
-		/\.(mp4|webm|ogv|ogg|mov|m4v)$/.test(normalized)
-		? "video"
-		: "image";
+	if (normalized.startsWith("data:audio/") || /\.(mp3|wav|m4a|aac|flac|opus)$/.test(normalized)) return "audio";
+	return normalized.startsWith("data:video/") || /\.(mp4|webm|ogv|ogg|mov|m4v)$/.test(normalized)
+		? "video" : "image";
 }
 
 export function createPluginMediaContent(

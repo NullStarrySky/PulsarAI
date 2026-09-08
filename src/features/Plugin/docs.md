@@ -63,3 +63,24 @@ Only Slots and Sources resource rows receive a selection switch and its hover
 icon treatment; Assets stays a pure filesystem view. Slot icons override the
 normal file icon in the slot projection, and source labels precede resource
 names.
+
+## Mode resources and reference estimates
+
+The built-in `MODE` slot accepts JSON resources with `id`, `name`, optional
+`description`, and optional `enter`/`exit` resource paths. Paths are absolute
+World paths. Switching imports the previous mode's exit script before the new
+mode's enter script; Conversation continues to own the interval marker.
+
+The file editor estimates text-like resource size locally with tiktoken's
+`cl100k_base` encoding. The number is informational: recursive imports,
+conditions, slots and runtime macro expansion may change the actual prompt cost.
+
+## Media resources
+
+Non-text World resources retain a `media://<uuid>` link while their bytes stay
+in the host media container. `useWorld.remove` remains an ordinary World-file
+operation and intentionally does not delete that host file. Agent code receives
+`generateImageToPath(options)` alongside its existing Image Generation options:
+it writes the first generated image to `options.path` (or `temp` by default) and
+returns `Promise<string>` with the media ID. Use `media.link(id)` to emit the
+stored result in Markdown or an HTML media tag.

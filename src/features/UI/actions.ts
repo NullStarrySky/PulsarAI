@@ -1,5 +1,15 @@
-import { Mic, Search, Settings, SquareMinus, Trash2 } from "lucide-vue-next";
-import { resetCharacterDataAction } from "@/features/Conversation/actions";
+import {
+	Mic,
+	PencilLine,
+	Search,
+	Settings,
+	SquareMinus,
+	Trash2,
+} from "lucide-vue-next";
+import {
+	resetCharacterDataAction,
+	toggleEditModeAction,
+} from "@/features/Conversation/actions";
 import {
 	type CommandDefinition,
 	useCommandStore,
@@ -51,6 +61,15 @@ function createCoreCommands(): CommandDefinition[] {
 					},
 				]
 			: []),
+		{
+			id: "conversation.toggle-edit-mode",
+			title: "切换编辑子对话模式",
+			description: "插入区间标记，并在退出时折叠这段内联子对话。",
+			category: "对话",
+			defaultHotkey: "Ctrl+Shift+E",
+			icon: PencilLine,
+			run: toggleEditModeAction,
+		},
 		{
 			id: "conversation.reset-character-data",
 			title: "清空全部角色数据",

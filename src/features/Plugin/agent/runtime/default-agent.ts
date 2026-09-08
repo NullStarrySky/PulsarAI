@@ -9,6 +9,7 @@ import {
 import { z } from "zod";
 import type {
 	ThinkingStep,
+	TokenUsage,
 	ToolCallResult,
 	ToolCallStep,
 } from "@/features/Conversation/messages/message-types";
@@ -47,6 +48,7 @@ interface DefaultAgentResources {
  */
 export interface AgentOutputContainer {
 	setModelName: (modelName: string) => Promise<void>;
+	setTokenUsage: (usage: TokenUsage) => Promise<void>;
 	appendContent: (delta: string) => Promise<void>;
 	addStep: (
 		step: ThinkingStep | ToolCallStep | ToolCallResult,
@@ -209,6 +211,7 @@ export function createAgentResourceProvider(
 						throw new Error(part.reason || "生成已中止。");
 					}
 				}
+				await this.input.container.setTokenUsage(await result.usage);
 			} finally {
 				await runtime.finish();
 			}
@@ -258,6 +261,7 @@ export function createAgentResourceProvider(
 					throw new Error(part.reason || "生成已中止。");
 				}
 			}
+			await container.setTokenUsage(await result.usage);
 		} finally {
 			await runtime.finish();
 		}

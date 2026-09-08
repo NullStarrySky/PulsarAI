@@ -9,7 +9,7 @@ import {
   nextTick,
   useId,
 } from "vue";
-import { AnimatePresence, motion, ReorderGroup, ReorderItem, useReducedMotion } from "motion-v";
+import { AnimatePresence, motion, useReducedMotion } from "motion-v";
 import { cn } from "../../../lib/utils";
 import { fontWeights } from "../../../lib/font-weight";
 import { spring } from "../../../lib/springs";
@@ -25,10 +25,9 @@ import Tooltip from "../tooltip/Tooltip.vue";
 
 const DEFAULT_ACCEPT = "image/png,image/jpeg,application/pdf";
 
-export interface QueuedMessage {
-  id: string;
-  text: string;
-  files: File[];
+export interface InputMessageSuggestionGroup {
+  label?: string;
+  suggestions: string[];
 }
 
 export interface InputMessageSlotContext {
@@ -43,7 +42,7 @@ export interface InputMessageProps {
   defaultValue?: string;
   placeholder?: string;
   placeholderSuggestion?: string;
-  suggestions?: string[];
+  suggestions?: string[] | InputMessageSuggestionGroup[];
   history?: string[];
   disabled?: boolean;
   minRows?: number;
@@ -55,8 +54,6 @@ export interface InputMessageProps {
   maxFiles?: number;
   filePreviewSize?: number;
   status?: "idle" | "streaming";
-  queue?: QueuedMessage[];
-  showQueue?: boolean;
   textareaProps?: Record<string, any>;
   class?: string;
   style?: any;
@@ -72,7 +69,6 @@ const props = withDefaults(defineProps<InputMessageProps>(), {
   sendLabel: "Send",
   accept: DEFAULT_ACCEPT,
   filePreviewSize: 80,
-  showQueue: true,
   history: () => [],
 });
 
@@ -80,10 +76,9 @@ const emit = defineEmits<{
   (e: "update:modelValue", val: string): void;
   (e: "update:value", val: string): void;
   (e: "valueChange", val: string): void;
-  (e: "send", value: string, files: File[], meta?: { queuedId?: string }): void;
+  (e: "send", value: string, files: File[]): void;
   (e: "stop"): void;
   (e: "update:files", files: File[]): void;
-  (e: "update:queue", queue: QueuedMessage[]): void;
 }>();
 
 const slots = defineSlots<{
@@ -92,6 +87,7 @@ const slots = defineSlots<{
   right?: (ctx: InputMessageSlotContext) => any;
   rightSlot?: (ctx: InputMessageSlotContext) => any;
   actions?: (ctx: InputMessageSlotContext) => any;
+  attachments?: (ctx: InputMessageSlotContext) => any;
 }>();
 
 defineOptions({ name: "InputMessage" });
@@ -106,7 +102,6 @@ const ArrowUpIcon = useIcon("arrow-up");
 const ArrowDownIcon = useIcon("arrow-down");
 const EnterIcon = useIcon("corner-down-left");
 const XIcon = useIcon("x");
-const ImageIcon = useIcon("image");
 
 const prefersReducedMotion = useReducedMotion();
 const reduceMotion = computed(() => prefersReducedMotion.value ?? false);
@@ -163,29 +158,32 @@ function setFiles(next: File[]) {
   emit("update:files", next);
 }
 
-// ── Queue state ──
-const queuePassed = computed(() => props.queue !== undefined);
-const internalQueue = ref<QueuedMessage[]>([]);
-const queueArr = computed<QueuedMessage[]>(() =>
-  queuePassed.value ? props.queue ?? [] : internalQueue.value
-);
-const supportsQueue = computed(() => props.status !== undefined);
 const streaming = computed(() => props.status === "streaming");
-const liveMsg = ref("");
-
-function setQueue(next: QueuedMessage[]) {
-  if (!queuePassed.value) {
-    internalQueue.value = next;
-  }
-  emit("update:queue", next);
-}
 
 // ── History state ──
 const historyIndex = ref<number | null>(null);
 const draftBeforeHistory = ref("");
 
 // ── Suggestions state ──
-const suggestionsArr = computed(() => props.suggestions ?? []);
+const suggestionGroups = computed<InputMessageSuggestionGroup[]>(() => {
+  const source = props.suggestions ?? [];
+  if (!source.length) return [];
+  return typeof source[0] === "string"
+    ? [{ suggestions: source as string[] }]
+    : source as InputMessageSuggestionGroup[];
+});
+const suggestionsArr = computed(() => suggestionGroups.value.flatMap((group) => group.suggestions));
+const suggestionItems = computed(() => {
+  let index = 0;
+  return suggestionGroups.value.flatMap((group) =>
+    group.suggestions.map((suggestion, groupIndex) => ({
+      suggestion,
+      index: index++,
+      label: groupIndex === 0 ? group.label : undefined,
+    })),
+  );
+});
+const hasSuggestionLabels = computed(() => suggestionGroups.value.some((group) => group.label));
 const suggestionsOpen = computed(
   () => suggestionsArr.value.length > 0 && currentValue.value === ""
 );
@@ -250,7 +248,6 @@ function useRegionHeight() {
 }
 
 const filesRegion = useRegionHeight();
-const queueRegion = useRegionHeight();
 const suggestionsRegion = useRegionHeight();
 
 // ── Textarea line-height & auto-resize ──
@@ -327,20 +324,6 @@ const edgeShadow = computed(() => {
 function handleSend() {
   if (!canSend.value) return;
   historyIndex.value = null;
-
-  if (streaming.value && supportsQueue.value) {
-    const item: QueuedMessage = {
-      id: crypto.randomUUID(),
-      text: trimmed.value,
-      files: [...filesArr.value],
-    };
-    setQueue([...queueArr.value, item]);
-    setValue("");
-    if (supportsFiles.value) setFiles([]);
-    nextTick(() => textareaRef.value?.focus());
-    return;
-  }
-
   emit("send", trimmed.value, [...filesArr.value]);
 }
 
@@ -348,62 +331,13 @@ function handleStop() {
   emit("stop");
 }
 
-// ── Auto-dispatch on streaming -> idle ──
-const prevStatus = ref(props.status);
-watch(
-  () => props.status,
-  (next, prev) => {
-    prevStatus.value = prev;
-    if (!supportsQueue.value) return;
-    if (prev === "streaming" && next === "idle" && queueArr.value.length > 0) {
-      const [head, ...rest] = queueArr.value;
-      setQueue(rest);
-      emit("send", head.text, head.files, { queuedId: head.id });
-      liveMsg.value = `Message sent.${rest.length ? ` ${rest.length} still queued.` : ""}`;
-    }
-  }
-);
-
-// ── Queue actions ──
-function editQueued(item: QueuedMessage) {
-  if (!supportsQueue.value) return;
-  historyIndex.value = null;
-  setValue(item.text);
-  if (supportsFiles.value) {
-    setFiles(props.maxFiles != null ? item.files.slice(0, props.maxFiles) : item.files);
-  }
-  setQueue(queueArr.value.filter((q) => q.id !== item.id));
-  nextTick(() => {
-    const el = textareaRef.value;
-    if (!el) return;
-    el.focus();
-    el.setSelectionRange(el.value.length, el.value.length);
-  });
-}
-
-function removeQueued(item: QueuedMessage) {
-  setQueue(queueArr.value.filter((q) => q.id !== item.id));
-}
-
-function moveQueued(item: QueuedMessage, dir: -1 | 1) {
-  const cur = queueArr.value;
-  const i = cur.findIndex((q) => q.id === item.id);
-  const j = i + dir;
-  if (i < 0 || j < 0 || j >= cur.length) return;
-  const next = [...cur];
-  [next[i], next[j]] = [next[j], next[i]];
-  setQueue(next);
-}
-
-const buttonMode = computed<"send" | "queue" | "stop">(() => {
+const buttonMode = computed<"send" | "stop">(() => {
   if (!streaming.value) return "send";
-  if (canSend.value && supportsQueue.value) return "queue";
   return "stop";
 });
 
 const buttonLabel = computed(() => {
   if (buttonMode.value === "stop") return "Stop";
-  if (buttonMode.value === "queue") return "Queue message";
   return props.sendLabel;
 });
 
@@ -517,7 +451,7 @@ function handleContainerMouseDown(e: MouseEvent) {
   if (target === textareaRef.value) return;
   if (
     target.closest(
-      'button, a, input, select, textarea, [contenteditable], [role="button"], [data-im-queue]'
+      'button, a, input, select, textarea, [contenteditable], [role="button"]'
     )
   ) {
     return;
@@ -694,96 +628,8 @@ defineExpose({
       </motion.div>
     </AnimatePresence>
 
-    <!-- 队列消息行 -->
-    <AnimatePresence v-if="supportsQueue && showQueue" :initial="false">
-      <motion.div
-        v-if="queueArr.length > 0"
-        key="queue-row"
-        :initial="{ height: 0, opacity: 0 }"
-        :animate="{ height: queueRegion.height.value ?? 0, opacity: 1 }"
-        :exit="{ height: 0, opacity: 0 }"
-        :transition="{ ...spring.moderate, bounce: 0 }"
-        class="overflow-hidden"
-      >
-        <div :ref="queueRegion.setRef">
-          <ReorderGroup
-            axis="y"
-            :values="queueArr"
-            data-im-queue
-            class="flex flex-col gap-1 pb-1"
-            @update:values="setQueue"
-          >
-            <AnimatePresence :initial="false">
-              <ReorderItem
-                v-for="(item, i) in queueArr"
-                :key="item.id"
-                :value="item"
-                layout
-                :initial="reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97 }"
-                :animate="{ opacity: 1, scale: 1 }"
-                :exit="reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97, transition: spring.fast.exit }"
-                :transition="spring.fast"
-                :aria-label="`Queued message ${i + 1} of ${queueArr.length}: ${item.text || `${item.files.length} attachments`}`"
-                tabindex="0"
-                :class="
-                  cn(
-                    'group/qrow flex items-center gap-2 rounded-lg bg-muted select-none outline-none',
-                    compactStep ? 'h-7 px-2 text-[12px]' : 'h-8 px-2.5 text-[13px]',
-                    'text-foreground/85 cursor-grab active:cursor-grabbing',
-                    'focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]'
-                  )
-                "
-                :style="{ fontVariationSettings: fontWeights.normal }"
-                @dblclick="editQueued(item)"
-                @keydown="
-                  (e: KeyboardEvent) => {
-                    if (e.key === 'Enter' || e.key === 'F2') {
-                      e.preventDefault();
-                      editQueued(item);
-                    } else if (e.key === 'Delete' || e.key === 'Backspace') {
-                      e.preventDefault();
-                      removeQueued(item);
-                    } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
-                      e.preventDefault();
-                      moveQueued(item, e.key === 'ArrowUp' ? -1 : 1);
-                    }
-                  }
-                "
-              >
-                <span
-                  v-if="item.files.length > 0"
-                  class="flex shrink-0 items-center gap-0.5 text-muted-foreground"
-                >
-                  <ImageIcon :size="13" />
-                  <span v-if="item.text" class="tabular-nums">{{ item.files.length }}</span>
-                </span>
-                <span class="-my-1 min-w-0 flex-1 truncate py-1 [text-box:trim-both_cap_alphabetic]">
-                  {{ item.text || `${item.files.length} attachment${item.files.length === 1 ? '' : 's'}` }}
-                </span>
-                <Tooltip content="移除" side="top">
-                  <button
-                    type="button"
-                    :aria-label="`Remove queued message: ${item.text}`"
-                    :class="
-                      cn(
-                        'flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-full',
-                        'text-muted-foreground outline-none hover:bg-hover hover:text-foreground',
-                        isTouch ? 'opacity-100' : 'opacity-0 group-hover/qrow:opacity-100 focus-visible:opacity-100',
-                        'transition-opacity duration-80 focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]'
-                      )
-                    "
-                    @pointerdown.stop
-                    @click.stop="removeQueued(item)"
-                  >
-                    <XIcon :size="13" :stroke-width="2.5" />
-                  </button>
-                </Tooltip>
-              </ReorderItem>
-            </AnimatePresence>
-          </ReorderGroup>
-        </div>
-      </motion.div>
-    </AnimatePresence>
+
+    <slot name="attachments" :="slotCtx" />
 
     <!-- Textarea 区域 -->
     <div class="relative">
@@ -929,7 +775,7 @@ defineExpose({
         :animate="{ height: suggestionsRegion.height.value ?? 0, opacity: 1 }"
         :exit="{ height: 0 }"
         :transition="{ ...spring.moderate, bounce: 0 }"
-        class="-mx-2 -mt-1 overflow-hidden"
+        class="order-first -mx-2 -mt-1 overflow-hidden"
       >
         <div
           :ref="
@@ -973,48 +819,46 @@ defineExpose({
 
           <!-- 建议词条目 -->
           <div
-            v-for="(s, i) in suggestionsArr"
-            :key="`${s}-${i}`"
+            v-for="item in suggestionItems"
+            :key="`${item.index}:${item.suggestion}`"
             :ref="
               (el) => {
-                registerSuggestion(i, el as HTMLElement | null);
+                registerSuggestion(item.index, el as HTMLElement | null);
               }
             "
-            :id="`${suggestionListId}-${i}`"
+            :id="`${suggestionListId}-${item.index}`"
             role="option"
-            :aria-selected="i === activeSuggestion"
+            :aria-selected="item.index === activeSuggestion"
             :class="
               cn(
                 'relative flex cursor-pointer items-center gap-2 select-none',
                 compactStep ? 'h-7 px-2 text-[13px]' : 'h-8 px-2.5 text-[14px]',
                 'text-muted-foreground transition-colors duration-80',
-                i === activeSuggestion && 'text-foreground'
+                item.index === activeSuggestion && 'text-foreground'
               )
             "
             :style="{ fontVariationSettings: fontWeights.normal }"
-            @click="acceptSuggestion(s)"
+            @click="acceptSuggestion(item.suggestion)"
           >
+            <span v-if="item.label" class="w-14 shrink-0 truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">{{ item.label }}</span>
+            <span v-else-if="hasSuggestionLabels" class="w-14 shrink-0" />
             <span class="-my-1 min-w-0 flex-1 truncate py-1 [text-box:trim-both_cap_alphabetic]">
-              {{ s }}
+              {{ item.suggestion }}
             </span>
             <ArrowDownIcon
-              v-if="i !== activeSuggestion && i === 0 && activeSuggestion == null"
+              v-if="item.index !== activeSuggestion && item.index === 0 && activeSuggestion == null"
               :size="13"
               class="shrink-0 text-muted-foreground/70 transition-opacity duration-80"
             />
             <EnterIcon
               v-else
               :size="13"
-              :class="cn('shrink-0 transition-opacity duration-80', i === activeSuggestion ? 'opacity-100' : 'opacity-0')"
+              :class="cn('shrink-0 transition-opacity duration-80', item.index === activeSuggestion ? 'opacity-100' : 'opacity-0')"
             />
           </div>
         </div>
       </motion.div>
     </AnimatePresence>
 
-    <!-- 屏幕朗诵状态 -->
-    <span class="sr-only" role="status" aria-live="polite">
-      {{ liveMsg }}
-    </span>
   </div>
 </template>

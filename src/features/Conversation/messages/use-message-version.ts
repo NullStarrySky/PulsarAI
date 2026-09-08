@@ -7,7 +7,7 @@ import {
 	formatMessageTime,
 	speakMessageContent,
 } from "./message-version-actions";
-import type { ChatMessage, FilePart } from "./message-types";
+import type { ChatMessage, FilePart, ReferencePart } from "./message-types";
 
 export interface MessageVersionOptions {
 	localPluginId?: string;
@@ -38,6 +38,12 @@ export function useMessageVersion(
 	const attachments = computed<FilePart[]>(() => {
 		const parts = message.value?.parts ?? [];
 		return parts.filter((part): part is FilePart => part.type === "file");
+	});
+	const references = computed<ReferencePart[]>(() => {
+		const parts = message.value?.parts ?? [];
+		return parts.filter(
+			(part): part is ReferencePart => part.type === "reference",
+		);
 	});
 
 	const pulses = computed(() => {
@@ -109,6 +115,7 @@ export function useMessageVersion(
 		message,
 		thinking,
 		attachments,
+		references,
 		pulses,
 		hasPluginChanges,
 		resourceSummary,

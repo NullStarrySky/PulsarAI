@@ -11,6 +11,7 @@ import type {
 	ChatMessageContainer,
 	Role,
 } from "./message-types";
+import { readMediaLink } from "@/features/Media/media-link";
 
 const containerTable = "message_containers";
 
@@ -115,13 +116,14 @@ export function pathForTail(
 	return path;
 }
 
-export function modelMessagesFromPath(
+export async function modelMessagesFromPath(
 	path: ChatMessageContainer[],
-): ModelMessage[] {
+): Promise<ModelMessage[]> {
 	const result: ModelMessage[] = [];
 	for (const container of path) {
 		const msg = currentMessage(container);
 		if (!msg || msg.type === "error") continue;
+		if (msg.meta.intervalOperations?.length) continue;
 		const role = container.role;
 
 		if (role === "user") {
@@ -132,10 +134,16 @@ export function modelMessagesFromPath(
 			if (msg.parts) {
 				for (const part of msg.parts) {
 					if (part.type === "file") {
+						const media = await readMediaLink(part.url);
 						parts.push({
 							type: "file",
-							data: part.url,
+							data: media?.bytes ?? part.url,
 							mimeType: part.mediaType,
+						});
+					} else if (part.type === "reference") {
+						parts.push({
+							type: "text",
+							text: `\n[引用${part.referenceType === "file" ? "文件" : "消息"}：${part.label}${part.path ? ` (${part.path})` : ""}]\n${part.content}`,
 						});
 					}
 				}

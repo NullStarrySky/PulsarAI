@@ -3,20 +3,12 @@ import {
 	createPluginMediaContent,
 	pluginMediaSource,
 } from "@/features/Plugin/editors/media/plugin-media";
+import { mediaLink, resolveMediaUrl, writeMedia } from "@/features/Media/media-link";
 import { useWorld } from "@/features/Plugin/tree/world-store";
 import { PIPER_TTS_PROVIDER_ID } from "./providers/piper-tts-client";
 import { generateSpeech } from "./text-to-speech";
 
 let playing: HTMLAudioElement | null = null;
-
-function base64(bytes: Uint8Array) {
-	let result = "";
-	const block = 0x8000;
-	for (let index = 0; index < bytes.length; index += block) {
-		result += String.fromCharCode(...bytes.subarray(index, index + block));
-	}
-	return btoa(result);
-}
 
 async function cacheKey(
 	messageId: string,
@@ -70,7 +62,7 @@ export async function playMessageSpeech(
 	const source =
 		cached?.type === "file" ? pluginMediaSource(cached.content) : "";
 	if (source) {
-		await startPlayback(source);
+		await startPlayback(await resolveMediaUrl(source));
 		return { cached: true };
 	}
 
@@ -81,11 +73,12 @@ export async function playMessageSpeech(
 	const bytes = result.audio.uint8Array;
 	const mediaType = result.audio.mediaType || "audio/mpeg";
 	const content = createPluginMediaContent(
-		`data:${mediaType};base64,${base64(bytes)}`,
+		mediaLink((await writeMedia(bytes, mediaType, "temp")).id),
+		"audio",
 	);
 	await world.write(cachePath, content);
 	const generatedSource = pluginMediaSource(content);
 	if (!generatedSource) throw new Error("生成的音频缓存无效。");
-	await startPlayback(generatedSource);
+	await startPlayback(await resolveMediaUrl(generatedSource));
 	return { cached: false };
 }

@@ -173,7 +173,9 @@ mod backup;
 mod backup_commands;
 mod database;
 mod files;
+
 mod lan_sync;
+mod media;
 mod migration;
 mod piper_tts;
 mod stt;
@@ -183,6 +185,7 @@ use backup_commands::*;
 use database::*;
 use files::*;
 use lan_sync::*;
+use media::*;
 use migration::{
     migration_read_binary, migration_read_png_character, migration_read_text, migration_scan_path,
 };
@@ -286,6 +289,10 @@ pub fn run() {
             database_reset_character_data,
             resource_save_image,
             resource_delete_file,
+            media_write,
+            media_read,
+            media_url,
+            media_delete,
             backup_list,
             backup_create,
             backup_restore,

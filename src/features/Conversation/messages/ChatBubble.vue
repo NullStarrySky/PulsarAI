@@ -28,6 +28,7 @@ import {
 	PopoverTrigger,
 } from "@/components/ui/popover";
 import ConversationComposerEditor from "@/features/Conversation/composer/ConversationComposerEditor.vue";
+import ComposerAttachmentStrip from "@/features/Conversation/composer/ComposerAttachmentStrip.vue";
 import ConversationMarkdown from "@/features/Conversation/stage/markstream/ConversationMarkdown.vue";
 import type { MessageBubbleViewModel } from "../use-conversation";
 import ChatSteps from "./ChatSteps.vue";
@@ -40,13 +41,24 @@ const props = defineProps<{
 const emit = defineEmits<{
 	"process-interaction": [];
 	"delete-message": [containerId: string];
+	"toggle-interval": [intervalId: string];
 }>();
 
 const actions = props.viewModel.actions;
 </script>
 
 <template>
+  <button
+    v-if="viewModel.intervalSummary"
+    type="button"
+    class="mx-auto flex max-w-full items-center gap-2 rounded-full border bg-muted/65 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    @click="emit('toggle-interval', viewModel.intervalSummary.id)"
+  >
+    <Pencil class="size-3.5" />
+    <span>{{ viewModel.intervalSummary.open ? '编辑模式中' : viewModel.intervalSummary.collapsed ? `编辑子对话 · ${viewModel.intervalSummary.count} 条消息` : '收起编辑子对话' }}</span>
+  </button>
   <ChatMessage
+    v-else
     :id="`message-bubble-${viewModel.containerId}`"
     :from="viewModel.role === 'user' ? 'user' : 'assistant'"
     :time="viewModel.messageTime"
@@ -60,6 +72,12 @@ const actions = props.viewModel.actions;
     ]"
   >
     <div class="whitespace-normal">
+	  <ComposerAttachmentStrip
+		v-if="viewModel.attachments.length || viewModel.references.length"
+		:attachments="[...viewModel.attachments, ...viewModel.references]"
+		:removable="false"
+		class="mb-2"
+	  />
       <ChatSteps
         :steps="viewModel.thinking as any"
         :working="generating && viewModel.role === 'assistant'"

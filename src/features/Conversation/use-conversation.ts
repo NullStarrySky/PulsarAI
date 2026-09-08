@@ -1,10 +1,4 @@
-import {
-	computed,
-	type MaybeRefOrGetter,
-	ref,
-	toValue,
-	watch,
-} from "vue";
+import { computed, type MaybeRefOrGetter, ref, toValue, watch } from "vue";
 import {
 	isChatGenerating,
 	loadChat,
@@ -39,9 +33,12 @@ import type {
 	AdditionalParts,
 	ChatMessage,
 	ChatMessageContainer,
+	FilePart,
+	ReferencePart,
 	Role,
 } from "./messages/message-types";
 import { useMessageContainer } from "./messages/use-message-container";
+import { mediaLinks, removeMediaLink } from "@/features/Media/media-link";
 
 export interface MessageBubbleViewModel {
 	containerId: string;
@@ -54,12 +51,19 @@ export interface MessageBubbleViewModel {
 	activeBranchIndex: number;
 	branchCount: number;
 	thinking: unknown[];
-	attachments: unknown[];
+	attachments: FilePart[];
+	references: ReferencePart[];
 	pulses: import("@/features/Plugin/tree/world-update").Pulse[];
 	hasPluginChanges: boolean;
 	resourceSummary: string;
 	messageTime: string;
 	actions: ReturnType<typeof useMessageContainer>;
+	intervalSummary?: {
+		id: string;
+		count: number;
+		collapsed: boolean;
+		open: boolean;
+	};
 }
 
 export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
@@ -68,7 +72,9 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 	const loading = ref(false);
 
 	const chatId = computed(() => toValue(chatIdSource));
-	const generating = computed(() => (chatId.value ? isChatGenerating(chatId.value) : false));
+	const generating = computed(() =>
+		chatId.value ? isChatGenerating(chatId.value) : false,
+	);
 	const currentContainers = () =>
 		containers.value as unknown as ChatMessageContainer[];
 
@@ -104,19 +110,26 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 	const intervalProjection = computed<IntervalProjection>(() =>
 		evaluateIntervals(activePath.value),
 	);
+	const editModeInterval = computed(() =>
+		intervalProjection.value.openIntervals.find(
+			(item) => item.interval.type === "edit",
+		),
+	);
+	const isEditMode = computed(() => Boolean(editModeInterval.value));
 
 	const activePathView = computed<MessageBubbleViewModel[]>(() => {
 		const localPluginId = chat.value?.localPluginId;
 		const cMap = new Map(currentContainers().map((item) => [item.id, item]));
 		return activePath.value.map((container) => {
 			const parent = container.previousContainer
-				? cMap.get(container.previousContainer) ?? null
+				? (cMap.get(container.previousContainer) ?? null)
 				: null;
 			const actions = useMessageContainer(container, {
 				localPluginId,
 				parentContainer: parent,
 				onSwitchVersion: async (cId, idx) => switchVersion(cId, idx),
-				onUpdateContent: async (content) => updateMessage(container.id, content),
+				onUpdateContent: async (content) =>
+					updateMessage(container.id, content),
 				onRegenerate: async (cId) => {
 					await regenerate(cId);
 				},
@@ -134,6 +147,7 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 				branchCount: actions.branchCount.value,
 				thinking: actions.thinking.value,
 				attachments: actions.attachments.value,
+				references: actions.references.value,
 				pulses: actions.pulses.value,
 				hasPluginChanges: actions.hasPluginChanges.value,
 				resourceSummary: actions.resourceSummary.value,
@@ -146,9 +160,7 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 	const composerDraft = computed<ComposerDraft>({
 		get: () => {
 			const current = chat.value as unknown as Conversation | null;
-			return (
-				current?.composerDraft ?? createDefaultComposerDraft(chatId.value)
-			);
+			return current?.composerDraft ?? createDefaultComposerDraft(chatId.value);
 		},
 		set: (value: ComposerDraft) => {
 			const current = chat.value as unknown as Conversation | null;
@@ -250,18 +262,66 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		}
 	}
 
-	async function openInterval(messageVersion: ChatMessage, input: OpenIntervalInput) {
+	async function openInterval(
+		messageVersion: ChatMessage,
+		input: OpenIntervalInput,
+	) {
 		return persistIntervalOpen(currentContainers(), messageVersion, input);
 	}
 
-	async function closeInterval(messageVersion: ChatMessage, intervalId: string) {
-		return persistIntervalClose(currentContainers(), messageVersion, intervalId);
+	async function closeInterval(
+		messageVersion: ChatMessage,
+		intervalId: string,
+	) {
+		return persistIntervalClose(
+			currentContainers(),
+			messageVersion,
+			intervalId,
+		);
 	}
 
-	async function send(
-		extraParts: AdditionalParts[] = [],
-		overrideRole?: Role,
-	) {
+	async function setMode(mode?: {
+		id: string;
+		name: string;
+		content?: import("./messages/interval-service").JsonValue;
+	}) {
+		const current = chat.value as unknown as Conversation | null;
+		if (!current) return;
+		const closing = editModeInterval.value;
+		if (closing && mode?.id === closing.interval.id) mode = undefined;
+		if (!closing && !mode) return;
+		const marker = await append({
+			conversationId: current.id,
+			role: "system",
+			content: closing
+				? `${closing.interval.name ?? "模式"}子对话已折叠`
+				: `${mode?.name ?? "编辑"}子对话`,
+			previousContainer: current.lastContainerId,
+		});
+		const message = currentMessage(marker);
+		if (!message) return;
+		if (closing) await closeInterval(message, closing.interval.id);
+		if (mode)
+			await openInterval(message, {
+				id: mode.id,
+				type: "edit",
+				name: mode.name,
+				content: mode.content ?? { mode: mode.id },
+			});
+		current.lastContainerId = marker.id;
+		current.updatedAt = new Date().toISOString();
+		await persistChat(current);
+	}
+
+	async function toggleEditMode() {
+		await setMode({
+			id: "builtin-edit",
+			name: "编辑模式",
+			content: { mode: "edit" },
+		});
+	}
+
+	async function send(extraParts: AdditionalParts[] = [], overrideRole?: Role) {
 		const current = chat.value as unknown as Conversation | null;
 		const currentDraft = composerDraft.value;
 		const activeIdx = currentDraft.activeMessage ?? 0;
@@ -320,7 +380,10 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		await persistChat(current);
 
 		if (triggerGenerate && container.role === "assistant") {
-			const path = pathForTail(currentContainers(), container.previousContainer);
+			const path = pathForTail(
+				currentContainers(),
+				container.previousContainer,
+			);
 			const promptContainer = path[path.length - 1];
 			await generateRequestedAssistantReply({
 				chatId: current.id,
@@ -426,11 +489,32 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 			await persistContainer(parent);
 		}
 
-		await deleteContainer(containerId);
+		const removedIds = new Set<string>();
+		const collect = (id: string) => {
+			if (removedIds.has(id)) return;
+			removedIds.add(id);
+			for (const childId of currentContainers().find((item) => item.id === id)
+				?.availableNextContainer ?? []) collect(childId);
+		};
+		collect(containerId);
+		const media = new Set(
+			currentContainers()
+				.filter((item) => removedIds.has(item.id))
+				.flatMap((item) =>
+					item.content.flatMap((message) => [
+						...(message.parts
+							?.filter((part): part is FilePart => part.type === "file")
+							.map((part) => part.url) ?? []),
+						...mediaLinks(message.content),
+					]),
+				),
+		);
+		await Promise.all([...media].map(removeMediaLink));
+		for (const id of removedIds) await deleteContainer(id);
 		(containers as unknown as { value: ChatMessageContainer[] }).value =
-			currentContainers().filter((item) => item.id !== containerId);
+			currentContainers().filter((item) => !removedIds.has(item.id));
 
-		if (current.lastContainerId === containerId) {
+		if (current.lastContainerId && removedIds.has(current.lastContainerId)) {
 			current.lastContainerId = parentId ?? null;
 			if (current.rootContainerId === containerId) {
 				current.rootContainerId = null;
@@ -455,12 +539,15 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 				prompt: input.prompt,
 			});
 		} catch (error) {
-			const target = currentContainers().find((item) => item.id === input.containerId);
+			const target = currentContainers().find(
+				(item) => item.id === input.containerId,
+			);
 			if (target) {
 				const activeMsg = target.content[target.activeMessage ?? 0];
 				if (activeMsg) {
 					activeMsg.type = "error";
-					activeMsg.content = error instanceof Error ? error.message : String(error);
+					activeMsg.content =
+						error instanceof Error ? error.message : String(error);
 					await persistContainer(target);
 				}
 			}
@@ -474,6 +561,8 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		containers,
 		activePath,
 		intervalProjection,
+		isEditMode,
+		editModeInterval,
 		activePathView,
 		composerDraft,
 		composerDraftContent,
@@ -490,6 +579,8 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		updateMessage,
 		openInterval,
 		closeInterval,
+		toggleEditMode,
+		setMode,
 		getOpenIntervals,
 		getIntervalSpans,
 		getIntervalProjection,

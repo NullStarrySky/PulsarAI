@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { MarkdownRender } from "markstream-vue";
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
+import { mediaLink, resolveMediaUrl } from "@/features/Media/media-link";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
 
@@ -50,9 +51,28 @@ interface MarkdownSegment {
 }
 
 const vueReferencePattern = /<([A-Za-z0-9][A-Za-z0-9._-]*\.vue)\s*\/>/gi;
+const mediaReferencePattern = /media:\/\/([0-9a-f-]{36})/gi;
+const renderedContent = ref("");
+let contentRevision = 0;
+
+watch(
+	() => props.modelValue,
+	async (value) => {
+		const revision = ++contentRevision;
+		const ids = [...new Set([...value.matchAll(mediaReferencePattern)].map((match) => match[1]!))];
+		const urls = new Map(
+			await Promise.all(ids.map(async (id) => [mediaLink(id), await resolveMediaUrl(mediaLink(id))] as const)),
+		);
+		if (revision !== contentRevision) return;
+		renderedContent.value = value.replace(mediaReferencePattern, (source, id) =>
+			urls.get(mediaLink(id)) ?? source,
+		);
+	},
+	{ immediate: true },
+);
 
 const segments = computed<MarkdownSegment[]>(() => {
-	const text = props.modelValue ?? "";
+	const text = renderedContent.value;
 	if (!text) return [];
 	const result: MarkdownSegment[] = [];
 	let lastIndex = 0;
