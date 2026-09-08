@@ -12,6 +12,9 @@ import {
 } from "@/features/Plugin/editors/media/plugin-media";
 import { resolveMediaUrl } from "@/features/Media/media-link";
 import PluginRegexEditor from "@/features/Plugin/editors/regex/PluginRegexEditor.vue";
+import StWorldbookRenderer from "@/features/Migrations/SillyTavern/renderers/StWorldbookRenderer.vue";
+import StPresetRenderer from "@/features/Migrations/SillyTavern/renderers/StPresetRenderer.vue";
+import PluginTypeRenderer from "./PluginTypeRenderer.vue";
 import type { WorldFileNode } from "@/features/Plugin/tree/world-types";
 import { resourceType } from "./resource-types";
 
@@ -35,13 +38,33 @@ watch(
 const mediaKind = computed(() =>
 	pluginMediaType(props.file.content, mediaSource.value),
 );
-const codeLanguage = computed(() =>
-	type.value === "javascript"
-		? "javascript"
-		: type.value === "markdown"
-			? "markdown"
-			: "json",
-);
+const codeLanguage = computed<"javascript" | "json" | "markdown" | "vue" | "text">(() => {
+	if (type.value === "javascript") return "javascript";
+	if (type.value === "markdown") return "markdown";
+	if (type.value === "component") return "vue";
+	if (type.value === "json" || props.file.name.endsWith(".json")) return "json";
+	return "text";
+});
+
+const parsedJson = computed(() => {
+	if (!props.file.name.endsWith(".json")) return null;
+	try {
+		const text = typeof props.modelValue === "string" ? props.modelValue : JSON.stringify(props.modelValue);
+		return JSON.parse(text);
+	} catch {
+		return null;
+	}
+});
+
+const isWorldbook = computed(() => {
+	const obj = parsedJson.value;
+	return Boolean(obj && typeof obj === "object" && "entries" in obj);
+});
+
+const isPreset = computed(() => {
+	const obj = parsedJson.value;
+	return Boolean(obj && typeof obj === "object" && ("prompts" in obj || "prompt_order" in obj));
+});
 </script>
 
 <template>
@@ -56,7 +79,25 @@ const codeLanguage = computed(() =>
       class="h-full"
       @update:model-value="emit('update:modelValue', $event)"
     />
+    <StWorldbookRenderer
+      v-else-if="isWorldbook && preview"
+      :model-value="modelValue"
+      @update:model-value="emit('update:modelValue', $event)"
+    />
+    <StPresetRenderer
+      v-else-if="isPreset && preview"
+      :model-value="modelValue"
+      @update:model-value="emit('update:modelValue', $event)"
+    />
     <PluginConfigEditor v-else-if="path?.endsWith('/config.json') && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
+    <PluginTypeRenderer
+      v-else-if="type === 'component' && preview"
+      :file="file"
+      :path="path"
+      :source="typeof modelValue === 'string' ? modelValue : ''"
+      :model-value="typeof modelValue === 'string' ? modelValue : ''"
+      @update:model-value="emit('update:modelValue', $event)"
+    />
     <PluginDataEditor v-else-if="type === 'data' && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
     <PluginRegexEditor v-else-if="(path?.endsWith('/regex.json') || path?.endsWith('.regex.json')) && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
     <PluginChatEditor v-else-if="type === 'chat' && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />

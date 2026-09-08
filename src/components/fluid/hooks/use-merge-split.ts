@@ -1,4 +1,4 @@
-import { computed, ref, watch, onUnmounted, type ComputedRef, type Ref } from "vue";
+import { computed, ref, watch, onUnmounted, toValue, type ComputedRef, type Ref, type MaybeRefOrGetter } from "vue";
 import { spring } from "../lib/springs";
 import type { ItemRect } from "./use-proximity-hover";
 
@@ -35,6 +35,46 @@ export interface SelBlock extends Rect {
 // A contiguous run of selected/checked rows, with a stable id so motion can
 // morph it across renders rather than exit+re-enter.
 export type Run = { start: number; end: number; id: number };
+
+/**
+ * Groups checked row indices into contiguous runs with ids that survive
+ * updates: a run keeps its id while any of its rows was in a run previously,
+ * so motion morphs a growing/shrinking block instead of swapping it.
+ */
+export function useSelectionRuns(checkedIndices: MaybeRefOrGetter<readonly number[]>): ComputedRef<Run[]> {
+  let prevGroupMap = new Map<number, number>();
+  let groupIdCounter = 0;
+
+  return computed(() => {
+    const indices = toValue(checkedIndices) ?? [];
+    const runs: { start: number; end: number }[] = [];
+    const sorted = [...indices].sort((a, b) => a - b);
+    for (const idx of sorted) {
+      const last = runs[runs.length - 1];
+      if (last && idx === last.end + 1) last.end = idx;
+      else runs.push({ start: idx, end: idx });
+    }
+
+    const usedIds = new Set<number>();
+    const nextGroupMap = new Map<number, number>();
+    const result = runs.map((run) => {
+      let stableId: number | null = null;
+      for (let i = run.start; i <= run.end; i++) {
+        const prevId = prevGroupMap.get(i);
+        if (prevId !== undefined && !usedIds.has(prevId)) {
+          stableId = prevId;
+          break;
+        }
+      }
+      const id = stableId ?? ++groupIdCounter;
+      usedIds.add(id);
+      for (let i = run.start; i <= run.end; i++) nextGroupMap.set(i, id);
+      return { ...run, id };
+    });
+    prevGroupMap = nextGroupMap;
+    return result;
+  });
+}
 
 // One in-flight merge or split; geometry is recomputed from the live runs each
 // render so rapid toggles redirect instead of freezing.

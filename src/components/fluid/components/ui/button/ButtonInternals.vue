@@ -16,7 +16,7 @@ defineOptions({ name: "FluidButtonInternals" });
     aria-hidden="true"
     :class="
       cn(
-        'absolute inset-px rounded-[inherit] transition-[box-shadow,background-color] [transition-duration:180ms,80ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1),ease] group-active:[transition-duration:80ms,80ms]',
+        'absolute inset-px rounded-[inherit] transition-[box-shadow,background-color] [transition-duration:180ms,80ms] [transition-timing-function:cubic-bezier(0.23,1,0.32,1),ease] group-active/btn:[transition-duration:80ms,80ms]',
         bgClass
       )
     "
@@ -26,8 +26,8 @@ defineOptions({ name: "FluidButtonInternals" });
       cn(
         'relative inline-flex items-center justify-center gap-[inherit] whitespace-nowrap',
         isIconOnly
-          ? '[&_svg]:stroke-[1.5] [&_svg]:transition-[stroke-width] [&_svg]:duration-80 group-hover:[&_svg]:stroke-[2]'
-          : '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:pointer-events-none [&_svg]:transition-[stroke-width] [&_svg]:duration-80 group-hover:[&_svg]:stroke-[2]'
+          ? '[&_svg]:stroke-[1.5] [&_svg]:transition-[stroke-width] [&_svg]:duration-80 group-hover/btn:[&_svg]:stroke-[2]'
+          : '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:pointer-events-none [&_svg]:transition-[stroke-width] [&_svg]:duration-80 group-hover/btn:[&_svg]:stroke-[2]'
       )
     "
   >

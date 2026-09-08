@@ -1,3 +1,7 @@
+import {
+	generateProceduralAvatarDataUrl,
+	generateProceduralCoverDataUrl,
+} from "../shared/procedural-cover";
 import { createPluginMediaContent } from "@/features/Plugin/editors/media/plugin-media";
 import blankMetaSource from "../builtIn/blank/.pulsar-plugin.json?raw";
 import coreMetaSource from "../builtIn/core/.pulsar-plugin.json?raw";
@@ -14,7 +18,7 @@ import {
 } from "./world-types";
 
 const rawFiles = import.meta.glob(
-	"../builtIn/*/**/*.{md,json,js,vue,ts,txt,data}",
+	"../builtIn/*/**/*.{md,json,js,vue,ts,txt,data,yaml,yml}",
 	{
 		eager: true,
 		query: "?raw",
@@ -445,13 +449,26 @@ export function createLocalPluginWorld(localPluginId: string): WorldDocument {
 		{ schemaVersion: 1, name: "新角色", tags: [] },
 		{ id: "definition", treeOrder: -2 },
 	);
-	world.root.children.avatar = createWorldFile("avatar.png", "", {
-		id: "avatar",
-		treeOrder: -1,
-	});
-	world.root.children.cover = createWorldFile("cover.png", "", {
-		id: "cover",
-		treeOrder: 0,
-	});
+	world.root.children.avatar = createWorldFile(
+		"avatar.png",
+		generateProceduralAvatarDataUrl(localPluginId, "新角色"),
+		{
+			id: "avatar",
+			treeOrder: -1,
+		},
+	);
+	world.root.children.cover = createWorldFile(
+		"cover.png",
+		generateProceduralCoverDataUrl(localPluginId, "新角色"),
+		{
+			id: "cover",
+			treeOrder: 0,
+		},
+	);
+	world.root.children.config = createWorldFile(
+		"config.json",
+		{ temperature: 0.7, maxTokens: 2048, debugMode: false, promptPrefix: "" },
+		{ id: "config", treeOrder: 1 },
+	);
 	return world;
 }

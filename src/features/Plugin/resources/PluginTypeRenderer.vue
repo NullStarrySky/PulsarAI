@@ -1,21 +1,13 @@
 <script setup lang="ts">
 import { PhWarningCircle as WarningCircle } from "@phosphor-icons/vue";
-import { compileScript, parse } from "@vue/compiler-sfc";
 import {
 	type Component,
 	computed,
-	defineComponent,
 	onErrorCaptured,
 	ref,
 	watch,
 } from "vue";
-import * as Vue from "vue";
-import {
-	useFile,
-	useFileContent,
-	useFolder,
-	useSlot,
-} from "../runtime/file-composables";
+import { compilePluginVueFile } from "../editors/vue/plugin-vue-runtime";
 import type { WorldFileNode } from "../tree/world-types";
 
 const props = defineProps<{
@@ -37,7 +29,7 @@ onErrorCaptured((err) => {
 });
 
 watch(
-	() => [props.source, props.file.id, props.file.updateDate],
+	() => [props.source, props.file.id],
 	() => {
 		runtimeError.value = null;
 	},
@@ -52,70 +44,14 @@ const compilation = computed<{
 	}
 
 	try {
-		const { descriptor, errors } = parse(props.source);
-		if (errors.length > 0) {
-			return {
-				component: null,
-				error: errors.map((e) => e.message).join("\n"),
-			};
-		}
-
-		if (!descriptor.template) {
-			return {
-				component: null,
-				error: "渲染器缺少 <template> 模块。",
-			};
-		}
-
-		const renderFn = Vue.compile(descriptor.template.content);
-		let compOptions: Record<string, any> = {};
-
-		if (descriptor.scriptSetup || descriptor.script) {
-			const compiled = compileScript(descriptor, { id: props.file.id });
-			const cleanCode = compiled.content
-				.replace(/import\s*\{([^}]+)\}\s*from\s*['"]vue['"];?/g, (_match, names: string) => `const { ${names.replace(/\s+as\s+/g, ": ")} } = Vue;`)
-				.replace(/export\s+default\s+/, "return ");
-
-			const evaluator = new Function(
-				"Vue",
-				"ref",
-				"computed",
-				"reactive",
-				"watch",
-				"onMounted",
-				"onUnmounted",
-				"useFile",
-				"useFileContent",
-				"useFolder",
-				"useSlot",
-				cleanCode,
-			);
-
-			compOptions =
-				evaluator(
-					Vue,
-					Vue.ref,
-					Vue.computed,
-					Vue.reactive,
-					Vue.watch,
-					Vue.onMounted,
-				Vue.onUnmounted,
-				useFile,
-				useFileContent,
-				useFolder,
-				useSlot,
-				) ?? {};
-		}
-
-		const DynamicComponent = defineComponent({
-			name: `TypeRenderer_${props.file.name.replace(/[^a-zA-Z0-9_]/g, "_")}`,
-			...compOptions,
-			props: ["file", "path", "modelValue"],
-			emits: ["update:modelValue"],
-			render: renderFn,
+		const result = compilePluginVueFile({
+			...props.file,
+			content: props.source,
 		});
-
-		return { component: DynamicComponent, error: null };
+		return {
+			component: result.component,
+			error: result.diagnostics.length && !result.component ? result.diagnostics.join("\n") : null,
+		};
 	} catch (err) {
 		return {
 			component: null,

@@ -25,9 +25,18 @@ import Tooltip from "../tooltip/Tooltip.vue";
 
 const DEFAULT_ACCEPT = "image/png,image/jpeg,application/pdf";
 
+export interface InputMessageSuggestionItem {
+  id?: string;
+  label?: string;
+  description?: string;
+  value?: string;
+  icon?: any;
+  raw?: any;
+}
+
 export interface InputMessageSuggestionGroup {
   label?: string;
-  suggestions: string[];
+  suggestions: Array<string | InputMessageSuggestionItem>;
 }
 
 export interface InputMessageSlotContext {
@@ -42,7 +51,7 @@ export interface InputMessageProps {
   defaultValue?: string;
   placeholder?: string;
   placeholderSuggestion?: string;
-  suggestions?: string[] | InputMessageSuggestionGroup[];
+  suggestions?: Array<string | InputMessageSuggestionItem> | InputMessageSuggestionGroup[];
   history?: string[];
   disabled?: boolean;
   minRows?: number;
@@ -79,6 +88,7 @@ const emit = defineEmits<{
   (e: "send", value: string, files: File[]): void;
   (e: "stop"): void;
   (e: "update:files", files: File[]): void;
+  (e: "selectSuggestion", suggestion: string | InputMessageSuggestionItem): void;
 }>();
 
 const slots = defineSlots<{
@@ -168,9 +178,11 @@ const draftBeforeHistory = ref("");
 const suggestionGroups = computed<InputMessageSuggestionGroup[]>(() => {
   const source = props.suggestions ?? [];
   if (!source.length) return [];
-  return typeof source[0] === "string"
-    ? [{ suggestions: source as string[] }]
-    : source as InputMessageSuggestionGroup[];
+  const first = source[0];
+  if (first && typeof first === "object" && "suggestions" in first) {
+    return source as InputMessageSuggestionGroup[];
+  }
+  return [{ suggestions: source as Array<string | InputMessageSuggestionItem> }];
 });
 const suggestionsArr = computed(() => suggestionGroups.value.flatMap((group) => group.suggestions));
 const suggestionItems = computed(() => {
@@ -185,9 +197,9 @@ const suggestionItems = computed(() => {
 });
 const hasSuggestionLabels = computed(() => suggestionGroups.value.some((group) => group.label));
 const suggestionsOpen = computed(
-  () => suggestionsArr.value.length > 0 && currentValue.value === ""
+  () => suggestionsArr.value.length > 0
 );
-const suggestionListRef = useTemplateRef<HTMLDivElement>("suggestionListRef");
+const suggestionListRef = ref<HTMLDivElement | null>(null);
 
 const {
   activeIndex: activeSuggestion,
@@ -294,10 +306,15 @@ function setCaretEnd() {
   });
 }
 
-function acceptSuggestion(text: string) {
+function acceptSuggestion(item: string | InputMessageSuggestionItem) {
   setActiveSuggestion(null);
   historyIndex.value = null;
-  setValue(text);
+  emit("selectSuggestion", item);
+  if (typeof item === "string") {
+    setValue(item);
+  } else if (item.value !== undefined) {
+    setValue(item.value);
+  }
   nextTick(() => {
     const el = textareaRef.value;
     if (!el) return;
@@ -780,7 +797,7 @@ defineExpose({
         <div
           :ref="
             (el) => {
-              suggestionListRef = el as HTMLDivElement;
+              suggestionListRef.value = el as HTMLDivElement | null;
               suggestionsRegion.setRef(el);
             }
           "
@@ -797,7 +814,7 @@ defineExpose({
             <motion.div
               v-if="activeSuggestion != null && suggestionRects[activeSuggestion]"
               :key="suggestionSession"
-              :class="cn('pointer-events-none absolute bg-hover', shape.bg)"
+              :class="cn('pointer-events-none absolute bg-hover rounded-lg', shape.bg)"
               :initial="{
                 opacity: 0,
                 top: suggestionRects[activeSuggestion].top + 'px',
@@ -820,7 +837,7 @@ defineExpose({
           <!-- 建议词条目 -->
           <div
             v-for="item in suggestionItems"
-            :key="`${item.index}:${item.suggestion}`"
+            :key="`${item.index}:${typeof item.suggestion === 'string' ? item.suggestion : (item.suggestion.id || item.suggestion.value || item.suggestion.label)}`"
             :ref="
               (el) => {
                 registerSuggestion(item.index, el as HTMLElement | null);
@@ -831,20 +848,35 @@ defineExpose({
             :aria-selected="item.index === activeSuggestion"
             :class="
               cn(
-                'relative flex cursor-pointer items-center gap-2 select-none',
-                compactStep ? 'h-7 px-2 text-[13px]' : 'h-8 px-2.5 text-[14px]',
+                'relative z-10 flex cursor-pointer items-center gap-2.5 select-none rounded-lg',
+                compactStep ? 'min-h-7 px-2 py-1 text-[13px]' : 'min-h-8 px-2.5 py-1.5 text-[14px]',
                 'text-muted-foreground transition-colors duration-80',
-                item.index === activeSuggestion && 'text-foreground'
+                item.index === activeSuggestion ? 'text-foreground font-medium bg-hover/40' : 'hover:text-foreground'
               )
             "
             :style="{ fontVariationSettings: fontWeights.normal }"
+            @mouseenter="setActiveSuggestion(item.index)"
+            @pointermove="setActiveSuggestion(item.index)"
             @click="acceptSuggestion(item.suggestion)"
           >
+            <component
+              :is="typeof item.suggestion !== 'string' ? item.suggestion.icon : null"
+              v-if="typeof item.suggestion !== 'string' && item.suggestion.icon"
+              class="size-4 shrink-0 text-muted-foreground"
+            />
             <span v-if="item.label" class="w-14 shrink-0 truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">{{ item.label }}</span>
             <span v-else-if="hasSuggestionLabels" class="w-14 shrink-0" />
-            <span class="-my-1 min-w-0 flex-1 truncate py-1 [text-box:trim-both_cap_alphabetic]">
-              {{ item.suggestion }}
-            </span>
+            <div class="-my-0.5 min-w-0 flex-1 truncate">
+              <span class="block truncate font-medium">
+                {{ typeof item.suggestion === 'string' ? item.suggestion : (item.suggestion.label ?? item.suggestion.value) }}
+              </span>
+              <span
+                v-if="typeof item.suggestion !== 'string' && item.suggestion.description"
+                class="block truncate text-[11px] text-muted-foreground"
+              >
+                {{ item.suggestion.description }}
+              </span>
+            </div>
             <ArrowDownIcon
               v-if="item.index !== activeSuggestion && item.index === 0 && activeSuggestion == null"
               :size="13"

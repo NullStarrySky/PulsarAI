@@ -15,6 +15,7 @@ export interface RunWorldInput {
 	roleId?: string;
 	role?: Role;
 	containerId?: string;
+	messageId?: string;
 	prompt?: string;
 	/** Extra opt-in features for a nonstandard Plugin entry point. */
 	features?: Omit<
@@ -65,6 +66,7 @@ export async function runWorld(input: RunWorldInput): Promise<RunWorldResult> {
 		input: true,
 		message: {
 			containerId: input.containerId,
+			messageId: input.messageId,
 			role: input.role ?? "assistant",
 			create: !input.containerId,
 		},

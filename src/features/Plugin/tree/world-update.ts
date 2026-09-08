@@ -4,8 +4,8 @@ import type { World, WorldDocument, WorldFileNode, WorldFolderNode, WorldNode } 
 export type WorldScopeName = "global" | "self";
 export interface WorldNodeRef { scope: WorldScopeName; id: string }
 
-type FileMeta = Pick<WorldFileNode, "name" | "icon" | "description" | "treeOrder" | "resourceSelected" | "slot" | "priority" | "condition" | "conditionEnabled" | "updateDate">;
-type FolderMeta = Pick<WorldFolderNode, "name" | "icon" | "description" | "treeOrder" | "openIcon" | "selectionMode" | "allowedResourceTypes" | "parent" | "updateDate">;
+type FileMeta = Pick<WorldFileNode, "name" | "icon" | "description" | "treeOrder" | "resourceSelected" | "slot" | "priority" | "condition" | "conditionEnabled">;
+type FolderMeta = Pick<WorldFolderNode, "name" | "icon" | "description" | "treeOrder" | "openIcon" | "selectionMode" | "allowedResourceTypes" | "parent">;
 
 /** One replayable, ID-addressed change. filename/nameAtTime are display-only history. */
 export type PulseOperation =
@@ -15,8 +15,8 @@ export type PulseOperation =
 	| { kind: "folder.meta.patch"; scope: WorldScopeName; nodeId: string; patch: Partial<FolderMeta>; filename?: string }
 	| { kind: "node.create"; scope: WorldScopeName; parentId: string; node: WorldNode; parentNameAtTime?: string }
 	| { kind: "node.delete"; scope: WorldScopeName; nodeId: string; parentId: string; nameAtTime: string }
-	| { kind: "node.move"; scope: WorldScopeName; nodeId: string; parentId: string; targetParentId: string; nameAtTime: string; patch?: Pick<FileMeta | FolderMeta, "name" | "treeOrder" | "updateDate"> }
-	| { kind: "node.copy"; scope: WorldScopeName; source: WorldNodeRef; targetParentId: string; idMap: Record<string, string>; nameAtTime: string; patch?: Pick<FileMeta | FolderMeta, "name" | "treeOrder" | "updateDate"> };
+	| { kind: "node.move"; scope: WorldScopeName; nodeId: string; parentId: string; targetParentId: string; nameAtTime: string; patch?: Pick<FileMeta | FolderMeta, "name" | "treeOrder"> }
+	| { kind: "node.copy"; scope: WorldScopeName; source: WorldNodeRef; targetParentId: string; idMap: Record<string, string>; nameAtTime: string; patch?: Pick<FileMeta | FolderMeta, "name" | "treeOrder"> };
 
 /** A user-visible atomic change. Cascading metadata lives in this same Pulse. */
 export interface Pulse { id: string; createdAt: string; operations: PulseOperation[] }
@@ -31,20 +31,119 @@ export function createPulse(operations: PulseOperation[]): Pulse {
 	if (!operations.length) throw new Error("Pulse 不能为空。");
 	return { id: crypto.randomUUID(), createdAt: new Date().toISOString(), operations };
 }
+
+/** Keeps a message container compact by folding later writes into prior writes to the same file property. */
+export function mergeContainerPulses(pulses: Pulse[], incoming: Pulse): Pulse[] {
+	const merged = clone(pulses);
+	const append: PulseOperation[] = [];
+	for (const operation of incoming.operations) {
+		if (operation.kind === "file.write") {
+			const previous = merged
+				.flatMap((pulse) => pulse.operations)
+				.reverse()
+				.find((candidate): candidate is Extract<PulseOperation, { kind: "file.write" }> =>
+					candidate.kind === "file.write" &&
+					candidate.scope === operation.scope &&
+					candidate.nodeId === operation.nodeId,
+				);
+			if (previous) {
+				previous.content = clone(operation.content);
+				previous.filename = operation.filename ?? previous.filename;
+				continue;
+			}
+		}
+		if (operation.kind === "file.meta.patch" || operation.kind === "folder.meta.patch") {
+			const patch = clone(operation.patch);
+			for (const candidate of merged.flatMap((pulse) => pulse.operations).reverse()) {
+				if (
+					candidate.kind !== operation.kind ||
+					candidate.scope !== operation.scope ||
+					candidate.nodeId !== operation.nodeId
+				) continue;
+				for (const key of Object.keys(patch)) {
+					if (!(key in candidate.patch)) continue;
+					(candidate.patch as Record<string, unknown>)[key] = patch[key as keyof typeof patch];
+					delete (patch as Record<string, unknown>)[key];
+				}
+			}
+			if (!Object.keys(patch).length) continue;
+			append.push({ ...operation, patch });
+			continue;
+		}
+		append.push(clone(operation));
+	}
+	if (append.length) merged.push({ ...clone(incoming), operations: append });
+	return merged;
+}
+export function describePulseOperation(op: PulseOperation): string {
+	const name =
+		"filename" in op
+			? op.filename
+			: "nameAtTime" in op
+				? op.nameAtTime
+				: op.kind === "node.create"
+					? op.node.name
+					: undefined;
+	const label = name ? `「${name}」` : "资源";
+	switch (op.kind) {
+		case "file.write":
+			return `写入文件 ${label}`;
+		case "file.replace":
+			return `替换文件 ${label} 中的内容`;
+		case "file.meta.patch": {
+			if (op.patch.resourceSelected !== undefined) {
+				return op.patch.resourceSelected ? `启用 ${label}` : `禁用 ${label}`;
+			}
+			if (op.patch.slot !== undefined) {
+				const slotName =
+					op.patch.slot.split("/").pop()?.replace(/^\$/, "") ?? op.patch.slot;
+				return `将 ${label} 分配到插槽 ${slotName}`;
+			}
+			if (op.patch.priority !== undefined) {
+				return `更新 ${label} 优先级为 ${op.patch.priority}`;
+			}
+			if (op.patch.name !== undefined) {
+				return `重命名 ${label} 为「${op.patch.name}」`;
+			}
+			return `更新 ${label} 属性`;
+		}
+		case "folder.meta.patch": {
+			if (op.patch.name !== undefined) {
+				return `重命名文件夹 ${label} 为「${op.patch.name}」`;
+			}
+			if (op.patch.selectionMode !== undefined) {
+				return `设置文件夹 ${label} 为 ${op.patch.selectionMode === "single" ? "单选" : op.patch.selectionMode === "multiple" ? "多选" : "无"}`;
+			}
+			return `更新文件夹 ${label} 属性`;
+		}
+		case "node.create":
+			return op.node.type === "folder" ? `新建文件夹 ${label}` : `新建文件 ${label}`;
+		case "node.delete":
+			return `删除 ${label}`;
+		case "node.move":
+			return `移动 ${label}`;
+		case "node.copy":
+			return `复制 ${label}`;
+	}
+}
+
 export function describePulse(pulse: Pulse): string {
+	const enableOp = pulse.operations.find(
+		(op) => op.kind === "file.meta.patch" && op.patch.resourceSelected === true,
+	);
+	const disableOp = pulse.operations.find(
+		(op) => op.kind === "file.meta.patch" && op.patch.resourceSelected === false,
+	);
+	if (enableOp && disableOp) {
+		const targetName =
+			"filename" in enableOp && enableOp.filename ? `「${enableOp.filename}」` : "资源";
+		return `切换为 ${targetName}`;
+	}
 	const first = pulse.operations[0];
 	if (!first) return "修改资源";
-	const name = "filename" in first ? first.filename : "nameAtTime" in first ? first.nameAtTime : first.kind === "node.create" ? first.node.name : undefined;
-	const suffix = pulse.operations.length > 1 ? `（及 ${pulse.operations.length - 1} 项关联修改）` : "";
-	switch (first.kind) {
-		case "file.write": return `写入 ${name ?? "文件"}${suffix}`;
-		case "file.replace": return `替换 ${name ?? "文件"} 中的文本${suffix}`;
-		case "file.meta.patch": case "folder.meta.patch": return `更新 ${name ?? "资源"} 属性${suffix}`;
-		case "node.create": return `新建 ${name}${suffix}`;
-		case "node.delete": return `删除 ${name}${suffix}`;
-		case "node.move": return `移动 ${name}${suffix}`;
-		case "node.copy": return `复制 ${name}${suffix}`;
-	}
+	const firstDesc = describePulseOperation(first);
+	if (pulse.operations.length <= 1) return firstDesc;
+	return `${firstDesc}（及 ${pulse.operations.length - 1} 项关联修改）`;
 }
 
 export function createWorldNodeIndex(document: WorldDocument): WorldNodeIndex {
@@ -69,7 +168,7 @@ function copyNode(node: WorldNode, idMap: Record<string, string>): WorldNode {
 	return { ...clone(node), id, children };
 }
 function checkPatch(node: WorldNode, patch: object) {
-	assertMeta(patch as Record<string, unknown>, node.type === "file" ? ["name", "icon", "description", "treeOrder", "resourceSelected", "slot", "priority", "condition", "conditionEnabled", "updateDate"] : ["name", "icon", "description", "treeOrder", "openIcon", "selectionMode", "allowedResourceTypes", "parent", "updateDate"], node.type === "file" ? "文件" : "文件夹");
+	assertMeta(patch as Record<string, unknown>, node.type === "file" ? ["name", "icon", "description", "treeOrder", "resourceSelected", "slot", "priority", "condition", "conditionEnabled"] : ["name", "icon", "description", "treeOrder", "openIcon", "selectionMode", "allowedResourceTypes", "parent"], node.type === "file" ? "文件" : "文件夹");
 }
 function applyOperation(world: World, operation: PulseOperation, indexes: WorldIndexes) {
 	switch (operation.kind) {

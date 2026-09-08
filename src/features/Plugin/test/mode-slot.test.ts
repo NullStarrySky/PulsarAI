@@ -18,7 +18,6 @@ function resource(content: string): WorldResource {
 			priority: 100,
 			treeOrder: 0,
 			createDate: "2026-01-01T00:00:00.000Z",
-			updateDate: "2026-01-01T00:00:00.000Z",
 		},
 	};
 }

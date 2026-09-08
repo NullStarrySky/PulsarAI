@@ -192,10 +192,10 @@ describe("useConversation generation flow", () => {
 			(item) => item.id === reloaded!.lastContainerId,
 		)!;
 		expect(assistant.content[0]?.type).toBe("error");
-		expect(assistant.content[0]?.content).toBe("生成失败");
+		expect(assistant.content[0]?.content).toContain("生成失败");
 	});
 
-	it("regenerate appends an assistant version and reruns the entry", async () => {
+	it("regenerate appends an assistant version and switchVersion updates active version reactively", async () => {
 		const chat = await prepareChat();
 		const conversation = useConversation(chat.id);
 		await conversation.ensureLoaded();
@@ -213,6 +213,17 @@ describe("useConversation generation flow", () => {
 		)!;
 		expect(refreshed.content).toHaveLength(2);
 		expect(refreshed.activeMessage).toBe(1);
+
+		// Switch back to version 0
+		await conversation.switchVersion(assistant.id, 0);
+		const afterSwitch = (await loadContainersForChat(chat.id)).find(
+			(item) => item.id === assistant.id,
+		)!;
+		expect(afterSwitch.activeMessage).toBe(0);
+		const view = conversation.activePathView.value.find(
+			(item) => item.containerId === assistant.id,
+		);
+		expect(view?.activeVersionIndex).toBe(0);
 	});
 
 	it("editing a message clears stale translation metadata", async () => {

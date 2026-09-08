@@ -43,6 +43,7 @@ const sidebarOpen = ref(true);
 const settingsSearch = ref("");
 const dialog = ref<HTMLElement | { $el?: unknown } | null>(null);
 const floating = useFloatingSurface({ surfaceId: "settings", open: settingsOpen, element: dialog, initialSize: { width: 1040, height: 680 }, minSize: { width: 620, height: 440 } });
+const floatingStyle = computed(() => floating.style.value);
 
 const pages = computed(() => getSettingPages());
 const activePage = computed(
@@ -102,7 +103,7 @@ function selectPage(pageId: string) {
       data-settings-dialog
       custom-position
       :show-close-button="false"
-      :style="floating.style"
+      :style="floatingStyle"
       class="flex max-w-none flex-col gap-0 overflow-hidden rounded-2xl border-border/70 bg-popover p-0 shadow-2xl sm:max-w-none mobile:rounded-none mobile:border-0"
       @open-auto-focus.prevent
     >

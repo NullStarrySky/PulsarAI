@@ -53,8 +53,8 @@ const hasBody = computed(() => !!slots.default);
 
 const rootClass = computed(() =>
   cn(
-    "group flex max-w-[80%] flex-col gap-1.5",
-    isUser.value ? "items-end self-end" : "items-start self-start",
+    "group/message flex max-w-[80%] flex-col gap-1.5",
+    isUser.value ? "items-end self-end ml-auto w-fit" : "items-start self-start w-full",
     props.class
   )
 );
@@ -73,7 +73,7 @@ const bodyClass = computed(() =>
           compact.value ? "px-3" : "px-3.5",
           "text-pretty bg-[color-mix(in_oklab,var(--accent),var(--background)_45%)] text-accent-foreground"
         )
-      : "text-foreground"
+      : "w-full text-foreground"
   )
 );
 
@@ -85,8 +85,8 @@ const metaClass = computed(() =>
       ? "opacity-100 pointer-events-auto"
       : !isTouch.value && [
           "pointer-events-none opacity-0 transition-opacity duration-150",
-          "group-hover:pointer-events-auto group-hover:opacity-100",
-          "group-focus-within:pointer-events-auto group-focus-within:opacity-100",
+          "group-hover/message:pointer-events-auto group-hover/message:opacity-100",
+          "group-focus-within/message:pointer-events-auto group-focus-within/message:opacity-100",
         ]
   )
 );

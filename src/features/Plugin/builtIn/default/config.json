@@ -6,5 +6,9 @@
 			"description": "留空时继承全局默认模型；引用可附带思考强度。"
 		},
 		"value": null
-	}
+	},
+	"temperature": 0.7,
+	"maxTokens": 2048,
+	"debugMode": false,
+	"promptPrefix": ""
 }

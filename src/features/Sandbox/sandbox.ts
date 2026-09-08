@@ -250,24 +250,26 @@ function buildExecutableBody(
 	code: string,
 	environment: SandboxEnvironment,
 ): string {
-	if (!code || /^(\/\/[^\n]*|\/\*[\s\S]*\*\/)\s*$/.test(code)) {
+	const trimmed = code.trim();
+	if (!trimmed || /^(\/\/[^\n]*|\/\*[\s\S]*\*\/)\s*$/.test(trimmed)) {
 		return "return undefined;";
 	}
-	if (/^[A-Za-z_$][\w$]*$/.test(code)) {
-		return typeof environment[code] === "function"
-			? `return ${code}();`
-			: `return ${code};`;
+	if (/^[A-Za-z_$][\w$]*$/.test(trimmed)) {
+		return typeof environment[trimmed] === "function"
+			? `return ${trimmed}();`
+			: `return ${trimmed};`;
 	}
+	const cleaned = trimmed.replace(/;+\s*$/, "");
 	if (
-		/^(async\s+)?function\b/.test(code) ||
-		/^(async\s*)?(\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/.test(code)
+		/^(async\s+)?function\b/.test(cleaned) ||
+		/^(async\s*)?(\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/.test(cleaned)
 	) {
-		return `return (${code});`;
+		return `return (${cleaned});`;
 	}
-	if (/^(if|for|while|switch|try|return|const|let|var)\b/.test(code)) {
-		return code;
+	if (/^(if|for|while|switch|try|return|const|let|var)\b/.test(trimmed)) {
+		return trimmed;
 	}
-	return `return (${code});`;
+	return `return (${cleaned});`;
 }
 
 function sandboxExecutionError(error: unknown, code: string): Error {

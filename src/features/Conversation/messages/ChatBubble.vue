@@ -30,8 +30,10 @@ import {
 import ConversationComposerEditor from "@/features/Conversation/composer/ConversationComposerEditor.vue";
 import ComposerAttachmentStrip from "@/features/Conversation/composer/ComposerAttachmentStrip.vue";
 import ConversationMarkdown from "@/features/Conversation/stage/markstream/ConversationMarkdown.vue";
+import { computed } from "vue";
 import type { MessageBubbleViewModel } from "../use-conversation";
 import ChatSteps from "./ChatSteps.vue";
+import WorldUpdateDivider from "./WorldUpdateDivider.vue";
 
 const props = defineProps<{
 	viewModel: MessageBubbleViewModel;
@@ -44,7 +46,7 @@ const emit = defineEmits<{
 	"toggle-interval": [intervalId: string];
 }>();
 
-const actions = props.viewModel.actions;
+const actions = computed(() => props.viewModel.actions);
 </script>
 
 <template>
@@ -57,6 +59,10 @@ const actions = props.viewModel.actions;
     <Pencil class="size-3.5" />
     <span>{{ viewModel.intervalSummary.open ? '编辑模式中' : viewModel.intervalSummary.collapsed ? `编辑子对话 · ${viewModel.intervalSummary.count} 条消息` : '收起编辑子对话' }}</span>
   </button>
+  <WorldUpdateDivider
+    v-else-if="viewModel.role === 'system' && viewModel.pulses.length > 0"
+    :updates="viewModel.pulses"
+  />
   <ChatMessage
     v-else
     :id="`message-bubble-${viewModel.containerId}`"
@@ -64,14 +70,11 @@ const actions = props.viewModel.actions;
     :time="viewModel.messageTime"
     :class="[
       viewModel.role === 'user'
-        ? 'max-w-[77%] self-end mobile:max-w-[88%]'
+        ? 'w-fit max-w-[77%] self-end ml-auto mobile:max-w-[88%]'
         : 'w-full max-w-full self-start',
-      viewModel.message?.type === 'error'
-        ? 'border border-destructive/30 bg-destructive/10 text-destructive rounded-2xl p-3'
-        : '',
     ]"
   >
-    <div class="whitespace-normal">
+    <div class="w-full min-w-0 whitespace-normal">
 	  <ComposerAttachmentStrip
 		v-if="viewModel.attachments.length || viewModel.references.length"
 		:attachments="[...viewModel.attachments, ...viewModel.references]"
@@ -80,7 +83,7 @@ const actions = props.viewModel.actions;
 	  />
       <ChatSteps
         :steps="viewModel.thinking as any"
-        :working="generating && viewModel.role === 'assistant'"
+        :working="viewModel.isGenerating ?? (generating && viewModel.role === 'assistant')"
         :started-at="viewModel.message?.meta?.generateInfo?.startTime"
         @interaction="emit('process-interaction')"
       />
@@ -93,12 +96,9 @@ const actions = props.viewModel.actions;
         @submit="actions.saveEdit"
       />
       <ConversationMarkdown
-        v-else-if="viewModel.message?.type === 'error'"
-        :model-value="viewModel.message.content"
-      />
-      <ConversationMarkdown
         v-else
         :model-value="viewModel.message?.content ?? ''"
+        class="w-full min-w-0"
       />
     </div>
 
@@ -106,7 +106,17 @@ const actions = props.viewModel.actions;
       <div v-if="viewModel.message" data-window-drag-block class="flex items-center gap-0.5">
         <Button v-if="viewModel.role === 'assistant'" variant="ghost" size="icon-sm" class="rounded-full" title="上一个版本" :disabled="viewModel.activeVersionIndex <= 0" @click="actions.prevVersion()"><ChevronLeft class="size-4" /></Button>
         <span v-if="viewModel.role === 'assistant'" class="px-1 text-xs text-muted-foreground">{{ viewModel.activeVersionIndex + 1 }}/{{ viewModel.versionCount }}</span>
-        <Button v-if="viewModel.role === 'assistant'" variant="ghost" size="icon-sm" class="rounded-full" title="下一个版本" :disabled="viewModel.activeVersionIndex >= viewModel.versionCount - 1" @click="actions.nextVersion()"><ChevronRight class="size-4" /></Button>
+        <Button
+          v-if="viewModel.role === 'assistant'"
+          variant="ghost"
+          size="icon-sm"
+          class="rounded-full"
+          :title="viewModel.isLastAssistant && viewModel.activeVersionIndex >= viewModel.versionCount - 1 ? '重新生成 (下一个版本)' : '下一个版本'"
+          :disabled="viewModel.activeVersionIndex >= viewModel.versionCount - 1 ? (viewModel.isLastAssistant ? generating : true) : false"
+          @click="actions.nextVersion()"
+        >
+          <ChevronRight class="size-4" />
+        </Button>
         <Button v-if="actions.editState.isEditing" variant="ghost" size="icon-sm" class="rounded-full" title="保存" @click="actions.saveEdit"><Check class="size-4" /></Button>
         <Button v-else variant="ghost" size="icon-sm" class="rounded-full" title="编辑" @click="actions.startEdit"><Pencil class="size-4" /></Button>
         <Button variant="ghost" size="icon-sm" class="rounded-full" title="复制" @click="actions.copy()"><Copy class="size-4" /></Button>

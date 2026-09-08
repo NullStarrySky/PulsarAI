@@ -10,9 +10,17 @@ import {
 	MoreHorizontal,
 	Plus,
 } from "lucide-vue-next";
-import { type Component, computed, nextTick, ref } from "vue";
+import {
+	type Component,
+	type ComponentPublicInstance,
+	computed,
+	nextTick,
+	ref,
+} from "vue";
 import {
 	Button,
+	CheckboxGroup,
+	CheckboxItem,
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
@@ -21,6 +29,8 @@ import {
 	DropdownMenuSubContent,
 	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
+	RadioGroup,
+	RadioItem,
 } from "@/components/fluid";
 import {
 	ContextMenu,
@@ -40,6 +50,8 @@ const props = defineProps<{
 	node: FileTreeNode;
 	selectedId?: string;
 	expanded: Set<string>;
+	claimHoverIndex?: () => number;
+	registerHoverItem?: (index: number, element: HTMLElement | null) => void;
 }>();
 const emit = defineEmits<{
 	select: [node: FileTreeNode];
@@ -72,6 +84,47 @@ const resourceMeta = computed(() => {
 		? `${selectedNode.prefix} · ${selectedNode.name}`
 		: selectedNode.name;
 });
+const hoverElements = new Map<string, HTMLElement>();
+const registeredHoverIndices = new Map<string, number>();
+const ownHoverIndex = props.claimHoverIndex?.();
+const childHoverIndices = new Map<string, number>();
+
+function childHoverIndex(id: string) {
+	let index = childHoverIndices.get(id);
+	if (index === undefined) {
+		index = props.claimHoverIndex?.();
+		if (index !== undefined) childHoverIndices.set(id, index);
+	}
+	return index;
+}
+
+function setHoverRow(
+	key: string,
+	index: number | undefined,
+	value: Element | ComponentPublicInstance | null,
+) {
+	const element =
+		value instanceof Element
+			? (value as HTMLElement)
+			: value?.$el instanceof Element
+				? (value.$el as HTMLElement)
+				: null;
+	const previous = registeredHoverIndices.get(key);
+	const previousElement = hoverElements.get(key);
+	if (
+		previous !== undefined &&
+		(element === null || previous !== index || previousElement !== element)
+	) {
+		props.registerHoverItem?.(previous, null);
+		registeredHoverIndices.delete(key);
+	}
+	if (element) hoverElements.set(key, element);
+	else hoverElements.delete(key);
+	if (element && index !== undefined && registeredHoverIndices.get(key) !== index) {
+		props.registerHoverItem?.(index, element);
+		registeredHoverIndices.set(key, index);
+	}
+}
 
 const isRenaming = ref(false);
 const renameDraft = ref("");
@@ -180,6 +233,92 @@ function forwardAction(
 ) {
 	emit("action", node, action, value);
 }
+
+const folderSelectionMode = computed<"none" | "single" | "multiple">(
+	() => props.node.selectionMode ?? props.node.data?.selectionMode ?? "none",
+);
+
+const subFolderChildren = computed(() =>
+	children.value.filter((child) => child.type === "folder"),
+);
+const fileChildren = computed(() =>
+	children.value.filter((child) => child.type === "file"),
+);
+
+const isSlotFolder = computed(() =>
+	isFolder.value &&
+	folderSelectionMode.value !== "none" &&
+	fileChildren.value.length > 0 &&
+	fileChildren.value.some((child) => child.selectableResource),
+);
+
+const selectedRadioChildId = computed(() => {
+	const selected = fileChildren.value.find((c) => c.resourceSelected);
+	return selected?.id ?? "";
+});
+
+const checkedIndices = computed(() => {
+	const set = new Set<number>();
+	fileChildren.value.forEach((child, idx) => {
+		if (child.resourceSelected) set.add(idx);
+	});
+	return set;
+});
+
+function handleRadioSelect(childId: string) {
+	const target = fileChildren.value.find((c) => c.id === childId);
+	if (target) {
+		emit("select", target);
+		toggleResource(target, true);
+	}
+}
+
+function handleCheckboxToggle(child: FileTreeNode) {
+	emit("select", child);
+	toggleResource(child, !child.resourceSelected);
+}
+
+function matchesActionFor(node: FileTreeNode, action: FileTreeAction) {
+	if (!action.type) return true;
+	if (typeof action.type === "function") return action.type(node);
+	return action.type === node.type;
+}
+
+function actionsFor(node: FileTreeNode): FileTreeAction[] {
+	return Object.values(node.action ?? {}).filter(
+		(act): act is FileTreeAction => act !== undefined && matchesActionFor(node, act),
+	);
+}
+
+function childInputKey(node: FileTreeNode, action: FileTreeAction) {
+	return `${node.id}:${action.id}`;
+}
+function childInputValue(node: FileTreeNode, action: FileTreeAction) {
+	return (
+		inputValues.value[childInputKey(node, action)] ??
+		action.input?.value?.(node) ??
+		""
+	);
+}
+function setChildInputValue(
+	node: FileTreeNode,
+	action: FileTreeAction,
+	value: string,
+) {
+	inputValues.value[childInputKey(node, action)] = value;
+}
+function runChildAction(
+	node: FileTreeNode,
+	action: FileTreeAction,
+	value?: string,
+) {
+	if (action.id === "rename") {
+		emit("action", node, action, value);
+		return;
+	}
+	if (action.input) delete inputValues.value[childInputKey(node, action)];
+	emit("action", node, action, value);
+}
 </script>
 
 <template>
@@ -187,6 +326,7 @@ function forwardAction(
     <ContextMenu>
       <ContextMenuTrigger as-child>
         <div
+          :ref="(element) => setHoverRow('self', ownHoverIndex, element)"
           class="file-tree-row group/tree-row cursor-pointer select-none"
           :class="{
             'is-selected': selectedId === node.id,
@@ -384,18 +524,311 @@ function forwardAction(
     </ContextMenu>
     <div v-if="isFolder" class="file-tree-children" :class="{ 'is-open': isExpanded }">
       <div class="file-tree-children-wrap">
-        <FileTreeBranch
-          v-for="child in children"
-          :key="child.id"
-          :node="child"
-          :selected-id="selectedId"
-          :expanded="expanded"
-          @select="emit('select', $event)"
-          @open="emit('open', $event)"
-          @toggle="emit('toggle', $event)"
-          @toggle-resource="toggleResource"
-          @action="forwardAction"
-        />
+        <!-- If it's a slot folder with single or multiple selection -->
+        <template v-if="isSlotFolder">
+          <!-- Any sub-folders in this slot -->
+          <FileTreeBranch
+            v-for="subFolder in subFolderChildren"
+            :key="subFolder.id"
+            :node="subFolder"
+            :selected-id="selectedId"
+            :expanded="expanded"
+            :claim-hover-index="claimHoverIndex"
+            :register-hover-item="registerHoverItem"
+            @select="emit('select', $event)"
+            @open="emit('open', $event)"
+            @toggle="emit('toggle', $event)"
+            @toggle-resource="toggleResource"
+            @action="forwardAction"
+          />
+
+          <!-- Single Selection: Fluid RadioGroup & RadioItem -->
+          <RadioGroup
+            v-if="folderSelectionMode === 'single'"
+            :model-value="selectedRadioChildId"
+            class="w-full gap-0.5"
+            size="compact"
+            :hover-highlight="false"
+            @update:model-value="handleRadioSelect"
+          >
+            <RadioItem
+              :ref="(element) => setHoverRow(`child:${child.id}`, childHoverIndex(child.id), element)"
+              v-for="(child, idx) in fileChildren"
+              :key="child.id"
+              :value="child.id"
+              :index="idx"
+              :selected="child.resourceSelected"
+              class="file-tree-row file-tree-slot-file group/tree-row w-full cursor-pointer select-none"
+              :class="{
+                'is-selected': selectedId === child.id,
+                'is-resource-selected': child.resourceSelected,
+              }"
+              @click="emit('select', child)"
+              @dblclick="emit('open', child)"
+            >
+              <ContextMenu>
+                <ContextMenuTrigger as-child>
+                  <div class="flex h-full min-w-0 flex-1 items-center justify-between gap-1.5 text-left">
+                    <div class="flex min-w-0 flex-1 items-center gap-1.5">
+                      <span v-if="child.prefix" class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">{{ child.prefix }}</span>
+                      <span class="min-w-0 truncate text-xs">{{ child.name }}</span>
+                      <span v-if="child.suffix" class="shrink-0 text-[10px] text-muted-foreground">· {{ child.suffix }}</span>
+                    </div>
+
+                    <div class="flex items-center gap-0.5 shrink-0" @click.stop>
+                      <button
+                        v-if="child.selectableResource || child.disableRowOpen"
+                        type="button"
+                        class="file-tree-open-button shrink-0 grid size-5 place-items-center rounded text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors"
+                        title="在编辑器中打开"
+                        aria-label="在编辑器中打开"
+                        @click.stop="emit('open', child)"
+                      >
+                        <ExternalLink class="size-3.5" />
+                      </button>
+
+                      <div v-if="actionsFor(child).length" class="file-tree-actions shrink-0">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger as-child>
+                            <button type="button" class="file-tree-action-button" aria-label="更多操作" title="更多操作" @click.stop><MoreHorizontal class="size-4" /></button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <template v-for="(act, aIdx) in actionsFor(child)" :key="act.id">
+                              <DropdownMenuSeparator v-if="act.separatorBefore && aIdx" />
+                              <DropdownMenuSub v-if="act.subActions?.length">
+                                <DropdownMenuSubTrigger :icon="iconFor(act.icon, Plus)" :label="act.name" />
+                                <DropdownMenuSubContent>
+                                  <DropdownMenuItem
+                                    v-for="subAction in act.subActions.filter((sa) => matchesActionFor(child, sa))"
+                                    :key="subAction.id"
+                                    :icon="iconFor(subAction.icon, Plus)"
+                                    :label="subAction.name"
+                                    @select="runChildAction(child, subAction)"
+                                  />
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                              <DropdownMenuSub v-else-if="act.input">
+                                <DropdownMenuSubTrigger :icon="iconFor(act.icon, MoreHorizontal)" :label="act.name" />
+                                <DropdownMenuSubContent class="w-60 p-2">
+                                  <div class="grid gap-2" @click.stop @keydown.stop>
+                                    <Input :model-value="childInputValue(child, act)" :placeholder="act.input.placeholder" @update:model-value="setChildInputValue(child, act, String($event))" @keydown.enter.prevent="runChildAction(child, act, childInputValue(child, act))" />
+                                    <Button size="sm" class="justify-center" @click="runChildAction(child, act, childInputValue(child, act))">{{ act.input.submitLabel ?? '保存' }}</Button>
+                                  </div>
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                              <DropdownMenuSub v-else-if="act.choices?.length">
+                                <DropdownMenuSubTrigger :icon="iconFor(act.icon, MoreHorizontal)" :label="act.name" />
+                                <DropdownMenuSubContent>
+                                  <DropdownMenuItem
+                                    v-for="choice in act.choices"
+                                    :key="choice.value"
+                                    :icon="iconFor(choice.icon, MoreHorizontal)"
+                                    :label="choice.name"
+                                    :checked="act.selected?.(child, choice.value)"
+                                    @select="runChildAction(child, act, choice.value)"
+                                  />
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                              <DropdownMenuItem
+                                v-else
+                                :class="act.id === 'delete' ? 'text-destructive focus:text-destructive' : ''"
+                                :icon="iconFor(act.icon, MoreHorizontal)"
+                                :label="act.name"
+                                @select="runChildAction(child, act)"
+                              />
+                            </template>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent v-if="actionsFor(child).length">
+                  <template v-for="(act, aIdx) in actionsFor(child)" :key="act.id">
+                    <ContextMenuSeparator v-if="act.separatorBefore && aIdx" />
+                    <ContextMenuSub v-if="act.subActions?.length">
+                      <ContextMenuSubTrigger><component :is="iconFor(act.icon, Plus)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
+                      <ContextMenuSubContent>
+                        <ContextMenuItem v-for="subAction in act.subActions.filter((sa) => matchesActionFor(child, sa))" :key="subAction.id" @select="runChildAction(child, subAction)"><component :is="iconFor(subAction.icon, Plus)" class="mr-2 size-4" />{{ subAction.name }}</ContextMenuItem>
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
+                    <ContextMenuSub v-else-if="act.input">
+                      <ContextMenuSubTrigger><component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
+                      <ContextMenuSubContent class="w-60 p-2">
+                        <div class="grid gap-2" @click.stop @keydown.stop>
+                          <Input :model-value="childInputValue(child, act)" :placeholder="act.input.placeholder" @update:model-value="setChildInputValue(child, act, String($event))" @keydown.enter.prevent="runChildAction(child, act, childInputValue(child, act))" />
+                          <Button size="sm" class="justify-center" @click="runChildAction(child, act, childInputValue(child, act))">{{ act.input.submitLabel ?? '保存' }}</Button>
+                        </div>
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
+                    <ContextMenuSub v-else-if="act.choices?.length">
+                      <ContextMenuSubTrigger><component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
+                      <ContextMenuSubContent>
+                        <ContextMenuItem v-for="choice in act.choices" :key="choice.value" @select="runChildAction(child, act, choice.value)"><component :is="iconFor(choice.icon, MoreHorizontal)" class="mr-2 size-4" />{{ choice.name }}<Check v-if="act.selected?.(child, choice.value)" class="ml-auto size-4" /></ContextMenuItem>
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
+                    <ContextMenuItem v-else :class="act.id === 'delete' ? 'text-destructive focus:text-destructive' : ''" @select="runChildAction(child, act)">
+                      <component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />
+                      <span class="truncate">{{ act.name }}</span>
+                    </ContextMenuItem>
+                  </template>
+                </ContextMenuContent>
+              </ContextMenu>
+            </RadioItem>
+          </RadioGroup>
+
+          <!-- Multiple Selection: Fluid CheckboxGroup & CheckboxItem -->
+          <CheckboxGroup
+            v-else-if="folderSelectionMode === 'multiple'"
+            :checked-indices="checkedIndices"
+            class="w-full gap-0.5"
+            size="compact"
+            :hover-highlight="false"
+          >
+            <CheckboxItem
+			  :ref="(element) => setHoverRow(`child:${child.id}`, childHoverIndex(child.id), element)"
+              v-for="(child, idx) in fileChildren"
+              :key="child.id"
+              :index="idx"
+              :checked="!!child.resourceSelected"
+              class="file-tree-row file-tree-slot-file group/tree-row w-full cursor-pointer select-none"
+              :class="{
+                'is-selected': selectedId === child.id,
+                'is-resource-selected': child.resourceSelected,
+              }"
+              @toggle="handleCheckboxToggle(child)"
+              @click="emit('select', child)"
+              @dblclick="emit('open', child)"
+            >
+              <ContextMenu>
+                <ContextMenuTrigger as-child>
+                  <div class="flex h-full min-w-0 flex-1 items-center justify-between gap-1.5 text-left">
+                    <div class="flex min-w-0 flex-1 items-center gap-1.5">
+                      <span v-if="child.prefix" class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">{{ child.prefix }}</span>
+                      <span class="min-w-0 truncate text-xs">{{ child.name }}</span>
+                      <span v-if="child.suffix" class="shrink-0 text-[10px] text-muted-foreground">· {{ child.suffix }}</span>
+                    </div>
+
+                    <div class="flex items-center gap-0.5 shrink-0" @click.stop>
+                      <button
+                        v-if="child.selectableResource || child.disableRowOpen"
+                        type="button"
+                        class="file-tree-open-button shrink-0 grid size-5 place-items-center rounded text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors"
+                        title="在编辑器中打开"
+                        aria-label="在编辑器中打开"
+                        @click.stop="emit('open', child)"
+                      >
+                        <ExternalLink class="size-3.5" />
+                      </button>
+
+                      <div v-if="actionsFor(child).length" class="file-tree-actions shrink-0">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger as-child>
+                            <button type="button" class="file-tree-action-button" aria-label="更多操作" title="更多操作" @click.stop><MoreHorizontal class="size-4" /></button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <template v-for="(act, aIdx) in actionsFor(child)" :key="act.id">
+                              <DropdownMenuSeparator v-if="act.separatorBefore && aIdx" />
+                              <DropdownMenuSub v-if="act.subActions?.length">
+                                <DropdownMenuSubTrigger :icon="iconFor(act.icon, Plus)" :label="act.name" />
+                                <DropdownMenuSubContent>
+                                  <DropdownMenuItem
+                                    v-for="subAction in act.subActions.filter((sa) => matchesActionFor(child, sa))"
+                                    :key="subAction.id"
+                                    :icon="iconFor(subAction.icon, Plus)"
+                                    :label="subAction.name"
+                                    @select="runChildAction(child, subAction)"
+                                  />
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                              <DropdownMenuSub v-else-if="act.input">
+                                <DropdownMenuSubTrigger :icon="iconFor(act.icon, MoreHorizontal)" :label="act.name" />
+                                <DropdownMenuSubContent class="w-60 p-2">
+                                  <div class="grid gap-2" @click.stop @keydown.stop>
+                                    <Input :model-value="childInputValue(child, act)" :placeholder="act.input.placeholder" @update:model-value="setChildInputValue(child, act, String($event))" @keydown.enter.prevent="runChildAction(child, act, childInputValue(child, act))" />
+                                    <Button size="sm" class="justify-center" @click="runChildAction(child, act, childInputValue(child, act))">{{ act.input.submitLabel ?? '保存' }}</Button>
+                                  </div>
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                              <DropdownMenuSub v-else-if="act.choices?.length">
+                                <DropdownMenuSubTrigger :icon="iconFor(act.icon, MoreHorizontal)" :label="act.name" />
+                                <DropdownMenuSubContent>
+                                  <DropdownMenuItem
+                                    v-for="choice in act.choices"
+                                    :key="choice.value"
+                                    :icon="iconFor(choice.icon, MoreHorizontal)"
+                                    :label="choice.name"
+                                    :checked="act.selected?.(child, choice.value)"
+                                    @select="runChildAction(child, act, choice.value)"
+                                  />
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                              <DropdownMenuItem
+                                v-else
+                                :class="act.id === 'delete' ? 'text-destructive focus:text-destructive' : ''"
+                                :icon="iconFor(act.icon, MoreHorizontal)"
+                                :label="act.name"
+                                @select="runChildAction(child, act)"
+                              />
+                            </template>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent v-if="actionsFor(child).length">
+                  <template v-for="(act, aIdx) in actionsFor(child)" :key="act.id">
+                    <ContextMenuSeparator v-if="act.separatorBefore && aIdx" />
+                    <ContextMenuSub v-if="act.subActions?.length">
+                      <ContextMenuSubTrigger><component :is="iconFor(act.icon, Plus)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
+                      <ContextMenuSubContent>
+                        <ContextMenuItem v-for="subAction in act.subActions.filter((sa) => matchesActionFor(child, sa))" :key="subAction.id" @select="runChildAction(child, subAction)"><component :is="iconFor(subAction.icon, Plus)" class="mr-2 size-4" />{{ subAction.name }}</ContextMenuItem>
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
+                    <ContextMenuSub v-else-if="act.input">
+                      <ContextMenuSubTrigger><component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
+                      <ContextMenuSubContent class="w-60 p-2">
+                        <div class="grid gap-2" @click.stop @keydown.stop>
+                          <Input :model-value="childInputValue(child, act)" :placeholder="act.input.placeholder" @update:model-value="setChildInputValue(child, act, String($event))" @keydown.enter.prevent="runChildAction(child, act, childInputValue(child, act))" />
+                          <Button size="sm" class="justify-center" @click="runChildAction(child, act, childInputValue(child, act))">{{ act.input.submitLabel ?? '保存' }}</Button>
+                        </div>
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
+                    <ContextMenuSub v-else-if="act.choices?.length">
+                      <ContextMenuSubTrigger><component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
+                      <ContextMenuSubContent>
+                        <ContextMenuItem v-for="choice in act.choices" :key="choice.value" @select="runChildAction(child, act, choice.value)"><component :is="iconFor(choice.icon, MoreHorizontal)" class="mr-2 size-4" />{{ choice.name }}<Check v-if="act.selected?.(child, choice.value)" class="ml-auto size-4" /></ContextMenuItem>
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
+                    <ContextMenuItem v-else :class="act.id === 'delete' ? 'text-destructive focus:text-destructive' : ''" @select="runChildAction(child, act)">
+                      <component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />
+                      <span class="truncate">{{ act.name }}</span>
+                    </ContextMenuItem>
+                  </template>
+                </ContextMenuContent>
+              </ContextMenu>
+            </CheckboxItem>
+          </CheckboxGroup>
+        </template>
+
+        <!-- Standard / fallback children -->
+        <template v-else>
+          <FileTreeBranch
+            v-for="child in children"
+            :key="child.id"
+            :node="child"
+            :selected-id="selectedId"
+            :expanded="expanded"
+            :claim-hover-index="claimHoverIndex"
+            :register-hover-item="registerHoverItem"
+            @select="emit('select', $event)"
+            @open="emit('open', $event)"
+            @toggle="emit('toggle', $event)"
+            @toggle-resource="toggleResource"
+            @action="forwardAction"
+          />
+        </template>
       </div>
     </div>
   </div>
@@ -404,6 +837,13 @@ function forwardAction(
 <style scoped>
 .file-tree-branch {
 	min-width: 0;
+}
+
+:deep(.file-tree-slot-file > span) {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
 }
 
 .file-tree-row {
@@ -425,7 +865,6 @@ function forwardAction(
 }
 
 .file-tree-row:hover {
-	background: color-mix(in oklab, var(--foreground) 4%, transparent);
 	color: var(--foreground);
 }
 

@@ -46,14 +46,13 @@ const actionViewOpen = ref(false);
 const actionView = ref<WorldResource | null>(null);
 const actionViewComponent = ref<Component | null>(null);
 
-const isEmpty = computed(() => chat.activePath.value.length === 0);
-const suggestions = [
-	{
-		label: "开始",
-		suggestions: ["用一句话介绍你自己", "我们开始一段新的对话"],
+const draftContent = computed({
+	get: () => chat.composerDraftContent.value,
+	set: (val: string) => {
+		chat.composerDraftContent.value = val;
 	},
-	{ label: "协作", suggestions: ["帮我梳理一个想法"] },
-];
+});
+
 const actions = computed(
 	() =>
 		world.slots.value.find((slot) => slot.path === "/self/slot/COMMAND")
@@ -198,11 +197,10 @@ function openActionView(action: WorldResource) {
     <div aria-hidden="true" class="mobile:hidden" />
     <div class="pointer-events-auto w-full pb-4 pt-2 mobile:px-2 mobile:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <PromptBar
-        v-model="chat.composerDraftContent.value"
+        v-model="draftContent"
         :attachments="attachments"
         :actions="actions"
         :references="referenceOptions"
-        :suggestions="isEmpty ? suggestions : []"
         :token-usage="lastTokenUsage"
 		:edit-mode="chat.isEditMode.value"
 		:modes="modes"

@@ -28,8 +28,9 @@ export async function selectOne<T>(
 }
 
 export async function upsert<T>(table: string, id: string, value: T) {
-	await host.database.upsert(table, id, value);
-	markLocalDatabaseChange(table, id, false, value);
+	const raw = JSON.parse(JSON.stringify(value));
+	await host.database.upsert(table, id, raw);
+	markLocalDatabaseChange(table, id, false, raw);
 }
 
 export async function remove(table: string, id: string) {

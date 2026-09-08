@@ -30,9 +30,30 @@ function definition(document: WorldDocument): LocalPluginDefinition | null {
 	if (value.schemaVersion !== 1 || !value.name?.trim()) return null;
 	return { schemaVersion: 1, name: value.name.trim(), ...(value.nickname ? { nickname: value.nickname } : {}), ...(value.description ? { description: value.description } : {}), tags: Array.isArray(value.tags) ? value.tags.filter((tag): tag is string => typeof tag === "string") : [], ...(value.avatar ? { avatar: value.avatar } : {}), ...(value.cover ? { cover: value.cover } : {}) };
 }
+import { generateProceduralAvatarDataUrl, generateProceduralCoverDataUrl } from "./shared/procedural-cover";
+
 function media(document: WorldDocument, name: string) {
 	const node = Object.values(document.root.children).find((child): child is WorldFileNode => child.type === "file" && child.name === name);
-	return typeof node?.content === "string" && node.content ? node.content : undefined;
+	if (typeof node?.content === "string" && node.content) return node.content;
+	const id = document.id.slice("local:".length);
+	const def = definition(document);
+	if (name === "cover.png") {
+		const generated = generateProceduralCoverDataUrl(id, def?.name ?? "");
+		if (node && node.type === "file") {
+			node.content = generated;
+			void import("@/host").then(({ host }) => host.database.upsert(worldTable, document.id, document));
+		}
+		return generated;
+	}
+	if (name === "avatar.png") {
+		const generated = generateProceduralAvatarDataUrl(id, def?.name ?? "");
+		if (node && node.type === "file") {
+			node.content = generated;
+			void import("@/host").then(({ host }) => host.database.upsert(worldTable, document.id, document));
+		}
+		return generated;
+	}
+	return undefined;
 }
 function compare(a: LocalPluginView, b: LocalPluginView, prefs: Preferences) {
 	const ap = prefs[a.id] ?? {}; const bp = prefs[b.id] ?? {};

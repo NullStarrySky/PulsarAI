@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { useVirtualizer } from "@tanstack/vue-virtual";
-import { type ComponentPublicInstance, computed, ref, toRef, watch } from "vue";
+import {
+	type ComponentPublicInstance,
+	computed,
+	onBeforeUnmount,
+	onMounted,
+	ref,
+	toRef,
+	watch,
+} from "vue";
 import {
 	MessageScroller,
 	MessageScrollerButton,
@@ -85,7 +93,8 @@ const visiblePathView = computed(() => {
 		(item) =>
 			item.role !== "system" ||
 			Boolean(item.intervalSummary) ||
-			Boolean(item.message?.content),
+			Boolean(item.message?.content) ||
+			(item.pulses && item.pulses.length > 0),
 	);
 });
 
@@ -154,6 +163,67 @@ const currentPluginName = computed(() => {
 		"P"
 	);
 });
+
+const lastAssistantItem = computed(() => {
+	const list = conversation.activePathView.value;
+	for (let i = list.length - 1; i >= 0; i--) {
+		if (list[i]?.role === "assistant" && list[i]?.message) {
+			return list[i];
+		}
+	}
+	return null;
+});
+
+function isEditableElement(target: EventTarget | null): boolean {
+	if (!target || !(target instanceof HTMLElement)) return false;
+	const tag = target.tagName.toLowerCase();
+	if (tag === "input" || tag === "textarea" || tag === "select") return true;
+	if (target.isContentEditable) return true;
+	if (target.closest?.(".ProseMirror, .cm-editor, [contenteditable='true']"))
+		return true;
+	return false;
+}
+
+async function handleKeyDown(event: KeyboardEvent) {
+	if (event.defaultPrevented) return;
+	if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+	if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+	if (isEditableElement(event.target)) return;
+
+	const item = lastAssistantItem.value;
+	if (!item) return;
+
+	if (event.key === "ArrowLeft") {
+		if (item.activeVersionIndex > 0) {
+			event.preventDefault();
+			await conversation.switchVersion(
+				item.containerId,
+				item.activeVersionIndex - 1,
+			);
+		}
+	} else if (event.key === "ArrowRight") {
+		if (item.activeVersionIndex < item.versionCount - 1) {
+			event.preventDefault();
+			await conversation.switchVersion(
+				item.containerId,
+				item.activeVersionIndex + 1,
+			);
+		} else {
+			if (!conversation.generating.value) {
+				event.preventDefault();
+				await conversation.regenerate(item.containerId);
+			}
+		}
+	}
+}
+
+onMounted(() => {
+	window.addEventListener("keydown", handleKeyDown);
+});
+
+onBeforeUnmount(() => {
+	window.removeEventListener("keydown", handleKeyDown);
+});
 </script>
 
 <template>
@@ -168,12 +238,17 @@ const currentPluginName = computed(() => {
                 <div v-for="row in virtualItems" :key="String(row.key)" :ref="measureRow" :data-index="row.index" class="absolute left-0 top-0 w-full pb-4" :style="{ transform: `translateY(${row.start}px)` }">
                   <MessageScrollerItem :message-id="visiblePathView[row.index]!.containerId" :scroll-anchor="visiblePathView[row.index]!.role === 'user'">
                     <ChatBubble
+                      :key="visiblePathView[row.index]!.containerId"
                       :view-model="visiblePathView[row.index]!"
                       :generating="conversation.generating.value"
                       @process-interaction="pauseVirtualEnd"
                       @delete-message="conversation.deleteMessage"
-					  @toggle-interval="toggleInterval"
-                    />
+                      @toggle-interval="toggleInterval"
+                    >
+                      <template #messageAction="bubbleProps">
+                        <slot name="messageAction" v-bind="bubbleProps" />
+                      </template>
+                    </ChatBubble>
                   </MessageScrollerItem>
                 </div>
               </div>

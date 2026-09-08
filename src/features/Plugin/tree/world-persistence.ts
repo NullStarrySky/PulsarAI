@@ -40,17 +40,38 @@ function repairBuiltinDefaultTemplateChatId(document: WorldDocument) {
 	delete template.children[legacy.id];
 	legacy.id = "builtin-default-template-chat";
 	template.children[legacy.id] = legacy;
-	document.updateDate = new Date().toISOString();
 	return true;
+}
+
+function syncBuiltinFolder(source: import("./world-types").WorldFolderNode, target: import("./world-types").WorldFolderNode): boolean {
+	let changed = false;
+	for (const [key, sourceChild] of Object.entries(source.children)) {
+		const targetChild = target.children[key];
+		if (!targetChild) {
+			target.children[key] = sourceChild;
+			changed = true;
+		} else if (sourceChild.type === "folder" && targetChild.type === "folder") {
+			if (syncBuiltinFolder(sourceChild, targetChild)) changed = true;
+		} else if (sourceChild.type === "file" && targetChild.type === "file") {
+			if ((!targetChild.content || targetChild.content === "") && sourceChild.content) {
+				targetChild.content = sourceChild.content;
+				changed = true;
+			}
+		}
+	}
+	return changed;
 }
 
 export async function ensureGlobalWorldDocument() {
 	const document = await loadWorldDocument(globalWorldDocumentId);
 	if (!document)
 		return createPersistedWorldDocument(createBuiltinGlobalWorld());
-	return repairBuiltinDefaultTemplateChatId(document)
-		? createPersistedWorldDocument(document)
-		: document;
+	let changed = repairBuiltinDefaultTemplateChatId(document);
+	const builtin = createBuiltinGlobalWorld();
+	if (syncBuiltinFolder(builtin.root, document.root)) {
+		changed = true;
+	}
+	return changed ? createPersistedWorldDocument(document) : document;
 }
 
 export async function ensureLocalPluginWorldDocument(localPluginId: string) {
@@ -62,9 +83,9 @@ export async function ensureLocalPluginWorldDocument(localPluginId: string) {
 }
 
 /**
- * Resolves compact ID-addressed updates against a working World, writes each
- * affected document in one JSON-patch request, then commits that same result
- * to memory. Cross-document transactions remain a host concern.
+ * Resolves compact ID-addressed updates against a working World, publishes the
+ * result to memory, then writes each affected document in one JSON-patch request.
+ * Cross-document transactions remain a host concern.
  */
 export async function persistPulses(
 	documents: World,
@@ -73,15 +94,14 @@ export async function persistPulses(
 	const working = structuredClone(documents);
 	applyPulses(working, pulses);
 
-	const changedAt = new Date().toISOString();
 	const changedScopes = new Set(pulses.flatMap((pulse) => pulse.operations.map((operation) => operation.scope)));
+	for (const scope of changedScopes)
+		Object.assign(documents[scope], working[scope]);
 	for (const scope of changedScopes) {
 		const document = documents[scope];
-		working[scope].updateDate = changedAt;
 		await host.database.update(worldTable, document.id, [
 			{ op: "replace", path: "/value", value: working[scope] },
 		]);
-		Object.assign(document, working[scope]);
 		markLocalDatabaseChange(worldTable, document.id, false, document);
 	}
 }

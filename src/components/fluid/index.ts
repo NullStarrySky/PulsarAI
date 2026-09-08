@@ -40,15 +40,31 @@ export {
   SURFACE_SHADOW,
 } from "./lib/surface-classes";
 export { default as Elevated } from "./lib/Elevated.vue";
+export {
+  popupMotionClass,
+  popupScrollAreaClass,
+  popupViewportClass,
+  isDisabledRow,
+  POPUP_NAV_KEYS,
+} from "./lib/popup";
 
 export {
+  useFluidHover,
+  useRegisterFluidHoverItem,
+  type ItemRect,
+  type UseFluidHoverOptions,
+  type UseFluidHoverReturn,
+  type FluidHoverHandlers,
   useProximityHover,
   useRegisterProximityItem,
-  type ItemRect,
   type UseProximityHoverOptions,
-} from "./hooks/use-proximity-hover";
+} from "./hooks/use-fluid-hover";
+export { default as FluidHoverHighlight } from "./components/ui/fluid-hover/FluidHoverHighlight.vue";
+export type { FluidHoverHighlightProps } from "./components/ui/fluid-hover/FluidHoverHighlight.vue";
+
 export {
   useMergeSplitBlocks,
+  useSelectionRuns,
 } from "./hooks/use-merge-split";
 export type { SelBlock, Run } from "./hooks/use-merge-split";
 export { default as SelectionBackgrounds } from "./hooks/SelectionBackgrounds.vue";
@@ -119,10 +135,14 @@ export { default as DropdownSeparator } from "./components/ui/dropdown/DropdownS
 export { default as DropdownMenuSeparator } from "./components/ui/dropdown/DropdownSeparator.vue";
 export { default as MenuItem } from "./components/ui/dropdown/MenuItem.vue";
 export { default as DropdownMenuItem } from "./components/ui/dropdown/MenuItem.vue";
+export { default as DropdownSearch } from "./components/ui/dropdown/DropdownSearch.vue";
+export { default as DropdownEmpty } from "./components/ui/dropdown/DropdownEmpty.vue";
 export {
   useDropdown,
   useDropdownMaybe,
+  useDropdownSearchHost,
   type DropdownContextValue,
+  type DropdownSearchHostValue,
 } from "./components/ui/dropdown/dropdown-context";
 
 export { default as RadioGroup } from "./components/ui/radio/RadioGroup.vue";
@@ -134,6 +154,9 @@ export { default as CheckboxItem } from "./components/ui/checkbox/CheckboxItem.v
 
 export { default as Combobox } from "./components/ui/combobox/Combobox.vue";
 export type { ComboboxItemData } from "./components/ui/combobox/Combobox.vue";
+export { default as ComboboxInput } from "./components/ui/combobox/ComboboxInput.vue";
+export { default as ComboboxEmpty } from "./components/ui/combobox/ComboboxEmpty.vue";
+export { default as ComboboxItem } from "./components/ui/combobox/ComboboxItem.vue";
 
 export { default as Select } from "./components/ui/select/Select.vue";
 export { default as SelectTrigger } from "./components/ui/select/SelectTrigger.vue";

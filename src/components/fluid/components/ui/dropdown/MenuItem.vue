@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, type HTMLAttributes } from "vue";
+import { ref, computed, watch, useSlots, type HTMLAttributes } from "vue";
 import {
   DropdownMenuItem,
   DropdownMenuRadioItem,
@@ -11,8 +11,6 @@ import type { IconComponent } from "../../../lib/icon-context";
 import { useDropdownMaybe } from "./dropdown-context";
 import MenuRowContent from "./MenuRowContent.vue";
 
-// MenuItem 只在 Dropdown 内使用，而后者选择了退出全局 pill 形状——
-// 理由见 dropdown.tsx。
 const shape = shapeMap.rounded;
 
 const props = withDefaults(
@@ -36,18 +34,16 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: "select"): void;
+  (e: "click", event: MouseEvent): void;
 }>();
 
+const slots = useSlots();
 const dropdownCtx = useDropdownMaybe();
 const internalRef = ref<HTMLDivElement | null>(null);
 
-const itemSlots = defineSlots<{
-  default?: () => any;
-}>();
-
 const resolvedLabel = computed(() => {
   if (props.label) return props.label;
-  const vnodes = itemSlots.default?.() ?? [];
+  const vnodes = slots.default?.() ?? [];
   const first = vnodes.find((v: any) => typeof v.children === "string");
   return typeof first?.children === "string" ? first.children : "";
 });
@@ -58,7 +54,7 @@ if (claimedIndex.value === -1 && dropdownCtx?.claimIndex) {
 }
 const resolvedIndex = computed(() => props.index ?? claimedIndex.value);
 
-// 向邻近悬停系统注册行元素——悬停高亮与选中背景的 rect 都来自这里。
+// 向流体悬停系统注册行元素
 const registerItem = dropdownCtx?.registerItem;
 watch(
   [resolvedIndex, internalRef] as const,
@@ -80,19 +76,13 @@ function setItemRef(el: any) {
   internalRef.value = (el?.$el as HTMLDivElement | null) ?? el ?? null;
 }
 
-let lastActivateTime = 0;
-function handleActivate() {
+function handleActivate(e?: MouseEvent) {
   if (props.disabled) return;
-  const now = performance.now();
-  if (now - lastActivateTime < 80) return;
-  lastActivateTime = now;
-  // 只 emit 一次：Vue 的 emit("select") 本身就会调用 onSelect prop，
-  // 再手动调用会让 toggle 类回调执行两次、互相抵消。
   emit("select");
+  if (e) emit("click", e);
 }
 
 function handleSelectEvent(e: Event) {
-  // reka 关闭菜单前检查 defaultPrevented——与 Base UI 的 closeOnClick={false} 对齐。
   if (!props.closeOnClick) e.preventDefault();
   handleActivate();
 }
@@ -107,9 +97,7 @@ function handleKeydown(e: KeyboardEvent) {
 
 const itemClass = computed(() =>
   cn(
-    // 固定高度让标签上的 text-box trim 不会收缩行。shrink-0 因为菜单 popup
-    // 是 max-height flex 列——没有它，长列表会压缩行来适应而不是滚动。
-    `relative z-10 flex ${sizeClasses.value.control} shrink-0 items-center ${sizeClasses.value.gap} ${shape.item} ${sizeClasses.value.itemPx} cursor-pointer outline-none`,
+    `relative z-10 flex ${sizeClasses.value.control} shrink-0 items-center ${sizeClasses.value.gap} ${shape.item} ${sizeClasses.value.itemPx} cursor-pointer outline-none select-none`,
     props.disabled && "pointer-events-none opacity-50",
     props.class
   )
@@ -117,10 +105,7 @@ const itemClass = computed(() =>
 </script>
 
 <template>
-  <!-- 弹出层内：菜单原语拥有 role / aria-checked / tabIndex / roving 高亮 /
-      typeahead 与激活（键盘激活会合成 click，所以行的 click 也会触发）。
-      样式 div 携带 Fluid Functionalism 视觉与邻近悬停注册；
-      MenuItem 本身不导入原语以外的任何东西。 -->
+  <!-- 弹出层内：RadioItem -->
   <DropdownMenuRadioItem
     v-if="inMenu && isRadio"
     :ref="setItemRef"
@@ -130,10 +115,20 @@ const itemClass = computed(() =>
     as-child
     @select="handleSelectEvent"
   >
-    <div :data-proximity-index="resolvedIndex" :aria-label="resolvedLabel" :class="itemClass">
-      <MenuRowContent :icon="icon" :label="resolvedLabel" :active="isActive" :checked="checked" />
+    <div
+      :data-proximity-index="resolvedIndex"
+      :data-fluid-hover-index="resolvedIndex"
+      :aria-label="resolvedLabel || undefined"
+      :class="itemClass"
+      @click="handleActivate"
+    >
+      <MenuRowContent :icon="icon" :label="label" :active="isActive" :checked="checked">
+        <slot />
+      </MenuRowContent>
     </div>
   </DropdownMenuRadioItem>
+
+  <!-- 弹出层内：普通 Item -->
   <DropdownMenuItem
     v-else-if="inMenu"
     :ref="setItemRef"
@@ -142,25 +137,36 @@ const itemClass = computed(() =>
     as-child
     @select="handleSelectEvent"
   >
-    <div :data-proximity-index="resolvedIndex" :aria-label="resolvedLabel" :class="itemClass">
-      <MenuRowContent :icon="icon" :label="resolvedLabel" :active="isActive" :checked="checked" />
+    <div
+      :data-proximity-index="resolvedIndex"
+      :data-fluid-hover-index="resolvedIndex"
+      :aria-label="resolvedLabel || undefined"
+      :class="itemClass"
+      @click="handleActivate"
+    >
+      <MenuRowContent :icon="icon" :label="label" :active="isActive" :checked="checked">
+        <slot />
+      </MenuRowContent>
     </div>
   </DropdownMenuItem>
 
-  <!-- 内联面板：自渲染 ARIA menuitem div。禁用项永远不会是 roving tab stop。 -->
+  <!-- 内联面板 -->
   <div
     v-else
     :ref="setItemRef"
     :data-proximity-index="resolvedIndex"
+    :data-fluid-hover-index="resolvedIndex"
     :tabindex="!disabled && resolvedIndex === (dropdownCtx?.checkedIndex ?? 0) ? 0 : -1"
     :role="isRadio ? 'menuitemradio' : 'menuitem'"
     :aria-checked="isRadio ? checked : undefined"
     :aria-disabled="disabled || undefined"
-    :aria-label="resolvedLabel"
+    :aria-label="resolvedLabel || undefined"
     :class="itemClass"
     @click="handleActivate"
     @keydown="handleKeydown"
   >
-    <MenuRowContent :icon="icon" :label="resolvedLabel" :active="isActive" :checked="checked" />
+    <MenuRowContent :icon="icon" :label="label" :active="isActive" :checked="checked">
+      <slot />
+    </MenuRowContent>
   </div>
 </template>

@@ -20,9 +20,11 @@ const props = withDefaults(
     /** 把组的行钉在尺寸阶梯的某一档（默认 36px，紧凑 28px——见 /docs/sizes）。
      *  省略时跟随外围 SizeProvider。 */
     size?: SizeVariant;
+    /** 由父级共享悬停层接管时关闭组内悬停测算与背景。 */
+    hoverHighlight?: boolean;
     class?: string;
   }>(),
-  {}
+  { hoverHighlight: true }
 );
 
 const emit = defineEmits<{
@@ -182,9 +184,9 @@ function handleKeydown(e: KeyboardEvent) {
     ref="containerRef"
     role="radiogroup"
     :class="cn('relative flex flex-col w-72 max-w-full select-none', props.class)"
-    @mouseenter="handlers.onMouseEnter"
-    @mousemove="handlers.onMouseMove"
-    @mouseleave="handlers.onMouseLeave"
+    @mouseenter="props.hoverHighlight && handlers.onMouseEnter()"
+    @mousemove="props.hoverHighlight && handlers.onMouseMove($event)"
+    @mouseleave="props.hoverHighlight && handlers.onMouseLeave()"
     @focus="handleFocus"
     @blur="handleBlur"
     @keydown="handleKeydown"
@@ -207,7 +209,7 @@ function handleKeydown(e: KeyboardEvent) {
     <!-- 悬停背景 -->
     <AnimatePresence>
       <motion.div
-        v-if="activeRect"
+        v-if="props.hoverHighlight && activeRect"
         :key="session"
         :class="`absolute ${shape.bg} bg-hover pointer-events-none`"
         :initial="{

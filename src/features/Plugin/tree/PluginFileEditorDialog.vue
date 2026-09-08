@@ -37,6 +37,7 @@ import { estimateReferenceTokens } from "@/features/Plugin/resources/token-estim
 import { requestLocate } from "./file-editor-manager";
 import SlotSubMenu from "./SlotSubMenu.vue";
 import type { SlotMenuNode } from "./slot-menu-types";
+import { providePluginWorldScope } from "@/features/Plugin/runtime/file-composables";
 import { useWorld } from "./world-store";
 import type { WorldFileNode } from "./world-types";
 
@@ -63,13 +64,13 @@ const emit = defineEmits<{
 	focus: [];
 }>();
 
-const world = useWorld(
-	computed(() => ({
-		localPluginId: props.localPluginId,
-		conversationId: props.conversationId,
-		applyReplay: true,
-	})),
-);
+const worldScope = computed(() => ({
+	localPluginId: props.localPluginId,
+	conversationId: props.conversationId,
+	applyReplay: true,
+}));
+const world = useWorld(worldScope);
+providePluginWorldScope(worldScope);
 
 const draft = ref("");
 const viewMode = ref<"preview" | "source">("preview");
@@ -121,11 +122,26 @@ const hasRenderSurface = computed(() => {
 	if (fileType.value === "media") return false;
 	if (["markdown", "chat", "data", "component"].includes(fileType.value))
 		return true;
-	return (
+	if (
 		props.path.endsWith("/config.json") ||
 		props.path.endsWith("/regex.json") ||
 		props.path.endsWith(".regex.json")
-	);
+	)
+		return true;
+	if (currentFile.value?.name.endsWith(".json")) {
+		try {
+			const c = currentFile.value.content;
+			const obj = typeof c === "string" ? JSON.parse(c) : c;
+			if (
+				obj &&
+				typeof obj === "object" &&
+				("entries" in obj || "prompts" in obj || "prompt_order" in obj)
+			) {
+				return true;
+			}
+		} catch {}
+	}
+	return false;
 });
 
 function globalSlotFor(fileSlot?: string) {

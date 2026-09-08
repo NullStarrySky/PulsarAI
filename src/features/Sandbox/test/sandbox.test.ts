@@ -57,4 +57,16 @@ describe("Sandbox", () => {
 			{ role: "user", content: "after" },
 		]);
 	});
+
+	it("executes arrow functions and expressions with trailing semicolons without syntax error", async () => {
+		const arrowFnWithSemicolon = `async () => {
+			return "arrow executed";
+		};`;
+		const result = await executeSandboxCodeAsync(arrowFnWithSemicolon);
+		expect(result).toBe("arrow executed");
+
+		const exprWithSemicolon = "1 + 2;";
+		const exprResult = await executeSandboxCodeAsync(exprWithSemicolon);
+		expect(exprResult).toBe(3);
+	});
 });

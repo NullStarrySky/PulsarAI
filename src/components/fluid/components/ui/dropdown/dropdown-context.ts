@@ -5,6 +5,8 @@ export interface DropdownContextValue {
   claimIndex?: () => number;
   activeIndex: ComputedRef<number | null> | Ref<number | null>;
   checkedIndex?: number;
+  multiple?: boolean;
+  checkedIndices?: number[];
   /** 项渲染在 Menu 弹出层（DropdownContent）内时为 true，此时由原语的
    *  Item / RadioItem 拥有 role、roving 高亮、typeahead 与激活。
    *  MenuItem 据此切换渲染。 */
@@ -31,7 +33,7 @@ export function useDropdownMaybe(): DropdownContextValue | null {
 
 export interface DropdownMenuContextValue {
   open: ComputedRef<boolean> | Ref<boolean>;
-  disabled: boolean;
+  disabled?: boolean;
 }
 
 export const DropdownMenuKey: InjectionKey<DropdownMenuContextValue> =
@@ -46,4 +48,27 @@ export function useDropdownMenuContext(): DropdownMenuContextValue {
   if (!ctx)
     throw new Error("DropdownMenu compound components must be inside <DropdownMenu>");
   return ctx;
+}
+
+export interface SearchHandle {
+  input: HTMLInputElement | null;
+  append: (text: string) => void;
+  deleteBackward: () => void;
+}
+
+export interface DropdownSearchHostValue {
+  register: (handle: SearchHandle) => () => void;
+  open: ComputedRef<boolean> | Ref<boolean>;
+  highlightFirst: () => void;
+}
+
+export const DropdownSearchHostKey: InjectionKey<DropdownSearchHostValue> =
+  Symbol("fluid-dropdown-search-host");
+
+export function provideDropdownSearchHost(ctx: DropdownSearchHostValue) {
+  provide(DropdownSearchHostKey, ctx);
+}
+
+export function useDropdownSearchHost(): DropdownSearchHostValue | null {
+  return inject(DropdownSearchHostKey, null);
 }

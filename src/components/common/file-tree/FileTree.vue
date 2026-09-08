@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { FluidHoverHighlight } from "@/components/fluid";
+import { useFluidHover } from "@/components/fluid/hooks/use-fluid-hover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FileTreeBranch from "./FileTreeBranch.vue";
 
@@ -68,6 +70,22 @@ const emit = defineEmits<{
 }>();
 
 const expandedSet = computed(() => new Set(props.expanded));
+const treeRef = ref<HTMLElement | null>(null);
+let nextHoverIndex = 0;
+const claimHoverIndex = () => nextHoverIndex++;
+const {
+	activeIndex: hoverIndex,
+	itemRects: hoverRects,
+	session: hoverSession,
+	handlers: hoverHandlers,
+	registerItem: registerHoverItem,
+} = useFluidHover(treeRef, {
+	isItemDisabled: (element) =>
+		Boolean(element.closest(".file-tree-children:not(.is-open)")),
+});
+const hoverRect = computed(() =>
+	hoverIndex.value === null ? null : (hoverRects.value[hoverIndex.value] ?? null),
+);
 
 function select(node: FileTreeNode) {
 	emit("update:modelValue", node.id);
@@ -96,13 +114,23 @@ function runAction(node: FileTreeNode, action: FileTreeAction, value?: string) {
 
 <template>
   <ScrollArea class="min-h-0 max-h-full">
-    <div class="file-tree min-h-0 p-1.5" :style="{ minWidth: `${minWidth}px` }">
+    <div
+      ref="treeRef"
+      class="file-tree relative min-h-0 p-1.5"
+      :style="{ minWidth: `${minWidth}px` }"
+      @mouseenter="hoverHandlers.onMouseEnter"
+      @mousemove="hoverHandlers.onMouseMove"
+      @mouseleave="hoverHandlers.onMouseLeave"
+    >
+      <FluidHoverHighlight :rect="hoverRect" :session="hoverSession" class="rounded-md" />
       <FileTreeBranch
         v-for="node in nodes"
         :key="node.id"
         :node="node"
         :selected-id="modelValue"
         :expanded="expandedSet"
+        :claim-hover-index="claimHoverIndex"
+        :register-hover-item="registerHoverItem"
         @select="select"
         @open="emit('open', $event)"
         @toggle="toggle"

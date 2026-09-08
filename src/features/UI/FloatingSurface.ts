@@ -1,5 +1,5 @@
 import interact from "interactjs";
-import { computed, onBeforeUnmount, ref, watch, type Ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch, type Ref } from "vue";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
 
 export type FloatingFrame = { x: number; y: number; width: number; height: number };
@@ -33,7 +33,10 @@ export function useFloatingSurface(options: {
 	function start() {
 		stop();
 		const candidate = options.element.value;
-		const element = candidate instanceof HTMLElement ? candidate : candidate?.$el instanceof HTMLElement ? candidate.$el : null;
+		let element = candidate instanceof HTMLElement ? candidate : candidate?.$el instanceof HTMLElement ? candidate.$el : null;
+		if (!element && typeof document !== "undefined") {
+			element = document.querySelector(`[data-settings-dialog]`) as HTMLElement | null;
+		}
 		if (!element || responsive.isMobileLayout) return;
 		const allowFrom = options.dragHandleId
 			? `#${CSS.escape(options.dragHandleId)}`
@@ -55,7 +58,7 @@ export function useFloatingSurface(options: {
 		memory.set(options.surfaceId, { ...frame.value });
 		if (options.persistGeometry) localStorage.setItem(`pulsarai:surface:${options.surfaceId}`, JSON.stringify(frame.value));
 	}
-	watch([options.open, () => responsive.isMobileLayout], async ([open]) => { stop(); if (!open) return; center(); await Promise.resolve(); start(); }, { immediate: true });
+	watch([options.open, () => responsive.isMobileLayout], async ([open]) => { stop(); if (!open) return; center(); await nextTick(); start(); }, { immediate: true });
 	onBeforeUnmount(stop);
 	return { frame, style, start, stop, center };
 }

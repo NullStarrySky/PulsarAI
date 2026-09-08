@@ -32,7 +32,7 @@ export const legacySizeAliases: Partial<Record<ButtonSize, ButtonSizeCanonical>>
 };
 
 const BASE =
-  "group relative isolate inline-flex items-center justify-center outline-none cursor-pointer " +
+  "group/btn relative isolate inline-flex items-center justify-center outline-none cursor-pointer " +
   "transition-colors duration-80 whitespace-nowrap " +
   "disabled:opacity-50 disabled:pointer-events-none " +
   "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]";
@@ -70,37 +70,37 @@ export function buttonVariants(opts: {
    补回到完整边界。按下时 spread 收缩，让 surface 每侧精确缩小 1px */
 export const bgVariants: Record<ButtonVariant, string> = {
   default:
-    "[--btn-bg:var(--foreground)] group-hover:[--btn-bg:color-mix(in_oklab,var(--foreground)_90%,var(--background))] group-active:[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+    "[--btn-bg:var(--foreground)] group-hover/btn:[--btn-bg:color-mix(in_oklab,var(--foreground)_90%,var(--background))] group-active/btn:[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active/btn:shadow-[0_0_0_0px_var(--btn-bg)]",
   primary:
-    "[--btn-bg:var(--foreground)] group-hover:[--btn-bg:color-mix(in_oklab,var(--foreground)_90%,var(--background))] group-active:[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+    "[--btn-bg:var(--foreground)] group-hover/btn:[--btn-bg:color-mix(in_oklab,var(--foreground)_90%,var(--background))] group-active/btn:[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active/btn:shadow-[0_0_0_0px_var(--btn-bg)]",
   secondary:
-    "[--btn-bg:var(--accent)] group-hover:[--btn-bg:color-mix(in_oklab,var(--accent)_80%,var(--background))] group-active:[--btn-bg:var(--accent)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+    "[--btn-bg:var(--accent)] group-hover/btn:[--btn-bg:color-mix(in_oklab,var(--accent)_80%,var(--background))] group-active/btn:[--btn-bg:var(--accent)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active/btn:shadow-[0_0_0_0px_var(--btn-bg)]",
   outline:
-    "bg-transparent shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-hover:bg-hover group-active:bg-active group-active:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]",
+    "bg-transparent shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-hover/btn:bg-hover group-active/btn:bg-active group-active/btn:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]",
   tertiary:
-    "bg-transparent shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-hover:bg-hover group-active:bg-active group-active:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]",
+    "bg-transparent shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-hover/btn:bg-hover group-active/btn:bg-active group-active/btn:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]",
   ghost:
-    "bg-transparent shadow-[0_0_0_1px_transparent] group-hover:bg-hover group-hover:shadow-[0_0_0_1px_var(--hover)] group-active:bg-active group-active:shadow-[0_0_0_0px_var(--active)]",
+    "bg-transparent shadow-[0_0_0_1px_transparent] group-hover/btn:bg-hover group-hover/btn:shadow-[0_0_0_1px_var(--hover)] group-active/btn:bg-active group-active/btn:shadow-[0_0_0_0px_var(--active)]",
   destructive:
-    "[--btn-bg:var(--destructive,#ef4444)] group-hover:[--btn-bg:color-mix(in_oklab,var(--destructive,#ef4444)_90%,black)] group-active:[--btn-bg:color-mix(in_oklab,var(--destructive,#ef4444)_80%,black)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+    "[--btn-bg:var(--destructive,#ef4444)] group-hover/btn:[--btn-bg:color-mix(in_oklab,var(--destructive,#ef4444)_90%,black)] group-active/btn:[--btn-bg:color-mix(in_oklab,var(--destructive,#ef4444)_80%,black)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active/btn:shadow-[0_0_0_0px_var(--btn-bg)]",
   link: "bg-transparent shadow-none",
 };
 
 /* 强制激活（`active` prop）：全尺寸下的按下配色；几何按压收缩仍然在其上响应。 */
 export const activeBgVariants: Record<ButtonVariant, string> = {
   default:
-    "[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+    "[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active/btn:shadow-[0_0_0_0px_var(--btn-bg)]",
   primary:
-    "[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+    "[--btn-bg:color-mix(in_oklab,var(--foreground)_80%,var(--background))] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active/btn:shadow-[0_0_0_0px_var(--btn-bg)]",
   secondary:
-    "[--btn-bg:var(--accent)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+    "[--btn-bg:var(--accent)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active/btn:shadow-[0_0_0_0px_var(--btn-bg)]",
   outline:
-    "bg-active shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-active:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]",
+    "bg-active shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-active/btn:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]",
   tertiary:
-    "bg-active shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-active:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]",
+    "bg-active shadow-[0_0_0_1px_var(--border),inset_0_0_0_0px_var(--border)] group-active/btn:shadow-[0_0_0_0px_var(--border),inset_0_0_0_1px_var(--border)]",
   ghost:
-    "bg-active shadow-[0_0_0_1px_var(--active)] group-active:shadow-[0_0_0_0px_var(--active)]",
+    "bg-hover shadow-[0_0_0_1px_var(--hover)] group-active/btn:bg-active group-active/btn:shadow-[0_0_0_0px_var(--active)]",
   destructive:
-    "[--btn-bg:color-mix(in_oklab,var(--destructive,#ef4444)_80%,black)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active:shadow-[0_0_0_0px_var(--btn-bg)]",
+    "[--btn-bg:var(--destructive,#ef4444)] bg-[var(--btn-bg)] shadow-[0_0_0_1px_var(--btn-bg)] group-active/btn:shadow-[0_0_0_0px_var(--btn-bg)]",
   link: "bg-transparent shadow-none",
 };

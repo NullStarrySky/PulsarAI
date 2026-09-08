@@ -124,7 +124,7 @@ function handleContextMenu(event: MouseEvent) {
 
 <template>
   <div
-    class="conversation-markstream markstream-vue"
+    class="conversation-markstream markstream-vue w-full min-w-0"
     :class="{ 'conversation-markstream--compact': props.compact }"
     :data-mode="activeMode"
     @contextmenu="handleContextMenu"
@@ -137,6 +137,7 @@ function handleContextMenu(event: MouseEvent) {
         :is-dark="isDark"
         :code-block-props="codeBlockProps"
         :custom-id="`msg-render-${idx}`"
+        class="w-full min-w-0"
       />
       <div v-else-if="segment.type === 'vue'" class="pulsar-vue-reference my-2">
         <component :is="getVueComponent(segment.filename)" />
@@ -189,9 +190,11 @@ function handleContextMenu(event: MouseEvent) {
 }
 
 .conversation-markstream pre,
+.conversation-markstream .code-block-container,
 .conversation-markstream .table-node-wrapper,
 .conversation-markstream .mermaid,
 .conversation-markstream .d2-node-wrapper {
+  width: 100%;
   max-width: 100%;
   overflow-x: auto;
 }

@@ -4,7 +4,6 @@ export const useLayoutStore = defineStore("layout", {
 	state: () => ({
 		settingsOpen: false,
 		immersiveConversation: false,
-		topBarPinned: true,
 	}),
 	actions: {
 		openSettings() {
@@ -18,12 +17,6 @@ export const useLayoutStore = defineStore("layout", {
 		},
 		setImmersiveConversation(enabled: boolean) {
 			this.immersiveConversation = enabled;
-		},
-		setTopBarPinned(pinned: boolean) {
-			this.topBarPinned = pinned;
-		},
-		toggleTopBarPinned() {
-			this.topBarPinned = !this.topBarPinned;
 		},
 	},
 });

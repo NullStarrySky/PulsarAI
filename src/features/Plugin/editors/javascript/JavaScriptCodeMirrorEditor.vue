@@ -24,7 +24,7 @@ import {
 const props = withDefaults(
 	defineProps<{
 		modelValue: string;
-		language?: "javascript" | "json" | "markdown" | "vue";
+		language?: "javascript" | "json" | "markdown" | "vue" | "text";
 		frameless?: boolean;
 		readonly?: boolean;
 		importSuggestions?: Array<{

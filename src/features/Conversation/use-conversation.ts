@@ -1,6 +1,7 @@
 import { computed, type MaybeRefOrGetter, ref, toValue, watch } from "vue";
 import {
 	isChatGenerating,
+	isMessageGenerating,
 	loadChat,
 	persistChat,
 	setChatGenerating,
@@ -58,6 +59,8 @@ export interface MessageBubbleViewModel {
 	resourceSummary: string;
 	messageTime: string;
 	actions: ReturnType<typeof useMessageContainer>;
+	isLastAssistant?: boolean;
+	isGenerating?: boolean;
 	intervalSummary?: {
 		id: string;
 		count: number;
@@ -66,32 +69,51 @@ export interface MessageBubbleViewModel {
 	};
 }
 
-export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
-	const chat = ref<Conversation | null>(null);
-	const containers = ref<ChatMessageContainer[]>([]);
-	const loading = ref(false);
+import { getConversationSharedState } from "./conversation-shared-state";
 
+export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 	const chatId = computed(() => toValue(chatIdSource));
+	const sharedState = computed(() => getConversationSharedState(chatId.value));
+
+	const chat = computed({
+		get: () => sharedState.value.chat.value,
+		set: (val) => {
+			sharedState.value.chat.value = val;
+		},
+	});
+	const containers = computed({
+		get: () => sharedState.value.containers.value,
+		set: (val) => {
+			sharedState.value.containers.value = val;
+		},
+	});
+	const loading = computed({
+		get: () => sharedState.value.loading.value,
+		set: (val) => {
+			sharedState.value.loading.value = val;
+		},
+	});
+
 	const generating = computed(() =>
 		chatId.value ? isChatGenerating(chatId.value) : false,
 	);
 	const currentContainers = () =>
-		containers.value as unknown as ChatMessageContainer[];
+		sharedState.value.containers.value as unknown as ChatMessageContainer[];
 
 	async function ensureLoaded() {
 		const id = chatId.value;
-		if (!id) {
-			chat.value = null;
-			containers.value = [];
-			return;
-		}
-		if (chat.value && chat.value.id === id) return;
-		loading.value = true;
+		if (!id) return;
+		const s = getConversationSharedState(id);
+		if (s.loaded.value && s.chat.value) return;
+		s.loading.value = true;
 		try {
-			chat.value = await loadChat(id);
-			containers.value = await loadContainersForChat(id);
+			const loadedChat = await loadChat(id);
+			const loadedContainers = await loadContainersForChat(id);
+			s.chat.value = loadedChat;
+			s.containers.value = loadedContainers;
+			s.loaded.value = true;
 		} finally {
-			loading.value = false;
+			s.loading.value = false;
 		}
 	}
 
@@ -120,13 +142,23 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 	const activePathView = computed<MessageBubbleViewModel[]>(() => {
 		const localPluginId = chat.value?.localPluginId;
 		const cMap = new Map(currentContainers().map((item) => [item.id, item]));
-		return activePath.value.map((container) => {
+		const path = activePath.value;
+		let lastAssistantId = "";
+		for (let i = path.length - 1; i >= 0; i--) {
+			if (path[i]?.role === "assistant") {
+				lastAssistantId = path[i].id;
+				break;
+			}
+		}
+		return path.map((container) => {
 			const parent = container.previousContainer
 				? (cMap.get(container.previousContainer) ?? null)
 				: null;
+			const isLastAssistant = container.id === lastAssistantId;
 			const actions = useMessageContainer(container, {
 				localPluginId,
 				parentContainer: parent,
+				isLastAssistant,
 				onSwitchVersion: async (cId, idx) => switchVersion(cId, idx),
 				onUpdateContent: async (content) =>
 					updateMessage(container.id, content),
@@ -153,6 +185,11 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 				resourceSummary: actions.resourceSummary.value,
 				messageTime: actions.messageTime.value,
 				actions,
+				isLastAssistant,
+				isGenerating: isMessageGenerating(
+					chatId.value,
+					actions.currentMessage.value?.id ?? "",
+				),
 			};
 		});
 	});
@@ -207,7 +244,7 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		previousContainer?: string | null;
 	}) {
 		const container = createContainer(input);
-		currentContainers().push(container);
+		sharedState.value.containers.value = [...sharedState.value.containers.value, container];
 		if (input.previousContainer) {
 			const parent = currentContainers().find(
 				(item) => item.id === input.previousContainer,
@@ -257,6 +294,7 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		const msg = target.content[target.activeMessage ?? 0];
 		if (msg) {
 			msg.content = content;
+			msg.type = "message";
 			if (msg.meta) delete msg.meta.translation;
 			await persistContainer(target);
 		}
@@ -308,6 +346,9 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 				name: mode.name,
 				content: mode.content ?? { mode: mode.id },
 			});
+		if (!current.rootContainerId) {
+			current.rootContainerId = marker.id;
+		}
 		current.lastContainerId = marker.id;
 		current.updatedAt = new Date().toISOString();
 		await persistChat(current);
@@ -355,9 +396,11 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 			current.lastContainerId = requestedReply.id;
 			await persistChat(current);
 
+			const replyMessage = currentMessage(requestedReply) ?? requestedReply.content[0];
 			await generateRequestedAssistantReply({
 				chatId: current.id,
 				containerId: requestedReply.id,
+				messageId: replyMessage?.id,
 				activePath: pathForTail(currentContainers(), container.id),
 				prompt: content,
 			});
@@ -385,9 +428,11 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 				container.previousContainer,
 			);
 			const promptContainer = path[path.length - 1];
+			const activeMsg = container.content[container.activeMessage ?? 0];
 			await generateRequestedAssistantReply({
 				chatId: current.id,
 				containerId: container.id,
+				messageId: activeMsg?.id,
 				activePath: path,
 				prompt: currentMessage(promptContainer ?? container)?.content ?? "",
 			});
@@ -414,6 +459,7 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 		await generateRequestedAssistantReply({
 			chatId: current.id,
 			containerId: target.id,
+			messageId: version.id,
 			activePath: path,
 			prompt: currentMessage(promptContainer)?.content ?? "",
 		});
@@ -527,15 +573,17 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 	async function generateRequestedAssistantReply(input: {
 		chatId: string;
 		containerId: string;
+		messageId?: string;
 		activePath: ChatMessageContainer[];
 		prompt: string;
 	}) {
-		setChatGenerating(input.chatId, true);
+		setChatGenerating(input.chatId, true, input.messageId);
 		try {
 			const { runWorld } = await import("@/features/Plugin/runtime/run-api");
 			await runWorld({
 				conversationId: input.chatId,
 				containerId: input.containerId,
+				messageId: input.messageId,
 				prompt: input.prompt,
 			});
 		} catch (error) {
@@ -543,11 +591,18 @@ export function useConversation(chatIdSource: MaybeRefOrGetter<string>) {
 				(item) => item.id === input.containerId,
 			);
 			if (target) {
-				const activeMsg = target.content[target.activeMessage ?? 0];
+				const activeMsg = input.messageId
+					? target.content.find((m) => m.id === input.messageId) ??
+						target.content[target.activeMessage ?? 0]
+					: target.content[target.activeMessage ?? 0];
 				if (activeMsg) {
 					activeMsg.type = "error";
-					activeMsg.content =
+					const errorMessage =
 						error instanceof Error ? error.message : String(error);
+					const existing = (activeMsg.content ?? "").trim();
+					activeMsg.content = existing
+						? `${existing}\n\n> [!CAUTION]\n> **生成失败**：${errorMessage}`
+						: `> [!CAUTION]\n> **生成失败**：${errorMessage}`;
 					await persistContainer(target);
 				}
 			}

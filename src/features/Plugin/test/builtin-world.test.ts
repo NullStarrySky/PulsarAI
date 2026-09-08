@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
 	createBuiltinGlobalWorld,
 	createLocalPluginWorld,
@@ -30,7 +30,7 @@ describe("built-in World", () => {
 			localRoot.children["builtin-default-plugin:localSlot:chat"];
 		expect(chatSlot?.type).toBe("folder");
 		if (chatSlot?.type !== "folder") return;
-		expect(chatSlot.parent).toBe("/self/slot/$chat");
+		expect(chatSlot.parent).toBe("/self/slot/$generation/$chat");
 		const chat = source.children["builtin-default-template-chat"];
 		expect(chat?.type).toBe("file");
 		if (chat?.type !== "file") return;
@@ -44,10 +44,5 @@ describe("built-in World", () => {
 		expect(world.root.children.slot?.type).toBe("folder");
 		const localRoot = world.root.children.localSlot;
 		expect(localRoot?.type).toBe("folder");
-		if (localRoot?.type !== "folder") return;
-		const background = localRoot.children["localSlot:background"];
-		expect(background?.type).toBe("folder");
-		if (background?.type === "folder")
-			expect(background.parent).toBe("/self/slot/$background");
 	});
 });

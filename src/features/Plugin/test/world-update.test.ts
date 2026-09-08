@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPulse, createPulse, describePulse } from "../tree/world-update";
+import { applyPulse, applyPulses, createPulse, describePulse, mergeContainerPulses } from "../tree/world-update";
 import { createWorldDocument, createWorldFile, createWorldFolder, type World } from "../tree/world-types";
 
 function fixture(): World {
@@ -18,5 +18,30 @@ describe("Pulse", () => {
 		const world = fixture(); const pulse = createPulse([{ kind: "file.meta.patch", scope: "self", nodeId: "file", patch: { priority: 2 }, filename: "same.md" }]);
 		expect(describePulse(pulse)).toContain("更新");
 		expect(() => applyPulse(world, createPulse([{ kind: "file.meta.patch", scope: "self", nodeId: "file", patch: { id: "bad" } as never }]))).toThrow("不允许修改");
+	});
+	it("folds repeatable writes and metadata properties within one message container", () => {
+		const initial = createPulse([
+			{ kind: "file.write", scope: "self", nodeId: "file", content: "draft", filename: "same.md" },
+			{ kind: "file.meta.patch", scope: "self", nodeId: "file", patch: { priority: 1, resourceSelected: true }, filename: "same.md" },
+		]);
+		const later = createPulse([
+			{ kind: "file.write", scope: "self", nodeId: "file", content: "final", filename: "renamed.md" },
+			{ kind: "file.meta.patch", scope: "self", nodeId: "file", patch: { resourceSelected: false }, filename: "renamed.md" },
+			{ kind: "file.meta.patch", scope: "self", nodeId: "file", patch: { slot: "/self/$slot" }, filename: "renamed.md" },
+		]);
+		const merged = mergeContainerPulses([initial], later);
+		const originalWorld = fixture();
+		const compactedWorld = structuredClone(originalWorld);
+		applyPulses(originalWorld, [initial, later]);
+		applyPulses(compactedWorld, merged);
+		expect(compactedWorld).toEqual(originalWorld);
+		expect(merged).toHaveLength(2);
+		expect(merged[0]?.operations).toEqual([
+			{ kind: "file.write", scope: "self", nodeId: "file", content: "final", filename: "renamed.md" },
+			{ kind: "file.meta.patch", scope: "self", nodeId: "file", patch: { priority: 1, resourceSelected: false }, filename: "same.md" },
+		]);
+		expect(merged[1]?.operations).toEqual([
+			{ kind: "file.meta.patch", scope: "self", nodeId: "file", patch: { slot: "/self/$slot" }, filename: "renamed.md" },
+		]);
 	});
 });

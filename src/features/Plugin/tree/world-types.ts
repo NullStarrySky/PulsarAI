@@ -30,7 +30,6 @@ interface WorldNodeBase {
 	description?: string;
 	treeOrder: number;
 	createDate: string;
-	updateDate: string;
 }
 
 export interface WorldFolderNode extends WorldNodeBase {
@@ -62,7 +61,6 @@ export interface WorldDocument {
 	id: string;
 	root: WorldFolderNode;
 	createDate: string;
-	updateDate: string;
 }
 
 export interface World {
@@ -81,7 +79,7 @@ export function createWorldFolder(
 	input: Partial<
 		Omit<
 			WorldFolderNode,
-			"id" | "type" | "name" | "children" | "createDate" | "updateDate"
+			"id" | "type" | "name" | "children" | "createDate"
 		>
 	> & {
 		id?: string;
@@ -104,7 +102,6 @@ export function createWorldFolder(
 		...(input.parent ? { parent: input.parent } : {}),
 		children: input.children ?? {},
 		createDate: date,
-		updateDate: date,
 	};
 }
 
@@ -114,7 +111,7 @@ export function createWorldFile(
 	input: Partial<
 		Omit<
 			WorldFileNode,
-			"id" | "type" | "name" | "content" | "createDate" | "updateDate"
+			"id" | "type" | "name" | "content" | "createDate"
 		>
 	> & {
 		id?: string;
@@ -135,7 +132,6 @@ export function createWorldFile(
 		...(input.condition ? { condition: input.condition } : {}),
 		...(input.conditionEnabled === false ? { conditionEnabled: false } : {}),
 		createDate: date,
-		updateDate: date,
 	};
 }
 
@@ -148,7 +144,6 @@ export function createWorldDocument(
 		id,
 		root: createWorldFolder(rootName, { id: `${id}:root` }),
 		createDate: date,
-		updateDate: date,
 	};
 }
 

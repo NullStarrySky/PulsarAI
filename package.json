@@ -117,6 +117,7 @@
 		"vue-i18n": "^11.4.10",
 		"vue-input-otp": "^0.4.0",
 		"vue-sonner": "^2.0.9",
+		"vue3-sfc-loader": "^0.9.5",
 		"zod": "4.5.4"
 	},
 	"devDependencies": {

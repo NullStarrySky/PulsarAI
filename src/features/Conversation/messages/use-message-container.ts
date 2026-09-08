@@ -7,6 +7,7 @@ import {
 
 export interface MessageContainerOptions extends MessageVersionOptions {
 	parentContainer?: ChatMessageContainer | null;
+	isLastAssistant?: boolean;
 	onSwitchVersion?: (containerId: string, index: number) => Promise<void> | void;
 	onSwitchBranch?: (
 		containerId: string,
@@ -79,7 +80,13 @@ export function useMessageContainer(
 	}
 
 	async function nextVersion() {
-		await gotoVersion(activeVersionIndex.value + 1);
+		const c = container.value;
+		if (!c) return;
+		if (activeVersionIndex.value < (c.content?.length ?? 0) - 1) {
+			await gotoVersion(activeVersionIndex.value + 1);
+		} else if (options.isLastAssistant && options.onRegenerate) {
+			await options.onRegenerate(c.id);
+		}
 	}
 
 	async function gotoBranch(branchId: string) {

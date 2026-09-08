@@ -7,6 +7,7 @@ import { loadChat, persistChat } from "@/features/Conversation/chats/chat-servic
 import {
 	createContainer,
 	currentMessage,
+	loadContainer,
 	persistContainer,
 } from "@/features/Conversation/messages/message-service";
 import {
@@ -36,6 +37,7 @@ import {
 	applyPulse,
 	createPulse,
 	createWorldNodeIndex,
+	mergeContainerPulses,
 	type Pulse,
 	type PulseOperation,
 } from "./world-update";
@@ -356,6 +358,7 @@ function selectedResources(
 }
 
 const conversationPulses = new Map<string, Pulse[]>();
+const replayPersistenceQueues = new Map<string, Promise<void>>();
 
 export function clearConversationPulses(conversationId?: string) {
 	if (conversationId) {
@@ -370,29 +373,93 @@ function activeReplayPulses(conversationId: string) {
 	return conversationPulses.get(conversationId) ?? [];
 }
 
+function appendConversationPulse(conversationId: string, pulse: Pulse) {
+	const current = conversationPulses.get(conversationId) ?? [];
+	current.push(clone(pulse));
+	conversationPulses.set(conversationId, current);
+}
+
+function enqueueReplayPersistence(conversationId: string, pulse: Pulse) {
+	const previous = replayPersistenceQueues.get(conversationId) ?? Promise.resolve();
+	const task = previous
+		.catch(() => undefined)
+		.then(() => recordReplayPulse(conversationId, pulse));
+	replayPersistenceQueues.set(conversationId, task);
+	void task.then(
+		() => {
+			if (replayPersistenceQueues.get(conversationId) === task)
+				replayPersistenceQueues.delete(conversationId);
+		},
+		() => {
+			if (replayPersistenceQueues.get(conversationId) === task)
+				replayPersistenceQueues.delete(conversationId);
+		},
+	);
+	return task;
+}
+
 async function recordReplayPulse(
 	conversationId: string,
 	pulse: Pulse,
 ) {
 	const current = conversationPulses.get(conversationId) ?? [];
-	current.push(clone(pulse));
-	conversationPulses.set(conversationId, current);
 
 	const chat = await loadChat(conversationId);
 	if (!chat) throw new Error("会话不存在。");
+
+	if (chat.lastContainerId) {
+		const lastContainer = await loadContainer(chat.lastContainerId);
+		const lastMsg = lastContainer ? currentMessage(lastContainer) : null;
+		if (
+			lastContainer &&
+			lastMsg &&
+			lastContainer.role === "system" &&
+			lastContainer.content.length === 1 &&
+			!lastMsg.content &&
+			!lastMsg.parts?.length &&
+			!lastMsg.meta.steps.length &&
+			!lastMsg.meta.intervalOperations?.length &&
+			Array.isArray(lastMsg.meta?.pulses)
+		) {
+			const previous = lastMsg.meta.pulses;
+			const merged = mergeContainerPulses(previous, pulse);
+			const pulseIndex = current.map((item) => item.id).lastIndexOf(pulse.id);
+			const start = pulseIndex - previous.length;
+			if (
+				start >= 0 &&
+				previous.every((item, index) => current[start + index]?.id === item.id)
+			) current.splice(start, previous.length + 1, ...clone(merged));
+			lastMsg.meta.pulses = merged;
+			conversationPulses.set(conversationId, current);
+			chat.updatedAt = new Date().toISOString();
+			await persistContainer(lastContainer);
+			await persistChat(chat);
+			return;
+		}
+	}
 	const container = createContainer({
 		conversationId,
 		role: "system",
 		content: "",
 		previousContainer: chat.lastContainerId,
 	});
-	chat.lastContainerId = container.id;
-	chat.updatedAt = new Date().toISOString();
-	await persistChat(chat);
 	const message = currentMessage(container);
 	if (!message) throw new Error("World 重放容器没有消息版本。");
 	message.meta.pulses = [clone(pulse)];
 	await persistContainer(container);
+	if (chat.lastContainerId) {
+		const parent = await loadContainer(chat.lastContainerId);
+		if (parent) {
+			parent.availableNextContainer.push(container.id);
+			parent.activeNextContainer = container.id;
+			await persistContainer(parent);
+		}
+	} else if (!chat.rootContainerId) {
+		chat.rootContainerId = container.id;
+	}
+	chat.lastContainerId = container.id;
+	chat.updatedAt = new Date().toISOString();
+	await persistChat(chat);
 }
 
 export async function initializeWorlds(localPluginId?: string) {
@@ -442,6 +509,9 @@ export function useWorld(
 		const value: World = { global: clone(globalDocument), self: clone(self) };
 		if (applyReplay.value && conversationId.value)
 			applyPulses(value, activeReplayPulses(conversationId.value));
+		const replay = normalizedScope(toValue(scope)).replay;
+		if (replay?.message.meta.pulses?.length)
+			applyPulses(value, replay.message.meta.pulses);
 		return value;
 	});
 	const resources = computed(() => {
@@ -533,20 +603,24 @@ export function useWorld(
 		if (applyReplay.value && conversationId.value) {
 			const replay = normalizedScope(toValue(scope)).replay;
 			if (replay) {
-				replay.message.meta.pulses ??= [];
-				replay.message.meta.pulses.push(clone(pulse));
-				await persistContainer(replay.container);
+				replay.message.meta.pulses = mergeContainerPulses(
+					replay.message.meta.pulses ?? [],
+					pulse,
+				);
 				worldRevision.value += 1;
+				await persistContainer(replay.container);
 				return;
 			}
-			await recordReplayPulse(conversationId.value, pulse);
+			appendConversationPulse(conversationId.value, pulse);
 			worldRevision.value += 1;
+			await enqueueReplayPersistence(conversationId.value, pulse);
 			return;
 		}
 		const self = localPluginDocuments.get(localPluginId.value);
 		if (!globalDocument || !self) throw new Error("World 文档尚未加载。");
-		await persistPulses({ global: globalDocument, self }, [pulse]);
+		const persistence = persistPulses({ global: globalDocument, self }, [pulse]);
 		worldRevision.value += 1;
+		await persistence;
 	}
 
 	async function update(
@@ -603,7 +677,6 @@ export function useWorld(
 		];
 		if (isSlotFolder && parent.node.id !== slotRoot.id) {
 			// Migrate local slots and direct file slot assignments pointing to parent slot to the new child slot
-			const changedAt = new Date().toISOString();
 			const parentSlotPath = `/self/slot/$${parent.node.id}`;
 			for (const res of resources.value) {
 				if (
@@ -616,12 +689,6 @@ export function useWorld(
 						nodeId: res.file.id,
 						path: ["slot"],
 						value: { type: "value", value: newFolderPath },
-					});
-					updates.push({
-						scope: res.scope,
-						nodeId: res.file.id,
-						path: ["updateDate"],
-						value: { type: "value", value: changedAt },
 					});
 				}
 			}
@@ -780,19 +847,12 @@ export function useWorld(
 			const target = resolve(path);
 			if (target.node.type !== "file")
 				throw new Error(`不能写入文件夹：${path}`);
-			const changedAt = new Date().toISOString();
 			await commit([
 				{
 					scope: target.scope,
 					nodeId: target.node.id,
 					path: ["content"],
 					value: { type: "value", value: content },
-				},
-				{
-					scope: target.scope,
-					nodeId: target.node.id,
-					path: ["updateDate"],
-					value: { type: "value", value: changedAt },
 				},
 			]);
 			return;
@@ -818,12 +878,6 @@ export function useWorld(
 				path: ["content"],
 				value: { type: "replace", find, replace },
 			},
-			{
-				scope: target.scope,
-				nodeId: target.node.id,
-				path: ["updateDate"],
-				value: { type: "value", value: new Date().toISOString() },
-			},
 		]);
 	}
 
@@ -837,12 +891,6 @@ export function useWorld(
 				nodeId: target.node.id,
 				path: [],
 				value: { type: "none" },
-			},
-			{
-				scope: target.scope,
-				nodeId: target.parent!.id,
-				path: ["updateDate"],
-				value: { type: "value", value: new Date().toISOString() },
 			},
 		]);
 	}
@@ -914,16 +962,9 @@ export function useWorld(
 					path: ["name"],
 					value: { type: "value", value: nextName },
 				},
-				{
-					scope: source.scope,
-					nodeId: source.node.id,
-					path: ["updateDate"],
-					value: { type: "value", value: new Date().toISOString() },
-				},
 			]);
 			return;
 		}
-		const changedAt = new Date().toISOString();
 		await commit([
 			{
 				scope: source.scope,
@@ -936,12 +977,6 @@ export function useWorld(
 				nodeId: source.node.id,
 				path: ["treeOrder"],
 				value: { type: "value", value: nextTreeOrder(targetParent.node) },
-			},
-			{
-				scope: source.scope,
-				nodeId: source.node.id,
-				path: ["updateDate"],
-				value: { type: "value", value: changedAt },
 			},
 			{
 				scope: targetParent.scope,
@@ -975,7 +1010,6 @@ export function useWorld(
 			throw new Error("文件名不能为空或包含路径分隔符。");
 		const idMap = copyIdMap(source.node, targetParent.document);
 		const id = idMap[source.node.id]!;
-		const changedAt = new Date().toISOString();
 		await commit([
 			{
 				scope: targetParent.scope,
@@ -998,12 +1032,6 @@ export function useWorld(
 				nodeId: id,
 				path: ["treeOrder"],
 				value: { type: "value", value: nextTreeOrder(targetParent.node) },
-			},
-			{
-				scope: targetParent.scope,
-				nodeId: id,
-				path: ["updateDate"],
-				value: { type: "value", value: changedAt },
 			},
 		]);
 		return `/${targetParent.scope}/$${id}`;
@@ -1048,7 +1076,6 @@ export function useWorld(
 				return;
 			}
 		}
-		const changedAt = new Date().toISOString();
 		await commit([
 			...Object.entries(patch).map(([key, value]) => ({
 				scope: target.scope,
@@ -1056,12 +1083,6 @@ export function useWorld(
 				path: [key],
 				value: { type: "value" as const, value },
 			})),
-			{
-				scope: target.scope,
-				nodeId: target.node.id,
-				path: ["updateDate"],
-				value: { type: "value" as const, value: changedAt },
-			},
 		]);
 	}
 
@@ -1084,7 +1105,6 @@ export function useWorld(
 		await ensureLoaded();
 		const target = resolve(path);
 		if (target.node.type !== "folder") throw new Error(`不是文件夹：${path}`);
-		const changedAt = new Date().toISOString();
 		await commit([
 			...Object.entries(patch).map(([key, value]) => ({
 				scope: target.scope,
@@ -1092,12 +1112,6 @@ export function useWorld(
 				path: [key],
 				value: { type: "value" as const, value },
 			})),
-			{
-				scope: target.scope,
-				nodeId: target.node.id,
-				path: ["updateDate"],
-				value: { type: "value" as const, value: changedAt },
-			},
 		]);
 		if (patch.selectionMode === "single") {
 			const selected = resources.value.find((resource) => {
@@ -1116,47 +1130,53 @@ export function useWorld(
 		await ensureLoaded();
 		const target = resolve(path);
 		if (target.node.type !== "file") throw new Error(`不是文件：${path}`);
+		const definitions = globalSlotDefinitions(requireWorld());
+		const locals = localSlotDefinitions(requireWorld());
 		const slot = globalSlotForResource(
 			resources.value.find((item) => item.file.id === target.node.id) ??
 				({
 					file: target.node,
 				} as WorldResource),
-			globalSlotDefinitions(requireWorld()),
-			localSlotDefinitions(requireWorld()),
+			definitions,
+			locals,
 		);
 		if (!selected || slot?.selectionMode !== "single") {
 			await updateFile(path, { resourceSelected: selected });
 			return;
 		}
 
-		const changedAt = new Date().toISOString();
-		const updates = resources.value
+		const targetUpdate = target.node.resourceSelected
+			? []
+			: [
+					{
+						scope: target.scope,
+						nodeId: target.node.id,
+						path: ["resourceSelected"],
+						value: { type: "value" as const, value: true },
+					},
+			  ];
+
+		const otherUpdates = resources.value
 			.filter(
 				(resource) =>
+					resource.file.id !== target.node.id &&
+					resource.file.resourceSelected &&
 					globalSlotForResource(
 						resource,
-						globalSlotDefinitions(requireWorld()),
-						localSlotDefinitions(requireWorld()),
+						definitions,
+						locals,
 					)?.path === slot?.path,
 			)
-			.flatMap((resource) => {
-				const resourceSelected = resource.file.id === target.node.id;
-				if (resource.file.resourceSelected === resourceSelected) return [];
-				return [
-					{
-						scope: resource.scope,
-						nodeId: resource.file.id,
-						path: ["resourceSelected"],
-						value: { type: "value" as const, value: resourceSelected },
-					},
-					{
-						scope: resource.scope,
-						nodeId: resource.file.id,
-						path: ["updateDate"],
-						value: { type: "value" as const, value: changedAt },
-					},
-				];
-			});
+			.flatMap((resource) => [
+				{
+					scope: resource.scope,
+					nodeId: resource.file.id,
+					path: ["resourceSelected"],
+					value: { type: "value" as const, value: false },
+				},
+			]);
+
+		const updates = [...targetUpdate, ...otherUpdates];
 		if (updates.length) await commit(updates);
 	}
 
@@ -1194,8 +1214,10 @@ export function useWorld(
 		const value = clone(requireWorld());
 		const apply = async (pulses: Pulse[]) => {
 			applyPulses(value, pulses);
-			message.meta.pulses ??= [];
-			message.meta.pulses.push(...clone(pulses));
+			message.meta.pulses = pulses.reduce(
+				(existing, pulse) => mergeContainerPulses(existing, pulse),
+				message.meta.pulses ?? [],
+			);
 			await persistContainer(container);
 		};
 		return { world: value, apply };
@@ -1257,7 +1279,6 @@ export function useWorld(
 			treeOrder: nextTreeOrder(localRoot),
 		});
 		const localPath = `${sourcePrefix}/$${localRoot.id}/$${contribution.id}`;
-		const changedAt = new Date().toISOString();
 		await commit([
 			{
 				scope: target.scope,
@@ -1270,12 +1291,6 @@ export function useWorld(
 				nodeId: target.node.id,
 				path: ["slot"],
 				value: { type: "value" as const, value: localPath },
-			},
-			{
-				scope: target.scope,
-				nodeId: target.node.id,
-				path: ["updateDate"],
-				value: { type: "value" as const, value: changedAt },
 			},
 		]);
 	}

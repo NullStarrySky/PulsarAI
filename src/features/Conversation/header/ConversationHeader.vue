@@ -6,14 +6,13 @@ import {
 	MoreHorizontal,
 	Pencil,
 	Pin,
-	PinOff,
 	Search,
 	Settings,
 	Trash2,
 	X,
 	FlaskConical,
 } from "lucide-vue-next";
-import { computed, onMounted, onUnmounted, ref, toRef, watch } from "vue";
+import { computed, ref, toRef, watch } from "vue";
 import {
 	Button,
 	DropdownMenu,
@@ -31,11 +30,11 @@ import { useResponsiveStore } from "@/features/Misc/responsive-store";
 // biome-ignore lint:style/useImportType
 import LocalPluginManager from "@/features/Plugin/LocalPluginManager.vue";
 import { useLocalPluginStore } from "@/features/Plugin/local-plugin-store";
+import UpdateIndicator from "@/features/UI/components/UpdateIndicator.vue";
 import { useLayoutStore } from "@/features/UI/layout-store";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
-import PluginSlotComponents from "../panels/PluginSlotComponents.vue";
 import { host } from "@/host";
-import UpdateIndicator from "@/features/UI/components/UpdateIndicator.vue";
+import PluginSlotComponents from "../panels/PluginSlotComponents.vue";
 
 const props = defineProps<{
 	localPluginId: string;
@@ -57,7 +56,6 @@ const localPlugins = useLocalPluginStore();
 const conversation = useConversation(toRef(props, "chatId"));
 const appWindow = host.desktop?.window;
 const isDev = import.meta.env.DEV;
-const hovered = ref(false);
 const packageMenuOpen = ref(false);
 const chatMenuOpen = ref(false);
 const operationsOpen = ref(false);
@@ -65,7 +63,6 @@ const localPluginManager = ref<InstanceType<typeof LocalPluginManager> | null>(
 	null,
 );
 const chatManager = ref<InstanceType<typeof ChatManager> | null>(null);
-const topBarHoverBoundary = 56;
 const selectedPackage = computed(
 	() =>
 		localPlugins.localPlugins.find((item) => item.id === props.localPluginId) ??
@@ -101,25 +98,6 @@ const closeClass = computed(() =>
 			? "text-white/80 hover:bg-red-600 hover:text-white"
 			: "text-slate-700 hover:bg-red-600 hover:text-slate-950",
 );
-const frameBorderClass = computed(() =>
-	layout.topBarPinned
-		? appearance.zenFrameEnabled
-			? "border-b border-zen-frame-border/80"
-			: "border-b border-border/80"
-		: appearance.zenFrameEnabled
-			? "border border-zen-frame-border/80"
-			: "border border-border/80",
-);
-const visible = computed(
-	() => layout.topBarPinned || hovered.value || operationsOpen.value,
-);
-
-function onMouseMove(event: MouseEvent) {
-	if (!layout.topBarPinned)
-		hovered.value = event.clientY <= topBarHoverBoundary;
-}
-onMounted(() => window.addEventListener("mousemove", onMouseMove));
-onUnmounted(() => window.removeEventListener("mousemove", onMouseMove));
 watch(
 	() => props.chatId,
 	(chatId) => {
@@ -130,17 +108,11 @@ watch(
 </script>
 
 <template>
-  <div v-if="!layout.topBarPinned" class="fixed inset-x-0 top-0 z-40 h-6" />
   <header
-    class="select-none items-center px-3 transition-all duration-200 ease-out mobile:px-2"
+    class="relative z-30 flex h-10 shrink-0 select-none items-center px-3 mobile:h-12 mobile:px-2"
     :class="[
       topBarClass,
       host.desktop && 'electron-window-drag-region',
-      layout.topBarPinned
-        ? 'relative z-30 flex h-10 shrink-0 mobile:h-12'
-        : 'fixed left-1.5 right-1.5 z-50 flex h-10 rounded-xl shadow-xl backdrop-blur-md mobile:h-12',
-      frameBorderClass,
-      !layout.topBarPinned && (visible ? 'top-1.5 opacity-100 pointer-events-auto' : '-top-14 opacity-0 pointer-events-none'),
     ]"
   >
     <div class="flex min-w-0 flex-1 items-center gap-1.5">
@@ -175,7 +147,6 @@ watch(
       </DropdownMenu>
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="设置" @click="layout.openSettings()"><Settings class="size-4" /></Button>
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="搜索" @click="command.openPalette('', props.chatId)"><Search class="size-4" /></Button>
-      <Button variant="ghost" size="icon-sm" class="rounded-full" :class="[buttonClass, !layout.topBarPinned && 'bg-muted/75 text-foreground']" :title="layout.topBarPinned ? '自动折叠顶栏' : '固定顶栏'" @click="layout.toggleTopBarPinned()"><Pin v-if="layout.topBarPinned" class="size-4" /><PinOff v-else class="size-4" /></Button>
       <Button v-if="isDev" variant="ghost" size="icon-sm" class="rounded-full" :class="[buttonClass, props.devExperiment && 'bg-muted/75 text-foreground']" title="导入实验页" @click="emit('toggle-dev-experiment')"><FlaskConical class="size-4" /></Button>
     </div>
     <div v-if="host.desktop && !responsive.isMobileLayout" class="flex shrink-0 items-center gap-0.5">

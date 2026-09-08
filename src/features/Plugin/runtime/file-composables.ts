@@ -125,7 +125,7 @@ export function useFileContent(path: MaybeRefOrGetter<string>, delay = 350) {
 	}
 
 	async function save(destination = toValue(path)) {
-		if (!dirty.value || !file.value) return;
+		if (!dirty.value) return;
 		const snapshot = current();
 		queue = queue.then(async () => {
 			saving.value = true;

@@ -64,7 +64,8 @@ const fileKinds: FileKind[] = [
 	{ id: "json", name: "JSON", extension: ".json", icon: "braces" },
 	{ id: "component", name: "Vue 组件", extension: ".vue", icon: "component" },
 	{ id: "media", name: "媒体", extension: ".png", icon: "image" },
-	{ id: "text", name: "文本", extension: ".txt", icon: "file-text" },
+	{ id: "text", name: "文本 (TXT)", extension: ".txt", icon: "file-text" },
+	{ id: "yaml", name: "YAML", extension: ".yaml", icon: "file-code" },
 ];
 
 type SlotKind =
@@ -251,6 +252,7 @@ function treeNode(
 		...(node.type === "folder"
 			? {
 					openIcon: node.openIcon,
+					selectionMode: (node as WorldFolderNode).selectionMode,
 					children: orderedChildren(node).map((child) =>
 						treeNode(scope, child, nodeNames, {
 							sourceId,
@@ -335,6 +337,7 @@ function slotNode(slot: (typeof world.slots.value)[number]): FileTreeNode {
 		name: slot.name,
 		type: "folder",
 		icon: slot.icon,
+		selectionMode: slot.selectionMode,
 		action: nodeActions(),
 		children: [
 			...childSlots.map(slotNode),
@@ -379,14 +382,17 @@ function localSlotBranch(
 ): FileTreeNode {
 	const path = `${prefix}/$${localRoot.id}${folder === localRoot ? "" : `/$${folder.id}`}`;
 	const local = world.localSlots.value.find((slot) => slot.path === path);
-	const icon = world.slots.value.find(
+	const parentSlot = world.slots.value.find(
 		(slot) => slot.path === local?.parent,
-	)?.icon;
+	);
+	const icon = parentSlot?.icon;
+	const selectionMode = parentSlot?.selectionMode ?? "none";
 	return {
 		id: `${scope}:local:${folder.id}`,
 		name: folder.name,
 		type: "folder",
 		icon: folder.icon,
+		selectionMode,
 		children: [
 			...orderedChildren(folder)
 				.filter((child): child is WorldFolderNode => child.type === "folder")
@@ -397,7 +403,7 @@ function localSlotBranch(
 					]),
 				),
 			...(local?.allResources ?? []).map((resource) =>
-				resourceNode(resource, icon, false),
+				resourceNode(resource, icon, false, true, true),
 			),
 		],
 		data: {
@@ -406,6 +412,7 @@ function localSlotBranch(
 			slotKind: (folder === localRoot
 				? "local-root"
 				: "local") as SlotKind,
+			selectionMode,
 			isRoot: false,
 		},
 	};
@@ -435,7 +442,7 @@ function sourceSlotBranch(
 			type: "folder" as const,
 			icon: slot.icon,
 			children: groupResources.map((resource) =>
-				resourceNode(resource, slot.icon, false),
+				resourceNode(resource, slot.icon, false, true, true),
 			),
 			data: { selectionMode: slot.selectionMode, isRoot: true },
 		})),
@@ -545,13 +552,8 @@ function openFile(node: FileTreeNode) {
 }
 
 function activate(node: FileTreeNode) {
+	// FileTree owns resource toggles; selection here only tracks keyboard/editor focus.
 	selected.value = node.id;
-	if (tab.value === "slots") {
-		if (node.selectableResource) {
-			toggleNode(node, !node.resourceSelected);
-		}
-		return;
-	}
 }
 
 async function createFile(path: string, kind: string) {
@@ -688,6 +690,7 @@ async function runTreeAction(
 		}
 		return;
 	}
+	if (action.id === "new-file") return createFile(path, "text");
 	if (action.id.startsWith("add-file:"))
 		return createFile(path, action.id.slice("add-file:".length));
 	if (action.id === "new-folder") return createFolder(node, path);

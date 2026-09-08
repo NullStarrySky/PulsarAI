@@ -169,43 +169,44 @@ function pickAction(action: WorldResource) {
 	}
 	closeMenu();
 }
-function handleKeydown(event: KeyboardEvent) {
-	const count = menuRows.value.length;
-	if (menuKind.value && count) {
-		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-			event.preventDefault();
-			event.stopPropagation();
-			activeIndex.value =
-				(activeIndex.value + (event.key === "ArrowDown" ? 1 : -1) + count) %
-				count;
-			return;
-		}
-		if ((event.key === "Enter" && !event.shiftKey) || event.key === "Tab") {
-			event.preventDefault();
-			event.stopPropagation();
-			const item = menuRows.value[activeIndex.value];
-			if (menuKind.value === "at")
-				pickAt(item as (typeof atRows.value)[number]);
-			else pickAction(item as WorldResource);
-			return;
-		}
+const inputSuggestions = computed(() => {
+	if (!menuKind.value) return [];
+	if (menuKind.value === "at") {
+		return atRows.value.map((item) => ({
+			id: (item as any).key ?? (item as any).label,
+			label: (item as any).label,
+			description: (item as any).description,
+			icon: atIcon(item),
+			value: props.modelValue,
+			raw: item,
+		}));
 	}
-	if (event.key === "Escape") {
-		toolsOpen.value = false;
-		menuDismissed.value = true;
+	return actionRows.value.map((action) => ({
+		id: action.file.id,
+		label: `/${action.file.name.replace(/\.[^.]+$/, "")}`,
+		description: action.scope === "global" ? "共享世界" : "角色世界",
+		value: props.modelValue,
+		raw: action,
+	}));
+});
+
+function onSelectSuggestion(item: any) {
+	if (!item) return;
+	const raw = typeof item === "object" && "raw" in item ? item.raw : item;
+	if (menuKind.value === "at") {
+		pickAt(raw);
+	} else if (menuKind.value === "slash") {
+		pickAction(raw);
 	}
 }
+
 function insertDictation(text: string) {
 	emit(
 		"update:modelValue",
 		`${props.modelValue}${props.modelValue ? " " : ""}${text}`,
 	);
 }
-function menuKey(item: unknown) {
-	return menuKind.value === "slash"
-		? (item as WorldResource).file.id
-		: (item as { key: string }).key;
-}
+
 function atIcon(item: unknown) {
 	const row = item as ComposerReferenceOption & { icon?: unknown };
 	return (
@@ -213,34 +214,31 @@ function atIcon(item: unknown) {
 		(row.reference?.referenceType === "file" ? FileText : MessageSquareText)
 	);
 }
-function selectMenuItem(item: unknown) {
-	if (menuKind.value === "at") pickAt(item as (typeof atRows.value)[number]);
-	else pickAction(item as WorldResource);
-}
 </script>
 
 <template>
-  <div class="relative" @keydown.capture="handleKeydown">
-    <Transition name="fade">
-      <div v-if="menuKind" class="absolute inset-x-0 bottom-[calc(100%+0.625rem)] z-20 overflow-hidden rounded-2xl border bg-popover/98 p-1.5 shadow-xl backdrop-blur">
-        <p class="border-b px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground">{{ menuKind === 'at' ? '引用文件或消息' : '执行命令' }}</p>
-        <div class="max-h-72 overflow-y-auto py-1">
-          <button v-for="(item, index) in menuRows" :key="menuKey(item)" type="button" class="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left text-xs transition-colors" :class="index === activeIndex ? 'bg-accent/60' : 'hover:bg-accent/60'" @mousedown.prevent @mouseenter="activeIndex = index" @click="selectMenuItem(item)">
-            <template v-if="menuKind === 'at'">
-              <component :is="atIcon(item)" class="size-4 shrink-0 text-muted-foreground" />
-              <span class="min-w-0"><span class="block truncate font-medium">{{ (item as any).label }}</span><span class="mt-0.5 block truncate text-[11px] opacity-70">{{ (item as any).description }}</span></span>
-            </template>
-            <template v-else>
-              <span class="min-w-0"><span class="block font-mono font-medium text-primary">/{{ (item as WorldResource).file.name.replace(/\.[^.]+$/, '') }}</span><span class="mt-0.5 block truncate text-[11px] text-muted-foreground">{{ (item as WorldResource).scope === 'global' ? '共享世界' : '角色世界' }}</span></span>
-            </template>
-          </button>
-          <p v-if="menuRows.length === 0" class="px-3 py-8 text-center text-xs text-muted-foreground">暂无匹配项</p>
-        </div>
-      </div>
-    </Transition>
-
-    <InputMessage :model-value="modelValue" :disabled="generating" :suggestions="suggestions" placeholder="随心输入，输入 @ 引用，输入 / 执行命令…" :min-rows="2" :max-rows="8" class="rounded-2xl border border-border/80 bg-background/95 shadow-[0_8px_26px_-18px_hsl(var(--foreground)/0.55)]" @update:model-value="emit('update:modelValue', $event)" @send="emit('submit')">
+  <div class="relative">
+    <InputMessage
+      :model-value="modelValue"
+      :disabled="generating"
+      :suggestions="inputSuggestions"
+      placeholder="随心输入，输入 @ 引用，输入 / 执行命令…"
+      :min-rows="2"
+      :max-rows="8"
+      :class="[
+        'rounded-2xl border border-border/80 bg-background/95 shadow-[0_8px_26px_-18px_hsl(var(--foreground)/0.55)] transition-[border-color,box-shadow]',
+        editMode && 'border-primary/60 ring-2 ring-primary/20 shadow-[0_8px_26px_-18px_hsl(var(--primary)/0.45)]',
+      ]"
+      @update:model-value="emit('update:modelValue', $event)"
+      @send="emit('submit')"
+      @select-suggestion="onSelectSuggestion"
+    >
       <template #attachments>
+        <div v-if="editMode" class="flex items-center gap-1.5 rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary font-medium">
+          <PencilLine class="size-3" />
+          <span>{{ activeModeId === 'builtin-edit' ? '编辑模式' : '子模式中' }}</span>
+          <button type="button" class="ml-1 text-primary/70 hover:text-primary" title="退出编辑模式" @click="emit('toggleEditMode')">×</button>
+        </div>
         <ComposerAttachmentStrip v-if="attachments.length" :attachments="attachments" @remove="emit('removeAttachment', $event)" />
         <div v-if="selectedAction" class="flex items-center">
           <span class="rounded-md border bg-muted/50 px-2 py-1 text-xs font-mono text-primary">/{{ selectedAction.label }}</span>
@@ -263,8 +261,3 @@ function selectMenuItem(item: unknown) {
     </InputMessage>
   </div>
 </template>
-
-<style scoped>
-.fade-enter-active, .fade-leave-active { transition: opacity 120ms ease, transform 120ms ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; transform: translateY(0.25rem); }
-</style>

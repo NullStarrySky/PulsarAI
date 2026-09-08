@@ -40,6 +40,14 @@ keeps IDs while copy regenerates every copied subtree ID.
 Conversation edits append the same update items to a hidden system message, or
 to the current message version during generation. Replay only applies those
 items to a cloned World; it never writes the database.
+If the active tail is already a pure Pulse-only system container, later edits
+reuse that container instead of extending the conversation path.
+
+Node timestamps are not replay data and do not participate in sync. A persisted
+World document is versioned by Database sync metadata's per-device vector;
+within one message container, later direct file-content or metadata-property
+writes replace the earlier write to that same node/property. Structural
+operations and writes in different containers retain their order.
 
 ## Paths and source scope
 

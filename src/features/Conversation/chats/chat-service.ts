@@ -11,24 +11,41 @@ import {
 	type Conversation,
 	createDefaultComposerDraft,
 } from "./chat-types";
+import { notifyChatUpdated } from "../conversation-shared-state";
 
 const chatTable = "conversations";
 
 // 轻量无状态生成指示器，按 chatId 标记是否正在流式生成
 const generatingChatIds = ref(new Set<string>());
+const generatingMessageIds = ref(new Map<string, string>());
 
 export function isChatGenerating(chatId: string): boolean {
 	return generatingChatIds.value.has(chatId);
 }
 
-export function setChatGenerating(chatId: string, generating: boolean): void {
+export function isMessageGenerating(chatId: string, messageId: string): boolean {
+	if (!chatId || !messageId) return false;
+	return generatingMessageIds.value.get(chatId) === messageId;
+}
+
+export function setChatGenerating(
+	chatId: string,
+	generating: boolean,
+	messageId?: string,
+): void {
 	const next = new Set(generatingChatIds.value);
+	const nextMsgs = new Map(generatingMessageIds.value);
 	if (generating) {
 		next.add(chatId);
+		if (messageId) {
+			nextMsgs.set(chatId, messageId);
+		}
 	} else {
 		next.delete(chatId);
+		nextMsgs.delete(chatId);
 	}
 	generatingChatIds.value = next;
+	generatingMessageIds.value = nextMsgs;
 }
 
 export async function loadChat(id: string): Promise<Conversation | null> {
@@ -53,6 +70,7 @@ export async function selectAllChats(): Promise<Conversation[]> {
 
 export async function persistChat(chat: Conversation): Promise<void> {
 	await upsert(chatTable, chat.id, chat);
+	notifyChatUpdated(chat);
 }
 
 export async function createChat(options: {

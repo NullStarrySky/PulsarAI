@@ -18,6 +18,15 @@ interface ElectronHostBridge {
 
 const bridge = typeof window !== "undefined" ? window.pulsarHost : undefined;
 
+function toPlainSerializable<T>(val: T): T {
+	if (val === undefined || val === null) return val;
+	try {
+		return JSON.parse(JSON.stringify(val));
+	} catch {
+		return val;
+	}
+}
+
 const invoke = <T>(
 	namespace: string,
 	method: string,
@@ -26,7 +35,11 @@ const invoke = <T>(
 	if (!bridge) {
 		return Promise.resolve(undefined as T);
 	}
-	return bridge.invoke<T>(namespace, method, payload);
+	return bridge.invoke<T>(
+		namespace,
+		method,
+		payload ? toPlainSerializable(payload) : undefined,
+	);
 };
 
 const platform = navigator.userAgent.toLocaleLowerCase().includes("windows")

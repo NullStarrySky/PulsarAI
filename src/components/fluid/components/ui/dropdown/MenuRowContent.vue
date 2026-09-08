@@ -8,7 +8,7 @@ import type { IconComponent } from "../../../lib/icon-context";
 
 const props = defineProps<{
   icon?: IconComponent;
-  label: string;
+  label?: string;
   active?: boolean;
   checked?: boolean;
 }>();
@@ -23,7 +23,7 @@ const skipAnimation = computed(() => !hasMounted.value);
 </script>
 
 <template>
-  <span v-if="icon" class="inline-grid">
+  <span v-if="icon" class="inline-grid shrink-0">
     <span class="col-start-1 row-start-1 invisible">
       <component :is="icon" :size="sizeClasses.icon" :stroke-width="2" />
     </span>
@@ -39,30 +39,30 @@ const skipAnimation = computed(() => !hasMounted.value);
       "
     />
   </span>
-  <!-- 两个堆叠 span 都带 text-box trim，不可见的加粗测量行与可见标签
-      保持相同的盒子。 -->
-  <span :class="cn('inline-grid flex-1', sizeClasses.text)">
-    <span
-      class="col-start-1 row-start-1 invisible [text-box:trim-both_cap_alphabetic]"
-      :style="{ fontVariationSettings: fontWeights.semibold }"
-      aria-hidden="true"
-    >
-      {{ label }}
+  <slot>
+    <span v-if="label" :class="cn('inline-grid flex-1', sizeClasses.text)">
+      <span
+        class="col-start-1 row-start-1 invisible [text-box:trim-both_cap_alphabetic]"
+        :style="{ fontVariationSettings: fontWeights.semibold }"
+        aria-hidden="true"
+      >
+        {{ label }}
+      </span>
+      <span
+        :class="
+          cn(
+            'col-start-1 row-start-1 transition-[color,font-variation-settings] duration-80 [text-box:trim-both_cap_alphabetic]',
+            active || checked ? 'text-foreground' : 'text-muted-foreground'
+          )
+        "
+        :style="{
+          fontVariationSettings: checked ? fontWeights.semibold : fontWeights.normal,
+        }"
+      >
+        {{ label }}
+      </span>
     </span>
-    <span
-      :class="
-        cn(
-          'col-start-1 row-start-1 transition-[color,font-variation-settings] duration-80 [text-box:trim-both_cap_alphabetic]',
-          active || checked ? 'text-foreground' : 'text-muted-foreground'
-        )
-      "
-      :style="{
-        fontVariationSettings: checked ? fontWeights.semibold : fontWeights.normal,
-      }"
-    >
-      {{ label }}
-    </span>
-  </span>
+  </slot>
   <AnimatePresence>
     <motion.svg
       v-if="checked"
@@ -75,7 +75,7 @@ const skipAnimation = computed(() => !hasMounted.value);
       :stroke-width="2"
       stroke-linecap="round"
       stroke-linejoin="round"
-      class="shrink-0 text-foreground"
+      class="shrink-0 text-foreground ml-auto"
       :initial="{ opacity: 1 }"
       :animate="{ opacity: 1 }"
       :exit="{ opacity: 1 }"

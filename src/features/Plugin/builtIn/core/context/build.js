@@ -68,4 +68,4 @@ async () => {
 	});
 
 	return messages;
-};
+}

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onUnmounted, useAttrs } from "vue";
+import { computed, ref, unref, watch, onUnmounted, useAttrs } from "vue";
 import {
   DialogPortal,
   DialogOverlay,
@@ -95,11 +95,13 @@ const transition = computed(() => (open.value ? spring.slow : spring.slow.exit))
 const attrs = useAttrs();
 const mergedStyle = computed<Record<string, any>>(() => {
   const result: Record<string, any> = {};
-  if (props.style && typeof props.style === "object") {
-    Object.assign(result, props.style);
+  const propStyle = unref(props.style);
+  if (propStyle && typeof propStyle === "object") {
+    Object.assign(result, propStyle);
   }
-  if (attrs.style && typeof attrs.style === "object") {
-    Object.assign(result, attrs.style);
+  const attrStyle = unref(attrs.style);
+  if (attrStyle && typeof attrStyle === "object") {
+    Object.assign(result, attrStyle);
   }
   return result;
 });

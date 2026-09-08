@@ -3,6 +3,7 @@ import {
 	remove,
 	selectAll,
 	selectByField,
+	selectOne,
 	upsert,
 } from "@/features/Database/database-service";
 import type {
@@ -26,15 +27,24 @@ export async function loadContainersForChat(
 	return records.map((record) => record.value);
 }
 
+export async function loadContainer(
+	id: string,
+): Promise<ChatMessageContainer | null> {
+	return selectOne<ChatMessageContainer>(containerTable, id);
+}
+
 export async function selectAllContainers(): Promise<ChatMessageContainer[]> {
 	const records = await selectAll<ChatMessageContainer>(containerTable);
 	return records.map((record) => record.value);
 }
 
+import { notifyContainerUpdated } from "../conversation-shared-state";
+
 export async function persistContainer(
 	container: ChatMessageContainer,
 ): Promise<void> {
 	await upsert(containerTable, container.id, container);
+	notifyContainerUpdated(container);
 }
 
 export async function deleteContainer(containerId: string): Promise<void> {

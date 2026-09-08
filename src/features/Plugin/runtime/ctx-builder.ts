@@ -19,6 +19,7 @@ import {
 	evaluateIntervals,
 	type IntervalProjection,
 } from "@/features/Conversation/messages/interval-service";
+import { getConversationSharedState } from "@/features/Conversation/conversation-shared-state";
 import type {
 	ChatMessage,
 	ChatMessageContainer,
@@ -38,8 +39,9 @@ import { createWorldSelfApi } from "@/features/Plugin/runtime/self-api";
 import type { SandboxEnvironment } from "@/features/Sandbox/sandbox";
 import { createSandboxFunction } from "@/features/Sandbox/sandbox";
 
-interface CtxMessageFeature {
+export interface CtxMessageFeature {
 	containerId?: string;
+	messageId?: string;
 	role?: Role;
 	/** Create the requested role container from the chat tail when absent. */
 	create?: boolean;
@@ -137,7 +139,27 @@ function injectSelectedData(
 function createReply(container: ChatMessageContainer, message: ChatMessage) {
 	let queue = Promise.resolve();
 	const persist = () => {
-		queue = queue.then(() => persistContainer(container));
+		queue = queue.then(async () => {
+			const shared = getConversationSharedState(container.conversationid);
+			const live = shared.containers.value.find((c) => c.id === container.id);
+			if (live) {
+				if (live.activeMessage !== undefined && live.activeMessage !== null) {
+					container.activeMessage = live.activeMessage;
+				}
+				for (const m of live.content) {
+					if (m.id !== message.id && !container.content.some((c) => c.id === m.id)) {
+						container.content.push(m);
+					}
+				}
+			}
+			const index = container.content.findIndex((m) => m.id === message.id);
+			if (index >= 0) {
+				container.content[index] = { ...message };
+			} else {
+				container.content.push({ ...message });
+			}
+			await persistContainer(container);
+		});
 		return queue;
 	};
 
@@ -315,11 +337,16 @@ export async function ctxbuilder(
 			container.role !== role
 		)
 			throw new Error("找不到指定角色的消息容器。");
-		const message =
-			container.activeMessage === null || container.activeMessage === undefined
+		// Pick message version: by messageFeature.messageId if provided, else by container.activeMessage
+		const message = messageFeature.messageId
+			? container.content.find((m) => m.id === messageFeature.messageId) ??
+				(container.activeMessage === null || container.activeMessage === undefined
+					? null
+					: container.content[container.activeMessage])
+			: container.activeMessage === null || container.activeMessage === undefined
 				? null
 				: container.content[container.activeMessage];
-		if (!message) throw new Error("消息容器没有活动版本。");
+		if (!message) throw new Error("消息容器没有指定版本或活动版本。");
 		const replyState = createReply(container, message);
 		result.container = container;
 		result.message = message;

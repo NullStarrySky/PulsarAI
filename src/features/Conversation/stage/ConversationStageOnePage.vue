@@ -1,8 +1,5 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref, watch } from "vue";
-import { PanelLeft, PanelRight, PanelTop } from "lucide-vue-next";
-import { Button } from "@/components/fluid";
-import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
 	cleanupAppLifetimeChats,
 	createChat,
@@ -12,10 +9,9 @@ import {
 import ChatComposer from "@/features/Conversation/composer/ChatComposer.vue";
 import ConversationHeader from "@/features/Conversation/header/ConversationHeader.vue";
 import ChatThread from "@/features/Conversation/messages/ChatThread.vue";
-import { useLocalPluginStore } from "@/features/Plugin/local-plugin-store";
 import AskUserComponent from "@/features/Plugin/agent/components/AskUserComponent.vue";
-import PluginAssetTreePanel from "@/features/Plugin/tree/PluginAssetTreePanel.vue";
-import PluginFileEditorDialog from "@/features/Plugin/tree/PluginFileEditorDialog.vue";
+import { useLocalPluginStore } from "@/features/Plugin/local-plugin-store";
+import { providePluginWorldScope } from "@/features/Plugin/runtime/file-composables";
 import {
 	bringToFront as bringEditorToFront,
 	closeFile as closeEditorFile,
@@ -23,9 +19,12 @@ import {
 	openFile as openEditorFile,
 	openFiles,
 } from "@/features/Plugin/tree/file-editor-manager";
+import PluginAssetTreePanel from "@/features/Plugin/tree/PluginAssetTreePanel.vue";
+import PluginFileEditorDialog from "@/features/Plugin/tree/PluginFileEditorDialog.vue";
 import { initializeWorlds } from "@/features/Plugin/tree/world-store";
-import { providePluginWorldScope } from "@/features/Plugin/runtime/file-composables";
 import type { WorldFileNode } from "@/features/Plugin/tree/world-types";
+import { Button } from "@/components/fluid";
+import { PanelLeft, X } from "lucide-vue-next";
 import PluginSlotComponents from "../panels/PluginSlotComponents.vue";
 import { usePanelEnvironment } from "../panels/panel-environment";
 
@@ -36,6 +35,7 @@ const localPluginId = ref("");
 const localChatId = ref("");
 const localPlugins = useLocalPluginStore();
 const assetPanelOpen = ref(false);
+const leftPanelOpen = ref(false);
 
 function isMainConversationStartup() {
 	if (new URLSearchParams(window.location.search).has("subwindow")) return false;
@@ -48,9 +48,6 @@ function isMainConversationStartup() {
 		return true;
 	}
 }
-const leftPanelOpen = ref(false);
-const rightPanelOpen = ref(false);
-const topPanelOpen = ref(true);
 const devExperimentOpen = ref(false);
 const DevStImportExperiment = import.meta.env.DEV
 	? defineAsyncComponent(() => import("@/features/Migrations/SillyTavern/import/DevStImportExperiment.vue"))
@@ -129,27 +126,42 @@ function openPluginFile(value: { file: WorldFileNode; path: string }) {
   <section class="relative flex h-full min-h-0 flex-col bg-background">
     <ConversationHeader v-if="ready && localPluginId && chatId" :local-plugin-id="localPluginId" v-model:chat-id="chatId" :asset-open="assetPanelOpen" :dev-experiment="devExperimentOpen" @update:local-plugin-id="selectLocalPlugin" @toggle-assets="toggleAssets" @toggle-dev-experiment="devExperimentOpen = !devExperimentOpen" />
     <component v-if="devExperimentOpen && DevStImportExperiment" :is="DevStImportExperiment" class="min-h-0 flex-1" />
-    <main v-else-if="ready && chatId" class="relative flex min-h-0 flex-1 overflow-hidden">
-      <aside class="hidden min-h-0 w-72 shrink-0 overflow-auto border-r bg-muted/15 p-2 md:block">
-        <PluginSlotComponents slot-id="panel-left" :direction="leftPanelDirection" />
-      </aside>
-      <section class="relative flex min-w-0 flex-1 flex-col">
-        <div v-if="topPanelOpen" class="shrink-0 border-b bg-muted/10 p-2"><PluginSlotComponents slot-id="panel-top" direction="horizontal" /></div>
-        <Button class="absolute left-2 top-2 z-10 hidden md:flex" variant="ghost" size="icon-sm" title="折叠顶部面板" @click="topPanelOpen = !topPanelOpen"><PanelTop class="size-4" /></Button>
+    <main v-else-if="ready && chatId" class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+      <!-- 左侧面板（宽屏常驻，窄屏可切换滑出） -->
+      <PluginSlotComponents slot-id="panel-left" :direction="leftPanelDirection" class="absolute inset-y-0 left-4 z-10 hidden w-[calc((100%_-_724px)_/_2_-_1rem)] overflow-y-auto py-3 xl:flex" />
+
+      <Button
+        v-if="!leftPanelOpen"
+        variant="ghost"
+        size="icon-sm"
+        class="absolute left-2.5 top-2.5 z-20 xl:hidden rounded-lg bg-card/85 border shadow-xs"
+        title="打开左侧面板"
+        @click="leftPanelOpen = true"
+      >
+        <PanelLeft class="size-4" />
+      </Button>
+
+      <div v-if="leftPanelOpen" class="fixed inset-0 z-30 bg-black/40 xl:hidden" @click="leftPanelOpen = false" />
+      <div
+        v-if="leftPanelOpen"
+        class="absolute inset-y-0 left-0 z-40 flex w-80 max-w-[85vw] flex-col bg-background/95 p-3 shadow-2xl backdrop-blur border-r xl:hidden"
+      >
+        <div class="flex items-center justify-between pb-2 border-b mb-2">
+          <span class="text-xs font-semibold text-foreground">左侧面板组件</span>
+          <Button variant="ghost" size="icon-sm" class="size-6 rounded-md" @click="leftPanelOpen = false">
+            <X class="size-3.5" />
+          </Button>
+        </div>
+        <PluginSlotComponents slot-id="panel-left" :direction="leftPanelDirection" class="h-full overflow-y-auto" />
+      </div>
+
+      <PluginSlotComponents slot-id="panel-right" :direction="rightPanelDirection" class="absolute inset-y-0 right-4 z-10 hidden w-[calc((100%_-_724px)_/_2_-_1rem)] overflow-y-auto py-3 xl:flex" />
+      <PluginSlotComponents slot-id="panel-top" direction="horizontal" class="relative z-10 mx-auto w-full max-w-[724px] shrink-0 px-4 pt-2" />
+      <section class="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <div class="min-h-0 flex-1"><ChatThread :key="chatId" :chat-id="chatId"><template #messageAction="slotProps"><slot name="messageAction" v-bind="slotProps" /></template></ChatThread></div>
         <ChatComposer :key="chatId" :chat-id="chatId" />
-        <Transition name="asset-panel"><PluginAssetTreePanel v-if="assetPanelOpen" :local-plugin-id="localPluginId" :conversation-id="chatId" @select="openPluginFile" @close="assetPanelOpen = false" /></Transition>
       </section>
-      <aside class="hidden min-h-0 w-72 shrink-0 overflow-auto border-l bg-muted/15 p-2 md:block">
-        <PluginSlotComponents slot-id="panel-right" :direction="rightPanelDirection" />
-      </aside>
-      <div class="absolute bottom-3 left-3 z-20 flex gap-1 md:hidden">
-        <Button size="icon-sm" variant="secondary" title="左侧面板" @click="leftPanelOpen = true"><PanelLeft class="size-4" /></Button>
-        <Button size="icon-sm" variant="secondary" title="顶部面板" @click="topPanelOpen = !topPanelOpen"><PanelTop class="size-4" /></Button>
-        <Button size="icon-sm" variant="secondary" title="右侧面板" @click="rightPanelOpen = true"><PanelRight class="size-4" /></Button>
-      </div>
-      <Sheet v-model:open="leftPanelOpen"><SheetContent side="left" class="w-[min(22rem,88vw)] p-4"><PluginSlotComponents slot-id="panel-left" :direction="leftPanelDirection" /></SheetContent></Sheet>
-      <Sheet v-model:open="rightPanelOpen"><SheetContent side="right" class="w-[min(22rem,88vw)] p-4"><PluginSlotComponents slot-id="panel-right" :direction="rightPanelDirection" /></SheetContent></Sheet>
+      <Transition name="asset-panel"><PluginAssetTreePanel v-if="assetPanelOpen" :local-plugin-id="localPluginId" :conversation-id="chatId" @select="openPluginFile" @close="assetPanelOpen = false" /></Transition>
     </main>
     <AskUserComponent />
     <PluginFileEditorDialog
