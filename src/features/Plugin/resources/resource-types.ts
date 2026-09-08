@@ -9,7 +9,7 @@ type PluginResourceValue = string | ArrayBuffer;
 
 export type ResourceFile = Pick<
 	WorldFileNode,
-	"name" | "content" | "condition" | "conditionEnabled"
+	"id" | "name" | "content" | "condition" | "conditionEnabled"
 >;
 
 export interface PluginResource {

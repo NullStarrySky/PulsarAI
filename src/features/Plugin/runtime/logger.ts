@@ -1,6 +1,12 @@
 export type PluginLogKind =
+	| "enter"
+	| "exit"
 	| "import"
+	| "read"
 	| "condition"
+	| "text"
+	| "macro"
+	| "result"
 	| "api"
 	| "sandbox"
 	| "error"

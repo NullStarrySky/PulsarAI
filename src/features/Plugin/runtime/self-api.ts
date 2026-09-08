@@ -6,6 +6,7 @@ import type {
 } from "@/features/Conversation/messages/message-types";
 import type { ResourceImportEnvironment } from "@/features/Plugin/resources/resource-wrapper";
 import { PluginLogger } from "@/features/Plugin/runtime";
+import { parseSkillDocument } from "@/features/Plugin/runtime/yaml-formatter";
 import { useWorld, type WorldScope } from "@/features/Plugin/tree/world-store";
 
 import {
@@ -91,6 +92,11 @@ export function createWorldSelfApi(
 			return parse(paths, environment);
 		},
 	};
+	const skills = () =>
+		slot.paths("skill").map((path) => ({
+			path,
+			...parseSkillDocument(world.read(path)),
+		}));
 	const importResource = (
 		path: string | string[],
 		environment: ResourceImportEnvironment = {},
@@ -128,7 +134,11 @@ export function createWorldSelfApi(
 		return imported;
 	};
 	return {
-		read: (path: string) => world.read(absolute(path)),
+		read: (path: string) => {
+			const resolved = absolute(path);
+			logger.append(`读取文件：${resolved}`, 0, "read", resolved);
+			return world.read(resolved);
+		},
 		write: (path: string, content: unknown) =>
 			world.write(absolute(path), content),
 		edit: (path: string, find: string, replace: string) =>
@@ -146,6 +156,7 @@ export function createWorldSelfApi(
 		run: importResource,
 		parse,
 		slot,
+		skills,
 		logger,
 		world,
 	};

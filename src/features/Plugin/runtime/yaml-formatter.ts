@@ -30,6 +30,16 @@ export function extractYAMLFormatter(
 	return (Array.isArray(input) ? input : [input]).map(extractYAMLFormatterItem);
 }
 
+/** A skill is just a Markdown resource in the `skill` slot.  Its frontmatter is
+ * deliberately removed from the prompt body and preserved as separate metadata. */
+export function parseSkillDocument(input: string) {
+	const [parsed] = extractYAMLFormatter(input);
+	return {
+		content: parsed?.result ?? "",
+		metadata: parsed?.formatter ?? [],
+	};
+}
+
 function parseYamlContent(yamlStr: string): Record<string, unknown> {
 	const result: Record<string, unknown> = {};
 	let currentKey: string | null = null;

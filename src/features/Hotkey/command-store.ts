@@ -16,6 +16,8 @@ export interface CommandDefinition {
 export const useCommandStore = defineStore("command", () => {
 	const paletteOpen = ref(false);
 	const paletteQuery = ref("");
+	/** The conversation that supplied the search entry point. */
+	const paletteChatId = ref("");
 	const commands = ref<CommandDefinition[]>([]);
 
 	const commandById = computed(
@@ -37,8 +39,9 @@ export const useCommandStore = defineStore("command", () => {
 		}
 	}
 
-	function openPalette(query = "") {
+	function openPalette(query = "", chatId = paletteChatId.value) {
 		paletteQuery.value = query;
+		paletteChatId.value = chatId;
 		paletteOpen.value = true;
 	}
 
@@ -62,6 +65,7 @@ export const useCommandStore = defineStore("command", () => {
 	return {
 		paletteOpen,
 		paletteQuery,
+		paletteChatId,
 		commands,
 		commandById,
 		registerCommand,

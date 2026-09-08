@@ -342,6 +342,7 @@ export async function ctxbuilder(
 			close: selfApi.close,
 			toggle: selfApi.toggle,
 			slot: selfApi.slot,
+			skills: selfApi.skills,
 			logger: selfApi.logger,
 			read_docs: readBuiltinAgentDocs,
 			ctx,

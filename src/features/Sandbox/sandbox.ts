@@ -168,13 +168,16 @@ async function replaceInlineExpressionsAsync(
 	const parts = splitInlineExpressions(text);
 	let output = "";
 	for (const part of parts) {
-		output +=
-			part.kind === "text"
-				? part.value
-				: stringifySandboxValue(
-						await executeSandboxCodeAsync(part.value, environments),
-						options,
-					);
+		if (part.kind === "text") {
+			if (part.value) options.logger?.append(`纯文本：${part.value}`, 0, "text");
+			output += part.value;
+			continue;
+		}
+		options.logger?.append(`宏：${part.value}`, 0, "macro");
+		options.logger?.append(`执行宏：${part.value}`, 1, "macro");
+		const result = stringifySandboxValue(await executeSandboxCodeAsync(part.value, environments), options);
+		options.logger?.append(`宏结果：${result}`, 1, "result");
+		output += result;
 	}
 	return output;
 }

@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { Box, Command, MessageSquare, Package, Search } from "lucide-vue-next";
+import { Box, Command, FileText, History, MessageSquare, Package, Search } from "lucide-vue-next";
 import { type Component, computed, nextTick, ref, shallowRef, watch } from "vue";
 import { Badge, Dialog, DialogContent, DialogTitle } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Conversation } from "@/features/Conversation/chats/chat-types";
 import { selectAllChats } from "@/features/Conversation/chats/chat-service";
+import { loadContainersForChat, pathForTail } from "@/features/Conversation/messages/message-service";
 import { useLocalPluginStore } from "@/features/Plugin/local-plugin-store";
+import { useWorld } from "@/features/Plugin/tree/world-store";
+import { initializeWorlds } from "@/features/Plugin/tree/world-store";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useHotkeyStore } from "@/features/Hotkey/hotkey-store";
 
@@ -23,6 +26,9 @@ const commandStore = useCommandStore();
 const hotkeyStore = useHotkeyStore();
 const localPlugins = useLocalPluginStore();
 const allChats = shallowRef<Conversation[]>([]);
+const historyResults = shallowRef<SearchResult[]>([]);
+const allMessageResults = shallowRef<SearchResult[]>([]);
+const assetResults = shallowRef<SearchResult[]>([]);
 const inputRoot = ref<HTMLElement | null>(null);
 const activeIndex = ref(0);
 
@@ -109,11 +115,18 @@ const conversationResults = computed<SearchResult[]>(() => {
 		}));
 });
 
+const filteredHistoryResults = computed(() => filterSearchResults(historyResults.value));
+const filteredAllMessageResults = computed(() => filterSearchResults(allMessageResults.value));
+const filteredAssetResults = computed(() => filterSearchResults(assetResults.value));
+
 const sections = computed(() =>
 	[
 		{ name: "命令", items: commandResults.value },
 		{ name: "角色包", items: packageResults.value },
 		{ name: "对话", items: conversationResults.value },
+		{ name: "当前会话历史", items: filteredHistoryResults.value },
+		{ name: "当前会话全部消息", items: filteredAllMessageResults.value },
+		{ name: "资产", items: filteredAssetResults.value },
 	].filter((section) => section.items.length > 0),
 );
 
@@ -129,6 +142,7 @@ watch(
 		}
 		await localPlugins.refresh();
 		allChats.value = await selectAllChats();
+		await refreshCurrentConversationIndex();
 		activeIndex.value = 0;
 		await nextTick();
 		inputRoot.value?.querySelector("input")?.focus();
@@ -138,6 +152,49 @@ watch(
 watch(query, () => {
 	activeIndex.value = 0;
 });
+
+function filterSearchResults(items: SearchResult[]) {
+	const search = normalizedQuery.value;
+	if (!search) return [];
+	return items.filter(item => matchesItem([item.title, item.description], search, false));
+}
+
+function textOfContainer(container: Awaited<ReturnType<typeof loadContainersForChat>>[number]) {
+	return container.content
+		.map((message, index) => `${index + 1}. ${message.content}`)
+		.join("\n")
+		.trim();
+}
+
+async function refreshCurrentConversationIndex() {
+	const chatId = commandStore.paletteChatId;
+	historyResults.value = [];
+	allMessageResults.value = [];
+	assetResults.value = [];
+	if (!chatId) return;
+	const chat = allChats.value.find(item => item.id === chatId);
+	if (!chat) return;
+	const containers = await loadContainersForChat(chatId);
+	const historyIds = new Set(pathForTail(containers, chat.lastContainerId).map(item => item.id));
+	const toResult = (container: (typeof containers)[number], history: boolean): SearchResult | null => {
+		const text = textOfContainer(container);
+		if (!text) return null;
+		return { id: `${history ? "history" : "message"}:${container.id}`, title: text.slice(0, 100), description: `${container.role} · ${container.id}`, icon: history ? History : MessageSquare, run: () => commandStore.closePalette() };
+	};
+	historyResults.value = containers.flatMap(item => historyIds.has(item.id) ? [toResult(item, true)].filter((value): value is SearchResult => Boolean(value)) : []);
+	allMessageResults.value = containers.flatMap(item => [toResult(item, false)].filter((value): value is SearchResult => Boolean(value)));
+	try {
+		await initializeWorlds(chat.localPluginId);
+		const world = useWorld({ localPluginId: chat.localPluginId, conversationId: chat.id, applyReplay: true });
+		assetResults.value = world.resources.value.map(resource => ({
+			id: `asset:${resource.path}`,
+			title: resource.file.name,
+			description: `${resource.path}\n${typeof resource.file.content === "string" ? resource.file.content.slice(0, 180) : JSON.stringify(resource.file.content).slice(0, 180)}`,
+			icon: FileText,
+			run: () => commandStore.closePalette(),
+		}));
+	} catch { /* Search remains useful while a World is still initializing. */ }
+}
 
 function matchesItem(
 	values: Array<string | undefined | null>,
@@ -198,7 +255,7 @@ function isActive(id: string) {
           <Input
             v-model="query"
             class="border-0 bg-transparent pl-7 text-base shadow-none focus-visible:ring-0"
-            placeholder="搜索命令、角色包或对话"
+            placeholder="搜索命令、角色、会话、消息或资产"
             @keydown.down.prevent="moveActive(1)"
             @keydown.up.prevent="moveActive(-1)"
             @keydown.enter.prevent="runActive"

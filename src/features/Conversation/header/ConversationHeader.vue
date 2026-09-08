@@ -13,7 +13,7 @@ import {
 	X,
 	FlaskConical,
 } from "lucide-vue-next";
-import { computed, onMounted, onUnmounted, ref, toRef } from "vue";
+import { computed, onMounted, onUnmounted, ref, toRef, watch } from "vue";
 import {
 	Button,
 	DropdownMenu,
@@ -116,6 +116,13 @@ function onMouseMove(event: MouseEvent) {
 }
 onMounted(() => window.addEventListener("mousemove", onMouseMove));
 onUnmounted(() => window.removeEventListener("mousemove", onMouseMove));
+watch(
+	() => props.chatId,
+	(chatId) => {
+		command.paletteChatId = chatId;
+	},
+	{ immediate: true },
+);
 </script>
 
 <template>
@@ -162,7 +169,7 @@ onUnmounted(() => window.removeEventListener("mousemove", onMouseMove));
         <DropdownMenuContent align="end" class="max-h-72 max-w-72 overflow-auto p-2"><PluginSlotComponents slot-id="topbar-left" direction="vertical" /><PluginSlotComponents slot-id="topbar-right" direction="vertical" /></DropdownMenuContent>
       </DropdownMenu>
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="设置" @click="layout.openSettings()"><Settings class="size-4" /></Button>
-      <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="搜索" @click="command.openPalette()"><Search class="size-4" /></Button>
+      <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="搜索" @click="command.openPalette('', props.chatId)"><Search class="size-4" /></Button>
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="[buttonClass, !layout.topBarPinned && 'bg-muted/75 text-foreground']" :title="layout.topBarPinned ? '自动折叠顶栏' : '固定顶栏'" @click="layout.toggleTopBarPinned()"><Pin v-if="layout.topBarPinned" class="size-4" /><PinOff v-else class="size-4" /></Button>
       <Button v-if="isDev" variant="ghost" size="icon-sm" class="rounded-full" :class="[buttonClass, props.devExperiment && 'bg-muted/75 text-foreground']" title="导入实验页" @click="emit('toggle-dev-experiment')"><FlaskConical class="size-4" /></Button>
     </div>

@@ -2,6 +2,7 @@
 import {
 	Code,
 	Crosshair,
+	Bug,
 	Eye,
 	FileText,
 	GripVertical,
@@ -31,6 +32,8 @@ import {
 import { useFloatingSurface } from "@/features/UI/FloatingSurface";
 import PluginResourceConditionEditor from "@/features/Plugin/resources/PluginResourceConditionEditor.vue";
 import PluginResourceRenderer from "@/features/Plugin/resources/PluginResourceRenderer.vue";
+import PluginContextDebugger from "@/features/Plugin/runtime/PluginContextDebugger.vue";
+import { estimateReferenceTokens } from "@/features/Plugin/resources/token-estimate";
 import { requestLocate } from "./file-editor-manager";
 import SlotSubMenu from "./SlotSubMenu.vue";
 import type { SlotMenuNode } from "./slot-menu-types";
@@ -76,6 +79,9 @@ const condition = ref("");
 const conditionEnabled = ref(true);
 const resourceSelected = ref(true);
 const isBouncing = ref(false);
+const debuggerOpen = ref(false);
+const referenceTokenCount = ref<number | null>(null);
+let tokenEstimateRevision = 0;
 
 const dialog = ref<HTMLElement | null>(null);
 const floating = useFloatingSurface({
@@ -85,7 +91,19 @@ const floating = useFloatingSurface({
 	initialSize: { width: 760, height: 720 },
 	minSize: { width: 420, height: 420 },
 	zIndex: props.zIndex,
-	initialPosition: props.initialOffset.x || props.initialOffset.y ? { x: Math.max(8, Math.round(window.innerWidth / 2 - 380 + props.initialOffset.x)), y: Math.max(8, Math.round(window.innerHeight / 2 - 360 + props.initialOffset.y)) } : undefined,
+	initialPosition:
+		props.initialOffset.x || props.initialOffset.y
+			? {
+					x: Math.max(
+						8,
+						Math.round(window.innerWidth / 2 - 380 + props.initialOffset.x),
+					),
+					y: Math.max(
+						8,
+						Math.round(window.innerHeight / 2 - 360 + props.initialOffset.y),
+					),
+				}
+			: undefined,
 });
 const floatingStyle = computed(() => floating.style.value);
 
@@ -153,7 +171,9 @@ const slotMenu = computed(() => {
 		return world.slots.value
 			.filter((item) => item.parent === parent)
 			.map((item) => ({ slot: item, children: build(item.path) }))
-			.filter((item) => eligible.has(item.slot.path) || item.children.length > 0);
+			.filter(
+				(item) => eligible.has(item.slot.path) || item.children.length > 0,
+			);
 	}
 	return build();
 });
@@ -161,7 +181,6 @@ const slotMenu = computed(() => {
 const conditionLabel = computed(() =>
 	condition.value.trim() ? "已配置条件" : "配置条件",
 );
-
 
 function restoreDraft() {
 	if (!currentFile.value) return;
@@ -248,6 +267,16 @@ watch(
 	},
 	{ immediate: true },
 );
+
+watch(
+	[() => props.path, draft],
+	async ([path, content]) => {
+		const revision = ++tokenEstimateRevision;
+		const count = await estimateReferenceTokens(path, content);
+		if (revision === tokenEstimateRevision) referenceTokenCount.value = count;
+	},
+	{ immediate: true },
+);
 </script>
 
 <template>
@@ -321,6 +350,9 @@ watch(
             >
               <Crosshair class="size-3.5" />
             </Button>
+            <Button variant="ghost" size="icon-sm" class="size-7 rounded-lg text-muted-foreground hover:text-foreground" title="上下文调试器" @click="debuggerOpen = !debuggerOpen">
+              <Bug class="size-3.5" />
+            </Button>
 
             <!-- Condition Editor Popover -->
             <Popover>
@@ -363,16 +395,17 @@ watch(
         </header>
 
         <!-- Main Content Area -->
-        <main class="relative z-0 min-h-0 flex-1 overflow-hidden bg-background">
+        <main class="relative z-0 flex min-h-0 flex-1 overflow-hidden bg-background">
           <PluginResourceRenderer
             v-if="currentFile"
             :file="currentFile"
             :path="path"
             :model-value="draft"
             :preview="viewMode === 'preview'"
-            class="h-full"
+            class="h-full min-w-0 flex-1"
             @update:model-value="saveContent"
           />
+          <PluginContextDebugger :open="debuggerOpen" :path="path" :local-plugin-id="localPluginId" :conversation-id="conversationId" />
         </main>
 
         <!-- Footer -->
@@ -398,6 +431,9 @@ watch(
 
           <!-- Right: Priority and Slot Selector -->
           <div class="flex items-center gap-3">
+            <Tooltip v-if="referenceTokenCount !== null" content="本地参考值；递归展开、条件和插槽会改变实际 token 用量">
+              <span class="whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">≈ {{ referenceTokenCount.toLocaleString() }} tokens</span>
+            </Tooltip>
             <div class="flex min-w-0 items-center gap-1.5">
               <span class="text-[11px] text-muted-foreground">优先级</span>
               <Button
