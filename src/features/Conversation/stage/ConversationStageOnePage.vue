@@ -1,16 +1,9 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref, watch } from "vue";
-import {
-	cleanupAppLifetimeChats,
-	createChat,
-	loadChat,
-	loadChatsForLocalPlugin,
-} from "@/features/Conversation/chats/chat-service";
+import { computed, ref, watch } from "vue";
+import { loadChat } from "@/features/Conversation/chats/chat-service";
 import ChatComposer from "@/features/Conversation/composer/ChatComposer.vue";
-import ConversationHeader from "@/features/Conversation/header/ConversationHeader.vue";
 import ChatThread from "@/features/Conversation/messages/ChatThread.vue";
 import AskUserComponent from "@/features/Plugin/agent/components/AskUserComponent.vue";
-import { useLocalPluginStore } from "@/features/Plugin/local-plugin-store";
 import { providePluginWorldScope } from "@/features/Plugin/runtime/file-composables";
 import {
 	bringToFront as bringEditorToFront,
@@ -28,30 +21,11 @@ import { PanelLeft, X } from "lucide-vue-next";
 import PluginSlotComponents from "../panels/PluginSlotComponents.vue";
 import { usePanelEnvironment } from "../panels/panel-environment";
 
-const props = defineProps<{ chatId?: string }>();
-const emit = defineEmits<{ "update:chatId": [chatId: string] }>();
+const props = defineProps<{ chatId: string; assetToggleToken?: number }>();
 const ready = ref(false);
 const localPluginId = ref("");
-const localChatId = ref("");
-const localPlugins = useLocalPluginStore();
 const assetPanelOpen = ref(false);
 const leftPanelOpen = ref(false);
-
-function isMainConversationStartup() {
-	if (new URLSearchParams(window.location.search).has("subwindow")) return false;
-	try {
-		const key = "pulsarai:conversation-app-lifetime-cleaned";
-		if (sessionStorage.getItem(key)) return false;
-		sessionStorage.setItem(key, "1");
-		return true;
-	} catch {
-		return true;
-	}
-}
-const devExperimentOpen = ref(false);
-const DevStImportExperiment = import.meta.env.DEV
-	? defineAsyncComponent(() => import("@/features/Migrations/SillyTavern/import/DevStImportExperiment.vue"))
-	: null;
 const { left: leftPanelDirection, right: rightPanelDirection } = usePanelEnvironment();
 const conversationWorldScope = computed(() => ({ localPluginId: localPluginId.value, conversationId: chatId.value, applyReplay: true }));
 providePluginWorldScope(conversationWorldScope);
@@ -60,63 +34,28 @@ watch(locateRequest, (req) => {
 	if (req) assetPanelOpen.value = true;
 });
 
-const chatId = computed({
-	get: () => props.chatId ?? localChatId.value,
-	set: (value: string) => {
-		if (props.chatId === undefined) localChatId.value = value;
-		else emit("update:chatId", value);
-	},
-});
+const chatId = computed(() => props.chatId);
 
 watch(
 	chatId,
 	async (value) => {
+		ready.value = false;
 		if (!value) return;
 		const chat = await loadChat(value);
-		if (chat) localPluginId.value = chat.localPluginId;
+		if (!chat) return;
+		localPluginId.value = chat.localPluginId;
+		await initializeWorlds(localPluginId.value);
+		ready.value = true;
 	},
 	{ immediate: true },
 );
 
-onMounted(async () => {
-	// Session storage survives renderer reloads; a child window is never a start.
-	if (isMainConversationStartup()) {
-		await cleanupAppLifetimeChats();
-	}
-	await localPlugins.refresh();
-	const suppliedChat = chatId.value ? await loadChat(chatId.value) : null;
-	if (suppliedChat) {
-		localPluginId.value = suppliedChat.localPluginId;
-		await initializeWorlds(localPluginId.value);
-		ready.value = true;
-		return;
-	}
-	const firstPlugin = localPlugins.localPlugins[0] ?? (await localPlugins.create());
-	if (firstPlugin) {
-		localPluginId.value = firstPlugin.id;
-		const pkgChats = await loadChatsForLocalPlugin(firstPlugin.id);
-		const targetChat =
-			pkgChats[0] ?? (await createChat({ localPluginId: firstPlugin.id }));
-		chatId.value = targetChat.id;
-		await initializeWorlds(firstPlugin.id);
-	}
-	ready.value = true;
-});
-
-async function selectLocalPlugin(nextLocalPluginId: string) {
-	if (!nextLocalPluginId) return;
-	chatId.value = "";
-	localPluginId.value = nextLocalPluginId;
-	await initializeWorlds(nextLocalPluginId);
-	const pkgChats = await loadChatsForLocalPlugin(nextLocalPluginId);
-	const nextChat =
-		pkgChats[0] ?? (await createChat({ localPluginId: nextLocalPluginId }));
-	chatId.value = nextChat.id;
-}
-
 function toggleAssets() {
 	assetPanelOpen.value = !assetPanelOpen.value;
 }
+watch(() => props.assetToggleToken, (token, previous) => {
+	if (token && token !== previous) toggleAssets();
+});
 function openPluginFile(value: { file: WorldFileNode; path: string }) {
 	openEditorFile(value.file, value.path, localPluginId.value, chatId.value);
 }
@@ -124,9 +63,7 @@ function openPluginFile(value: { file: WorldFileNode; path: string }) {
 
 <template>
   <section class="relative flex h-full min-h-0 flex-col bg-background">
-    <ConversationHeader v-if="ready && localPluginId && chatId" :local-plugin-id="localPluginId" v-model:chat-id="chatId" :asset-open="assetPanelOpen" :dev-experiment="devExperimentOpen" @update:local-plugin-id="selectLocalPlugin" @toggle-assets="toggleAssets" @toggle-dev-experiment="devExperimentOpen = !devExperimentOpen" />
-    <component v-if="devExperimentOpen && DevStImportExperiment" :is="DevStImportExperiment" class="min-h-0 flex-1" />
-    <main v-else-if="ready && chatId" class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+    <main v-if="ready && chatId" class="relative flex min-h-0 flex-1 flex-col overflow-hidden">
       <!-- 左侧面板（宽屏常驻，窄屏可切换滑出） -->
       <PluginSlotComponents slot-id="panel-left" :direction="leftPanelDirection" class="absolute inset-y-0 left-4 z-10 hidden w-[calc((100%_-_724px)_/_2_-_1rem)] overflow-y-auto py-3 xl:flex" />
 

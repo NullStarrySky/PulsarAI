@@ -14,21 +14,21 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/fluid";
+import { toggleEditModeEvent } from "@/features/Conversation/actions";
+import { fileToMessagePart } from "@/features/Conversation/messages/message-attachment";
 import type {
 	ActionPart,
 	FilePart,
 	ReferencePart,
 } from "@/features/Conversation/messages/message-types";
-import { fileToMessagePart } from "@/features/Conversation/messages/message-attachment";
-import { removeMediaLink } from "@/features/Media/media-link";
-import { toggleEditModeEvent } from "@/features/Conversation/actions";
 import { useConversation } from "@/features/Conversation/use-conversation";
 import { useDefaultConfigStore } from "@/features/defaultConfigs/default-config-store";
+import { removeMediaLink } from "@/features/Media/media-link";
 import ModelSelect from "@/features/ModelConnection/components/ModelSelect.vue";
 import { compilePluginVueFile } from "@/features/Plugin/editors/vue/plugin-vue-runtime";
 import {
-	parsePluginModes,
 	type PluginMode,
+	parsePluginModes,
 } from "@/features/Plugin/runtime/mode-slot";
 import type { WorldResource } from "@/features/Plugin/tree/world-store";
 import { useWorld } from "@/features/Plugin/tree/world-store";

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Notification, Notivue } from "notivue";
 import { onBeforeUnmount, onMounted } from "vue";
-import ConversationStageOnePage from "@/features/Conversation/stage/ConversationStageOnePage.vue";
+import Todo from "@/features/Conversation/stage/todo.vue";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useHotkeyStore } from "@/features/Hotkey/hotkey-store";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
@@ -45,7 +45,7 @@ onBeforeUnmount(() => {
       class="min-h-0 flex-1"
       :class="appearance.zenFrameEnabled && 'overflow-hidden rounded-xl border border-zen-frame-border/80 bg-background shadow-sm mobile:rounded-lg'"
     >
-      <ConversationStageOnePage />
+      <Todo />
     </div>
     <SettingsDialog />
     <CommandSearchDialog />
