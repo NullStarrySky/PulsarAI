@@ -1,10 +1,8 @@
 import {
-	BarChart3,
 	Brain,
 	BookOpen,
 	CreditCard,
 	Globe,
-	History,
 	ImageIcon,
 	Info,
 	Keyboard,
@@ -16,7 +14,6 @@ import {
 	Volume2,
 } from "lucide-vue-next";
 import type { Component } from "vue";
-import BackupSettingsPage from "@/features/Backup/BackupSettingsPage.vue";
 import DefaultConfigSettingsPage from "@/features/defaultConfigs/DefaultConfigSettingsPage.vue";
 import BuiltInDocsPage from "@/features/Docs/BuiltInDocsPage.vue";
 import HotkeySettingsPage from "@/features/Hotkey/HotkeySettingsPage.vue";
@@ -25,13 +22,11 @@ import RuntimeSettingsPage from "@/features/Misc/RuntimeSettingsPage.vue";
 import ModelProviderSettingsPage from "@/features/ModelConnection/components/ModelProviderSettingsPage.vue";
 import AboutSettingsPage from "@/features/Setting/components/pages/AboutSettingsPage.vue";
 import SttSettingsPage from "@/features/STT/SttSettingsPage.vue";
-import StatisticSettingsPage from "@/features/Statistic/StatisticSettingsPage.vue";
 import TranslateSettingsPage from "@/features/Translate/TranslateSettingsPage.vue";
 import TtsSettingsPage from "@/features/TTS/TtsSettingsPage.vue";
 import AppearanceSettingsPage from "@/features/UI/components/AppearanceSettingsPage.vue";
 import WebSearchSettingsPage from "@/features/WebSearch/WebSearchSettingsPage.vue";
 import ConversationFavoriteSettingsPage from "./components/pages/ConversationFavoriteSettingsPage.vue";
-import ConversationPanelSettingsPage from "@/features/Conversation/panels/ConversationPanelSettingsPage.vue";
 import GeneralSettingsPage from "./components/pages/GeneralSettingsPage.vue";
 import SubscriptionSettingsPage from "./components/pages/SubscriptionSettingsPage.vue";
 
@@ -119,20 +114,8 @@ export function ensureDefaultSettingPages() {
 		component: ConversationFavoriteSettingsPage,
 	});
 	registerSettingPage({
-		meta: { id: "conversation.panels", icon: Settings, title: "会话面板" },
-		component: ConversationPanelSettingsPage,
-	});
-	registerSettingPage({
 		meta: { id: "account.subscription", icon: CreditCard, title: "订阅方案" },
 		component: SubscriptionSettingsPage,
-	});
-	registerSettingPage({
-		meta: { id: "data.backup", icon: History, title: "版本管理" },
-		component: BackupSettingsPage,
-	});
-	registerSettingPage({
-		meta: { id: "data.statistic", icon: BarChart3, title: "数据统计" },
-		component: StatisticSettingsPage,
 	});
 	registerSettingPage({
 		meta: { id: "docs.builtin", icon: BookOpen, title: "内置文档" },

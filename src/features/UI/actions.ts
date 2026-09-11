@@ -8,8 +8,8 @@ import {
 } from "lucide-vue-next";
 import {
 	resetCharacterDataAction,
-	toggleEditModeAction,
-} from "@/features/Conversation/actions";
+} from "@/features/Conversation/clear-data";
+import { toggleEditModeAction } from "@/features/Conversation/dataflow/activePathComposable";
 import {
 	type CommandDefinition,
 	useCommandStore,

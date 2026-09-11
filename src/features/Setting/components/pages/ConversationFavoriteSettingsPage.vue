@@ -7,7 +7,7 @@ import {
 	Star,
 	UserRound,
 } from "lucide-vue-next";
-import { computed, onMounted, ref, shallowRef } from "vue";
+import { computed, ref } from "vue";
 import { Button } from "@/components/fluid";
 import {
 	Empty,
@@ -16,29 +16,22 @@ import {
 	EmptyMedia,
 	EmptyTitle,
 } from "@/components/ui/empty";
-import type {
-	ChatMessage,
-	ChatMessageContainer,
-} from "@/features/Conversation/messages/message-types";
-import type { Conversation } from "@/features/Conversation/chats/chat-types";
-import { selectAllChats } from "@/features/Conversation/chats/chat-service";
-import {
-	persistContainer,
-	selectAllContainers,
-} from "@/features/Conversation/messages/message-service";
+import type { ChatContainer, ChatMessage, ChatMeta } from "@/features/Conversation/dataflow/types";
+import { useSyncStore } from "@/features/Database/dbsync-store";
 import SettingPage from "@/features/Setting/components/SettingPage.vue";
 import { useLayoutStore } from "@/features/UI/layout-store";
 
 interface FavoriteMessageEntry {
-	conversation: Conversation;
-	container: ChatMessageContainer;
+	conversation: ChatMeta;
+	container: ChatContainer;
 	message: ChatMessage;
 	messageIndex: number;
 	containerOrder: number;
 }
 
-const allChats = shallowRef<Conversation[]>([]);
-const allContainers = shallowRef<ChatMessageContainer[]>([]);
+const dbsync = useSyncStore();
+const allChats = computed(() => [...dbsync.chatMeta.values()].flatMap(items => [...items.values()]));
+const allContainers = computed(() => [...dbsync.containers.values()].flatMap(items => [...items]));
 const layout = useLayoutStore();
 const navigatingId = ref("");
 
@@ -68,12 +61,7 @@ const favorites = computed<FavoriteMessageEntry[]>(() => {
 		);
 });
 
-onMounted(async () => {
-	allChats.value = await selectAllChats();
-	allContainers.value = await selectAllContainers();
-});
-
-function roleLabel(container: ChatMessageContainer) {
+function roleLabel(container: ChatContainer) {
 	if (container.role === "user") return "用户";
 	if (container.role === "system") return "系统";
 	return "助手";
@@ -96,7 +84,7 @@ async function openFavorite(entry: FavoriteMessageEntry) {
 	navigatingId.value = entry.message.id;
 	try {
 		entry.container.activeMessage = entry.messageIndex;
-		await persistContainer(entry.container);
+		dbsync.markDirty({ type: "container", id: entry.container.id });
 		layout.closeSettings();
 	} finally {
 		navigatingId.value = "";

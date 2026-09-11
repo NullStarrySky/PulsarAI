@@ -1,226 +1,25 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { MarkdownRender } from "markstream-vue";
-import { computed, ref, watch } from "vue";
-import { mediaLink, resolveMediaUrl } from "@/features/Media/media-link";
 import "markstream-vue/index.css";
 import "katex/dist/katex.min.css";
 
-interface ConversationMarkdownSelection {
-	from: number;
-	to: number;
-	text: string;
-}
-
-const props = withDefaults(
-	defineProps<{
-		modelValue: string;
-		compact?: boolean;
-		mode?: "chat" | "docs";
-	}>(),
-	{
-		modelValue: "",
-		compact: false,
-		mode: undefined,
-	},
-);
-
-const emit = defineEmits<{
-	annotate: [selection: ConversationMarkdownSelection];
-}>();
-
-const activeMode = computed(
-	() => props.mode || (props.compact ? "chat" : "docs"),
-);
-
-const codeBlockProps = computed(() => ({
-	theme: {
-		light: "vitesse-dark",
-		dark: "vitesse-dark",
-	},
-}));
-
-const isDark = computed(() => {
-	if (typeof document === "undefined") return true;
-	return document.documentElement.classList.contains("dark");
-});
-
-interface MarkdownSegment {
-	type: "markdown" | "vue";
-	content: string;
-	filename?: string;
-}
-
-const vueReferencePattern = /<([A-Za-z0-9][A-Za-z0-9._-]*\.vue)\s*\/>/gi;
-const mediaReferencePattern = /media:\/\/([0-9a-f-]{36})/gi;
-const renderedContent = ref("");
-let contentRevision = 0;
-
-watch(
-	() => props.modelValue,
-	async (value) => {
-		const revision = ++contentRevision;
-		const ids = [...new Set([...value.matchAll(mediaReferencePattern)].map((match) => match[1]!))];
-		const urls = new Map(
-			await Promise.all(ids.map(async (id) => [mediaLink(id), await resolveMediaUrl(mediaLink(id))] as const)),
-		);
-		if (revision !== contentRevision) return;
-		renderedContent.value = value.replace(mediaReferencePattern, (source, id) =>
-			urls.get(mediaLink(id)) ?? source,
-		);
-	},
-	{ immediate: true },
-);
-
-const segments = computed<MarkdownSegment[]>(() => {
-	const text = renderedContent.value;
-	if (!text) return [];
-	const result: MarkdownSegment[] = [];
-	let lastIndex = 0;
-	let match: RegExpExecArray | null;
-
-	vueReferencePattern.lastIndex = 0;
-	while ((match = vueReferencePattern.exec(text)) !== null) {
-		if (match.index > lastIndex) {
-			result.push({
-				type: "markdown",
-				content: text.slice(lastIndex, match.index),
-			});
-		}
-		result.push({
-			type: "vue",
-			content: match[0],
-			filename: match[1],
-		});
-		lastIndex = vueReferencePattern.lastIndex;
-	}
-
-	if (lastIndex < text.length) {
-		result.push({
-			type: "markdown",
-			content: text.slice(lastIndex),
-		});
-	}
-
-	return result;
-});
-
-function getVueComponent(filename?: string) {
-	return filename ? null : null;
-}
-
-function handleContextMenu(event: MouseEvent) {
-	const selectionObj = window.getSelection();
-	if (!selectionObj || selectionObj.isCollapsed) return;
-	const text = selectionObj.toString().trim();
-	if (!text) return;
-	event.preventDefault();
-	emit("annotate", {
-		from: 0,
-		to: text.length,
-		text,
-	});
-}
+const props = withDefaults(defineProps<{ content: string; compact?: boolean }>(), { compact: false });
+const dark = computed(() => typeof document === "undefined" || document.documentElement.classList.contains("dark"));
 </script>
 
 <template>
-  <div
-    class="conversation-markstream markstream-vue w-full min-w-0"
-    :class="{ 'conversation-markstream--compact': props.compact }"
-    :data-mode="activeMode"
-    @contextmenu="handleContextMenu"
-  >
-    <template v-for="(segment, idx) in segments" :key="idx">
-      <MarkdownRender
-        v-if="segment.type === 'markdown'"
-        :content="segment.content"
-        :mode="activeMode"
-        :is-dark="isDark"
-        :code-block-props="codeBlockProps"
-        :custom-id="`msg-render-${idx}`"
-        class="w-full min-w-0"
-      />
-      <div v-else-if="segment.type === 'vue'" class="pulsar-vue-reference my-2">
-        <component :is="getVueComponent(segment.filename)" />
-      </div>
-    </template>
-  </div>
+  <MarkdownRender
+    :content="props.content"
+    :mode="props.compact ? 'chat' : 'docs'"
+    :is-dark="dark"
+    :code-block-props="{ theme: { light: 'vitesse-dark', dark: 'vitesse-dark' } }"
+    class="conversation-markstream w-full min-w-0"
+  />
 </template>
 
 <style>
-.conversation-markstream.markstream-vue,
-.conversation-markstream .markstream-vue {
-  --ms-text-body: var(--editor-font-size, 14px) !important;
-  --ms-leading-body: var(--editor-line-height, 1.5) !important;
-  --ms-flow-paragraph-y: 0.5em !important;
-  --ms-font-sans: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
-  --ms-font-mono: var(--font-mono, var(--font-code, ui-monospace, SFMono-Regular, Consolas, monospace));
-  color: var(--foreground);
-}
-
-.conversation-markstream .paragraph-node,
-.conversation-markstream p {
-  font-size: var(--ms-text-body) !important;
-  line-height: var(--ms-leading-body) !important;
-}
-
-.conversation-markstream .paragraph-node:first-child,
-.conversation-markstream p:first-child {
-  margin-top: 0 !important;
-}
-
-.conversation-markstream .paragraph-node:last-child,
-.conversation-markstream p:last-child {
-  margin-bottom: 0 !important;
-}
-
-.conversation-markstream--compact {
-  --ms-flow-paragraph-y: 0.35em;
-  --ms-flow-list-y: 0.25em;
-  --ms-flow-list-item-y: 0.1em;
-  --ms-flow-heading-1-mt: 0.4em;
-  --ms-flow-heading-1-mb: 0.3em;
-  --ms-flow-heading-2-mt: 0.5em;
-  --ms-flow-heading-2-mb: 0.25em;
-  --ms-flow-heading-3-mt: 0.4em;
-  --ms-flow-heading-3-mb: 0.2em;
-  --ms-flow-codeblock-y: 0.4em;
-  --ms-flow-table-y: 0.4em;
-  --ms-flow-diagram-y: 0.4em;
-  --ms-flow-blockquote-y: 0.4em;
-}
-
-.conversation-markstream pre,
-.conversation-markstream .code-block-container,
-.conversation-markstream .table-node-wrapper,
-.conversation-markstream .mermaid,
-.conversation-markstream .d2-node-wrapper {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: auto;
-}
-
-.conversation-markstream img {
-  max-width: 100%;
-  height: auto;
-  border-radius: var(--radius);
-}
-
-.conversation-markstream .katex-display {
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 0.25rem 0;
-  margin: 0.5em 0;
-}
-
-.pulsar-vue-reference {
-  margin: 0.5rem 0;
-}
-
-.pulsar-vue-reference-error {
-  border: 1px dashed var(--border);
-  border-radius: var(--radius);
-  color: var(--muted-foreground);
-  font-size: 0.875rem;
-  padding: 0.75rem;
-}
+.conversation-markstream { --ms-text-body: var(--editor-font-size, 14px) !important; --ms-leading-body: var(--editor-line-height, 1.5) !important; --ms-font-sans: var(--font-sans, sans-serif); --ms-font-mono: var(--font-mono, monospace); color: var(--foreground); }
+.conversation-markstream pre, .conversation-markstream .code-block-container, .conversation-markstream .table-node-wrapper { max-width: 100%; overflow-x: auto; }
+.conversation-markstream img { max-width: 100%; height: auto; border-radius: var(--radius); }
 </style>
