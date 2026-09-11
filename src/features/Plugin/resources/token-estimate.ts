@@ -1,10 +1,10 @@
-const TOKENIZED_TEXT_FILE =
+const tokenizedTextFile =
 	/(?:\.(?:md|txt|json|js|ts|vue|css|html|xml|ya?ml|toml)|(?:^|\/)AGENTS\.md)$/i;
 
 let encoderPromise: Promise<import("tiktoken").Tiktoken> | null = null;
 
 export function supportsReferenceTokenEstimate(path: string) {
-	return TOKENIZED_TEXT_FILE.test(path);
+	return tokenizedTextFile.test(path);
 }
 
 export async function estimateReferenceTokens(path: string, content: string) {

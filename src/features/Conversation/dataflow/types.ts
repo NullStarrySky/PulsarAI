@@ -1,3 +1,5 @@
+import type { Pulse } from "@/features/Plugin/dataflow";
+
 export type Role = "user" | "assistant" | "system";
 
 export interface FilePart {
@@ -46,10 +48,11 @@ export interface TokenUsage {
 	outputTokens?: number;
 	totalTokens?: number;
 }
+
 export interface MessageMeta {
 	steps: Array<ThinkingStep | ToolCallStep | ToolCallResult>;
 	intervalOperations?: import("./activePathComposable/interval-services").IntervalOperation[];
-	pulses?: unknown[];
+	pulses?: Pulse[];
 	generateInfo?: {
 		modelName?: string;
 		startTime?: string;
@@ -116,11 +119,6 @@ export interface CharacterData {
 	description?: string;
 	avatarUrl?: string;
 	coverUrl?: string;
-}
-
-export interface PluginData {
-	id: string;
-	root: unknown;
 }
 
 export function createDraft(conversationid = ""): ChatContainer {

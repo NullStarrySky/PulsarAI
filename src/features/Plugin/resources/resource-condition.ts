@@ -37,7 +37,10 @@ function parseRegex(value: string) {
 	const closingSlash = value.lastIndexOf("/");
 	if (closingSlash <= 0) return null;
 	try {
-		return new RegExp(value.slice(1, closingSlash), value.slice(closingSlash + 1));
+		return new RegExp(
+			value.slice(1, closingSlash),
+			value.slice(closingSlash + 1),
+		);
 	} catch {
 		return null;
 	}

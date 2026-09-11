@@ -12,7 +12,7 @@ import type {
 	TokenUsage,
 	ToolCallResult,
 	ToolCallStep,
-} from "@/features/Conversation/messages/message-types";
+} from "@/features/Conversation/dataflow/types";
 
 import { getDefaultChatModel } from "@/features/defaultConfigs/default-config-service";
 import type { ReasoningEffort } from "@/features/ModelConnection/model-reference";
@@ -87,13 +87,13 @@ const codeActInstructions = [
 	"Use normal text only for the final user-facing answer after the necessary tool calls are complete.",
 	"Submit one JavaScript function in the form `async function () { ... return value; }`.",
 	"The function must contain an explicit return. Use only APIs documented in the current context.",
-	"Return plain serializable data. Preserve resource `id` and `path` when later calls may need to follow the result.",
+	"Return plain serializable data. Preserve resource paths when later calls may need to follow the result.",
 	"To delegate a bounded task, call `await generate({ plugin?, environment?, prompt })` inside the function. It returns the child agent's final text; the default plugin is the blank no-template process and an omitted environment uses an in-memory temporary conversation.",
 	"Plugin tool functions, when their prompt is present in the compiled context, are ordinary functions directly on ctx. Call the documented function name inside codeAct.",
-	"Inspect World slot contracts with `slot.list()` / `get()`. `slot.paths('/self/slot/<name>')` returns selected resource paths; pass them to `await parse(...)` for recursive macro expansion. A chat resource returns pure message[] without authoring labels or disabled entries.",
+	"Inspect slot contracts with `slot.list()` / `get()`. `slot.paths('<name>')` returns selected resource paths; pass them to `await parse(...)` for recursive macro expansion. A chat resource returns pure message[] without authoring labels or disabled entries.",
 	"World write/edit/mkdir/move/remove and writable .data wrapper operations update the current message-bound World immediately. A resource contributes to its referenced slot only when it is selected; files stay directly readable either way.",
-	"World paths use `/self/path` for package-local files and `/global/<source-folder>/path` for shared files. In source code, `@/path` remains local to the source folder. Use open(path), close(path), or toggle(path) only for resources, never folders or slots.",
-	"Read and update .data through its documented wrapper facade when possible, or use data.readForResource(resourceId, dataId) and data.writeForResource(resourceId, dataId, value). Persisted data values must remain pure JSON.",
+	"Resource paths beginning with `/` address the local tree; `/global/<source-folder>/path` addresses a shared source. In source code, `@/path` remains local to the source folder. Use open(path), close(path), or toggle(path) only for resources, never folders or slots.",
+	"Read and update .data through its documented wrapper facade when possible. Persisted data values must remain pure JSON.",
 	"The tool result contains either `{ ok: true, value }` or `{ ok: false, error }`; inspect errors and correct the next function.",
 ].join("\n");
 

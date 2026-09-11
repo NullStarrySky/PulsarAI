@@ -1,6 +1,7 @@
 import { computed } from "vue";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import { mediaLinks, removeMediaLink } from "@/features/Media/media-link";
+import { type Pulse, usePluginData } from "@/features/Plugin/dataflow";
 import { isChatGenerating, setChatGeneration, useChat } from "../chats";
 import { useContainerVersion } from "../containerComposable";
 import { usePureContainers } from "../containers";
@@ -14,13 +15,27 @@ import { evaluateIntervals } from "./interval-services";
 import {
 	createContainer,
 	currentMessage,
+	modelMessagesFromPath,
 	pathForTail,
 } from "./message-service";
 
 export interface ReplayGroup {
 	container: ChatContainer;
 	version: ChatMessage;
-	pulses: unknown[];
+	pulses: Pulse[];
+}
+
+/** A message version is the sole durable owner of its resource Pulses. */
+export function applyVersionPulse(
+	container: ChatContainer,
+	version: ChatMessage,
+	pulse: Pulse,
+) {
+	if (!container.content.some((candidate) => candidate.id === version.id))
+		throw new Error("Pulse 必须绑定到消息容器中的具体版本。");
+	version.meta.pulses ??= [];
+	version.meta.pulses.push(pulse);
+	useSyncStore().markDirty({ type: "container", id: container.id });
 }
 
 export const toggleEditModeEvent = "pulsarai:conversation-toggle-edit-mode";
@@ -46,6 +61,29 @@ export function useActivePathComposable(chatId: string) {
 				: [];
 		}),
 	);
+	const replayPulses = computed(() =>
+		replayGroups.value.map((group) => group.pulses),
+	);
+	function forVersion(container: ChatContainer, version: ChatMessage) {
+		if (container.conversationid !== chatId)
+			throw new Error("消息版本不属于当前会话。");
+		const groups = computed(() =>
+			pathForTail(collection.containers.value, container.id).map((item) => {
+				const message =
+					item.id === container.id ? version : currentMessage(item);
+				return message?.meta.pulses ?? [];
+			}),
+		);
+		const filetree = usePluginData(
+			() => chat.value?.localPluginId ?? "",
+			groups,
+		);
+		return {
+			filetree,
+			applyPulse: (pulse: Pulse) =>
+				applyVersionPulse(container, version, pulse),
+		};
+	}
 	const editMode = computed(
 		() =>
 			intervals.value.openIntervals.find(
@@ -156,12 +194,36 @@ export function useActivePathComposable(chatId: string) {
 				target.container.previousContainer,
 			);
 			const prompt = currentMessage(path[path.length - 1])?.content ?? "";
+			const workspace = forVersion(target.container, target.message);
 			const { runWorld } = await import("@/features/Plugin/runtime/run-api");
 			await runWorld({
 				conversationId: current.id,
-				containerId: target.container.id,
-				messageId: target.message.id,
+				container: target.container,
+				message: target.message,
 				prompt,
+				chat: await modelMessagesFromPath(path),
+				filetree: workspace.filetree,
+				applyPulse: workspace.applyPulse,
+				context: {
+					conversation: current,
+					input: {
+						read: () => currentMessage(current.composerDraft)?.content ?? "",
+						write: (content: string) => {
+							const draft = currentMessage(current.composerDraft);
+							if (!draft) return;
+							draft.content = content;
+							store.markDirty({ type: "meta", id: current.id });
+						},
+						edit: (find: string, replace: string) => {
+							const draft = currentMessage(current.composerDraft);
+							if (!draft || !find || !draft.content.includes(find))
+								return false;
+							draft.content = draft.content.replace(find, replace);
+							store.markDirty({ type: "meta", id: current.id });
+							return true;
+						},
+					},
+				},
 			});
 		} catch (error) {
 			target.message.type = "error";
@@ -279,6 +341,8 @@ export function useActivePathComposable(chatId: string) {
 		activePath,
 		intervals,
 		replayGroups,
+		replayPulses,
+		forVersion,
 		editMode: { active: editMode, toggle: toggleEditMode },
 		draft,
 		generating,

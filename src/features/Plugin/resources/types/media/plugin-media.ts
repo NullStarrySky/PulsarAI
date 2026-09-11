@@ -30,9 +30,15 @@ export function pluginMediaType(
 	}
 
 	const normalized = source.split(/[?#]/, 1)[0]?.toLowerCase() ?? "";
-	if (normalized.startsWith("data:audio/") || /\.(mp3|wav|m4a|aac|flac|opus)$/.test(normalized)) return "audio";
-	return normalized.startsWith("data:video/") || /\.(mp4|webm|ogv|ogg|mov|m4v)$/.test(normalized)
-		? "video" : "image";
+	if (
+		normalized.startsWith("data:audio/") ||
+		/\.(mp3|wav|m4a|aac|flac|opus)$/.test(normalized)
+	)
+		return "audio";
+	return normalized.startsWith("data:video/") ||
+		/\.(mp4|webm|ogv|ogg|mov|m4v)$/.test(normalized)
+		? "video"
+		: "image";
 }
 
 export function createPluginMediaContent(

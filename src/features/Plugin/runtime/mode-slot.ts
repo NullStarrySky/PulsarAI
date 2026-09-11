@@ -1,4 +1,5 @@
-import type { WorldResource } from "../tree/world-store";
+import { computed } from "vue";
+import { type UseSlotOptions, useSlot } from "../dataflow/use-slot";
 
 export interface PluginMode {
 	id: string;
@@ -9,34 +10,39 @@ export interface PluginMode {
 	resourcePath: string;
 }
 
-export function parsePluginModes(resources: WorldResource[]): PluginMode[] {
-	return resources.flatMap((resource) => {
-		try {
-			const value =
-				typeof resource.file.content === "string"
-					? JSON.parse(resource.file.content)
-					: resource.file.content;
-			if (!value || typeof value !== "object") return [];
-			const mode = value as Record<string, unknown>;
-			const id = String(mode.id ?? resource.file.id).trim();
-			const name = String(
-				mode.name ?? resource.file.name.replace(/\.json$/i, ""),
-			).trim();
-			if (!id || !name) return [];
-			return [
-				{
-					id,
-					name,
-					resourcePath: resource.path,
-					...(typeof mode.description === "string"
-						? { description: mode.description }
-						: {}),
-					...(typeof mode.enter === "string" ? { enter: mode.enter } : {}),
-					...(typeof mode.exit === "string" ? { exit: mode.exit } : {}),
-				},
-			];
-		} catch {
-			return [];
-		}
-	});
+/** MODE is now just the selected JSON files of the ordinary slot registry. */
+export function usePluginModes(options: UseSlotOptions) {
+	const slots = useSlot(options);
+	return computed<PluginMode[]>(() =>
+		slots.paths("MODE").flatMap((resourcePath) => {
+			try {
+				const value = JSON.parse(slots.read(resourcePath)) as Record<
+					string,
+					unknown
+				>;
+				const name = String(
+					value.name ??
+						resourcePath
+							.split("/")
+							.at(-1)
+							?.replace(/\.json$/i, ""),
+				).trim();
+				if (!name) return [];
+				return [
+					{
+						id: String(value.id ?? resourcePath).trim(),
+						name,
+						resourcePath,
+						...(typeof value.description === "string"
+							? { description: value.description }
+							: {}),
+						...(typeof value.enter === "string" ? { enter: value.enter } : {}),
+						...(typeof value.exit === "string" ? { exit: value.exit } : {}),
+					},
+				];
+			} catch {
+				return [];
+			}
+		}),
+	);
 }

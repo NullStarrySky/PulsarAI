@@ -19,7 +19,7 @@ import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
 	oneDarkPro,
 	oneDarkProColors,
-} from "@/features/Plugin/editors/javascript/one-dark-pro-theme";
+} from "@/features/Plugin/resources/types/javascript/one-dark-pro-theme";
 
 const props = withDefaults(
 	defineProps<{

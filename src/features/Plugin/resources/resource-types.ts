@@ -1,16 +1,16 @@
 import {
-	type WorldFileNode,
-	type WorldFileType,
-	worldFileType,
-} from "@/features/Plugin/tree/world-types";
+	type FileMeta,
+	type PluginResourceType,
+	type ResourcePath,
+	resourceType as resourceTypeForPath,
+} from "../dataflow/types";
 
-export type PluginResourceType = WorldFileType;
 type PluginResourceValue = string | ArrayBuffer;
 
-export type ResourceFile = Pick<
-	WorldFileNode,
-	"id" | "name" | "content" | "condition" | "conditionEnabled"
->;
+export interface ResourceFile extends FileMeta {
+	path: ResourcePath;
+	content: string;
+}
 
 export interface PluginResource {
 	file: ResourceFile;
@@ -20,26 +20,13 @@ export interface PluginResource {
 }
 
 export function resourceType(file: ResourceFile): PluginResourceType {
-	return worldFileType(file.name);
+	return resourceTypeForPath(file.path);
 }
 
 export function textContent(file: ResourceFile): string {
-	if (typeof file.content === "string") return file.content;
-	return JSON.stringify(file.content ?? null, null, 2);
+	return file.content;
 }
 
 export function binaryContent(file: ResourceFile): ArrayBuffer {
-	const source = file.content;
-	if (source instanceof ArrayBuffer)
-		return Uint8Array.from(new Uint8Array(source)).buffer;
-	if (ArrayBuffer.isView(source)) {
-		return Uint8Array.from(
-			new Uint8Array(source.buffer, source.byteOffset, source.byteLength),
-		).buffer;
-	}
-	// Persisted media currently keeps an URL/string payload.  Encoding preserves
-	// the byte-oriented API until the database media backend supplies raw bytes.
-	return new TextEncoder().encode(
-		typeof source === "string" ? source : JSON.stringify(source ?? null),
-	).buffer;
+	return new TextEncoder().encode(file.content).buffer;
 }

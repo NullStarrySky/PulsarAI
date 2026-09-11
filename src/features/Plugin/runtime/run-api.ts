@@ -1,90 +1,128 @@
-import { loadChat } from "@/features/Conversation/chats/chat-service";
-import type { Role } from "@/features/Conversation/messages/message-types";
-import {
-	type CtxBuilderConfig,
-	ctxbuilder,
-} from "@/features/Plugin/runtime/ctx-builder";
-import { useWorld } from "@/features/Plugin/tree/world-store";
+import type { ModelMessage } from "ai";
+import type { MaybeRefOrGetter } from "vue";
+import type {
+	ChatContainer,
+	ChatMessage,
+	TokenUsage,
+} from "@/features/Conversation/dataflow/types";
+import { useSyncStore } from "@/features/Database/dbsync-store";
 import type { SandboxEnvironment } from "@/features/Sandbox/sandbox";
+import type { AgentOutputContainer } from "../agent/runtime/default-agent";
+import { createAgentResourceProvider } from "../agent/runtime/default-agent";
+import type { PluginData, Pulse, ResourcePath } from "../dataflow/types";
+import { parsePluginDataDefinition } from "../resources/types/data/plugin-data";
+import { createPluginEnvironment } from "./environment";
+import type { PluginLogger } from "./logger";
 
 export interface RunWorldInput {
-	/** Selected generation container resource in the complete world. */
-	entryPath?: string;
 	conversationId: string;
-	/** Local Plugin ID. When supplied it must own the conversation. */
-	roleId?: string;
-	role?: Role;
-	containerId?: string;
-	messageId?: string;
-	prompt?: string;
-	/** Extra opt-in features for a nonstandard Plugin entry point. */
-	features?: Omit<
-		CtxBuilderConfig,
-		"chat" | "message" | "plugin" | "toolFunction"
-	>;
+	container: ChatContainer;
+	message: ChatMessage;
+	prompt: string;
+	chat: ModelMessage[];
+	filetree: MaybeRefOrGetter<PluginData | null>;
+	applyPulse: (pulse: Pulse) => void;
+	context?: SandboxEnvironment;
+	entryPath?: ResourcePath;
 }
 
 export interface RunWorldResult {
 	context: SandboxEnvironment;
-	containerId: string;
-	messageId: string;
-	flush: () => Promise<void>;
+	entryPath: ResourcePath;
+	logger: PluginLogger;
 }
 
-/**
- * Runs a Plugin's selected generatePath inside a message-version-bound
- * workspace. Conversation supplies lifecycle/error presentation only.
- */
-export async function runWorld(input: RunWorldInput): Promise<RunWorldResult> {
-	const chat = await loadChat(input.conversationId);
-
-	if (!chat) throw new Error("会话不存在。");
-	if (input.roleId && input.roleId !== chat.localPluginId)
-		throw new Error("角色不属于该会话。");
-
-	const world = useWorld({ localPluginId: chat.localPluginId, conversationId: input.conversationId });
-	const entryPath =
-		input.entryPath ??
-		world.slots.value.find((slot) => slot.id === "generatePath")?.resources[0]
-			?.path;
-	if (!entryPath) throw new Error("World 没有选中的生成入口。");
-	const target = world.resolve(entryPath);
-	if (target.node.type !== "file")
-		throw new Error(`生成入口不存在：${entryPath}`);
-
-	const context: SandboxEnvironment = {
-		conversationId: chat.id,
-		sourcePath: entryPath,
-		roleId: input.roleId ?? chat.localPluginId,
-		prompt: input.prompt ?? "",
-		now: () => new Date().toISOString(),
-	};
-	const built = await ctxbuilder(context, {
-		chat: true,
-		conversation: true,
-		role: true,
-		input: true,
-		message: {
-			containerId: input.containerId,
-			messageId: input.messageId,
-			role: input.role ?? "assistant",
-			create: !input.containerId,
+function createReply(container: ChatContainer, message: ChatMessage) {
+	const store = useSyncStore();
+	const persist = () =>
+		store.markDirty({ type: "container", id: container.id });
+	const reply: AgentOutputContainer & Record<string, unknown> = {
+		read: () => ({
+			container: structuredClone(container),
+			message: structuredClone(message),
+		}),
+		setContent: async (content: string) => {
+			message.content = content;
+			persist();
 		},
-		plugin: true,
-		toolFunction: true,
-		...input.features,
-	});
-	if (!built.container || !built.message || !built.selfApi)
-		throw new Error("runWorld 未获得消息绑定的 World 环境。");
-	try {
-		await built.selfApi.import(entryPath, context);
-	} finally {
-		await built.flush();
-	}
-	return {
-		context,
-		containerId: built.container.id,
-		messageId: built.message.id,
-		flush: built.flush,
+		clear: async () => {
+			message.type = "message";
+			message.content = "";
+			message.parts = [];
+			message.meta.steps = [];
+			persist();
+		},
+		setModelName: async (modelName: string) => {
+			message.meta.generateInfo ??= { startTime: new Date().toISOString() };
+			message.meta.generateInfo.modelName = modelName;
+			persist();
+		},
+		setTokenUsage: async (usage: TokenUsage) => {
+			message.meta.generateInfo ??= {};
+			message.meta.generateInfo.usage = usage;
+			message.meta.generateInfo.finishTime = new Date().toISOString();
+			persist();
+		},
+		appendContent: async (delta: string) => {
+			message.content += delta;
+			persist();
+		},
+		addStep: async (step) => {
+			message.meta.steps.push(structuredClone(step));
+			persist();
+		},
+		updateThinking: async (id: string, content: string) => {
+			const step = message.meta.steps.find(
+				(candidate) => candidate.type === "thinking" && candidate.id === id,
+			);
+			if (step?.type === "thinking") step.message = content;
+			persist();
+		},
+		completeToolCall: async (result) => {
+			const index = message.meta.steps.findIndex(
+				(step) =>
+					step.type === "tool-call" && step.toolCallId === result.toolCallId,
+			);
+			if (index < 0) message.meta.steps.push(structuredClone(result));
+			else message.meta.steps.splice(index, 1, structuredClone(result));
+			persist();
+		},
 	};
+	return reply;
+}
+
+/** Runs the selected source against the exact message-version replay projection. */
+export async function runWorld(input: RunWorldInput): Promise<RunWorldResult> {
+	const reply = createReply(input.container, input.message);
+	const built = createPluginEnvironment({
+		filetree: input.filetree,
+		applyPulse: input.applyPulse,
+		sourcePath: input.entryPath ?? "/global/builtin-core-plugin/generate.js",
+		context: {
+			...input.context,
+			conversationId: input.conversationId,
+			prompt: input.prompt,
+			chat: input.chat,
+			CHAT: input.chat,
+			container: input.container,
+			message: input.message,
+			reply,
+		},
+	});
+	const entryPath = input.entryPath ?? built.slots.paths("generatePath")[0];
+	if (!entryPath) throw new Error("没有已选中的生成流程。");
+	built.environment.sourcePath = entryPath;
+	built.registerCustomTools();
+	for (const path of built.slots.paths("DATA_INJECT")) {
+		const definition = parsePluginDataDefinition(built.files.read(path));
+		const name = definition.varName?.trim();
+		if (!name) continue;
+		if (name in built.environment) throw new Error(`数据变量名冲突：${name}`);
+		built.environment[name] = await built.importAt(path, entryPath);
+	}
+	const agent = createAgentResourceProvider({ environment: built.environment });
+	built.environment.agent = agent;
+	built.environment.AGENT = agent;
+	await built.importAt(entryPath, entryPath);
+	return { context: built.environment, entryPath, logger: built.logger };
 }

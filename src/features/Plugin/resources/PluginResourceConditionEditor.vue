@@ -9,12 +9,12 @@ import {
 	SelectTrigger,
 	SelectValue,
 	Switch,
+	TabItem,
 	Tabs,
 	TabsList,
-	TabItem,
 } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
-import JavaScriptCodeMirrorEditor from "@/features/Plugin/editors/javascript/JavaScriptCodeMirrorEditor.vue";
+import JavaScriptCodeMirrorEditor from "@/features/Plugin/resources/types/javascript/JavaScriptCodeMirrorEditor.vue";
 import {
 	type ResourceConditionFunction,
 	type ResourceConditionRow,
