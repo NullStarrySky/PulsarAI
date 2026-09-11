@@ -1,11 +1,24 @@
 <script setup lang="ts">
 import { Box, Command, History, MessageSquare, Search } from "lucide-vue-next";
-import { type Component, computed, nextTick, ref, shallowRef, watch } from "vue";
+import {
+	type Component,
+	computed,
+	nextTick,
+	ref,
+	shallowRef,
+	watch,
+} from "vue";
 import { Badge, Dialog, DialogContent, DialogTitle } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { ChatContainer, ChatMeta } from "@/features/Conversation/dataflow/types";
-import { currentMessage, pathForTail } from "@/features/Conversation/dataflow/message-service";
+import {
+	currentMessage,
+	pathForTail,
+} from "@/features/Conversation/dataflow/activePathComposable/message-service";
+import type {
+	ChatContainer,
+	ChatMeta,
+} from "@/features/Conversation/dataflow/types";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useHotkeyStore } from "@/features/Hotkey/hotkey-store";
@@ -22,7 +35,12 @@ type SearchResult = {
 const commandStore = useCommandStore();
 const hotkeyStore = useHotkeyStore();
 const dbsync = useSyncStore();
-const allChats = computed(() => [...dbsync.chatMeta.values()].flatMap(list => [...list.values()]) as ChatMeta[]);
+const allChats = computed(
+	() =>
+		[...dbsync.chatMeta.values()].flatMap((list) => [
+			...list.values(),
+		]) as ChatMeta[],
+);
 const historyResults = shallowRef<SearchResult[]>([]);
 const allMessageResults = shallowRef<SearchResult[]>([]);
 const inputRoot = ref<HTMLElement | null>(null);
@@ -79,8 +97,7 @@ const conversationResults = computed<SearchResult[]>(() => {
 		.map((item) => ({
 			id: `conversation:${item.id}`,
 			title: item.title,
-			description:
-				description: "对话",
+			description: "对话",
 			icon: MessageSquare,
 			run: () => {
 				commandStore.closePalette();
@@ -88,8 +105,12 @@ const conversationResults = computed<SearchResult[]>(() => {
 		}));
 });
 
-const filteredHistoryResults = computed(() => filterSearchResults(historyResults.value));
-const filteredAllMessageResults = computed(() => filterSearchResults(allMessageResults.value));
+const filteredHistoryResults = computed(() =>
+	filterSearchResults(historyResults.value),
+);
+const filteredAllMessageResults = computed(() =>
+	filterSearchResults(allMessageResults.value),
+);
 
 const sections = computed(() =>
 	[
@@ -124,7 +145,9 @@ watch(query, () => {
 function filterSearchResults(items: SearchResult[]) {
 	const search = normalizedQuery.value;
 	if (!search) return [];
-	return items.filter(item => matchesItem([item.title, item.description], search, false));
+	return items.filter((item) =>
+		matchesItem([item.title, item.description], search, false),
+	);
 }
 
 function textOfContainer(container: ChatContainer) {
@@ -136,17 +159,38 @@ async function refreshCurrentConversationIndex() {
 	historyResults.value = [];
 	allMessageResults.value = [];
 	if (!chatId) return;
-	const chat = allChats.value.find(item => item.id === chatId);
+	const chat = allChats.value.find((item) => item.id === chatId);
 	if (!chat) return;
 	const containers = [...(dbsync.containers.get(chatId) ?? [])];
-	const historyIds = new Set(pathForTail(containers, chat.lastContainerId).map(item => item.id));
-	const toResult = (container: (typeof containers)[number], history: boolean): SearchResult | null => {
+	const historyIds = new Set(
+		pathForTail(containers, chat.lastContainerId).map((item) => item.id),
+	);
+	const toResult = (
+		container: (typeof containers)[number],
+		history: boolean,
+	): SearchResult | null => {
 		const text = textOfContainer(container);
 		if (!text) return null;
-		return { id: `${history ? "history" : "message"}:${container.id}`, title: text.slice(0, 100), description: `${container.role} · ${container.id}`, icon: history ? History : MessageSquare, run: () => commandStore.closePalette() };
+		return {
+			id: `${history ? "history" : "message"}:${container.id}`,
+			title: text.slice(0, 100),
+			description: `${container.role} · ${container.id}`,
+			icon: history ? History : MessageSquare,
+			run: () => commandStore.closePalette(),
+		};
 	};
-	historyResults.value = containers.flatMap(item => historyIds.has(item.id) ? [toResult(item, true)].filter((value): value is SearchResult => Boolean(value)) : []);
-	allMessageResults.value = containers.flatMap(item => [toResult(item, false)].filter((value): value is SearchResult => Boolean(value)));
+	historyResults.value = containers.flatMap((item) =>
+		historyIds.has(item.id)
+			? [toResult(item, true)].filter((value): value is SearchResult =>
+					Boolean(value),
+				)
+			: [],
+	);
+	allMessageResults.value = containers.flatMap((item) =>
+		[toResult(item, false)].filter((value): value is SearchResult =>
+			Boolean(value),
+		),
+	);
 }
 
 function matchesItem(

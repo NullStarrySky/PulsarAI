@@ -1,16 +1,21 @@
 import { computed } from "vue";
 import { useSyncStore } from "@/features/Database/dbsync-store";
+import { mediaLinks, removeMediaLink } from "@/features/Media/media-link";
 import { isChatGenerating, setChatGeneration, useChat } from "../chats";
 import { useContainerVersion } from "../containerComposable";
 import { usePureContainers } from "../containers";
-import { evaluateIntervals } from "../interval-services";
-import { currentMessage, pathForTail } from "../message-service";
 import {
 	type ChatContainer,
 	type ChatMessage,
 	createDraft,
 	type Role,
 } from "../types";
+import { evaluateIntervals } from "./interval-services";
+import {
+	createContainer,
+	currentMessage,
+	pathForTail,
+} from "./message-service";
 
 export interface ReplayGroup {
 	container: ChatContainer;
@@ -65,10 +70,24 @@ export function useActivePathComposable(chatId: string) {
 	}) {
 		const current = chat.value;
 		if (!current) return null;
-		const container = collection.create({
-			...input,
-			previousContainer: input.previousContainer ?? current.lastContainerId,
-		});
+		const container = store.addContainer(
+			createContainer({
+				conversationId: current.id,
+				...input,
+				previousContainer: input.previousContainer ?? current.lastContainerId,
+			}),
+		);
+		if (container.previousContainer) {
+			const parent = [...collection.containers.value].find(
+				(item) => item.id === container.previousContainer,
+			);
+			if (parent) {
+				parent.availableNextContainer.push(container.id);
+				parent.activeNextContainer = container.id;
+				store.markDirty({ type: "container", id: parent.id });
+			}
+		}
+		store.markDirty({ type: "container", id: container.id });
 		if (!current.rootContainerId) current.rootContainerId = container.id;
 		current.lastContainerId = container.id;
 		if (input.role === "user")
@@ -171,7 +190,77 @@ export function useActivePathComposable(chatId: string) {
 		containerId: string,
 		deleteDescendants = false,
 	) {
-		await collection.delete(containerId, deleteDescendants);
+		const list = store.containers.get(chatId) as Set<ChatContainer> | undefined;
+		const container = [...(list ?? [])].find((item) => item.id === containerId);
+		if (!container) return;
+		const byId = new Map([...(list ?? [])].map((item) => [item.id, item]));
+		const removed = new Set<string>();
+		const collect = (id: string) => {
+			if (removed.has(id)) return;
+			removed.add(id);
+			if (deleteDescendants)
+				for (const child of byId.get(id)?.availableNextContainer ?? [])
+					collect(child);
+		};
+		collect(containerId);
+		const parent = container.previousContainer
+			? byId.get(container.previousContainer)
+			: undefined;
+		const children = container.availableNextContainer.filter(
+			(id) => byId.has(id) && !removed.has(id),
+		);
+		const replacementId = children.includes(container.activeNextContainer ?? "")
+			? container.activeNextContainer!
+			: (children[0] ?? null);
+		if (parent) {
+			parent.availableNextContainer = parent.availableNextContainer.flatMap(
+				(id) => (id === containerId ? children : id),
+			);
+			if (parent.activeNextContainer === containerId)
+				parent.activeNextContainer = replacementId;
+			store.markDirty({ type: "container", id: parent.id });
+		}
+		for (const childId of children) {
+			const child = byId.get(childId)!;
+			child.previousContainer = container.previousContainer ?? null;
+			store.markDirty({ type: "container", id: child.id });
+		}
+		const current = chat.value;
+		if (current) {
+			if (current.rootContainerId === containerId)
+				current.rootContainerId = deleteDescendants ? null : replacementId;
+			if (current.lastContainerId && removed.has(current.lastContainerId)) {
+				let tail =
+					parent ??
+					(deleteDescendants ? undefined : byId.get(replacementId ?? ""));
+				const seen = new Set<string>();
+				while (tail?.activeNextContainer && !seen.has(tail.id)) {
+					seen.add(tail.id);
+					tail = byId.get(tail.activeNextContainer);
+				}
+				current.lastContainerId = tail?.id ?? null;
+			}
+			current.updatedAt = new Date().toISOString();
+			store.markDirty({ type: "meta", id: current.id });
+		}
+		const media = new Set(
+			[...removed].flatMap(
+				(id) =>
+					byId
+						.get(id)
+						?.content.flatMap((message) => [
+							...(message.parts
+								?.filter((part) => part.type === "file")
+								.map((part) => part.url) ?? []),
+							...mediaLinks(message.content),
+						]) ?? [],
+			),
+		);
+		for (const url of media) await removeMediaLink(url);
+		for (const id of removed) {
+			list?.delete(byId.get(id)!);
+			store.markDirty({ type: "container", id });
+		}
 	}
 	async function send() {
 		const content = draft.value.trim();
