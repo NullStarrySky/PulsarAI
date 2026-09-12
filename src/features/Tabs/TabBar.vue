@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MessageCircle, X } from "lucide-vue-next";
+import { LayoutGrid, MessageCircle, Plus, X } from "lucide-vue-next";
 import { ref } from "vue";
 import { Button } from "@/components/fluid";
 import type { TabView } from "./store";
@@ -18,11 +18,14 @@ const emit = defineEmits<{
 	activate: [id: string];
 	close: [id: string];
 	reorder: [fromIndex: number, toIndex: number];
+	create: [];
 }>();
 const draggingIndex = ref<number | null>(null);
 
 function iconFor(icon: TabView["icon"]) {
-	return icon === "message-circle" ? MessageCircle : null;
+	if (icon === "message-circle") return MessageCircle;
+	if (icon === "layout-grid") return LayoutGrid;
+	return null;
 }
 
 function drop(toIndex: number) {
@@ -42,8 +45,9 @@ function reorderByKeyboard(event: KeyboardEvent, index: number) {
 </script>
 
 <template>
-  <div class="flex min-w-0 items-center gap-1 overflow-x-auto py-1" role="tablist">
-    <div
+  <div class="flex min-w-0 items-center gap-1 py-1" role="tablist">
+    <div class="flex min-w-0 items-center gap-1 overflow-x-auto">
+      <div
       v-for="(tab, index) in props.tabs"
       :key="tab.id"
       class="group flex h-7 min-w-24 max-w-52 shrink-0 items-center rounded-md text-xs transition-colors"
@@ -68,7 +72,8 @@ function reorderByKeyboard(event: KeyboardEvent, index: number) {
         <span class="min-w-0 flex-1 truncate">{{ tab.name }}</span>
       </Button>
       <Button variant="ghost" size="icon-sm" class="mr-1 size-4 shrink-0 rounded opacity-0 transition-opacity hover:bg-foreground/10 group-hover:opacity-100 focus-visible:opacity-100 mobile:opacity-100" :aria-label="`关闭 ${tab.name}`" @click="emit('close', tab.id)"><X class="size-3" /></Button>
+      </div>
     </div>
-    <span v-if="!props.tabs.length" class="px-2 text-sm font-medium">PulsarAI</span>
+    <Button variant="ghost" size="icon-sm" class="size-7 shrink-0" :class="props.inactiveClass" title="新建页面" aria-label="新建页面" @click="emit('create')"><Plus class="size-4" /></Button>
   </div>
 </template>

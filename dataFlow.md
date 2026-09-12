@@ -25,7 +25,7 @@ Conversation/dataflow        Plugin/dataflow
 
 - Database 只负责记录 I/O、内存驻留、脏数据调度与同步元数据，不承载 Conversation 或 Plugin 的领域操作。
 - Conversation 用 `chatId` 显式寻址。`ChatMeta` 保存会话级元数据和草稿，`ChatContainer` 组成可分支消息树，当前 `lastContainerId` 决定活动路径。
-- Plugin 的持久化源是 `PluginData { tree, meta }`。一次资源修改由一个 `Pulse` 表示；会话中的 Pulse 归属于具体消息版本，回放时才叠加到源 World 上。
+- Plugin 的持久化源是 `PluginData { tree, meta }`。角色的 `definition.package.json` 用 `globalPlugins: string[]` 按文件夹名和顺序声明启用的全局来源。一次资源修改由一个 `Pulse` 表示；会话中的 Pulse 归属于具体消息版本，回放时才叠加到各自来源上。
 - 生成是两条数据流的汇合点：Conversation 提供活动消息路径，Plugin 提供按该路径回放后的 World、插槽和 Sandbox 环境；流式结果再写回当前 assistant 消息版本。
 - Tabs 只拥有视图生命周期。`features/Tabs/store.ts` 打开 tab 时调用 dbsync `load(chat)`，关闭后延迟 `unload(chat)`；它不拥有或复制会话数据。
 
@@ -79,10 +79,11 @@ Conversation/
 1. `ChatComposer` 通过 `useActivePathComposable(chatId).draft` 修改 `ChatMeta.composerDraft`；dbsync 将 meta 标脏并在稍后批量持久化。
 2. `send()` 把草稿变成 user container，连接到当前尾节点；随后创建 assistant container，并更新 `rootContainerId`、`lastContainerId` 和父节点的分支指针。
 3. `pathForTail()` 沿 `previousContainer` 得到活动路径；`modelMessagesFromPath()` 选取每个容器的活动消息版本、读取媒体链接并生成模型消息。
-4. 同一路径上的 `message.meta.pulses` 被组成 replay groups；`usePluginData()` 将其按顺序应用到 Plugin 源文档的克隆上。
-5. `runWorld()` 在这个精确的消息版本投影上建立 Plugin 环境并运行选中的 `generatePath`。
-6. Agent 的文本、思考、工具结果和 token usage 直接赋值到 assistant `ChatMessage`，每次更新都把容器标脏。
-7. 失败会转换为持久化的 `ChatMessage.type = "error"`，而生成中状态只存在内存，不进入数据库。
+4. 同一路径上的 `message.meta.pulses` 被组成 replay groups；`usePluginData()` 按路径把它们分发给本地来源或具体全局插件来源并分别重放。
+5. 重放后的本地角色定义给出当前 `globalPlugins`；运行时按数组顺序选择并合并这些全局来源，未启用来源不进入树。
+6. `runWorld()` 在这个精确的消息版本投影上建立 Plugin 环境并运行选中的 `generatePath`。
+7. Agent 的文本、思考、工具结果和 token usage 直接赋值到 assistant `ChatMessage`，每次更新都把容器标脏。
+8. 失败会转换为持久化的 `ChatMessage.type = "error"`，而生成中状态只存在内存，不进入数据库。
 
 ## `src/features/Plugin`
 
@@ -124,12 +125,12 @@ Plugin/
 │     └─ prompt.md                             — 默认提示资源。
 ├─ dataflow/
 │  ├─ index.ts                                — Plugin dataflow 的统一导出入口。
-│  ├─ types.ts                                — ResourceTree/Meta、PluginData、Character 投影、Pulse 和资源类型契约。
+│  ├─ types.ts                                — ResourceTree/Meta、PluginData、Pulse 和资源类型契约。
 │  ├─ pulse.ts                                — 路径解析、树操作、Pulse 应用/回放和文件读取的纯逻辑。
 │  ├─ use-file-api.ts                         — 在一个 PluginData 投影上提供同步 read/write/edit/ls/move/copy/remove。
 │  ├─ use-file-tree-ui.ts                     — 资源树 tabs、菜单动作、剪贴板和图标等 UI 投影。
 │  ├─ use-opened-file.ts                      — 当前打开文件、浮层位置和资源树定位请求状态。
-│  ├─ use-plugin-data.ts                      — 读取源 Plugin，挂载 built-ins，并按 Conversation Pulse 回放。
+│  ├─ use-plugin-data.ts                      — 按路径分别重放本地/全局来源，再按角色定义动态选择并合并；角色列表在此提供新建与导入 action。
 │  ├─ use-slot.ts                             — 构建 slot 树、收集和排序贡献资源、执行单选/多选。
 │  └─ use-tree-merge.ts                       — 把全局来源只读挂载到本地 World 的 `/global/<source>`。
 ├─ resources/
@@ -144,6 +145,8 @@ Plugin/
 │  ├─ PluginResourceRenderer.vue              — 资源预览/源码编辑的分派容器。
 │  ├─ PluginTypeRenderer.vue                  — 按扩展名选择类型专用编辑器。
 │  └─ types/
+│     ├─ character/plugin-character.ts        — 角色定义解析、全局插件文件夹数组和 Character 投影。
+│     ├─ character/PluginCharacterEditor.vue  — 名称、描述及启用全局插件的结构化编辑器。
 │     ├─ chat/plugin-chat.ts                  — `.chat.json` 校验、默认值及 ModelMessage 转换。
 │     ├─ chat/PluginChatEditor.vue            — role-aware chat 资源编辑器。
 │     ├─ config/plugin-config.ts              — Plugin 配置字段类型定义。
@@ -169,13 +172,13 @@ Plugin/
 ### World 编辑与回放流
 
 ```text
-resource_worlds:local:<localPluginId>（源 PluginData）
-        + 内置 global PluginData
-        ↓ useTreeMerge
-统一寻址树：/self 语义对应本地源，/global/<source> 对应共享源
-        + 活动路径中每个消息版本的 Pulse[]
-        ↓ replayPluginData（克隆后顺序应用）
-当前消息版本可见的 World
+本地 PluginData + 多个全局 PluginData + 活动路径 Pulse[]
+        ↓ 按 /global/<folder>/ 路径分流
+各来源独立 replayPluginData
+        ↓ 读取重放后的 definition.package.json.globalPlugins
+按文件夹名称数组筛选并依次 useTreeMerge
+        ↓
+当前消息版本可见的统一 World
         ↓ useFileApi / useSlot / createPluginEnvironment
 编辑器、Sandbox、生成流程
 ```
@@ -186,12 +189,13 @@ resource_worlds:local:<localPluginId>（源 PluginData）
 
 ```text
 Tabs/
-├─ store.ts       — `{type:"chat", id}[]`、activeId、open/close/reorder/active 和顶栏 views computed。
+├─ CharacterEntryPage.vue — 无 tab 或新建空白 tab 的角色入口，提供搜索、卡片/列表切换，并触发角色列表的新建与导入 action。
+├─ store.ts       — chat/home 视图、activeId、open/close/reorder/active 和顶栏 views computed。
 ├─ store.test.ts  — load、排序、激活与延迟 unload 的聚焦单元测试。
 └─ TabBar.vue     — 受控 tab 栏；渲染图标/名称/关闭按钮，支持拖拽和 Alt+方向键排序。
 ```
 
-`open({ type: "chat", contentid })` 先取消同 ID 的待卸载任务，再 `load({type:"chat", id})`，最后去重加入并激活。`close(id | index)` 立即移除视图并选中右侧或左侧相邻项，300ms 后确认没有重新打开才 `unload`。TabBar 不直接读写 store，只通过 props 与事件受控。
+`open({ type: "chat", contentid })` 先取消同 ID 的待卸载任务，再 `load({type:"chat", id})`，最后去重加入并激活；`open({type:"home"})` 创建不加载领域数据的角色入口页。`close(id | index)` 立即移除视图并选中右侧或左侧相邻项，仅 chat 在 300ms 后确认没有重新打开才 `unload`。TabBar 不直接读写 store，只通过 props 与事件受控。
 
 ## 持久化边界摘要
 
@@ -201,7 +205,7 @@ Tabs/
 | 会话元数据与草稿 | `dbsync.chatMeta` | `conversations:<chatId>` | chat 操作或草稿变化后标记 `meta` dirty |
 | 消息树与版本/Pulse | `dbsync.containers` | `message_containers:<containerId>` | 容器、消息、版本或 Pulse 变化后标记 `container` dirty |
 | 生成进度 | `ChatMeta.generation` | 不持久化 | 生成开始/结束时仅更新运行时状态 |
-| 打开的 tabs 与 activeId | `Tabs` store | 不持久化 | UI open/close/reorder/active |
+| 打开的 chat/home tabs 与 activeId | `Tabs` store | 不持久化 | UI open/close/reorder/active |
 | LAN 同步版本信息 | `sync-metadata.ts` | Host 提供的本地元数据存储 | database-service 成功写入或远端合并 |
 
 dbsync 默认在首次 dirty 后 500ms 批量写入；卸载 chat 前会主动 flush，避免视图释放导致未写数据丢失。Tabs 的 300ms 延迟卸载用于吸收关闭后立刻重开的 UI 操作，两种延迟承担不同职责。

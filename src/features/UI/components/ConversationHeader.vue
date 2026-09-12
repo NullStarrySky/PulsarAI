@@ -27,6 +27,7 @@ const emit = defineEmits<{
 	activate: [id: string];
 	close: [id: string];
 	reorder: [fromIndex: number, toIndex: number];
+	create: [];
 }>();
 const appearance = useAppearanceStore();
 const responsive = useResponsiveStore();
@@ -54,7 +55,7 @@ function reorder(fromIndex: number, toIndex: number) {
 
 <template>
   <header class="relative z-30 flex h-10 shrink-0 select-none items-center px-3 mobile:h-12 mobile:px-2" :class="[topBarClass, host.desktop && 'electron-window-drag-region']">
-    <div class="min-w-0 flex-1" :class="host.desktop && 'electron-window-drag-region'"><TabBar class="max-w-[min(52vw,44rem)]" data-window-drag-block :tabs="props.tabs" :active-id="props.activeId" :inactive-class="buttonClass" @activate="emit('activate', $event)" @close="emit('close', $event)" @reorder="reorder" /></div>
+    <div class="min-w-0 flex-1" :class="host.desktop && 'electron-window-drag-region'"><TabBar class="max-w-[min(52vw,44rem)]" data-window-drag-block :tabs="props.tabs" :active-id="props.activeId" :inactive-class="buttonClass" @activate="emit('activate', $event)" @close="emit('close', $event)" @reorder="reorder" @create="emit('create')" /></div>
     <div class="flex shrink-0 items-center gap-0.5" data-window-drag-block>
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="会话列表" @click="emit('update:managerOpen', !props.managerOpen)"><History class="size-4" /></Button>
       <Button variant="ghost" size="icon-sm" class="rounded-full" :class="buttonClass" title="设置" @click="layout.openSettings()"><Settings class="size-4" /></Button>

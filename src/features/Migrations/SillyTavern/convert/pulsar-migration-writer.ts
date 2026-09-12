@@ -189,7 +189,7 @@ export class PulsarSillyTavernMigrationWriter {
     const worldConfig = structuredClone(packageItem.worldConfig);
     worldConfig.disabled = [...new Set([
       ...worldConfig.disabled.filter((path: string) => path !== "/self/generate.js"),
-      "/global/builtin-core-plugin/generate.js",
+      "/global/core/generate.js",
     ])];
     await packages.updatePackage(packageItem.id, { worldConfig });
 
@@ -675,5 +675,5 @@ function sillyTavernGenerateSource() {
     "  const complete = reply.read().message.content;",
     "  await reply.setContent(applyRules(complete, 'assistant', 1));",
   ];
-  return source.join("\n");
+	return source.join("\n");
 }

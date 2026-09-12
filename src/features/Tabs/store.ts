@@ -2,13 +2,13 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 
-export type Tab = { type: "chat"; id: string };
-export type OpenTab = { type: "chat"; contentid: string };
-export interface TabView extends Tab {
+export type Tab = { type: "chat"; id: string } | { type: "home"; id: string };
+export type OpenTab = { type: "chat"; contentid: string } | { type: "home" };
+export type TabView = Tab & {
 	name: string;
-	icon?: "message-circle";
+	icon?: "message-circle" | "layout-grid";
 	localPluginId?: string;
-}
+};
 
 function indexOf(tabs: Tab[], target: string | number) {
 	return typeof target === "number"
@@ -27,6 +27,8 @@ export const useTabsStore = defineStore("tabs", () => {
 	);
 	const views = computed<TabView[]>(() =>
 		tabs.value.map((tab) => {
+			if (tab.type === "home")
+				return { ...tab, name: "角色", icon: "layout-grid" };
 			const chat = [...sync.chatMeta.values()]
 				.map((chats) => chats.get(tab.id))
 				.find(Boolean);
@@ -40,7 +42,12 @@ export const useTabsStore = defineStore("tabs", () => {
 	);
 
 	async function open(input: OpenTab) {
-		if (input.type !== "chat") return;
+		if (input.type === "home") {
+			const id = `home:${crypto.randomUUID()}`;
+			tabs.value.push({ type: "home", id });
+			activeId.value = id;
+			return;
+		}
 		const id = input.contentid;
 		const pending = pendingUnloads.get(id);
 		if (pending) {
@@ -61,6 +68,7 @@ export const useTabsStore = defineStore("tabs", () => {
 		if (activeId.value === tab.id)
 			activeId.value =
 				tabs.value[index]?.id ?? tabs.value[index - 1]?.id ?? null;
+		if (tab.type !== "chat") return;
 		pendingUnloads.set(
 			tab.id,
 			setTimeout(() => {

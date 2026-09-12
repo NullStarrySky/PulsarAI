@@ -35,7 +35,7 @@ export async function runWorld(input: RunWorldInput): Promise<RunWorldResult> {
 	const built = createPluginEnvironment({
 		filetree: input.filetree,
 		applyPulse: input.applyPulse,
-		sourcePath: input.entryPath ?? "/global/builtin-core-plugin/generate.js",
+		sourcePath: input.entryPath ?? "/",
 		context: {
 			...input.context,
 			conversationId: input.conversationId,

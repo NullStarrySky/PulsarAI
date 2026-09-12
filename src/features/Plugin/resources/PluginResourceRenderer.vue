@@ -8,6 +8,7 @@ import StWorldbookRenderer from "@/features/Migrations/SillyTavern/renderers/StW
 import PluginTypeRenderer from "./PluginTypeRenderer.vue";
 import type { ResourceFile } from "./resource-types";
 import { resourceType } from "./resource-types";
+import PluginCharacterEditor from "./types/character/PluginCharacterEditor.vue";
 import PluginChatEditor from "./types/chat/PluginChatEditor.vue";
 import PluginConfigEditor from "./types/config/PluginConfigEditor.vue";
 import PluginDataEditor from "./types/data/PluginDataEditor.vue";
@@ -72,6 +73,7 @@ const isPreset = computed(() =>
     <ConversationComposerEditor v-if="type === 'markdown' && preview" :model-value="modelValue" placeholder="输入 Markdown 内容" :enable-ai="false" :submit-on-enter="false" full-height class="h-full" @update:model-value="emit('update:modelValue', $event)" />
     <StWorldbookRenderer v-else-if="isWorldbook && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
     <StPresetRenderer v-else-if="isPreset && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
+    <PluginCharacterEditor v-else-if="file.path === '/definition.package.json' && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
     <PluginConfigEditor v-else-if="file.path.endsWith('/config.json') && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
     <PluginTypeRenderer v-else-if="type === 'component' && preview" :file="file" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
     <PluginDataEditor v-else-if="type === 'data' && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />

@@ -44,18 +44,18 @@ export function normalizeResourcePath(path: string): ResourcePath {
 
 export type PluginPath =
 	| { scope: "local"; path: ResourcePath }
-	| { scope: "global"; pluginId: string; path: ResourcePath };
+	| { scope: "global"; folder: string; path: ResourcePath };
 
-/** `/x` belongs to the local source; `/global/<pluginId>/x` addresses one global source. */
+/** `/x` belongs to the local source; `/global/<folder>/x` addresses one global source. */
 export function parsePluginPath(path: string): PluginPath {
 	const normalized = normalizeResourcePath(path);
 	const parts = normalized.slice(1).split("/").filter(Boolean);
 	if (parts[0] !== "global") return { scope: "local", path: normalized };
-	const pluginId = parts[1];
-	if (!pluginId) throw new Error(`全局资源路径缺少 Plugin ID：${path}`);
+	const folder = parts[1];
+	if (!folder) throw new Error(`全局资源路径缺少 Plugin 文件夹：${path}`);
 	return {
 		scope: "global",
-		pluginId,
+		folder,
 		path: parts.length > 2 ? `/${parts.slice(2).join("/")}` : "/",
 	};
 }
@@ -64,7 +64,7 @@ export function parsePluginPath(path: string): PluginPath {
 export function resolveResourcePath(sourcePath: ResourcePath, request: string) {
 	if (request.startsWith("/")) return normalizeResourcePath(request);
 	const source = parsePluginPath(sourcePath);
-	const root = source.scope === "local" ? "" : `/global/${source.pluginId}`;
+	const root = source.scope === "local" ? "" : `/global/${source.folder}`;
 	if (request.startsWith("@/"))
 		return normalizeResourcePath(`${root}/${request.slice(2)}`);
 	const parent = sourcePath.split("/").slice(0, -1);

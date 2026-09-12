@@ -233,6 +233,13 @@ const builtinAssets = import.meta.glob("../builtIn/*/**/*", {
 	import: "default",
 }) as Record<string, string>;
 
+export function builtinPluginFolders() {
+	return Object.keys(builtinManifests)
+		.map((path) => path.split("/").at(-2))
+		.filter((folder): folder is string => Boolean(folder))
+		.sort((left, right) => left.localeCompare(right));
+}
+
 function set(target: object, key: string, value: unknown) {
 	Object.defineProperty(target, key, {
 		value,
@@ -342,7 +349,7 @@ export function importBuiltinPlugins() {
 			const folder = key.split("/").at(-2);
 			if (!folder) throw new Error(`无效的内置 Plugin 路径：${key}`);
 			const data = importBuiltinPlugin(folder, source);
-			return [data.id, data];
+			return [folder, data];
 		}),
 	);
 }
@@ -355,7 +362,16 @@ export function createLocalPluginData(id: string): PluginData {
 	writeBuiltinFile(
 		data,
 		"/definition.package.json",
-		JSON.stringify({ schemaVersion: 1, name: "新角色", tags: [] }, null, 2),
+		JSON.stringify(
+			{
+				schemaVersion: 1,
+				name: "新角色",
+				tags: [],
+				globalPlugins: ["core", "default"],
+			},
+			null,
+			2,
+		),
 		defaultFileMeta(),
 	);
 	writeBuiltinFile(

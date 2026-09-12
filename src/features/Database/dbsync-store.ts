@@ -4,11 +4,11 @@ import type {
 	ChatContainer,
 	ChatMeta,
 } from "@/features/Conversation/dataflow/types";
+import type { PluginData } from "@/features/Plugin/dataflow/types";
 import {
 	type CharacterData,
 	characterFromPlugin,
-	type PluginData,
-} from "@/features/Plugin/dataflow/types";
+} from "@/features/Plugin/resources/types/character/plugin-character";
 import {
 	remove,
 	selectAll,
@@ -172,6 +172,25 @@ export const useSyncStore = defineStore("dbsync", () => {
 		else characters.add(next);
 	}
 
+	function addPlugin(id: string, value: PluginData) {
+		characterWatchers.get(id)?.();
+		const plugin = reactive(value) as PluginData;
+		plugins.set(id, plugin);
+		refreshCharacter(id);
+		characterWatchers.set(
+			id,
+			watch(
+				() => plugins.get(id),
+				() => {
+					refreshCharacter(id);
+					markDirty({ type: "plugin", id });
+				},
+				{ deep: true },
+			),
+		);
+		return plugin;
+	}
+
 	/** Removes one chat's memory graph after queuing database deletes. */
 	function removeChat(chatId: string) {
 		const chat = [...chatMeta.values()]
@@ -201,19 +220,7 @@ export const useSyncStore = defineStore("dbsync", () => {
 				const value = row.value;
 				if (!value.id?.startsWith("local:")) continue;
 				const id = value.id.slice("local:".length);
-				plugins.set(id, reactive(value) as PluginData);
-				refreshCharacter(id);
-				characterWatchers.set(
-					id,
-					watch(
-						() => plugins.get(id),
-						() => {
-							refreshCharacter(id);
-							markDirty({ type: "plugin", id });
-						},
-						{ deep: true },
-					),
-				);
+				addPlugin(id, value);
 			}
 		} finally {
 			hydrating--;
@@ -355,6 +362,7 @@ export const useSyncStore = defineStore("dbsync", () => {
 		_sync,
 		clearAll,
 		addChat,
+		addPlugin,
 		removeChat,
 		addContainers,
 		addContainer,

@@ -1,6 +1,6 @@
 # Plugin 资源
 
-World 是当前 Agent 的文件、上下文和可调用能力来源。本地资源位于 `/self/`，共享来源位于 `/global/<source-folder>/`，插槽契约是 `/self/slot/` 下的空文件夹。资源源码中的 `@/path` 始终指向其所属来源根，并会按来源挂载规范化。
+World 是当前 Agent 的文件、上下文和可调用能力来源。本地资源位于 `/self/`，共享来源位于 `/global/<source-folder>/`，角色通过 `/self/definition.package.json` 的 `globalPlugins` 文件夹名称数组决定启用哪些共享来源及其合并顺序。每个来源先独立重放属于自己的 Pulse，再进行合并。资源源码中的 `@/path` 始终指向其所属来源根，并会按来源挂载规范化。
 
 ## 读取和导入
 

@@ -1,12 +1,10 @@
 # World resources
 
-World is the resource model. It has two persisted documents with the exact same
-nested node shape:
-
-- `resource_worlds:global` is the shared document.
-- `resource_worlds:local:<localPluginId>` is a local Plugin's World document.
-  document. Its root contains global `/self/slot/` contracts and a source-local
-  `/self/localSlot/` definition tree.
+World is the resource model. A role owns one local source document at
+`resource_worlds:local:<localPluginId>`. Global Plugins are independent source
+trees identified at runtime by their source folder names. The role's root
+`definition.package.json` stores the enabled folders as `globalPlugins: string[]`;
+the array is both the enable set and merge order.
 
 Every document is a folder tree. Folder and file keys are stable node IDs;
 `name` is only display text and ordinary sibling files/folders may share it. A
@@ -20,11 +18,10 @@ local slots and may point at a global contract through their stable `parent`
 path. A file stores its local-slot ID path in `slot`, so renaming either folder
 does not invalidate membership.
 
-`useWorld(options)` is the only World API. With `applyReplay: false` it reads
-and edits the stored global/self documents. With a conversation and replay
-enabled, it clones those documents and applies the active message path's ordered
-`pulses`. Slot and source views are projections exported by the same
-composable; they are not stored separately.
+`usePluginData()` routes the active message path's Pulses to their owning local
+or global source, replays each source independently, then reads the replayed
+role definition and merges only its enabled global folders. Slot and source
+views are projections of that result; they are not stored separately.
 
 ## Updates and replay
 
@@ -37,9 +34,11 @@ edits batch the affected document's JSON patches before applying the same result
 to memory. Move and copy reject a destination below the source folder; move
 keeps IDs while copy regenerates every copied subtree ID.
 
-Conversation edits append the same update items to a hidden system message, or
-to the current message version during generation. Replay only applies those
-items to a cloned World; it never writes the database.
+Conversation edits append updates to the current message version. Replay only
+applies those updates to cloned source trees; it never writes the database.
+Moves and copies cannot cross source roots because one Pulse has exactly one
+replay owner. Editing `definition.package.json.globalPlugins` dynamically adds,
+removes, or reorders global mounts in the resulting World.
 If the active tail is already a pure Pulse-only system container, later edits
 reuse that container instead of extending the conversation path.
 
@@ -51,10 +50,9 @@ operations and writes in different containers retain their order.
 
 ## Paths and source scope
 
-`/self/...` addresses the package document. `/global/...` addresses the shared
-document. In authored resources `@/...` resolves to the resource's own source
-root; shared built-ins use their top-level global folder as that root. There is
-no `@pluginId/...` syntax and no runtime Plugin object.
+`/self/...` addresses the role's local source. `/global/<source-folder>/...`
+addresses one global source. In authored resources `@/...` resolves to the
+resource's own source root. There is no `@pluginId/...` syntax.
 
 ## User interface
 

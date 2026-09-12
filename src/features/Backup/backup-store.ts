@@ -6,6 +6,7 @@ import type {
 import { selectAll, upsert } from "@/features/Database/database-service";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import type { PluginData as WorldDocument } from "@/features/Plugin/dataflow/types";
+import { parseCharacterDefinition } from "@/features/Plugin/resources/types/character/plugin-character";
 import { host } from "@/host";
 import {
 	createResourceBundle,
@@ -183,14 +184,9 @@ export const useBackupStore = defineStore("backup", {
 			if (!data) return [];
 			return [
 				...data.localPlugins.map((document) => {
-					let name = "本地 Plugin";
-					const source = document.tree["definition.package.json"];
-					if (typeof source === "string") {
-						try {
-							const value = JSON.parse(source) as { name?: unknown };
-							if (typeof value.name === "string") name = value.name;
-						} catch {}
-					}
+					const name = parseCharacterDefinition(
+						document.tree["definition.package.json"],
+					).name;
 					return {
 						key: `local-plugin:${document.id.slice(6)}`,
 						id: document.id.slice(6),
@@ -333,7 +329,7 @@ export const useBackupStore = defineStore("backup", {
 				properties: ["openFile", "openDirectory"],
 				filters: [{ name: "PulsarAI 资源文件夹", extensions: ["zip"] }],
 			});
-			if (typeof path !== "string") return;
+			if (typeof path !== "string") return null;
 			const source = await host.backup.invoke<number[] | ResourceBundleFiles>(
 				"resource_bundle_read",
 				{ path },
@@ -344,6 +340,7 @@ export const useBackupStore = defineStore("backup", {
 			setBackupResources(this, persistentSnapshot(payload.snapshot));
 			this.selectedResourceKeys = [`${payload.rootType}:${payload.rootId}`];
 			await this.restoreSelectedResources(mode);
+			return payload.rootType === "local-plugin" ? payload.rootId : null;
 		},
 		async restoreSelectedResources(_mode: ResourceImportMode) {
 			const source = this

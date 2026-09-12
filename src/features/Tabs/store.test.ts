@@ -40,4 +40,16 @@ describe("Tabs store", () => {
 		await vi.advanceTimersByTimeAsync(300);
 		expect(sync.unload).toHaveBeenCalledWith({ type: "chat", id: "one" });
 	});
+
+	it("creates a blank home page without loading conversation data", async () => {
+		const store = useTabsStore();
+		await store.open({ type: "home" });
+		expect(store.tabs[0]?.type).toBe("home");
+		expect(store.views[0]?.name).toBe("角色");
+		expect(sync.load).not.toHaveBeenCalled();
+
+		store.close(0);
+		await vi.advanceTimersByTimeAsync(300);
+		expect(sync.unload).not.toHaveBeenCalled();
+	});
 });

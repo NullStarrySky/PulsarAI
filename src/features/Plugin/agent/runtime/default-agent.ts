@@ -74,7 +74,7 @@ const codeActInstructions = [
 	"Submit one JavaScript function in the form `async function () { ... return value; }`.",
 	"The function must contain an explicit return. Use only APIs documented in the current context.",
 	"Return plain serializable data. Preserve resource paths when later calls may need to follow the result.",
-	"To delegate a bounded task, call `await generate({ plugin?, environment?, prompt })` inside the function. It returns the child agent's final text; the default plugin is the blank no-template process and an omitted environment uses an in-memory temporary conversation.",
+	"To delegate a bounded task, call `await generate({ plugin?, environment?, prompt })` inside the function. The plugin is a global source folder name; it defaults to blank, and an omitted environment uses an in-memory temporary conversation.",
 	"Plugin tool functions, when their prompt is present in the compiled context, are ordinary functions directly on ctx. Call the documented function name inside codeAct.",
 	"Inspect slot contracts with `slot.list()` / `get()`. `slot.paths('<name>')` returns selected resource paths; pass them to `await parse(...)` for recursive macro expansion. A chat resource returns pure message[] without authoring labels or disabled entries.",
 	"World write/edit/mkdir/move/remove and writable .data wrapper operations update the current message-bound World immediately. A resource contributes to its referenced slot only when it is selected; files stay directly readable either way.",

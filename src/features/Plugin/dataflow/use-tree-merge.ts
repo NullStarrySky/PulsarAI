@@ -33,32 +33,35 @@ function mountMeta(
 	}
 }
 
-/**
- * Creates the one runtime tree addressed by File API. The `global` folder is a
- * virtual mount and therefore reserved in local Plugin source trees.
- */
+/** Merges already-replayed sources into the one tree addressed by File API. */
+export function mergePluginData(
+	localData: PluginData,
+	global: GlobalPluginData,
+) {
+	const merged = clonePluginData(localData);
+	if (Object.hasOwn(merged.tree, "global"))
+		throw new Error("本地 Plugin 根目录保留 global 名称给全局资源挂载。");
+	const globalTree: PluginData["tree"] = {};
+	set(merged.tree, "global", globalTree);
+	set(merged.meta, "/global", defaultFolderMeta());
+	for (const [folder, data] of Object.entries(global)) {
+		if (!folder || folder.includes("/"))
+			throw new Error(`无效的全局 Plugin 文件夹名称：${folder}`);
+		const mount = `/global/${folder}`;
+		const source = clonePluginData(data);
+		set(globalTree, folder, source.tree);
+		set(merged.meta, mount, defaultFolderMeta());
+		mountMeta(merged.meta, source, mount);
+	}
+	return merged;
+}
+
 export function useTreeMerge(
 	local: MaybeRefOrGetter<PluginData | null>,
 	global: MaybeRefOrGetter<GlobalPluginData>,
 ) {
 	return computed(() => {
 		const localData = toValue(local);
-		if (!localData) return null;
-		const merged = clonePluginData(localData);
-		if (Object.hasOwn(merged.tree, "global"))
-			throw new Error("本地 Plugin 根目录保留 global 名称给全局资源挂载。");
-		const globalTree: PluginData["tree"] = {};
-		set(merged.tree, "global", globalTree);
-		set(merged.meta, "/global", defaultFolderMeta());
-		for (const [pluginId, data] of Object.entries(toValue(global))) {
-			if (!pluginId || pluginId.includes("/"))
-				throw new Error(`无效的全局 Plugin ID：${pluginId}`);
-			const mount = `/global/${pluginId}`;
-			const source = clonePluginData(data);
-			set(globalTree, pluginId, source.tree);
-			set(merged.meta, mount, defaultFolderMeta());
-			mountMeta(merged.meta, source, mount);
-		}
-		return merged;
+		return localData ? mergePluginData(localData, toValue(global)) : null;
 	});
 }
