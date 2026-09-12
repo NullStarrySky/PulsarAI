@@ -1,10 +1,13 @@
+import { useSyncStore } from "@/features/Database/dbsync-store";
 import { getSpeechModel } from "@/features/defaultConfigs/default-config-service";
 import {
-	createPluginMediaContent,
-	pluginMediaSource,
-} from "@/features/Plugin/editors/media/plugin-media";
-import { mediaLink, resolveMediaUrl, writeMedia } from "@/features/Media/media-link";
-import { useWorld } from "@/features/Plugin/tree/world-store";
+	mediaLink,
+	resolveMediaUrl,
+	writeMedia,
+} from "@/features/Media/media-link";
+import { applyPulse } from "@/features/Plugin/dataflow/pulse";
+import { useFileApi } from "@/features/Plugin/dataflow/use-file-api";
+import { pluginMediaSource } from "@/features/Plugin/resources/types/media/plugin-media";
 import { PIPER_TTS_PROVIDER_ID } from "./providers/piper-tts-client";
 import { generateSpeech } from "./text-to-speech";
 
@@ -49,18 +52,28 @@ export async function playMessageSpeech(
 	if (!trimmed) throw new Error("没有可朗读的内容。");
 
 	if (!localPluginId) throw new Error("当前会话没有本地 Plugin。");
-	const world = useWorld({ localPluginId, applyReplay: false });
-	await world.mkdir("/self/temp");
+	const sync = useSyncStore();
+	await sync.init();
+	const plugin = sync.plugins.get(localPluginId);
+	if (!plugin) throw new Error("当前会话的本地 Plugin 不存在。");
+	const files = useFileApi({
+		filetree: plugin,
+		applyPulse: (pulse) => {
+			applyPulse(plugin, pulse);
+			sync.markDirty({ type: "plugin", id: localPluginId });
+		},
+	});
+	if (!files.exists("/temp")) files.mkdir("/temp");
 
 	const model = String((await getSpeechModel()) ?? "default");
 	const extension = model.startsWith(`${PIPER_TTS_PROVIDER_ID}/`)
 		? "wav"
 		: "mp3";
 	const filename = `tts-${await cacheKey(messageId, trimmed, model, voice)}.${extension}`;
-	const cachePath = `/self/temp/${filename}`;
-	const cached = world.exists(cachePath) ? world.resolve(cachePath).node : null;
-	const source =
-		cached?.type === "file" ? pluginMediaSource(cached.content) : "";
+	const cachePath = `/temp/${filename}`;
+	const source = files.exists(cachePath)
+		? pluginMediaSource(files.read(cachePath))
+		: "";
 	if (source) {
 		await startPlayback(await resolveMediaUrl(source));
 		return { cached: true };
@@ -72,12 +85,10 @@ export async function playMessageSpeech(
 	});
 	const bytes = result.audio.uint8Array;
 	const mediaType = result.audio.mediaType || "audio/mpeg";
-	const content = createPluginMediaContent(
-		mediaLink((await writeMedia(bytes, mediaType, "temp")).id),
-		"audio",
+	const generatedSource = mediaLink(
+		(await writeMedia(bytes, mediaType, "temp")).id,
 	);
-	await world.write(cachePath, content);
-	const generatedSource = pluginMediaSource(content);
+	files.write(cachePath, generatedSource);
 	if (!generatedSource) throw new Error("生成的音频缓存无效。");
 	await startPlayback(await resolveMediaUrl(generatedSource));
 	return { cached: false };

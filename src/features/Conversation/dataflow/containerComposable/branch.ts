@@ -32,8 +32,9 @@ export function useContainerBranch(
 		if (!value?.previousContainer || !siblings.value.includes(branchId)) return;
 		const all = [...(store.containers.get(value.conversationid) ?? [])];
 		const parent = all.find((item) => item.id === value.previousContainer);
-		let tail = all.find((item) => item.id === branchId);
-		if (!parent || !tail) return;
+		const branch = all.find((item) => item.id === branchId);
+		if (!parent || !branch) return;
+		let tail: ChatContainer = branch;
 		parent.activeNextContainer = branchId;
 		const seen = new Set<string>();
 		while (tail.activeNextContainer && !seen.has(tail.id)) {

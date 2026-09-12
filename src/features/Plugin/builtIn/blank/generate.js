@@ -4,7 +4,8 @@ const useStreamText = Boolean(config.useStreamText?.value);
 
 if (useMock) {
 	const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-	await reply.setModelName("mock-deepseek-v4");
+	reply.meta.generateInfo ??= { startTime: new Date().toISOString() };
+	reply.meta.generateInfo.modelName = "mock-deepseek-v4";
 
 	const thinkingText = `The user wants me to output some markdown text for testing rendering. They want various markdown elements. Let me create a nice test markdown output. This is a simple request - I don't need to use any tools, just output markdown text directly.
 
@@ -159,12 +160,13 @@ $$
 以上就是全部测试内容喵~ 辛苦你检查渲染效果了，有任何问题随时叫我喵！🐾`;
 
 	// 1. 流式输出思考过程
-	await reply.addStep({ type: "thinking", id: "think-mock-1", message: "" });
+	const thinking = { type: "thinking", id: "think-mock-1", message: "" };
+	reply.meta.steps.push(thinking);
 	let currentThinking = "";
 	for (let i = 0; i < thinkingText.length; i += 8) {
 		const chunk = thinkingText.slice(i, i + 8);
 		currentThinking += chunk;
-		await reply.updateThinking("think-mock-1", currentThinking);
+		thinking.message = currentThinking;
 		await sleep(15);
 	}
 
@@ -173,7 +175,7 @@ $$
 	// 2. 流式输出 Markdown 正文
 	for (let i = 0; i < outputText.length; i += 6) {
 		const chunk = outputText.slice(i, i + 6);
-		await reply.appendContent(chunk);
+		reply.content += chunk;
 		await sleep(12);
 	}
 } else {

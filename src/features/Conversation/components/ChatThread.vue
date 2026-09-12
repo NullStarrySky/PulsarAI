@@ -182,7 +182,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleKeyDown));
             <div v-if="visibleRows.length" class="relative w-full" :style="{ height: `${virtualizer.getTotalSize()}px` }">
               <div v-for="row in virtualItems" :key="String(row.key)" :ref="measureRow" :data-index="row.index" class="absolute left-0 top-0 w-full pb-4" :style="{ transform: `translateY(${row.start}px)` }" @pointerdown="pauseVirtualEnd">
                 <MessageScrollerItem :message-id="visibleRows[row.index]!.container.id" :scroll-anchor="visibleRows[row.index]!.container.role === 'user'">
-                  <ChatBubble :container-id="visibleRows[row.index]!.container.id" :interval-summary="visibleRows[row.index]!.intervalSummary" @regenerate="conversation.regenerate" @delete-container="conversation.deleteContainer" @toggle-interval="toggleInterval" />
+                  <ChatBubble :chat-id="props.chatId" :container-id="visibleRows[row.index]!.container.id" :interval-summary="visibleRows[row.index]!.intervalSummary" @regenerate="conversation.regenerate" @delete-container="conversation.deleteContainer" @toggle-interval="toggleInterval" />
                 </MessageScrollerItem>
               </div>
             </div>

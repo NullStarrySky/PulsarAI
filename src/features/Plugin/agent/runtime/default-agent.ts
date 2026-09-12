@@ -7,12 +7,7 @@ import {
 	tool,
 } from "ai";
 import { z } from "zod";
-import type {
-	ThinkingStep,
-	TokenUsage,
-	ToolCallResult,
-	ToolCallStep,
-} from "@/features/Conversation/dataflow/types";
+import type { ChatMessage } from "@/features/Conversation/dataflow/types";
 
 import { getDefaultChatModel } from "@/features/defaultConfigs/default-config-service";
 import type { ReasoningEffort } from "@/features/ModelConnection/model-reference";
@@ -46,16 +41,7 @@ interface DefaultAgentResources {
  * The persisted reply target supplied by Conversation generation. Plugins pass
  * this as `container` when constructing the sandbox ToolLoopAgent wrapper.
  */
-export interface AgentOutputContainer {
-	setModelName: (modelName: string) => Promise<void>;
-	setTokenUsage: (usage: TokenUsage) => Promise<void>;
-	appendContent: (delta: string) => Promise<void>;
-	addStep: (
-		step: ThinkingStep | ToolCallStep | ToolCallResult,
-	) => Promise<void>;
-	updateThinking: (id: string, message: string) => Promise<void>;
-	completeToolCall: (step: ToolCallResult) => Promise<void>;
-}
+export type AgentOutputContainer = ChatMessage;
 
 interface ContainerToolLoopAgent {
 	stream: (input: { messages: ModelMessage[] }) => Promise<void>;
@@ -147,6 +133,7 @@ export function createAgentResourceProvider(
 
 		async stream({ messages }: { messages: ModelMessage[] }) {
 			const runtime = await prepare();
+			const output = this.input.container;
 			const runner = new ToolLoopAgent({
 				model: runtime.model,
 				reasoning: runtime.reasoning,
@@ -157,15 +144,18 @@ export function createAgentResourceProvider(
 				stopWhen: runtime.stopWhen,
 			});
 			const thinkingById = new Map<string, string>();
+			const generateInfo = (output.meta.generateInfo ??= {
+				startTime: new Date().toISOString(),
+			});
 			try {
-				await this.input.container.setModelName(runtime.modelName);
+				generateInfo.modelName = runtime.modelName;
 				const result = await runner.stream({ messages });
 				for await (const part of result.fullStream) {
 					if (part.type === "text-delta") {
-						await this.input.container.appendContent(part.text);
+						output.content += part.text;
 					} else if (part.type === "reasoning-start") {
 						thinkingById.set(part.id, "");
-						await this.input.container.addStep({
+						output.meta.steps.push({
 							type: "thinking",
 							id: part.id,
 							message: "",
@@ -173,24 +163,35 @@ export function createAgentResourceProvider(
 					} else if (part.type === "reasoning-delta") {
 						const thinking = (thinkingById.get(part.id) ?? "") + part.text;
 						thinkingById.set(part.id, thinking);
-						await this.input.container.updateThinking(part.id, thinking);
+						const step = output.meta.steps.find(
+							(candidate) =>
+								candidate.type === "thinking" && candidate.id === part.id,
+						);
+						if (step?.type === "thinking") step.message = thinking;
 					} else if (part.type === "tool-call") {
-						await this.input.container.addStep({
+						output.meta.steps.push({
 							type: "tool-call",
 							toolCallId: part.toolCallId,
 							toolName: part.toolName,
 							input: part.input,
 						});
 					} else if (part.type === "tool-result") {
-						await this.input.container.completeToolCall({
+						const step = {
 							type: "tool-result",
 							toolCallId: part.toolCallId,
 							toolName: part.toolName,
 							input: part.input,
 							output: part.output,
-						});
+						} as const;
+						const index = output.meta.steps.findIndex(
+							(candidate) =>
+								candidate.type === "tool-call" &&
+								candidate.toolCallId === part.toolCallId,
+						);
+						if (index < 0) output.meta.steps.push(step);
+						else output.meta.steps.splice(index, 1, step);
 					} else if (part.type === "tool-error") {
-						await this.input.container.completeToolCall({
+						const step = {
 							type: "tool-result",
 							toolCallId: part.toolCallId,
 							toolName: part.toolName,
@@ -202,7 +203,14 @@ export function createAgentResourceProvider(
 										? part.error.message
 										: String(part.error),
 							},
-						});
+						} as const;
+						const index = output.meta.steps.findIndex(
+							(candidate) =>
+								candidate.type === "tool-call" &&
+								candidate.toolCallId === part.toolCallId,
+						);
+						if (index < 0) output.meta.steps.push(step);
+						else output.meta.steps.splice(index, 1, step);
 					} else if (part.type === "error") {
 						throw part.error instanceof Error
 							? part.error
@@ -211,7 +219,8 @@ export function createAgentResourceProvider(
 						throw new Error(part.reason || "生成已中止。");
 					}
 				}
-				await this.input.container.setTokenUsage(await result.usage);
+				generateInfo.usage = await result.usage;
+				generateInfo.finishTime = new Date().toISOString();
 			} finally {
 				await runtime.finish();
 			}
@@ -228,8 +237,11 @@ export function createAgentResourceProvider(
 		if (!container) throw new Error("streamText 需要输出 container。");
 		const runtime = await prepare();
 		const thinkingById = new Map<string, string>();
+		const generateInfo = (container.meta.generateInfo ??= {
+			startTime: new Date().toISOString(),
+		});
 		try {
-			await container.setModelName(runtime.modelName);
+			generateInfo.modelName = runtime.modelName;
 			const result = streamText({
 				model: runtime.model,
 				messages,
@@ -241,10 +253,10 @@ export function createAgentResourceProvider(
 			});
 			for await (const part of result.fullStream) {
 				if (part.type === "text-delta") {
-					await container.appendContent(part.text);
+					container.content += part.text;
 				} else if (part.type === "reasoning-start") {
 					thinkingById.set(part.id, "");
-					await container.addStep({
+					container.meta.steps.push({
 						type: "thinking",
 						id: part.id,
 						message: "",
@@ -252,7 +264,11 @@ export function createAgentResourceProvider(
 				} else if (part.type === "reasoning-delta") {
 					const thinking = (thinkingById.get(part.id) ?? "") + part.text;
 					thinkingById.set(part.id, thinking);
-					await container.updateThinking(part.id, thinking);
+					const step = container.meta.steps.find(
+						(candidate) =>
+							candidate.type === "thinking" && candidate.id === part.id,
+					);
+					if (step?.type === "thinking") step.message = thinking;
 				} else if (part.type === "error") {
 					throw part.error instanceof Error
 						? part.error
@@ -261,7 +277,8 @@ export function createAgentResourceProvider(
 					throw new Error(part.reason || "生成已中止。");
 				}
 			}
-			await container.setTokenUsage(await result.usage);
+			generateInfo.usage = await result.usage;
+			generateInfo.finishTime = new Date().toISOString();
 		} finally {
 			await runtime.finish();
 		}

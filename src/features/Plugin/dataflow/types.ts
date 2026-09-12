@@ -33,6 +33,43 @@ export interface PluginData {
 	meta: MetaMap;
 }
 
+export interface CharacterData {
+	id: string;
+	name: string;
+	description?: string;
+	avatarUrl?: string;
+	coverUrl?: string;
+}
+
+/** Character is a live UI projection of its owning local Plugin. */
+export function characterFromPlugin(
+	localPluginId: string,
+	plugin: PluginData,
+): CharacterData {
+	const source = plugin.tree["definition.package.json"];
+	let definition: Record<string, unknown> = {};
+	if (typeof source === "string") {
+		try {
+			const parsed: unknown = JSON.parse(source);
+			if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+				definition = parsed as Record<string, unknown>;
+		} catch {
+			// A broken authoring document still has a usable fallback projection.
+		}
+	}
+	const text = (value: unknown) =>
+		typeof value === "string" ? value : undefined;
+	const avatar = plugin.tree["avatar.png"];
+	const cover = plugin.tree["cover.png"];
+	return {
+		id: localPluginId,
+		name: text(definition.name)?.trim() || "未命名角色",
+		description: text(definition.description),
+		avatarUrl: typeof avatar === "string" ? avatar : text(definition.avatar),
+		coverUrl: typeof cover === "string" ? cover : text(definition.cover),
+	};
+}
+
 /** A single replayable filesystem primitive. */
 export type Atom =
 	| { kind: "file.write"; path: ResourcePath; content: string }

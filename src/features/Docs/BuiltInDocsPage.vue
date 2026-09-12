@@ -2,9 +2,9 @@
 import { computed, ref } from "vue";
 import { Button } from "@/components/fluid";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import conversationDocs from "@/features/Conversation/docs.md?raw";
 import ConversationMarkdown from "@/features/Conversation/stage/markstream/ConversationMarkdown.vue";
 import pluginDocs from "@/features/Plugin/docs.md?raw";
+import dataFlowDocs from "../../../dataFlow.md?raw";
 
 const chapters = [
 	{
@@ -17,7 +17,7 @@ const chapters = [
 				content:
 					"# 基本架构\n\nPulsar 以 World、Conversation 与稳定 Host facade 作为三条正交边界。静态资源保存在 World；发生过的消息、Pulse 与 Interval 保存在 Conversation；平台能力只从 Host 进入。",
 			},
-			{ id: "conversation", name: "会话与区间", content: conversationDocs },
+			{ id: "data-flow", name: "数据流", content: dataFlowDocs },
 			{ id: "plugin", name: "插件与 World", content: pluginDocs },
 		],
 	},
@@ -97,6 +97,6 @@ function selectChapter(id: (typeof chapters)[number]["id"]) {
     <nav class="border-r p-2 mobile:hidden">
       <Button v-for="page in activeChapter.pages" :key="page.id" class="mb-1 w-full justify-start" :variant="activePage.id === page.id ? 'secondary' : 'ghost'" @click="activePageId = page.id">{{ page.name }}</Button>
     </nav>
-    <ScrollArea class="min-h-0"><article class="mx-auto max-w-3xl px-7 py-6 mobile:px-4"><div class="mb-3 hidden flex-wrap gap-1 mobile:flex"><Button v-for="page in activeChapter.pages" :key="page.id" size="sm" :variant="activePage.id === page.id ? 'secondary' : 'ghost'" @click="activePageId = page.id">{{ page.name }}</Button></div><ConversationMarkdown :model-value="activePage.content" /></article></ScrollArea>
+    <ScrollArea class="min-h-0"><article class="mx-auto max-w-3xl px-7 py-6 mobile:px-4"><div class="mb-3 hidden flex-wrap gap-1 mobile:flex"><Button v-for="page in activeChapter.pages" :key="page.id" size="sm" :variant="activePage.id === page.id ? 'secondary' : 'ghost'" @click="activePageId = page.id">{{ page.name }}</Button></div><ConversationMarkdown :content="activePage.content" /></article></ScrollArea>
   </div>
 </template>

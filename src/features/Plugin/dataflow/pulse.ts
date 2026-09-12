@@ -23,7 +23,7 @@ function own<T extends object>(value: T, key: PropertyKey) {
 	return Object.hasOwn(value, key);
 }
 
-function set<T>(target: Record<string, T>, key: string, value: T) {
+function set(target: object, key: string, value: unknown) {
 	Object.defineProperty(target, key, {
 		value,
 		enumerable: true,
@@ -93,7 +93,9 @@ export function basename(path: ResourcePath) {
 	return normalized.slice(normalized.lastIndexOf("/") + 1);
 }
 
-export function isResourceTree(node: ResourceNode): node is ResourceTree {
+export function isResourceTree(
+	node: ResourceNode | null | undefined,
+): node is ResourceTree {
 	return typeof node === "object" && node !== null && !Array.isArray(node);
 }
 

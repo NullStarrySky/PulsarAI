@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Notification, Notivue } from "notivue";
 import { onBeforeUnmount, onMounted } from "vue";
-import ConversationSurface from "@/features/Conversation/stage/ConversationSurface.vue";
 import { useCommandStore } from "@/features/Hotkey/command-store";
 import { useHotkeyStore } from "@/features/Hotkey/hotkey-store";
 import { useResponsiveStore } from "@/features/Misc/responsive-store";
@@ -9,6 +8,7 @@ import SettingsDialog from "@/features/Setting/components/SettingsDialog.vue";
 import { registerCoreCommands } from "@/features/UI/actions";
 import CommandSearchDialog from "@/features/UI/search/CommandSearchDialog.vue";
 import { useAppearanceStore } from "@/features/UI/theme/appearance-store";
+import ConversationContainer from "./ConversationContainer.vue";
 
 const appearance = useAppearanceStore();
 const responsive = useResponsiveStore();
@@ -45,7 +45,7 @@ onBeforeUnmount(() => {
       class="min-h-0 flex-1"
       :class="appearance.zenFrameEnabled && 'overflow-hidden rounded-xl border border-zen-frame-border/80 bg-background shadow-sm mobile:rounded-lg'"
     >
-      <ConversationSurface />
+      <ConversationContainer />
     </div>
     <SettingsDialog />
     <CommandSearchDialog />

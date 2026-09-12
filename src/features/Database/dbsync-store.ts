@@ -1,11 +1,14 @@
 import { defineStore } from "pinia";
-import { reactive, type WatchStopHandle, watch } from "vue";
+import { reactive, shallowReactive, type WatchStopHandle, watch } from "vue";
 import type {
-	CharacterData,
 	ChatContainer,
 	ChatMeta,
 } from "@/features/Conversation/dataflow/types";
-import type { PluginData } from "@/features/Plugin/dataflow";
+import {
+	type CharacterData,
+	characterFromPlugin,
+	type PluginData,
+} from "@/features/Plugin/dataflow/types";
 import {
 	remove,
 	selectAll,
@@ -57,8 +60,8 @@ function parseDirtyKey(key: string): DirtyTarget {
 export const useSyncStore = defineStore("dbsync", () => {
 	const characters = reactive(new Set<CharacterData>());
 	const plugins = reactive(new Map<string, PluginData>());
-	const chatMeta = reactive(new Map<string, Map<string, ChatMeta>>());
-	const containers = reactive(new Map<string, Set<ChatContainer>>());
+	const chatMeta = shallowReactive(new Map<string, Map<string, ChatMeta>>());
+	const containers = shallowReactive(new Map<string, Set<ChatContainer>>());
 	const characterWatchers = new Map<string, WatchStopHandle>();
 	const metaWatchers = new Map<string, WatchStopHandle>();
 	const containerWatchers = new Map<string, WatchStopHandle>();
@@ -130,16 +133,17 @@ export const useSyncStore = defineStore("dbsync", () => {
 	function addChat(value: ChatMeta) {
 		let list = chatMeta.get(value.localPluginId);
 		if (!list) {
-			list = reactive(new Map<string, ChatMeta>());
+			list = shallowReactive(new Map<string, ChatMeta>());
 			chatMeta.set(value.localPluginId, list);
 		}
-		list.set(value.id, reactive(value) as ChatMeta);
-		watchMeta(value.localPluginId, value.id, list.get(value.id));
-		return list.get(value.id)!;
+		const chat = reactive(value) as ChatMeta;
+		list.set(value.id, chat);
+		watchMeta(value.localPluginId, value.id, chat);
+		return chat;
 	}
 
 	function addContainers(chatId: string, values: ChatContainer[]) {
-		const list = reactive(
+		const list = shallowReactive(
 			new Set<ChatContainer>(
 				values.map((value) => reactive(value) as ChatContainer),
 			),
@@ -154,6 +158,18 @@ export const useSyncStore = defineStore("dbsync", () => {
 		if (!list) list = addContainers(value.conversationid, []);
 		list.add(reactive(value) as ChatContainer);
 		return [...list].find((item) => item.id === value.id)!;
+	}
+
+	function refreshCharacter(id: string) {
+		const current = [...characters].find((item) => item.id === id);
+		const plugin = plugins.get(id);
+		if (!plugin) {
+			if (current) characters.delete(current);
+			return;
+		}
+		const next = characterFromPlugin(id, plugin);
+		if (current) Object.assign(current, next);
+		else characters.add(next);
 	}
 
 	/** Removes one chat's memory graph after queuing database deletes. */
@@ -186,28 +202,15 @@ export const useSyncStore = defineStore("dbsync", () => {
 				if (!value.id?.startsWith("local:")) continue;
 				const id = value.id.slice("local:".length);
 				plugins.set(id, reactive(value) as PluginData);
-				// TODO: character projections are read-only until World persistence joins syncStore.
-				const definitionSource = value.tree?.["definition.package.json"];
-				let definition: Partial<CharacterData> | undefined;
-				if (typeof definitionSource === "string") {
-					try {
-						definition = JSON.parse(definitionSource) as Partial<CharacterData>;
-					} catch {
-						definition = undefined;
-					}
-				}
-				characters.add({
-					id,
-					name: definition?.name?.trim() || "未命名角色",
-					description: definition?.description,
-					avatarUrl: definition?.avatar,
-					coverUrl: definition?.cover,
-				});
+				refreshCharacter(id);
 				characterWatchers.set(
 					id,
 					watch(
 						() => plugins.get(id),
-						() => markDirty({ type: "plugin", id }),
+						() => {
+							refreshCharacter(id);
+							markDirty({ type: "plugin", id });
+						},
 						{ deep: true },
 					),
 				);

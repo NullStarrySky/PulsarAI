@@ -193,6 +193,7 @@ export function useFileTreeUI(options: FileApiOptions) {
 				: {}),
 		};
 		const type: NodeKind = isResourceTree(node) ? "folder" : "file";
+		const tree = isResourceTree(node) ? node : null;
 		return {
 			id: `${tab}:${path}`,
 			name,
@@ -202,13 +203,13 @@ export function useFileTreeUI(options: FileApiOptions) {
 				? {
 						openIcon: "folder-open",
 						selectionMode: meta.selectionMode,
-						children: Object.keys(node)
+						children: Object.keys(tree ?? {})
 							.filter(
 								(child) => !(isRoot && tab === "local" && child === "global"),
 							)
 							.sort((left, right) => left.localeCompare(right))
 							.map((child) =>
-								treeNode(child, node[child]!, join(path, child), tab),
+								treeNode(child, tree![child]!, join(path, child), tab),
 							),
 					}
 				: {}),

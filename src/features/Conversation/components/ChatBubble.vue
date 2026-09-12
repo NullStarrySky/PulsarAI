@@ -9,6 +9,7 @@ import {
 	Trash2,
 	Volume2,
 } from "lucide-vue-next";
+import { computed } from "vue";
 import {
 	Button,
 	DropdownMenu,
@@ -22,6 +23,7 @@ import ConversationMarkdown from "../stage/markstream/ConversationMarkdown.vue";
 import ChatSteps from "./ChatSteps.vue";
 
 const props = defineProps<{
+	chatId: string;
 	containerId: string;
 	intervalSummary?: {
 		id: string;
@@ -35,8 +37,9 @@ const emit = defineEmits<{
 	deleteContainer: [containerId: string, deleteDescendants: boolean];
 	toggleInterval: [id: string];
 }>();
-const item = useContainerComposable(props.containerId);
+const item = useContainerComposable(props.chatId, props.containerId);
 const container = item.container;
+const message = computed(() => item.message.current.value);
 
 function deleteMessage() {
 	const deleteDescendants = window.confirm(
@@ -52,22 +55,22 @@ function deleteMessage() {
     <span>{{ props.intervalSummary.open ? '编辑模式中' : props.intervalSummary.collapsed ? `编辑子对话 · ${props.intervalSummary.count} 条消息` : '收起编辑子对话' }}</span>
   </button>
   <FluidChatMessage
-    v-else-if="container && item.message.current"
+    v-else-if="container && message"
     :from="container.role === 'user' ? 'user' : 'assistant'"
-    :time="item.utility.messageTime"
+    :time="item.utility.messageTime.value"
     :class="container.role === 'user' ? 'ml-auto w-fit max-w-[77%] self-end mobile:max-w-[88%]' : 'w-full self-start'"
   >
     <div class="w-full min-w-0">
-      <p v-if="container.role === 'system' && item.interval.operations.length" class="text-xs text-muted-foreground">{{ item.interval.operations[0]?.kind === 'interval.open' ? '编辑模式中' : '编辑模式已结束' }}</p>
-      <ChatSteps :steps="item.message.current.meta.steps" />
+      <p v-if="container.role === 'system' && item.interval.operations.value.length" class="text-xs text-muted-foreground">{{ item.interval.operations.value[0]?.kind === 'interval.open' ? '编辑模式中' : '编辑模式已结束' }}</p>
+      <ChatSteps :steps="message.meta.steps" />
       <textarea v-if="item.message.edit.active" v-model="item.message.edit.content" class="min-h-24 w-full rounded-md border bg-background p-2 text-sm" @keydown.ctrl.enter.prevent="item.message.saveEdit" />
-      <ConversationMarkdown v-else :content="item.message.current.content" compact />
+      <ConversationMarkdown v-else :content="message.content" compact />
     </div>
     <template #actions>
       <div class="flex items-center gap-0.5">
-        <Button v-if="container.role === 'assistant'" variant="ghost" size="icon-sm" :disabled="!item.version.canPrev" title="上一个版本" @click="item.version.prev"><ChevronLeft class="size-4" /></Button>
-        <span v-if="container.role === 'assistant'" class="px-1 text-xs text-muted-foreground">{{ item.version.index + 1 }}/{{ item.version.count }}</span>
-        <Button v-if="container.role === 'assistant'" variant="ghost" size="icon-sm" :disabled="!item.version.canNext" title="下一个版本" @click="item.version.next"><ChevronRight class="size-4" /></Button>
+        <Button v-if="container.role === 'assistant'" variant="ghost" size="icon-sm" :disabled="!item.version.canPrev.value" title="上一个版本" @click="item.version.prev"><ChevronLeft class="size-4" /></Button>
+        <span v-if="container.role === 'assistant'" class="px-1 text-xs text-muted-foreground">{{ item.version.index.value + 1 }}/{{ item.version.count.value }}</span>
+        <Button v-if="container.role === 'assistant'" variant="ghost" size="icon-sm" :disabled="!item.version.canNext.value" title="下一个版本" @click="item.version.next"><ChevronRight class="size-4" /></Button>
         <Button v-if="item.message.edit.active" variant="ghost" size="icon-sm" title="保存" @click="item.message.saveEdit"><Check class="size-4" /></Button>
         <Button v-else variant="ghost" size="icon-sm" title="编辑" @click="item.message.startEdit"><Pencil class="size-4" /></Button>
         <Button variant="ghost" size="icon-sm" title="复制" @click="item.utility.copy"><Copy class="size-4" /></Button>

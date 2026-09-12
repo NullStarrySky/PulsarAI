@@ -1,31 +1,29 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
-import { cn } from "../../../lib/utils";
+import { computed, nextTick, onUnmounted, ref, watch } from "vue";
 import { useIcon } from "../../../lib/icon-context";
 import { useSize } from "../../../lib/size-context";
-import { useSurface } from "../../../lib/surface-context";
 import { SURFACE_BG } from "../../../lib/surface-classes";
+import { useSurface } from "../../../lib/surface-context";
+import { cn } from "../../../lib/utils";
 import { useDropdownSearchHost } from "./dropdown-context";
 
 const props = withDefaults(
-  defineProps<{
-    modelValue?: string;
-    placeholder?: string;
-    clearOnClose?: boolean;
-    autoFocus?: boolean;
-    class?: any;
-  }>(),
-  {
-    modelValue: "",
-    placeholder: "搜索…",
-    clearOnClose: true,
-    autoFocus: true,
-  }
+	defineProps<{
+		modelValue?: string;
+		placeholder?: string;
+		clearOnClose?: boolean;
+		autoFocus?: boolean;
+		class?: any;
+	}>(),
+	{
+		modelValue: "",
+		placeholder: "搜索…",
+		clearOnClose: true,
+		autoFocus: true,
+	},
 );
 
-const emit = defineEmits<{
-  (e: "update:modelValue", value: string): void;
-}>();
+const emit = defineEmits<(e: "update:modelValue", value: string) => void>();
 
 defineOptions({ name: "DropdownSearch" });
 
@@ -38,82 +36,79 @@ const inputRef = ref<HTMLInputElement | null>(null);
 
 const internalValue = ref(props.modelValue);
 watch(
-  () => props.modelValue,
-  (v) => {
-    internalValue.value = v;
-  }
+	() => props.modelValue,
+	(v) => {
+		internalValue.value = v;
+	},
 );
 
 function updateValue(val: string) {
-  internalValue.value = val;
-  emit("update:modelValue", val);
+	internalValue.value = val;
+	emit("update:modelValue", val);
 }
 
 if (host) {
-  const unregister = host.register({
-    get input() {
-      return inputRef.value;
-    },
-    append: (text: string) => updateValue(internalValue.value + text),
-    deleteBackward: () => updateValue(internalValue.value.slice(0, -1)),
-  });
-  onUnmounted(() => unregister());
+	const unregister = host.register({
+		get input() {
+			return inputRef.value;
+		},
+		append: (text: string) => updateValue(internalValue.value + text),
+		deleteBackward: () => updateValue(internalValue.value.slice(0, -1)),
+	});
+	onUnmounted(() => unregister());
 }
 
 // 自动对焦与重置
 if (host) {
-  watch(
-    () => host.open.value,
-    (isOpen) => {
-      if (!isOpen) return;
-      if (props.clearOnClose && internalValue.value !== "") {
-        updateValue("");
-      }
-      if (!props.autoFocus) return;
-      nextTick(() => {
-        requestAnimationFrame(() => {
-          inputRef.value?.focus();
-        });
-      });
-    },
-    { immediate: true }
-  );
+	watch(
+		() => host.open.value,
+		(isOpen) => {
+			if (!isOpen) return;
+			if (props.clearOnClose && internalValue.value !== "") {
+				updateValue("");
+			}
+			if (!props.autoFocus) return;
+			nextTick(() => {
+				requestAnimationFrame(() => {
+					inputRef.value?.focus();
+				});
+			});
+		},
+		{ immediate: true },
+	);
 }
 
 // 过滤时保持第一行高亮
-watch(
-  [() => internalValue.value, () => host?.open.value],
-  () => {
-    if (!host || document.activeElement !== inputRef.value) return;
-    host.highlightFirst();
-  }
-);
+watch([() => internalValue.value, () => host?.open.value], () => {
+	if (!host || document.activeElement !== inputRef.value) return;
+	host.highlightFirst();
+});
 
 function menuRows(from: HTMLElement | null): HTMLElement[] {
-  const menu = from?.closest<HTMLElement>('[role="menu"]');
-  if (!menu) return [];
-  const ROW_SELECTOR = [
-    '[role="menuitem"]:not([aria-disabled="true"])',
-    '[role="menuitemradio"]:not([aria-disabled="true"])',
-    '[role="menuitemcheckbox"]:not([aria-disabled="true"])',
-  ].join(", ");
-  return Array.from(menu.querySelectorAll<HTMLElement>(ROW_SELECTOR));
+	const menu = from?.closest<HTMLElement>('[role="menu"]');
+	if (!menu) return [];
+	const ROW_SELECTOR = [
+		'[role="menuitem"]:not([aria-disabled="true"])',
+		'[role="menuitemradio"]:not([aria-disabled="true"])',
+		'[role="menuitemcheckbox"]:not([aria-disabled="true"])',
+	].join(", ");
+	return Array.from(menu.querySelectorAll<HTMLElement>(ROW_SELECTOR));
 }
 
 function handleKeyDown(e: KeyboardEvent) {
-  if (e.defaultPrevented) return;
-  if (e.key === "Escape" || e.key === "Tab") return;
-  e.stopPropagation();
+	if (e.defaultPrevented) return;
+	if (e.key === "Escape" || e.key === "Tab") return;
+	e.stopPropagation();
 
-  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-    const rows = menuRows(e.currentTarget as HTMLElement);
-    if (rows.length === 0) return;
-    e.preventDefault();
-    (e.key === "ArrowDown" ? rows[0] : rows[rows.length - 1])?.focus();
-  } else if (e.key === "Enter") {
-    e.preventDefault();
-    menuRows(e.currentTarget as HTMLElement)[0]?.click();
-  }
+	if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+		const rows = menuRows(e.currentTarget as HTMLElement);
+		if (rows.length === 0) return;
+		e.preventDefault();
+		(e.key === "ArrowDown" ? rows[0] : rows[rows.length - 1])?.focus();
+	} else if (e.key === "Enter") {
+		e.preventDefault();
+		menuRows(e.currentTarget as HTMLElement)[0]?.click();
+	}
 }
 </script>
 

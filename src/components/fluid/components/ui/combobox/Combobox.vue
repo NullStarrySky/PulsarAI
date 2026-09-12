@@ -1,64 +1,62 @@
 <script setup lang="ts">
-import { computed, getCurrentInstance, ref, watch, provide, inject, type InjectionKey, type Ref } from "vue";
+import { AnimatePresence, motion } from "motion-v";
 import {
-  ComboboxRoot,
-  ComboboxAnchor,
-  ComboboxTrigger,
-  ComboboxPortal,
-  ComboboxContent as RekaComboboxContent,
-  ComboboxViewport,
-  ComboboxInput as RekaComboboxInput,
-  ComboboxEmpty as RekaComboboxEmpty,
-  ComboboxItem as RekaComboboxItem,
+	ComboboxAnchor,
+	ComboboxPortal,
+	ComboboxRoot,
+	ComboboxTrigger,
+	ComboboxViewport,
+	ComboboxContent as RekaComboboxContent,
+	ComboboxEmpty as RekaComboboxEmpty,
+	ComboboxInput as RekaComboboxInput,
+	ComboboxItem as RekaComboboxItem,
 } from "reka-ui";
-import { motion, AnimatePresence } from "motion-v";
-import { cn } from "../../../lib/utils";
-import { spring, exitFallbackMs } from "../../../lib/springs";
-import { propPassed } from "../../../lib/prop-passed";
+import { computed, getCurrentInstance, ref, watch } from "vue";
 import { useFluidHover } from "../../../hooks/use-fluid-hover";
-import { shapeMap } from "../../../lib/shape-context";
-import { useSize, type SizeVariant } from "../../../lib/size-context";
+import type Elevated from "../../../lib/Elevated.vue";
 import { useForwardedEl } from "../../../lib/forwarded-el";
-import Elevated from "../../../lib/Elevated.vue";
-import { isDisabledRow, popupMotionClass } from "../../../lib/popup";
-import FluidHoverHighlight from "../fluid-hover/FluidHoverHighlight.vue";
 import type { IconComponent } from "../../../lib/icon-context";
 import { useIcon } from "../../../lib/icon-context";
+import { isDisabledRow, popupMotionClass } from "../../../lib/popup";
+import { propPassed } from "../../../lib/prop-passed";
+import { shapeMap } from "../../../lib/shape-context";
+import { type SizeVariant, useSize } from "../../../lib/size-context";
+import { exitFallbackMs, spring } from "../../../lib/springs";
+import { cn } from "../../../lib/utils";
+import FluidHoverHighlight from "../fluid-hover/FluidHoverHighlight.vue";
 
 // Combobox 弹出层表面使用更紧凑利落的 "rounded" 圆角
 const shape = shapeMap.rounded;
 
 export interface ComboboxItemData {
-  value: string;
-  label: string;
-  icon?: IconComponent;
+	value: string;
+	label: string;
+	icon?: IconComponent;
 }
 
 const props = withDefaults(
-  defineProps<{
-    items?: readonly ComboboxItemData[];
-    /** 受控选中值。 */
-    modelValue?: string;
-    placeholder?: string;
-    /** 过滤输入的占位文本。 */
-    searchPlaceholder?: string;
-    emptyText?: string;
-    disabled?: boolean;
-    /** 把触发器与弹层钉在尺寸阶梯的某一档。省略时跟随外围 SizeProvider。 */
-    size?: SizeVariant;
-    class?: string;
-  }>(),
-  {
-    placeholder: "选择…",
-    searchPlaceholder: "搜索…",
-    emptyText: "无匹配项",
-    disabled: false,
-  }
+	defineProps<{
+		items?: readonly ComboboxItemData[];
+		/** 受控选中值。 */
+		modelValue?: string;
+		placeholder?: string;
+		/** 过滤输入的占位文本。 */
+		searchPlaceholder?: string;
+		emptyText?: string;
+		disabled?: boolean;
+		/** 把触发器与弹层钉在尺寸阶梯的某一档。省略时跟随外围 SizeProvider。 */
+		size?: SizeVariant;
+		class?: string;
+	}>(),
+	{
+		placeholder: "选择…",
+		searchPlaceholder: "搜索…",
+		emptyText: "无匹配项",
+		disabled: false,
+	},
 );
 
-const emit = defineEmits<{
-  (e: "update:modelValue", value: string): void;
-}>();
+const emit = defineEmits<(e: "update:modelValue", value: string) => void>();
 
 defineOptions({ name: "Combobox" });
 
@@ -69,102 +67,114 @@ const valuePassed = computed(() => propPassed(instance, "modelValue"));
 
 const internalValue = ref<string | undefined>(undefined);
 const currentValue = computed(() =>
-  valuePassed.value ? props.modelValue : internalValue.value
+	valuePassed.value ? props.modelValue : internalValue.value,
 );
 
 const open = ref(false);
 const mounted = ref(false);
 
 watch(open, (o) => {
-  if (o) {
-    mounted.value = true;
-    return;
-  }
-  const id = setTimeout(() => (mounted.value = false), exitFallbackMs(spring.fast));
-  return () => clearTimeout(id);
+	if (o) {
+		mounted.value = true;
+		return;
+	}
+	const id = setTimeout(
+		() => (mounted.value = false),
+		exitFallbackMs(spring.fast),
+	);
+	return () => clearTimeout(id);
 });
 
 function handleValueChange(next: string | undefined) {
-  const v = next ?? "";
-  if (!valuePassed.value) internalValue.value = v;
-  emit("update:modelValue", v);
+	const v = next ?? "";
+	if (!valuePassed.value) internalValue.value = v;
+	emit("update:modelValue", v);
 }
 
 function handleAnimationComplete() {
-  if (!open.value) mounted.value = false;
+	if (!open.value) mounted.value = false;
 }
 
 const selectedLabel = computed(() => {
-  if (!props.items) return null;
-  const found = props.items.find((it) => it.value === currentValue.value);
-  return found ? found.label : null;
+	if (!props.items) return null;
+	const found = props.items.find((it) => it.value === currentValue.value);
+	return found ? found.label : null;
 });
 
-const labelByValue = computed(() => new Map((props.items ?? []).map((it) => [it.value, it.label])));
+const labelByValue = computed(
+	() => new Map((props.items ?? []).map((it) => [it.value, it.label])),
+);
 const filterFunction = (value: string, searchTerm: string) => {
-  const label = labelByValue.value.get(value) ?? value;
-  return label.toLowerCase().includes(searchTerm.toLowerCase());
+	const label = labelByValue.value.get(value) ?? value;
+	return label.toLowerCase().includes(searchTerm.toLowerCase());
 };
 
 // ── 流体悬停（弹层内）──────────────────────────────────
 const elevatedRef = ref<InstanceType<typeof Elevated> | null>(null);
 const containerRef = useForwardedEl(elevatedRef);
 const {
-  activeIndex,
-  setActiveIndex,
-  itemRects,
-  session,
-  handlers,
-  measureItems,
-  registerItem,
+	activeIndex,
+	setActiveIndex,
+	itemRects,
+	session,
+	handlers,
+	measureItems,
 } = useFluidHover(containerRef, { isItemDisabled: isDisabledRow });
 
 const focusedIndex = ref<number | null>(null);
 
 watch(open, (o) => {
-  if (!o) return;
-  measureItems();
+	if (!o) return;
+	measureItems();
 });
 
 watch(open, (o) => {
-  if (o) return;
-  focusedIndex.value = null;
-  setActiveIndex(null);
+	if (o) return;
+	focusedIndex.value = null;
+	setActiveIndex(null);
 });
 
 const activeRect = computed(() =>
-  activeIndex.value !== null ? itemRects.value[activeIndex.value] ?? null : null
+	activeIndex.value !== null
+		? (itemRects.value[activeIndex.value] ?? null)
+		: null,
 );
 const focusRect = computed(() =>
-  focusedIndex.value !== null ? itemRects.value[focusedIndex.value] ?? null : null
+	focusedIndex.value !== null
+		? (itemRects.value[focusedIndex.value] ?? null)
+		: null,
 );
 const checkedRect = computed(() => {
-  if (!props.items) return null;
-  const idx = props.items.findIndex((it) => it.value === currentValue.value);
-  return idx >= 0 ? itemRects.value[idx] ?? null : null;
+	if (!props.items) return null;
+	const idx = props.items.findIndex((it) => it.value === currentValue.value);
+	return idx >= 0 ? (itemRects.value[idx] ?? null) : null;
 });
 
 function handleMouseEnter() {
-  handlers.onMouseEnter();
-  focusedIndex.value = null;
+	handlers.onMouseEnter();
+	focusedIndex.value = null;
 }
 
 function handleFocus(e: FocusEvent) {
-  const target = e.target as HTMLElement;
-  const indexAttr = target
-    .closest("[data-proximity-index], [data-fluid-hover-index]")
-    ?.getAttribute("data-proximity-index") ?? target.closest("[data-fluid-hover-index]")?.getAttribute("data-fluid-hover-index");
-  if (indexAttr != null) {
-    const idx = Number(indexAttr);
-    setActiveIndex(idx);
-    focusedIndex.value = target.matches(":focus-visible") ? idx : null;
-  }
+	const target = e.target as HTMLElement;
+	const indexAttr =
+		target
+			.closest("[data-proximity-index], [data-fluid-hover-index]")
+			?.getAttribute("data-proximity-index") ??
+		target
+			.closest("[data-fluid-hover-index]")
+			?.getAttribute("data-fluid-hover-index");
+	if (indexAttr != null) {
+		const idx = Number(indexAttr);
+		setActiveIndex(idx);
+		focusedIndex.value = target.matches(":focus-visible") ? idx : null;
+	}
 }
 
 function handleBlur(e: FocusEvent) {
-  if (containerRef.value?.contains(e.relatedTarget as Node)) return;
-  focusedIndex.value = null;
-  setActiveIndex(null);
+	if (containerRef.value?.contains(e.relatedTarget as Node)) return;
+	focusedIndex.value = null;
+	setActiveIndex(null);
 }
 
 // ── 尺寸 ──
@@ -172,20 +182,20 @@ const sizeClasses = useSize(() => props.size);
 const compact = computed(() => sizeClasses.value.variant === "compact");
 
 const triggerClass = computed(() =>
-  cn(
-    "group inline-flex items-center justify-between outline-none cursor-pointer",
-    "transition-all duration-80",
-    "disabled:opacity-50 disabled:pointer-events-none",
-    "focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]",
-    "border border-border bg-transparent text-foreground hover:bg-hover",
-    sizeClasses.value.control,
-    sizeClasses.value.text,
-    sizeClasses.value.px,
-    sizeClasses.value.gap,
-    compact.value ? "min-w-[160px]" : "min-w-[200px]",
-    shape.input,
-    props.class
-  )
+	cn(
+		"group inline-flex items-center justify-between outline-none cursor-pointer",
+		"transition-all duration-80",
+		"disabled:opacity-50 disabled:pointer-events-none",
+		"focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]",
+		"border border-border bg-transparent text-foreground hover:bg-hover",
+		sizeClasses.value.control,
+		sizeClasses.value.text,
+		sizeClasses.value.px,
+		sizeClasses.value.gap,
+		compact.value ? "min-w-[160px]" : "min-w-[200px]",
+		shape.input,
+		props.class,
+	),
 );
 </script>
 

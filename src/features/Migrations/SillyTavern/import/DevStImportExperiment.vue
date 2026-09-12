@@ -1,27 +1,39 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
 import { Code, Eye, FilePlus2, Play, Upload } from "lucide-vue-next";
-import { Button, Tabs, TabsList, TabItem } from "@/components/fluid";
+import { computed, ref } from "vue";
+import FileTree, {
+	type FileTreeNode,
+} from "@/components/common/file-tree/FileTree.vue";
+import { Button, TabItem, Tabs, TabsList } from "@/components/fluid";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import FileTree, { type FileTreeNode } from "@/components/common/file-tree/FileTree.vue";
+import { useSyncStore } from "@/features/Database/dbsync-store";
+import { applyPulse as applyPluginPulse } from "@/features/Plugin/dataflow/pulse";
+import { useFileApi } from "@/features/Plugin/dataflow/use-file-api";
 import { host } from "@/host";
-import { usePluginWorld } from "@/features/Plugin/runtime/file-composables";
-import { openFile } from "@/features/Plugin/tree/file-editor-manager";
-import type { WorldFileNode } from "@/features/Plugin/tree/world-types";
-import StWorldbookRenderer from "../renderers/StWorldbookRenderer.vue";
 import StPresetRenderer from "../renderers/StPresetRenderer.vue";
+import StWorldbookRenderer from "../renderers/StWorldbookRenderer.vue";
 import { applyStImportPlan } from "./st-import-apply";
 import {
 	buildStImportPlan,
 	readStResourceFile,
-	tryBuildStImportPlan,
-	type StImportFile,
 	type StImportPlan,
 	type StResourceFile,
+	tryBuildStImportPlan,
 } from "./st-import-plan";
 import { stTestRenderers } from "./st-test-renderers";
 
-const world = usePluginWorld();
+const sync = useSyncStore();
+void sync.init();
+const localPluginId = computed(() => [...sync.characters][0]?.id ?? "");
+const plugin = computed(() => sync.plugins.get(localPluginId.value) ?? null);
+const world = useFileApi({
+	filetree: plugin,
+	applyPulse: (pulse) => {
+		if (!plugin.value) throw new Error("没有可写入的本地 Plugin。");
+		applyPluginPulse(plugin.value, pulse);
+		sync.markDirty({ type: "plugin", id: localPluginId.value });
+	},
+});
 const source = ref<StResourceFile | null>(null);
 const plan = ref<StImportPlan | null>(null);
 const error = ref("");
@@ -97,7 +109,7 @@ function convert() {
 async function apply() {
 	if (!plan.value) return;
 	try {
-		const result = await applyStImportPlan(world, plan.value, "/self");
+		const result = await applyStImportPlan(world, plan.value, "/");
 		applied.value = `已写入测试 World：${result.createdPaths.length} 个节点`;
 	} catch (cause) {
 		error.value = cause instanceof Error ? cause.message : String(cause);
@@ -157,7 +169,14 @@ const planTreeNodes = computed<FileTreeNode[]>(() => {
 				});
 			} else {
 				const ext = name.split(".").pop() || "";
-				const icon = ext === "md" ? "file-text" : ext === "json" ? "file-code" : ext === "vue" ? "file-code-2" : "file";
+				const icon =
+					ext === "md"
+						? "file-text"
+						: ext === "json"
+							? "file-code"
+							: ext === "vue"
+								? "file-code-2"
+								: "file";
 				list.push({
 					id: `file:${fullPath}`,
 					name,
@@ -168,7 +187,13 @@ const planTreeNodes = computed<FileTreeNode[]>(() => {
 				});
 			}
 		}
-		return list.sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "folder" ? -1 : 1));
+		return list.sort((a, b) =>
+			a.type === b.type
+				? a.name.localeCompare(b.name)
+				: a.type === "folder"
+					? -1
+					: 1,
+		);
 	}
 
 	return mapToNodes(rootMap);
@@ -176,17 +201,7 @@ const planTreeNodes = computed<FileTreeNode[]>(() => {
 
 function handleSelectTreeNode(node: FileTreeNode) {
 	if (node.type !== "file" || !node.data?.file) return;
-	const f: StImportFile = node.data.file;
-	const fileNode: WorldFileNode = {
-		id: `st-plan-${f.path.replace(/[^a-zA-Z0-9_]/g, "-")}`,
-		type: "file",
-		name: f.name || f.path.split("/").pop() || "file",
-		content: f.content,
-		order: f.order ?? 100,
-		slot: f.slotId,
-		createDate: new Date().toISOString(),
-	};
-	openFile(fileNode, f.path, (world as any).scope?.localPluginId ?? "default");
+	applied.value = `计划文件：${node.data.path}`;
 }
 </script>
 
@@ -255,7 +270,7 @@ function handleSelectTreeNode(node: FileTreeNode) {
         <FilePlus2 class="size-4" />应用到测试 World
       </Button>
       <div class="text-[11px] text-muted-foreground leading-relaxed">
-        默认转换不会写入数据库；点击右侧树中文件可打开浮动资源编辑器。
+        默认转换不会写入数据库；应用后写入当前本地 Plugin。
       </div>
       <div v-if="error" class="rounded-lg bg-destructive/10 p-2 text-xs text-destructive">
         {{ error }}
@@ -273,8 +288,8 @@ function handleSelectTreeNode(node: FileTreeNode) {
     <!-- Right Column: Hierarchical File Tree with Floating Editor -->
     <section class="flex min-h-0 flex-col rounded-2xl border border-border/80 bg-card p-3 shadow-xs">
       <div class="mb-2.5 flex items-center justify-between border-b pb-2">
-        <h2 class="text-xs font-semibold text-foreground">目标树 (复用文件树与浮窗)</h2>
-        <span v-if="plan" class="text-[10px] text-muted-foreground">点击节点打开浮窗</span>
+        <h2 class="text-xs font-semibold text-foreground">目标树</h2>
+        <span v-if="plan" class="text-[10px] text-muted-foreground">点击节点查看路径</span>
       </div>
       <div class="min-h-0 flex-1 overflow-hidden">
         <FileTree

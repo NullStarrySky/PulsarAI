@@ -4,7 +4,7 @@ import { defaultFolderMeta, type PluginData, type ResourceMeta } from "./types";
 
 export type GlobalPluginData = Record<string, PluginData>;
 
-function set<T>(target: Record<string, T>, key: string, value: T) {
+function set(target: object, key: string, value: unknown) {
 	Object.defineProperty(target, key, {
 		value,
 		enumerable: true,

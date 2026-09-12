@@ -1,7 +1,13 @@
 import { computed, toValue } from "vue";
 import { builtinSlotRegistry } from "../utils/import-converter";
 import { isResourceTree, normalizeResourcePath, parentPath } from "./pulse";
-import type { FileMeta, FolderMeta, PluginData, ResourcePath } from "./types";
+import type {
+	FileMeta,
+	FolderMeta,
+	PluginData,
+	ResourceMeta,
+	ResourcePath,
+} from "./types";
 import { type FileApiOptions, useFileApi } from "./use-file-api";
 
 export interface SlotResource {
@@ -78,7 +84,7 @@ function directSlotPath(data: PluginData, path: ResourcePath) {
 	let current: string | null = path;
 	while (current && !seen.has(current)) {
 		seen.add(current);
-		const meta = data.meta[current];
+		const meta: ResourceMeta | undefined = data.meta[current];
 		if (meta && "selectionMode" in meta && current.startsWith("/slot/"))
 			return current;
 		if (meta && "parent" in meta && meta.parent) {

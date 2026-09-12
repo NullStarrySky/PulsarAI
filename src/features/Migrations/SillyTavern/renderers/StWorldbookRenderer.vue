@@ -1,6 +1,6 @@
 <script setup lang="ts">
+import { BookOpen, Plus, Search, Tag, Trash2 } from "lucide-vue-next";
 import { computed, ref, watch } from "vue";
-import { BookOpen, Plus, Search, Trash2, Tag, SlidersHorizontal } from "lucide-vue-next";
 import {
 	Accordion,
 	AccordionContent,
@@ -196,8 +196,8 @@ function updateSecondaryKeys(entry: StWorldbookEntry, text: string) {
                 >
                   <Tag class="mr-0.5 size-2.5 opacity-60" />{{ k }}
                 </Badge>
-                <span v-if="(entry.key || []).length > 3" class="text-[10px] text-muted-foreground">
-                  +{{ entry.key.length - 3 }}
+                <span v-if="(entry.key?.length ?? 0) > 3" class="text-[10px] text-muted-foreground">
+                  +{{ (entry.key?.length ?? 0) - 3 }}
                 </span>
               </div>
               <span class="ml-auto shrink-0 text-[10px] tabular-nums text-muted-foreground">
@@ -214,7 +214,7 @@ function updateSecondaryKeys(entry: StWorldbookEntry, text: string) {
                   :model-value="entry.comment ?? ''"
                   placeholder="例如：主要角色设定"
                   class="h-7 text-xs bg-background shadow-none"
-                  @update:model-value="entry.comment = $event; notifyUpdate()"
+                  @update:model-value="entry.comment = String($event); notifyUpdate()"
                 />
               </div>
               <div class="space-y-1">
@@ -235,7 +235,7 @@ function updateSecondaryKeys(entry: StWorldbookEntry, text: string) {
                 :model-value="(entry.key || []).join(', ')"
                 placeholder="例如：Pulsar, 助手, 飞船"
                 class="h-7 text-xs bg-background shadow-none font-mono"
-                @update:model-value="updateKeys(entry, $event)"
+                @update:model-value="updateKeys(entry, String($event))"
               />
             </div>
 
@@ -246,7 +246,7 @@ function updateSecondaryKeys(entry: StWorldbookEntry, text: string) {
                 :model-value="(entry.secondary_keys || []).join(', ')"
                 placeholder="可选，仅当主键与次要键均匹配时激活"
                 class="h-7 text-xs bg-background shadow-none font-mono"
-                @update:model-value="updateSecondaryKeys(entry, $event)"
+                @update:model-value="updateSecondaryKeys(entry, String($event))"
               />
             </div>
 

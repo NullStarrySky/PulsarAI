@@ -1,26 +1,47 @@
 <script setup lang="ts">
 import { MessageCircle, Pin, Plus, Search, Trash2, X } from "lucide-vue-next";
 import { computed, ref } from "vue";
-import { Button, Badge } from "@/components/fluid";
+import { Badge, Button } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import { useChatList } from "../dataflow/chats";
 
-const props = defineProps<{ localPluginId: string; chatId: string; open: boolean }>();
-const emit = defineEmits<{ "update:open": [open: boolean]; select: [chatId: string] }>();
+const props = defineProps<{
+	localPluginId: string;
+	chatId: string;
+	open: boolean;
+}>();
+const emit = defineEmits<{
+	"update:open": [open: boolean];
+	select: [chatId: string];
+	close: [chatId: string];
+}>();
 const search = ref("");
 const chatList = useChatList(props.localPluginId);
 const visible = computed(() => {
 	const query = search.value.trim().toLocaleLowerCase();
-	return [...chatList.chats.value].filter(chat => !query || chat.title.toLocaleLowerCase().includes(query)).sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || b.updatedAt.localeCompare(a.updatedAt));
+	return [...chatList.chats.value]
+		.filter((chat) => !query || chat.title.toLocaleLowerCase().includes(query))
+		.sort(
+			(a, b) =>
+				Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
+				b.updatedAt.localeCompare(a.updatedAt),
+		);
 });
-function select(chatId: string) { emit("select", chatId); emit("update:open", false); }
-function create() { const chat = chatList.create(); select(chat.id); }
+function select(chatId: string) {
+	emit("select", chatId);
+	emit("update:open", false);
+}
+function create() {
+	const chat = chatList.create();
+	select(chat.id);
+}
 function remove(chatId: string) {
-	const chat = [...chatList.chats.value].find(value => value.id === chatId);
+	const chat = [...chatList.chats.value].find((value) => value.id === chatId);
 	if (!chat || !window.confirm(`删除会话“${chat.title}”？`)) return;
 	chatList.delete(chatId);
+	emit("close", chatId);
 	if (chatId === props.chatId) {
 		const next = [...chatList.chats.value][0] ?? chatList.create();
 		emit("select", next.id);
@@ -28,7 +49,7 @@ function remove(chatId: string) {
 }
 function togglePinned(chatId: string, event: MouseEvent) {
 	event.stopPropagation();
-	const chat = [...chatList.chats.value].find(value => value.id === chatId);
+	const chat = [...chatList.chats.value].find((value) => value.id === chatId);
 	if (!chat) return;
 	chat.pinned = !chat.pinned;
 	chat.updatedAt = new Date().toISOString();

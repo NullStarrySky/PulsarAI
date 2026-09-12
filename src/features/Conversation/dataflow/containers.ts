@@ -11,7 +11,13 @@ function containersForChat(chatId: string) {
 		| undefined;
 }
 
-function findContainer(containerId: string) {
+function findContainer(chatId: string, containerId: string) {
+	return [...(containersForChat(chatId) ?? [])].find(
+		(item) => item.id === containerId,
+	);
+}
+
+function findContainerById(containerId: string) {
 	return [...useSyncStore().containers.values()]
 		.flatMap((items) => [...items])
 		.find((item) => item.id === containerId);
@@ -19,7 +25,7 @@ function findContainer(containerId: string) {
 
 registerSyncHandler<ChatContainer>("container", {
 	table: "message_containers",
-	value: findContainer,
+	value: findContainerById,
 });
 
 export function usePureContainers(chatId: string) {
@@ -28,6 +34,6 @@ export function usePureContainers(chatId: string) {
 }
 
 /** Thin reactive address lookup; it adds no persistence behavior. */
-export function usePureContainer(containerId: string) {
-	return computed(() => findContainer(containerId) ?? null);
+export function usePureContainer(chatId: string, containerId: string) {
+	return computed(() => findContainer(chatId, containerId) ?? null);
 }

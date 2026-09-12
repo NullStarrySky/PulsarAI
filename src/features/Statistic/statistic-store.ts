@@ -1,11 +1,11 @@
 import { defineStore } from "pinia";
 import { computed, ref, shallowRef } from "vue";
-import { selectAllChats } from "@/features/Conversation/chats/chat-service";
-import type { Conversation } from "@/features/Conversation/chats/chat-types";
-import { selectAllContainers } from "@/features/Conversation/messages/message-service";
-import type { ChatMessageContainer } from "@/features/Conversation/messages/message-types";
+import type {
+	ChatContainer as ChatMessageContainer,
+	ChatMeta as Conversation,
+} from "@/features/Conversation/dataflow/types";
 import { selectAll, upsert } from "@/features/Database/database-service";
-import { useLocalPluginStore } from "@/features/Plugin/local-plugin-store";
+import { useSyncStore } from "@/features/Database/dbsync-store";
 import {
 	createStatisticEvent,
 	createYearHeatmap,
@@ -17,11 +17,12 @@ const table = "statistic_events";
 export const useStatisticStore = defineStore("statistic", () => {
 	const events = ref<StatisticEvent[]>([]);
 	const loaded = ref(false);
-	const localPlugins = useLocalPluginStore();
+	const sync = useSyncStore();
 	const allChats = shallowRef<Conversation[]>([]);
 	const allContainers = shallowRef<ChatMessageContainer[]>([]);
 
-	const packageCount = computed(() => localPlugins.localPlugins.length);
+	const localPlugins = computed(() => [...sync.characters]);
+	const packageCount = computed(() => localPlugins.value.length);
 	const conversationCount = computed(() => allChats.value.length);
 	const messageCount = computed(() =>
 		allContainers.value.reduce(
@@ -33,7 +34,7 @@ export const useStatisticStore = defineStore("statistic", () => {
 	const sizeByType = computed(() => {
 		const conversationsBytes = byteSize(allChats.value);
 		const containersBytes = byteSize(allContainers.value);
-		const packagesBytes = byteSize(localPlugins.localPlugins);
+		const packagesBytes = byteSize(localPlugins.value);
 		return [
 			{
 				id: "packages",
@@ -56,7 +57,7 @@ export const useStatisticStore = defineStore("statistic", () => {
 		];
 	});
 	const sizeByPackage = computed(() =>
-		localPlugins.localPlugins.map((item, index) => {
+		localPlugins.value.map((item, index) => {
 			const pkgConversations = allChats.value.filter(
 				(conversationItem) => conversationItem.localPluginId === item.id,
 			);
@@ -70,9 +71,7 @@ export const useStatisticStore = defineStore("statistic", () => {
 				id: item.id,
 				label: item.name,
 				bytes:
-					byteSize(item) +
-					byteSize(pkgConversations) +
-					byteSize(pkgContainers),
+					byteSize(item) + byteSize(pkgConversations) + byteSize(pkgContainers),
 				color: `hsl(${(index * 67) % 360} 70% 55%)`,
 			};
 		}),
@@ -85,8 +84,13 @@ export const useStatisticStore = defineStore("statistic", () => {
 		events.value = (await selectAll<StatisticEvent>(table)).map(
 			(item) => item.value,
 		);
-		allChats.value = await selectAllChats();
-		allContainers.value = await selectAllContainers();
+		await sync.init();
+		allChats.value = (await selectAll<Conversation>("conversations")).map(
+			(item) => item.value,
+		);
+		allContainers.value = (
+			await selectAll<ChatMessageContainer>("message_containers")
+		).map((item) => item.value);
 		loaded.value = true;
 	}
 

@@ -1,20 +1,13 @@
-import { builtinGlobalSlotPath } from "@/features/Plugin/tree/builtin-world";
+import { builtinSlotRegistry } from "@/features/Plugin/utils/import-converter";
 import type { StImportFile, StImportPlan } from "./st-import-plan";
 
-/**
- * Minimal World surface used to apply an import plan — satisfied by the
- * object returned from `useWorld`.
- */
 export interface StImportWorldWriter {
 	exists(path: string): boolean;
-	ls(path?: string): Array<{ id: string; name: string; type: "file" | "folder" }>;
-	createFolder(parentPath: string, name: string): Promise<string>;
-	createFile(parentPath: string, name: string, content?: unknown): Promise<string>;
-	updateFolder(
-		path: string,
-		patch: { parent?: string },
-	): Promise<void>;
-	updateFile(
+	ls(path?: string): string[];
+	mkdir(path: string): void;
+	write(path: string, content: string): void;
+	updateFolderMeta(path: string, patch: { parent?: string }): void;
+	updateFileMeta(
 		path: string,
 		patch: {
 			slot?: string;
@@ -22,23 +15,15 @@ export interface StImportWorldWriter {
 			priority?: number;
 			resourceSelected?: boolean;
 		},
-	): Promise<void>;
-	/** Enables/disables with single-selection slots deselecting their siblings. */
-	setSelected(path: string, selected: boolean): Promise<void>;
+	): void;
 }
 
 export interface StImportApplyResult {
-	/** The generated folder, or the single created file. */
 	rootPath: string;
 	createdPaths: string[];
 	diagnostics: string[];
 }
 
-/**
- * Writes an import plan below `targetFolderPath` (`/self/…` or `/global/<source>/…`).
- * Imported resources default to enabled; worldbook entries keep the enabled
- * result defined by their original entry (carried in the plan).
- */
 export async function applyStImportPlan(
 	writer: StImportWorldWriter,
 	plan: StImportPlan,
@@ -46,153 +31,96 @@ export async function applyStImportPlan(
 ): Promise<StImportApplyResult> {
 	const createdPaths: string[] = [];
 	const diagnostics = [...plan.diagnostics];
-
 	if (plan.mode === "file") {
 		const file = plan.files[0];
 		if (!file) throw new Error("导入计划没有可写入的文件。");
-		const fileName = await uniqueName(writer, targetFolderPath, file.path, true);
-		const filePath = await writer.createFile(
-			targetFolderPath,
-			fileName,
-			file.content,
-		);
-		createdPaths.push(filePath);
-		await patchImportedFile(writer, targetFolderPath, filePath, file);
-		return { rootPath: filePath, createdPaths, diagnostics };
+		const path = uniquePath(writer, targetFolderPath, file.path, true);
+		writeFile(writer, path, file);
+		createdPaths.push(path);
+		return { rootPath: path, createdPaths, diagnostics };
 	}
 
-	const folderName = await uniqueName(writer, targetFolderPath, plan.name, false);
-	const folderPath = await writer.createFolder(targetFolderPath, folderName);
-	createdPaths.push(folderPath);
-	const folderCache = new Map<string, string>([["", folderPath]]);
+	const rootPath = uniquePath(writer, targetFolderPath, plan.name, false);
+	writer.mkdir(rootPath);
+	createdPaths.push(rootPath);
 	for (const file of plan.files) {
-		const segments = file.path.split("/");
-		const fileName = segments.pop();
-		if (!fileName) continue;
-		const parentPath = await ensureFolderChain(
-			writer,
-			folderPath,
-			segments,
-			folderCache,
-			createdPaths,
-		);
-		const filePath = await writer.createFile(
-			parentPath,
-			fileName,
-			file.content,
-		);
-		createdPaths.push(filePath);
-		await patchImportedFile(writer, targetFolderPath, filePath, file);
+		const parts = file.path.split("/").filter(Boolean);
+		const name = parts.pop();
+		if (!name) continue;
+		let parent = rootPath;
+		for (const part of parts) {
+			parent = join(parent, part);
+			if (!writer.exists(parent)) {
+				writer.mkdir(parent);
+				createdPaths.push(parent);
+			}
+		}
+		const path = join(parent, name);
+		writeFile(writer, path, file);
+		createdPaths.push(path);
 	}
-	return { rootPath: folderPath, createdPaths, diagnostics };
+	return { rootPath, createdPaths, diagnostics };
 }
 
-async function patchImportedFile(
+function writeFile(
 	writer: StImportWorldWriter,
-	targetFolderPath: string,
-	filePath: string,
+	path: string,
 	file: StImportFile,
 ) {
-	const slotPath = file.slotId
-		? await ensureLocalSlotPath(writer, targetFolderPath, file.slotId)
-		: undefined;
-	await writer.updateFile(filePath, {
-		...(slotPath ? { slot: slotPath } : {}),
+	writer.write(
+		path,
+		typeof file.content === "string"
+			? file.content
+			: JSON.stringify(file.content, null, 2),
+	);
+	const slot = file.slotId ? ensureLocalSlot(writer, file.slotId) : undefined;
+	writer.updateFileMeta(path, {
+		...(slot ? { slot } : {}),
 		...(file.condition ? { condition: file.condition } : {}),
 		...(file.priority !== undefined ? { priority: file.priority } : {}),
+		resourceSelected: file.resourceSelected !== false,
 	});
-	// 导入的资源默认开启，开启结果覆盖原有配置；世界书条目由计划携带
-	// 原条目的开启结果。单选插槽经 setSelected 关闭同槽位的其他资源。
-	if (file.resourceSelected !== false) {
-		await writer.setSelected(filePath, true);
-	} else {
-		await writer.updateFile(filePath, { resourceSelected: false });
-	}
 }
 
-/**
- * Resolves (or creates) the source-local slot path a file contributes through,
- * e.g. `/self/$localSlot/$localSlot:character` or
- * `/global/$source/$localSlot/$child` with `parent` pointing at the contract.
- */
-async function ensureLocalSlotPath(
-	writer: StImportWorldWriter,
-	targetFolderPath: string,
-	slotId: string,
-): Promise<string> {
-	const scope = targetFolderPath.startsWith("/self") ? "self" : "global";
-	const second = targetFolderPath.split("/")[2] ?? "";
-	const sourceRootPath =
-		scope === "self"
-			? "/self"
-			: `/global/${second}`;
-	let localRootPath: string | null = null;
-	for (const child of writer.ls(sourceRootPath)) {
-		if (child.type === "folder" && child.name === "localSlot") {
-			localRootPath = `${sourceRootPath}/$${child.id}`;
-			break;
-		}
-	}
-	if (!localRootPath) localRootPath = await writer.createFolder(sourceRootPath, "localSlot");
-
-	for (const child of writer.ls(localRootPath)) {
-		if (
-			child.type === "folder" &&
-			(child.id === `localSlot:${slotId}` || child.name === slotId)
-		) {
-			const slotPath = `${localRootPath}/$${child.id}`;
-			const contractPath = builtinGlobalSlotPath(slotId);
-			if (scope === "global" && contractPath) {
-				await writer.updateFolder(slotPath, { parent: contractPath });
-			}
-			return slotPath;
-		}
-	}
-	const created = await writer.createFolder(localRootPath, slotId);
-	const contractPath = builtinGlobalSlotPath(slotId);
-	if (contractPath) await writer.updateFolder(created, { parent: contractPath });
-	return created;
+function ensureLocalSlot(writer: StImportWorldWriter, slotId: string) {
+	const root = "/localSlot";
+	if (!writer.exists(root)) writer.mkdir(root);
+	const path = join(root, slotId);
+	if (!writer.exists(path)) writer.mkdir(path);
+	const contract = slotContractPath(slotId);
+	if (contract) writer.updateFolderMeta(path, { parent: contract });
+	return path;
 }
 
-async function ensureFolderChain(
-	writer: StImportWorldWriter,
-	rootPath: string,
-	segments: string[],
-	cache: Map<string, string>,
-	createdPaths: string[],
-): Promise<string> {
-	let cursor = rootPath;
-	let relative = "";
-	for (const segment of segments) {
-		relative = relative ? `${relative}/${segment}` : segment;
-		const cached = cache.get(relative);
-		if (cached) {
-			cursor = cached;
-			continue;
-		}
-		cursor = writer.exists(`${cursor}/${segment}`)
-			? `${cursor}/${segment}`
-			: await writer.createFolder(cursor, segment);
-		createdPaths.push(cursor);
-		cache.set(relative, cursor);
+function slotContractPath(id: string) {
+	const slot = builtinSlotRegistry.find((item) => item.id === id);
+	if (!slot) return undefined;
+	const parts = [slot.name];
+	let parentId = slot.parentId;
+	while (parentId) {
+		const parent = builtinSlotRegistry.find((item) => item.id === parentId);
+		if (!parent) break;
+		parts.unshift(parent.name);
+		parentId = parent.parentId;
 	}
-	return cursor;
+	return `/slot/${parts.join("/")}`;
 }
 
-async function uniqueName(
+function uniquePath(
 	writer: StImportWorldWriter,
-	parentPath: string,
-	base: string,
+	parent: string,
+	name: string,
 	isFile: boolean,
 ) {
-	const dot = isFile ? base.lastIndexOf(".") : -1;
-	const stem = dot > 0 ? base.slice(0, dot) : base;
-	const tail = dot > 0 ? base.slice(dot) : "";
-	let index = 1;
-	let candidate = base;
-	while (writer.exists(`${parentPath}/${candidate}`)) {
-		index += 1;
-		candidate = `${stem}-${index}${tail}`;
-	}
-	return candidate;
+	const dot = isFile ? name.lastIndexOf(".") : -1;
+	const stem = dot > 0 ? name.slice(0, dot) : name;
+	const suffix = dot > 0 ? name.slice(dot) : "";
+	let path = join(parent, name);
+	for (let index = 2; writer.exists(path); index += 1)
+		path = join(parent, `${stem}-${index}${suffix}`);
+	return path;
+}
+
+function join(parent: string, name: string) {
+	return parent === "/" ? `/${name}` : `${parent}/${name}`;
 }

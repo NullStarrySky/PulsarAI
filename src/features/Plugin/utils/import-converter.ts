@@ -233,7 +233,7 @@ const builtinAssets = import.meta.glob("../builtIn/*/**/*", {
 	import: "default",
 }) as Record<string, string>;
 
-function set<T>(target: Record<string, T>, key: string, value: T) {
+function set(target: object, key: string, value: unknown) {
 	Object.defineProperty(target, key, {
 		value,
 		enumerable: true,

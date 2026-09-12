@@ -113,14 +113,6 @@ export interface ChatMeta extends PersistedChatMeta {
 	generation?: ChatGenerationState;
 }
 
-export interface CharacterData {
-	id: string;
-	name: string;
-	description?: string;
-	avatarUrl?: string;
-	coverUrl?: string;
-}
-
 export function createDraft(conversationid = ""): ChatContainer {
 	return {
 		id: "draft-container",

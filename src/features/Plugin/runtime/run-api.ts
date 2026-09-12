@@ -3,11 +3,8 @@ import type { MaybeRefOrGetter } from "vue";
 import type {
 	ChatContainer,
 	ChatMessage,
-	TokenUsage,
 } from "@/features/Conversation/dataflow/types";
-import { useSyncStore } from "@/features/Database/dbsync-store";
 import type { SandboxEnvironment } from "@/features/Sandbox/sandbox";
-import type { AgentOutputContainer } from "../agent/runtime/default-agent";
 import { createAgentResourceProvider } from "../agent/runtime/default-agent";
 import type { PluginData, Pulse, ResourcePath } from "../dataflow/types";
 import { parsePluginDataDefinition } from "../resources/types/data/plugin-data";
@@ -32,68 +29,9 @@ export interface RunWorldResult {
 	logger: PluginLogger;
 }
 
-function createReply(container: ChatContainer, message: ChatMessage) {
-	const store = useSyncStore();
-	const persist = () =>
-		store.markDirty({ type: "container", id: container.id });
-	const reply: AgentOutputContainer & Record<string, unknown> = {
-		read: () => ({
-			container: structuredClone(container),
-			message: structuredClone(message),
-		}),
-		setContent: async (content: string) => {
-			message.content = content;
-			persist();
-		},
-		clear: async () => {
-			message.type = "message";
-			message.content = "";
-			message.parts = [];
-			message.meta.steps = [];
-			persist();
-		},
-		setModelName: async (modelName: string) => {
-			message.meta.generateInfo ??= { startTime: new Date().toISOString() };
-			message.meta.generateInfo.modelName = modelName;
-			persist();
-		},
-		setTokenUsage: async (usage: TokenUsage) => {
-			message.meta.generateInfo ??= {};
-			message.meta.generateInfo.usage = usage;
-			message.meta.generateInfo.finishTime = new Date().toISOString();
-			persist();
-		},
-		appendContent: async (delta: string) => {
-			message.content += delta;
-			persist();
-		},
-		addStep: async (step) => {
-			message.meta.steps.push(structuredClone(step));
-			persist();
-		},
-		updateThinking: async (id: string, content: string) => {
-			const step = message.meta.steps.find(
-				(candidate) => candidate.type === "thinking" && candidate.id === id,
-			);
-			if (step?.type === "thinking") step.message = content;
-			persist();
-		},
-		completeToolCall: async (result) => {
-			const index = message.meta.steps.findIndex(
-				(step) =>
-					step.type === "tool-call" && step.toolCallId === result.toolCallId,
-			);
-			if (index < 0) message.meta.steps.push(structuredClone(result));
-			else message.meta.steps.splice(index, 1, structuredClone(result));
-			persist();
-		},
-	};
-	return reply;
-}
-
 /** Runs the selected source against the exact message-version replay projection. */
 export async function runWorld(input: RunWorldInput): Promise<RunWorldResult> {
-	const reply = createReply(input.container, input.message);
+	const reply = input.message;
 	const built = createPluginEnvironment({
 		filetree: input.filetree,
 		applyPulse: input.applyPulse,
