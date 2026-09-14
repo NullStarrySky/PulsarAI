@@ -9,7 +9,6 @@ import {
 
 export interface StImportWorldWriter {
 	exists(path: string): boolean;
-	ls(path?: string): string[];
 	mkdir(path: string): void;
 	write(path: string, content: string): void;
 	updateFolderMeta(path: string, patch: { parent?: string }): void;

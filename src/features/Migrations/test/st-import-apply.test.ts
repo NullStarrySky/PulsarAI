@@ -24,11 +24,6 @@ function createMockWriter() {
 	const folders = new Set<string>(["/", "/localSlot"]);
 	const writer: StImportWorldWriter = {
 		exists: (path) => folders.has(path) || files.has(path),
-		ls: (path = "/") =>
-			[...folders, ...files.keys()]
-				.filter((item) => item !== path && item.startsWith(path))
-				.map((item) => item.slice(path.length).replace(/^\//, ""))
-				.filter((item) => item && !item.includes("/")),
 		mkdir: (path) => void folders.add(path),
 		write: (path, content) => void files.set(path, { content }),
 		updateFolderMeta: () => {},

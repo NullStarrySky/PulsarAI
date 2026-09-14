@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { MessageCircle, Pin, Plus, Search, Trash2, X } from "@/lib/phosphor-icons";
+import { push } from "notivue";
 import { computed, ref } from "vue";
 import { Badge, Button } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSyncStore } from "@/features/Database/dbsync-store";
+import {
+	MessageCircle,
+	Pin,
+	Plus,
+	Search,
+	Trash2,
+	X,
+} from "@/lib/phosphor-icons";
 import { useChatList } from "../dataflow/chats";
 
 const props = defineProps<{
@@ -34,8 +42,14 @@ function select(chatId: string) {
 	emit("update:open", false);
 }
 function create() {
-	const chat = chatList.create();
-	select(chat.id);
+	try {
+		const chat = chatList.create();
+		select(chat.id);
+		return chat;
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "无法新建会话。");
+		return null;
+	}
 }
 function remove(chatId: string) {
 	const chat = [...chatList.chats.value].find((value) => value.id === chatId);
@@ -43,8 +57,8 @@ function remove(chatId: string) {
 	chatList.delete(chatId);
 	emit("close", chatId);
 	if (chatId === props.chatId) {
-		const next = [...chatList.chats.value][0] ?? chatList.create();
-		emit("select", next.id);
+		const next = [...chatList.chats.value][0] ?? create();
+		if (next) emit("select", next.id);
 	}
 }
 function togglePinned(chatId: string, event: MouseEvent) {
