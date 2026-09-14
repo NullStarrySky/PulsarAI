@@ -159,7 +159,6 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 			parseAt(slots.paths(path), sourcePath, extra),
 	});
 	Object.assign(root, scoped(sourcePath), {
-		importRegistry,
 		slot,
 		skills: () =>
 			slots.paths("skill").map((path) => ({ path, content: files.read(path) })),
@@ -207,6 +206,10 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 		}
 		return tools.map(({ name, path }) => ({ name, path }));
 	}
+	function dispose() {
+		importRegistry.clear();
+		importing.clear();
+	}
 	return {
 		environment: root,
 		files,
@@ -215,6 +218,7 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 		logger,
 		importAt,
 		importRegistry,
+		dispose,
 		parseAt,
 		registerCustomTools,
 	};

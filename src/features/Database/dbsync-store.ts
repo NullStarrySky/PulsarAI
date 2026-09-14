@@ -62,6 +62,7 @@ function parseDirtyKey(key: string): DirtyTarget {
  * collections; feature actions mark persistent changes dirty for batched writes.
  */
 export const useSyncStore = defineStore("dbsync", () => {
+// 避免任何形式的直接从useSyncStore中的map读取和修改对象的行为，应当始终从封装了watch和markditry的useXXX函数中取值
 	const characters = reactive(new Set<CharacterData>());
 	const plugins = reactive(new Map<string, PluginDocument>());
 	const chatMeta = shallowReactive(new Map<string, Map<string, ChatMeta>>());

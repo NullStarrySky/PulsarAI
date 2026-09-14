@@ -123,41 +123,22 @@ function syncExpanded(targetPlan: StImportPlan | null) {
 	expandedPaths.value = Array.from(paths);
 }
 
-// Convert flat plan.files into a full folder/file tree structure
+// Map standard plan.tree and plan.meta into FileTreeNode structure
 const planTreeNodes = computed<FileTreeNode[]>(() => {
 	if (!plan.value) return [];
-	const files = plan.value.files;
-	const rootMap = new Map<string, any>();
+	const { tree, meta } = plan.value;
 
-	for (const f of files) {
-		const cleanPath = f.path.replace(/^\/+/, "");
-		const parts = cleanPath.split("/");
-		let currentMap = rootMap;
-		for (let i = 0; i < parts.length; i++) {
-			const part = parts[i]!;
-			const isLast = i === parts.length - 1;
-			if (!currentMap.has(part)) {
-				currentMap.set(part, {
-					name: part,
-					isDir: !isLast,
-					file: isLast ? f : null,
-					children: new Map<string, any>(),
-				});
-			}
-			currentMap = currentMap.get(part).children;
-		}
-	}
-
-	function mapToNodes(map: Map<string, any>, prefix = ""): FileTreeNode[] {
+	function treeToNodes(currentTree: Record<string, any>, prefix = ""): FileTreeNode[] {
 		const list: FileTreeNode[] = [];
-		for (const [name, item] of map.entries()) {
+		for (const [name, node] of Object.entries(currentTree)) {
 			const fullPath = prefix ? `${prefix}/${name}` : name;
-			if (item.isDir) {
+			const absPath = `/${fullPath}`;
+			if (typeof node === "object" && node !== null) {
 				list.push({
 					id: `folder:${fullPath}`,
 					name,
 					type: "folder",
-					children: mapToNodes(item.children, fullPath),
+					children: treeToNodes(node, fullPath),
 					data: { path: fullPath },
 				});
 			} else {
@@ -170,13 +151,16 @@ const planTreeNodes = computed<FileTreeNode[]>(() => {
 							: ext === "vue"
 								? "file-code-2"
 								: "file";
+				const fileMeta = meta[absPath] as any;
 				list.push({
 					id: `file:${fullPath}`,
 					name,
 					type: "file",
 					icon,
-					suffix: item.file.slotId ? `slot: ${item.file.slotId}` : undefined,
-					data: { file: item.file, path: `/${fullPath}` },
+					suffix: fileMeta?.slot
+						? `slot: ${fileMeta.slot.replace("/localSlot/", "")}`
+						: undefined,
+					data: { content: node, path: absPath },
 				});
 			}
 		}
@@ -189,7 +173,7 @@ const planTreeNodes = computed<FileTreeNode[]>(() => {
 		);
 	}
 
-	return mapToNodes(rootMap);
+	return treeToNodes(tree);
 });
 
 function handleSelectTreeNode(node: FileTreeNode) {

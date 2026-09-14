@@ -22,6 +22,19 @@ import type {
 	SillyTavernWorldbookSource,
 } from "../convert/source-types";
 
+import { normalizeResourcePath } from "@/features/Plugin/dataflow/pulse";
+import {
+	defaultFileMeta,
+	defaultFolderMeta,
+	type FileMeta,
+	type FolderMeta,
+	type MetaMap,
+	type ResourceMeta,
+	type ResourcePath,
+	type ResourceTree,
+} from "@/features/Plugin/dataflow/types";
+import { builtinSlotRegistry } from "@/features/Plugin/utils/import-converter";
+
 export type StImportKind =
 	| "character"
 	| "worldbook"
@@ -41,6 +54,12 @@ export interface StImportFile {
 	resourceSelected?: boolean;
 }
 
+export interface StImportBundle {
+	tree: ResourceTree;
+	meta: MetaMap;
+	metaList: Array<{ path: ResourcePath; meta: ResourceMeta }>;
+}
+
 export interface StImportPlan {
 	kind: StImportKind;
 	/** Generated folder base name; the original filename without its extension. */
@@ -48,6 +67,9 @@ export interface StImportPlan {
 	/** "folder" creates `<name>/…`; "file" writes the single file into the target folder. */
 	mode: "file" | "folder";
 	files: StImportFile[];
+	tree: ResourceTree;
+	meta: MetaMap;
+	metaList: Array<{ path: ResourcePath; meta: ResourceMeta }>;
 	diagnostics: string[];
 	/** Character card extras consumed by the package import flow. */
 	character?: { name: string; description: string; iconDataUrl?: string };
@@ -208,6 +230,117 @@ function isClearlyStResource(value: unknown, kind: StImportKind) {
 		: "chat_completion_source" in value;
 }
 
+export function slotContractPath(id: string): string | undefined {
+	const slot = builtinSlotRegistry.find((item) => item.id === id);
+	if (!slot) return undefined;
+	const parts = [slot.name];
+	let parentId = slot.parentId;
+	while (parentId) {
+		const parent = builtinSlotRegistry.find((item) => item.id === parentId);
+		if (!parent) break;
+		parts.unshift(parent.name);
+		parentId = parent.parentId;
+	}
+	return `/slot/${parts.join("/")}`;
+}
+
+export function createImportBundle(
+	files: StImportFile[],
+	name: string,
+	mode: "file" | "folder",
+): StImportBundle {
+	const tree: ResourceTree = {};
+	const meta: MetaMap = {};
+	const metaList: Array<{ path: ResourcePath; meta: ResourceMeta }> = [];
+
+	const addMeta = (path: ResourcePath, itemMeta: ResourceMeta) => {
+		meta[path] = itemMeta;
+		metaList.push({ path, meta: itemMeta });
+	};
+
+	const ensureFolder = (absPath: ResourcePath): ResourceTree => {
+		const parts = absPath.split("/").filter(Boolean);
+		let current = tree;
+		let currentPath = "";
+		for (const part of parts) {
+			currentPath = `${currentPath}/${part}`;
+			const existing = current[part];
+			if (!existing || typeof existing === "string") {
+				const nextFolder: ResourceTree = {};
+				current[part] = nextFolder;
+				if (!meta[currentPath]) {
+					addMeta(currentPath, defaultFolderMeta());
+				}
+				current = nextFolder;
+			} else {
+				current = existing;
+			}
+		}
+		return current;
+	};
+
+	for (const file of files) {
+		const relPath = file.path.replace(/^\/+/, "");
+		const fullRelPath = mode === "folder" ? `${name}/${relPath}` : relPath;
+		const absPath = normalizeResourcePath(`/${fullRelPath}`);
+		const parts = absPath.split("/").filter(Boolean);
+		const fileName = parts.pop()!;
+		const folderPath = parts.length ? `/${parts.join("/")}` : "/";
+		const parentFolder = folderPath === "/" ? tree : ensureFolder(folderPath);
+
+		parentFolder[fileName] =
+			typeof file.content === "string"
+				? file.content
+				: JSON.stringify(file.content, null, 2);
+
+		const fileMeta: FileMeta = {
+			resourceSelected: file.resourceSelected !== false,
+			priority: file.priority ?? 100,
+			...(file.condition ? { condition: file.condition } : {}),
+		};
+
+		if (file.slotId) {
+			const slotFolder = `/localSlot/${file.slotId}`;
+			fileMeta.slot = slotFolder;
+
+			const localSlotTree = ensureFolder("/localSlot");
+			if (
+				!localSlotTree[file.slotId] ||
+				typeof localSlotTree[file.slotId] === "string"
+			) {
+				localSlotTree[file.slotId] = {};
+				const contract = slotContractPath(file.slotId);
+				const folderMeta: FolderMeta = {
+					selectionMode: "none",
+					...(contract ? { parent: contract } : {}),
+				};
+				addMeta(slotFolder, folderMeta);
+			}
+		}
+
+		addMeta(absPath, fileMeta);
+	}
+
+	return { tree, meta, metaList };
+}
+
+function finalizePlan(plan: {
+	kind: StImportKind;
+	name: string;
+	mode: "file" | "folder";
+	files: StImportFile[];
+	diagnostics: string[];
+	character?: { name: string; description: string; iconDataUrl?: string };
+}): StImportPlan {
+	const bundle = createImportBundle(plan.files, plan.name, plan.mode);
+	return {
+		...plan,
+		tree: bundle.tree,
+		meta: bundle.meta,
+		metaList: bundle.metaList,
+	};
+}
+
 function planFromValue(
 	value: unknown,
 	baseName: string,
@@ -310,7 +443,7 @@ function characterPlan(
 	appendLorebookFiles(files, artifact.embeddedLorebooks);
 	if (artifact.regexRules.length) files.push(regexFile(artifact.regexRules));
 
-	return {
+	return finalizePlan({
 		kind: "character",
 		name: baseName,
 		mode: "folder",
@@ -321,7 +454,7 @@ function characterPlan(
 			description: artifact.description,
 			iconDataUrl,
 		},
-	};
+	});
 }
 
 function worldbookPlan(
@@ -355,13 +488,13 @@ function worldbookPlan(
 	const files: StImportFile[] = [];
 	appendLorebookFiles(files, artifact.entries);
 	if (!files.length) throw new Error("世界书没有可导入的条目。");
-	return {
+	return finalizePlan({
 		kind: "worldbook",
 		name: baseName,
 		mode: "folder",
 		files,
 		diagnostics: artifact.diagnostics.map((item) => item.message),
-	};
+	});
 }
 
 function presetPlan(
@@ -415,13 +548,13 @@ function presetPlan(
 		});
 	}
 	if (artifact.regexRules.length) files.push(regexFile(artifact.regexRules));
-	return {
+	return finalizePlan({
 		kind: "preset",
 		name: baseName,
 		mode: "folder",
 		files,
 		diagnostics: artifact.diagnostics.map((item) => item.message),
-	};
+	});
 }
 
 function regexPlan(
@@ -448,13 +581,13 @@ function regexPlan(
 	const diagnostics: MigrationDiagnostic[] = [];
 	const rules = convertGlobalRegex(snapshot, diagnostics);
 	if (!rules.length) throw new Error("没有可导入的正则规则。");
-	return {
+	return finalizePlan({
 		kind: "regex",
 		name: baseName,
 		mode: "file",
 		files: [regexFile(rules)],
 		diagnostics: diagnostics.map((item) => item.message),
-	};
+	});
 }
 
 function personaPlan(
@@ -473,7 +606,7 @@ function personaPlan(
 	const artifacts = convertPersonas(snapshot);
 	const artifact = artifacts[0];
 	const markdown = artifact?.markdown?.trim() || `# ${name}`;
-	return {
+	return finalizePlan({
 		kind: "persona",
 		name: baseName,
 		mode: "file",
@@ -485,7 +618,7 @@ function personaPlan(
 			},
 		],
 		diagnostics: artifact?.diagnostics.map((item) => item.message) ?? [],
-	};
+	});
 }
 
 function appendLorebookFiles(

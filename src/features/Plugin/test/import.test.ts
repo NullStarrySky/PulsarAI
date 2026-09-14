@@ -37,12 +37,11 @@ describe("JS module imports", () => {
 		const first = await runWorld(input);
 		expect(input.message.content).toBe("3");
 		expect(track).toHaveBeenCalledTimes(1);
+		expect(first.context.importRegistry).toBeUndefined();
 		const second = await runWorld(input);
 		expect(input.message.content).toBe("3");
 		expect(track).toHaveBeenCalledTimes(2);
-		expect(first.context.importRegistry).not.toBe(
-			second.context.importRegistry,
-		);
+		expect(second.context.importRegistry).toBeUndefined();
 	});
 	it("returns defaults without invoking them, and preserves named declarations", () => {
 		const called = vi.fn();
@@ -125,7 +124,10 @@ describe("JS module imports", () => {
 		) as () => unknown;
 		expect(other()).toEqual({ count: 100 });
 		expect(other).not.toBe(useCounter);
-		expect(built.environment.importRegistry).toBe(built.importRegistry);
+		expect(built.environment.importRegistry).toBeUndefined();
+		expect(built.importRegistry.has("/global/one/counter.js")).toBe(true);
+		built.dispose();
+		expect(built.importRegistry.size).toBe(0);
 		expect(
 			create().importAt("/global/one/counter.js", "/self/start.js"),
 		).not.toBe(useCounter);

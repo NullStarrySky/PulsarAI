@@ -1,5 +1,11 @@
+import { normalizeResourcePath } from "@/features/Plugin/dataflow/pulse";
+import type { PluginData, ResourceTree } from "@/features/Plugin/dataflow/types";
 import { builtinSlotRegistry } from "@/features/Plugin/utils/import-converter";
-import type { StImportFile, StImportPlan } from "./st-import-plan";
+import {
+	slotContractPath,
+	type StImportFile,
+	type StImportPlan,
+} from "./st-import-plan";
 
 export interface StImportWorldWriter {
 	exists(path: string): boolean;
@@ -22,6 +28,80 @@ export interface StImportApplyResult {
 	rootPath: string;
 	createdPaths: string[];
 	diagnostics: string[];
+}
+
+function deepMergeTrees(target: ResourceTree, source: ResourceTree) {
+	for (const [key, val] of Object.entries(source)) {
+		if (typeof val === "string") {
+			target[key] = val;
+		} else {
+			if (!target[key] || typeof target[key] === "string") {
+				target[key] = {};
+			}
+			deepMergeTrees(target[key] as ResourceTree, val);
+		}
+	}
+}
+
+/**
+ * Pure data merge of an StImportPlan into an in-memory PluginData tree and meta.
+ * Directly merges tree and meta without requiring filesystem mocks.
+ */
+export function mergeImportPlanToPluginData(
+	target: PluginData,
+	plan: StImportPlan,
+	targetFolderPath = "/",
+): PluginData {
+	const normalizedTarget = normalizeResourcePath(targetFolderPath);
+	if (normalizedTarget === "/") {
+		deepMergeTrees(target.tree, plan.tree);
+		for (const { path, meta } of plan.metaList) {
+			target.meta[path] = meta;
+		}
+	} else {
+		const targetParts = normalizedTarget.split("/").filter(Boolean);
+		let current = target.tree;
+		for (const part of targetParts) {
+			if (!current[part] || typeof current[part] === "string") {
+				current[part] = {};
+			}
+			current = current[part] as ResourceTree;
+		}
+		for (const [name, node] of Object.entries(plan.tree)) {
+			if (name === "localSlot") {
+				if (
+					!target.tree.localSlot ||
+					typeof target.tree.localSlot === "string"
+				) {
+					target.tree.localSlot = {};
+				}
+				deepMergeTrees(
+					target.tree.localSlot as ResourceTree,
+					node as ResourceTree,
+				);
+			} else {
+				if (typeof node === "string") {
+					current[name] = node;
+				} else {
+					if (!current[name] || typeof current[name] === "string") {
+						current[name] = {};
+					}
+					deepMergeTrees(current[name] as ResourceTree, node);
+				}
+			}
+		}
+		for (const { path, meta } of plan.metaList) {
+			if (path.startsWith("/localSlot")) {
+				target.meta[path] = meta;
+			} else {
+				const remountedPath = normalizeResourcePath(
+					`${normalizedTarget}${path}`,
+				);
+				target.meta[remountedPath] = meta;
+			}
+		}
+	}
+	return target;
 }
 
 export async function applyStImportPlan(
@@ -90,20 +170,6 @@ function ensureLocalSlot(writer: StImportWorldWriter, slotId: string) {
 	const contract = slotContractPath(slotId);
 	if (contract) writer.updateFolderMeta(path, { parent: contract });
 	return path;
-}
-
-function slotContractPath(id: string) {
-	const slot = builtinSlotRegistry.find((item) => item.id === id);
-	if (!slot) return undefined;
-	const parts = [slot.name];
-	let parentId = slot.parentId;
-	while (parentId) {
-		const parent = builtinSlotRegistry.find((item) => item.id === parentId);
-		if (!parent) break;
-		parts.unshift(parent.name);
-		parentId = parent.parentId;
-	}
-	return `/slot/${parts.join("/")}`;
 }
 
 function uniquePath(

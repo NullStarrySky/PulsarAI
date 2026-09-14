@@ -92,6 +92,21 @@ describe("buildStImportPlan", () => {
 		expect(first?.priority).toBe(42);
 		expect(second?.resourceSelected).toBe(false);
 		expect(second?.slotId).toBe("after_char");
+
+		// 验证输出的文件树与 meta 结构
+		expect(plan.tree).toBeDefined();
+		const demoFolder = (plan.tree["demo-book"] as any)?.lorebooks;
+		expect(demoFolder?.["001-设定：城市.md"]).toBe("这座城市建立在废墟之上。");
+		expect(plan.meta["/demo-book/lorebooks/001-设定：城市.md"]).toMatchObject({
+			resourceSelected: true,
+			priority: 42,
+			slot: "/localSlot/before_char",
+		});
+		expect(plan.meta["/localSlot/before_char"]).toMatchObject({
+			selectionMode: "none",
+			parent: "/slot/上下文位置/角色之前",
+		});
+		expect(plan.metaList.length).toBeGreaterThanOrEqual(2);
 	});
 
 	it("classifies a character card and produces info/lorebooks/regex files", () => {
