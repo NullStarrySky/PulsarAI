@@ -1,20 +1,21 @@
-import { executeSandboxCode } from "@/features/Sandbox/sandbox";
-
-export const resourceConditionDefinitions = [
-	{ id: "include", label: "包含", placeholder: "关键词或 /正则/flags" },
-	{ id: "exclude", label: "排除", placeholder: "关键词或 /正则/flags" },
-	{ id: "probability", label: "概率", placeholder: "0-100" },
-	{ id: "custom", label: "自定义", placeholder: "JavaScript 布尔表达式" },
-] as const;
+import { executeSandboxCode } from "@/features/Plugin/runtime/sandbox";
 
 export type ResourceConditionFunction =
-	(typeof resourceConditionDefinitions)[number]["id"];
-
-export interface ResourceConditionRow {
+	| "include"
+	| "exclude"
+	| "probability"
+	| "custom";
+export type ResourceConditionRow = {
 	id: string;
 	functionName: ResourceConditionFunction;
 	value: string;
-}
+};
+export const resourceConditionDefinitions = [
+	{ id: "include", label: "包含", placeholder: "关键词或 /正则/" },
+	{ id: "exclude", label: "不包含", placeholder: "关键词或 /正则/" },
+	{ id: "probability", label: "概率", placeholder: "百分比" },
+	{ id: "custom", label: "自定义", placeholder: "JavaScript 条件" },
+] as const;
 
 function messageText(message: unknown) {
 	if (!message || typeof message !== "object") return "";
@@ -46,7 +47,7 @@ function parseRegex(value: string) {
 	}
 }
 
-export function createResourceConditionEnvironment(
+function createResourceConditionEnvironment(
 	chatValue: unknown,
 	random: () => number = Math.random,
 ) {

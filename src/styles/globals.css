@@ -30,6 +30,10 @@ html.native-window-dragging #app {
 	-webkit-app-region: no-drag;
 }
 
+.electron-window-drag-region [data-window-drag-block] {
+	-webkit-app-region: no-drag;
+}
+
 @font-face {
 	font-family: "Fira Code";
 	src: url("../assets/fonts/fira-code.woff2") format("woff2");

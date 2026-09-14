@@ -1,5 +1,5 @@
 import { computed, type MaybeRef, unref } from "vue";
-import { useSyncStore } from "@/features/Database/dbsync-store";
+import { markContainerDirty } from "../containers";
 import {
 	createMessage,
 	currentMessage,
@@ -20,7 +20,7 @@ export function useContainerVersion(
 		const value = container.value;
 		if (!value || next < 0 || next >= value.content.length) return;
 		value.activeMessage = next;
-		useSyncStore().markDirty({ type: "container", id: value.id });
+		markContainerDirty(value.conversationid, value.id);
 	}
 	function prev() {
 		goto(index.value - 1);
@@ -33,7 +33,7 @@ export function useContainerVersion(
 		if (!value) return null;
 		value.content.push(createMessage(input));
 		value.activeMessage = value.content.length - 1;
-		useSyncStore().markDirty({ type: "container", id: value.id });
+		markContainerDirty(value.conversationid, value.id);
 		return current.value;
 	}
 	function remove(target = index.value) {
@@ -47,7 +47,7 @@ export function useContainerVersion(
 			return null;
 		const [message] = value.content.splice(target, 1);
 		value.activeMessage = Math.min(target, value.content.length - 1);
-		useSyncStore().markDirty({ type: "container", id: value.id });
+		markContainerDirty(value.conversationid, value.id);
 		return message ?? null;
 	}
 	return {

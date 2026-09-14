@@ -19,9 +19,12 @@ path. A file stores its local-slot ID path in `slot`, so renaming either folder
 does not invalidate membership.
 
 `usePluginData()` routes the active message path's Pulses to their owning local
-or global source, replays each source independently, then reads the replayed
-role definition and merges only its enabled global folders. Slot and source
-views are projections of that result; they are not stored separately.
+or global source, replays every source independently, and mounts all global
+folders so resource UI can inspect and edit inactive sources too.
+`useActivePluginData(filetree)` derives the enabled sources in role-definition
+order without another replay or deep copy. Runtime slots, panels and custom
+tools use this active projection; explicit file access uses the complete tree.
+Neither projection is stored separately.
 
 ## Updates and replay
 
@@ -30,9 +33,22 @@ Business calls (`write`, `edit`, `mkdir`, `move`, `copy`, `remove`,
 stores a target node ID plus a short local path. It either writes a value,
 removes a value with `none`, replaces a unique substring, copies from an ID
 reference with a deterministic ID map, or moves an ID reference. Persistent
-edits batch the affected document's JSON patches before applying the same result
-to memory. Move and copy reject a destination below the source folder; move
+edits update the owning version's replay projection synchronously; their owner
+controls persistence. Move and copy reject a destination below the source folder; move
 keeps IDs while copy regenerates every copied subtree ID.
+
+The on-disk local Plugin is `PluginDocument { id, tree, meta, versions }`.
+`tree/meta` retain the original authored source. Source editing synchronously
+appends a Pulse to the latest version and compacts that version before marking
+the Plugin dirty for normal database sync. A version is mutable only until a
+conversation references its ID; the next edit then creates a child version
+with a new Git-style 40-character ID and appends there. Each version keeps a
+history-only `parentId` and cumulative Pulses that replay directly over the
+original source.
+
+New conversations persist the latest saved `pluginVersionId`. Loading replays
+that version over the original source before applying the conversation path;
+later Plugin edits do not alter existing conversations.
 
 Conversation edits append updates to the current message version. Replay only
 applies those updates to cloned source trees; it never writes the database.
@@ -42,11 +58,12 @@ removes, or reorders global mounts in the resulting World.
 If the active tail is already a pure Pulse-only system container, later edits
 reuse that container instead of extending the conversation path.
 
-Node timestamps are not replay data and do not participate in sync. A persisted
-World document is versioned by Database sync metadata's per-device vector;
-within one message container, later direct file-content or metadata-property
-writes replace the earlier write to that same node/property. Structural
-operations and writes in different containers retain their order.
+`compactPulses()` is shared by Plugin version appends and Conversation message-version
+persistence. It keeps the last direct content write and merges metadata fields
+within one group, retaining structural dependency order. File API `edit`
+records the resulting content as `file.write`. Different versions and message
+groups are never compacted together. Database sync vectors remain separate
+from these domain version IDs.
 
 ## Paths and source scope
 
@@ -90,3 +107,11 @@ operation and intentionally does not delete that host file. Agent code receives
 it writes the first generated image to `options.path` (or `temp` by default) and
 returns `Promise<string>` with the media ID. Use `media.link(id)` to emit the
 stored result in Markdown or an HTML media tag.
+
+## JavaScript modules and persistent state
+
+JS resources declare `export default`; `imports(path)` / `fs.import(path)` synchronously return that value without invoking it. Use `read(path)` for source text. Module loading supports default exports only; use `imports` rather than static imports, and place asynchronous work inside exported async functions.
+
+Each generation owns an `importRegistry` keyed by resolved absolute resource paths. Repeated imports return the same value, preserving module closures; a new generation gets a new registry. Calling a composable repeatedly can still create separate instances, so a module may retain a shared instance when needed. Source-local references remain bound to the defining resource.
+
+Persist state in ordinary JSON and expose actions or derived values through JS composables. Actions use `JSON.parse(read(path))` for the latest state and `write` / `edit` to append version-owned Pulse. Imported JSON remains a snapshot for the generation even after file writes. Describe callable resource paths in ordinary context resources; no automatic state injection is required.

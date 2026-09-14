@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-vue-next";
 import { computed } from "vue";
 import {
 	Button,
@@ -12,13 +11,17 @@ import {
 } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "@/lib/phosphor-icons";
+import type { ResourcePath } from "../../../dataflow/types";
+import type { FileApiOptions } from "../../../dataflow/use-file-api";
+import { useFileApi } from "../../../dataflow/use-file-api";
 import { type PluginChatMessage, readPluginChatContext } from "./plugin-chat";
 
-const props = defineProps<{ modelValue: string }>();
-const emit = defineEmits<{ "update:modelValue": [value: string] }>();
+const props = defineProps<FileApiOptions & { path: ResourcePath }>();
+const content = useFileApi(props).useFileContent(() => props.path);
 const parsed = computed(() => {
 	try {
-		return { value: readPluginChatContext(props.modelValue), error: "" };
+		return { value: readPluginChatContext(content.value), error: "" };
 	} catch (error) {
 		return {
 			value: { message: [] as PluginChatMessage[] },
@@ -40,30 +43,26 @@ function serialize(message: PluginChatMessage[]) {
 	);
 }
 function update(index: number, patch: Partial<PluginChatMessage>) {
-	const message = structuredClone(parsed.value.value.message);
-	message[index] = { ...message[index]!, ...patch };
-	emit("update:modelValue", serialize(message));
+	Object.assign(parsed.value.value.message[index]!, patch);
+	content.value = serialize(parsed.value.value.message);
 }
 function add() {
-	emit(
-		"update:modelValue",
-		serialize([...parsed.value.value.message, { role: "system", content: "" }]),
-	);
+	content.value = serialize([
+		...parsed.value.value.message,
+		{ role: "system", content: "" },
+	]);
 }
 function remove(index: number) {
-	emit(
-		"update:modelValue",
-		serialize(
-			parsed.value.value.message.filter((_, itemIndex) => itemIndex !== index),
-		),
+	content.value = serialize(
+		parsed.value.value.message.filter((_, itemIndex) => itemIndex !== index),
 	);
 }
 function move(index: number, delta: number) {
 	const target = index + delta;
-	const message = structuredClone(parsed.value.value.message);
+	const message = parsed.value.value.message;
 	if (target < 0 || target >= message.length) return;
 	[message[index], message[target]] = [message[target]!, message[index]!];
-	emit("update:modelValue", serialize(message));
+	content.value = serialize(message);
 }
 </script>
 

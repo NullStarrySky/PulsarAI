@@ -87,7 +87,7 @@ export function parentPath(path: ResourcePath) {
 	return index === 0 ? "/" : normalized.slice(0, index);
 }
 
-export function basename(path: ResourcePath) {
+function basename(path: ResourcePath) {
 	const normalized = normalizeResourcePath(path);
 	if (normalized === "/") throw new Error("资源根目录没有名称。");
 	return normalized.slice(normalized.lastIndexOf("/") + 1);
@@ -141,7 +141,7 @@ function moveMeta(
 	if (!copy) for (const [path] of entries) delete meta[path];
 	for (const [path, value] of entries) {
 		const nextPath = `${to}${path.slice(from.length)}`;
-		const next = structuredClone(value) as ResourceMeta;
+		const next = (copy ? structuredClone(value) : value) as ResourceMeta;
 		if ("slot" in next && next.slot && sameOrChild(next.slot, from))
 			next.slot = `${to}${next.slot.slice(from.length)}`;
 		if ("parent" in next && next.parent && sameOrChild(next.parent, from))
@@ -157,17 +157,16 @@ function rewriteMetaReferences(
 	to: ResourcePath,
 ) {
 	for (const [path, value] of Object.entries(meta)) {
-		const next = structuredClone(value) as ResourceMeta;
 		let changed = false;
-		if ("slot" in next && next.slot && sameOrChild(next.slot, from)) {
-			next.slot = `${to}${next.slot.slice(from.length)}`;
+		if ("slot" in value && value.slot && sameOrChild(value.slot, from)) {
+			value.slot = `${to}${value.slot.slice(from.length)}`;
 			changed = true;
 		}
-		if ("parent" in next && next.parent && sameOrChild(next.parent, from)) {
-			next.parent = `${to}${next.parent.slice(from.length)}`;
+		if ("parent" in value && value.parent && sameOrChild(value.parent, from)) {
+			value.parent = `${to}${value.parent.slice(from.length)}`;
 			changed = true;
 		}
-		if (changed) set(meta, path, next);
+		if (changed) set(meta, path, value);
 	}
 }
 
@@ -317,9 +316,100 @@ export function applyPulse(data: PluginData, pulse: Pulse): PluginData {
 	}
 }
 
-export function applyPulses(data: PluginData, pulses: readonly Pulse[]) {
+function applyPulses(data: PluginData, pulses: readonly Pulse[]) {
 	for (const pulse of pulses) applyPulse(data, pulse);
 	return data;
+}
+
+function compactPulseSegment(segment: readonly Pulse[]): Pulse[] {
+	const result: Array<Pulse | null> = [...segment];
+	const patches = new Map<
+		string,
+		{
+			index: number;
+			pulse: Extract<Pulse, { kind: "file.meta.patch" | "folder.meta.patch" }>;
+		}
+	>();
+	const contents = new Map<
+		string,
+		{ first: number; lastWrite: number; pulse: Pulse }
+	>();
+	for (const [index, pulse] of segment.entries()) {
+		if (pulse.kind === "file.write" || pulse.kind === "file.replace") {
+			const path = normalizeResourcePath(pulse.path);
+			const previous = contents.get(path);
+			if (!previous)
+				contents.set(path, {
+					first: index,
+					lastWrite: pulse.kind === "file.write" ? index : -1,
+					pulse,
+				});
+			else if (pulse.kind === "file.write") {
+				previous.lastWrite = index;
+				previous.pulse = pulse;
+			}
+		}
+		if (pulse.kind !== "file.meta.patch" && pulse.kind !== "folder.meta.patch")
+			continue;
+		const key = `${pulse.kind}:${normalizeResourcePath(pulse.path)}`;
+		const previous = patches.get(key);
+		if (!previous) {
+			patches.set(key, { index, pulse });
+			continue;
+		}
+		previous.pulse = {
+			...previous.pulse,
+			patch: { ...previous.pulse.patch, ...pulse.patch },
+		} as typeof previous.pulse;
+		result[previous.index] = previous.pulse;
+		result[index] = null;
+	}
+	for (const [index, pulse] of segment.entries()) {
+		if (pulse.kind !== "file.write" && pulse.kind !== "file.replace") continue;
+		const content = contents.get(normalizeResourcePath(pulse.path))!;
+		if (content.lastWrite < 0 || index > content.lastWrite) continue;
+		result[index] = index === content.first ? content.pulse : null;
+	}
+	return result.filter((pulse): pulse is Pulse => pulse !== null);
+}
+
+/** Compacts one replay group without moving writes across dependent tree mutations. */
+export function compactPulses(pulses: readonly Pulse[]): Pulse[] {
+	const result: Pulse[] = [];
+	let segment: Pulse[] = [];
+	const flush = () => {
+		result.push(...compactPulseSegment(segment));
+		segment = [];
+	};
+	for (const pulse of pulses) {
+		// ponytail: O(n²) dependency scans for large groups; index paths only if measured.
+		const affected =
+			pulse.kind === "node.remove"
+				? [pulse.path]
+				: pulse.kind === "node.copy"
+					? [pulse.from, pulse.to]
+					: [];
+		if (
+			pulse.kind === "node.move" ||
+			affected.some((path) =>
+				segment.some(
+					(item) =>
+						(item.kind === "file.write" ||
+							item.kind === "file.replace" ||
+							item.kind === "file.meta.patch" ||
+							item.kind === "folder.meta.patch") &&
+						sameOrChild(
+							normalizeResourcePath(item.path),
+							normalizeResourcePath(path),
+						),
+				),
+			)
+		)
+			flush();
+		segment.push(pulse);
+	}
+	flush();
+	return result;
 }
 
 export function replayPluginData(

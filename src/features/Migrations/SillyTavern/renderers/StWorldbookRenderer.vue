@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { BookOpen, Plus, Search, Tag, Trash2 } from "lucide-vue-next";
 import { computed, ref, watch } from "vue";
 import {
 	Accordion,
@@ -12,6 +11,7 @@ import {
 } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { BookOpen, Plus, Search, Tag, Trash2 } from "@/lib/phosphor-icons";
 
 export interface StWorldbookEntry {
 	uid?: number | string;
@@ -28,7 +28,7 @@ export interface StWorldbookEntry {
 }
 
 const props = defineProps<{
-	modelValue: string | Record<string, any>;
+	modelValue: string;
 	editable?: boolean;
 }>();
 
@@ -43,11 +43,7 @@ watch(
 	() => props.modelValue,
 	(val) => {
 		try {
-			if (typeof val === "string") {
-				internalData.value = JSON.parse(val || "{}");
-			} else if (val && typeof val === "object") {
-				internalData.value = JSON.parse(JSON.stringify(val));
-			}
+			internalData.value = JSON.parse(val || "{}");
 		} catch {
 			internalData.value = {};
 		}

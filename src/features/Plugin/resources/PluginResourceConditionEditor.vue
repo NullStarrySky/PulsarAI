@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Minus, Plus, Trash2 } from "lucide-vue-next";
 import { computed, ref, watch } from "vue";
 import {
 	Button,
@@ -15,6 +14,7 @@ import {
 } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import JavaScriptCodeMirrorEditor from "@/features/Plugin/resources/types/javascript/JavaScriptCodeMirrorEditor.vue";
+import { Minus, Plus, Trash2 } from "@/lib/phosphor-icons";
 import {
 	type ResourceConditionFunction,
 	type ResourceConditionRow,

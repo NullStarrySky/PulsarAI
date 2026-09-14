@@ -8,7 +8,7 @@ import {
   OctagonXIcon,
   TriangleAlertIcon,
   XIcon,
-} from '@lucide/vue'
+} from '@/lib/phosphor-icons'
 import { reactiveOmit } from '@vueuse/core'
 import { Toaster as Sonner } from 'vue-sonner'
 import { cn } from '@/lib/utils.ts'

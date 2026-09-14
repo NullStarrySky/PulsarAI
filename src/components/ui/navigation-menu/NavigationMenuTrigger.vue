@@ -2,7 +2,7 @@
 import type { NavigationMenuTriggerProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { ChevronDownIcon } from '@lucide/vue'
+import { ChevronDownIcon } from '@/lib/phosphor-icons'
 import { reactiveOmit } from '@vueuse/core'
 import {
   NavigationMenuTrigger,

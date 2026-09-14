@@ -1,10 +1,10 @@
-import * as LucideIcons from "lucide-vue-next";
 import * as Vue from "vue";
 import { type Component, defineAsyncComponent, markRaw } from "vue";
 import { loadModule } from "vue3-sfc-loader";
 import * as FluidComponents from "@/components/fluid";
 import * as DatabaseService from "@/features/Database/database-service";
 import { host } from "@/host";
+import * as PhosphorIcons from "@/lib/phosphor-icons";
 import type { ResourceFile } from "../../resource-types";
 
 export interface PluginVueRuntimeResult {
@@ -12,14 +12,11 @@ export interface PluginVueRuntimeResult {
 	error: string | null;
 }
 
-export async function loadPluginVueModule(
-	source: string,
-	filename = "component.vue",
-) {
+async function loadPluginVueModule(source: string, filename = "component.vue") {
 	return loadModule(filename, {
 		moduleCache: {
 			vue: Vue,
-			"lucide-vue-next": LucideIcons,
+			"@/lib/phosphor-icons": PhosphorIcons,
 			"@/components/fluid": FluidComponents,
 			"@/features/Database/database-service": DatabaseService,
 			"@/host": { host },

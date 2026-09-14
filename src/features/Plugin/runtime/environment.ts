@@ -1,16 +1,16 @@
 import type { ModelMessage } from "ai";
 import { toValue } from "vue";
-import { generateImageToPath } from "@/features/ImageGeneration/image-generation";
-import { mediaLink } from "@/features/Media/media-link";
+import { mediaLink } from "@/features/Plugin/media/media-link";
 import {
-	createSandboxFunction,
 	resolveSandboxMessagesAsync,
 	resolveSandboxTextAsync,
 	type SandboxEnvironment,
-} from "@/features/Sandbox/sandbox";
+} from "@/features/Plugin/runtime/sandbox";
+import { generateImageToPath } from "@/features/Request/ai-sdk";
 import { resolveResourcePath } from "../dataflow/pulse";
 import type { PluginData, ResourcePath } from "../dataflow/types";
 import { type FileApiOptions, useFileApi } from "../dataflow/use-file-api";
+import { useActivePluginData } from "../dataflow/use-plugin-data";
 import { useSlot } from "../dataflow/use-slot";
 import { importResource } from "../resources/import";
 import { PluginLogger } from "./logger";
@@ -48,9 +48,12 @@ function builtinDocs(id?: string) {
  */
 export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 	const files = useFileApi(options);
-	const slots = useSlot(options);
+	const activeFiletree = useActivePluginData(options.filetree);
+	const slots = useSlot({ ...options, filetree: activeFiletree });
 	const logger = options.logger ?? new PluginLogger();
 	const root: SandboxEnvironment = { ...(options.context ?? {}) };
+	const importRegistry = new Map<ResourcePath, unknown>();
+	const importing = new Set<ResourcePath>();
 	const sourcePath = options.sourcePath;
 	function data() {
 		const value = toValue(options.filetree);
@@ -71,9 +74,18 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 				: values.flat();
 		}
 		const path = resolve(from, request);
+		if (importRegistry.has(path)) return importRegistry.get(path);
+		if (importing.has(path)) throw new Error(`循环导入：${path}`);
 		const child = scoped(path);
 		logger.append(`导入文件：${path}`, 0, "import", path);
-		return importResource(data(), path, child);
+		importing.add(path);
+		try {
+			const value = importResource(data(), path, child);
+			importRegistry.set(path, value);
+			return value;
+		} finally {
+			importing.delete(path);
+		}
 	}
 	async function parseAt(
 		request: string | string[],
@@ -147,6 +159,7 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 			parseAt(slots.paths(path), sourcePath, extra),
 	});
 	Object.assign(root, scoped(sourcePath), {
+		importRegistry,
 		slot,
 		skills: () =>
 			slots.paths("skill").map((path) => ({ path, content: files.read(path) })),
@@ -166,7 +179,9 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 				else collect(node, path);
 			}
 		};
-		collect(data().tree);
+		const active = activeFiletree.value;
+		if (!active) throw new Error("Plugin 资源尚未加载。");
+		collect(active.tree);
 		const tools = paths
 			.flatMap((path) => {
 				const match = /\/tools\/([^/]+)\/tool\.js$/i.exec(path);
@@ -184,9 +199,10 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 		for (const tool of tools) {
 			if (collisions.has(tool.name))
 				throw new Error(`工具函数名称与 ctx 冲突：${tool.name}`);
-			root[tool.name] = createSandboxFunction(files.read(tool.path), [
-				scoped(tool.path),
-			]);
+			const callable = importAt(tool.path, tool.path);
+			if (typeof callable !== "function")
+				throw new Error(`工具默认导出必须是函数：${tool.path}`);
+			root[tool.name] = callable;
 			collisions.add(tool.name);
 		}
 		return tools.map(({ name, path }) => ({ name, path }));
@@ -198,6 +214,7 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 		slot,
 		logger,
 		importAt,
+		importRegistry,
 		parseAt,
 		registerCustomTools,
 	};

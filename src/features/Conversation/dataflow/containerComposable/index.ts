@@ -1,4 +1,4 @@
-import { usePureContainer } from "../containers";
+import { useContainer } from "../containers";
 import { useContainerActions } from "./actions";
 import { useContainerAttachments } from "./attachments";
 import { useContainerBranch } from "./branch";
@@ -8,7 +8,7 @@ import { useContainerVersion } from "./version";
 
 /** All behaviour scoped to one persisted message container. */
 export function useContainerComposable(chatId: string, containerId: string) {
-	const container = usePureContainer(chatId, containerId);
+	const container = useContainer(chatId, containerId);
 	return {
 		container,
 		version: useContainerVersion(container),

@@ -2,7 +2,7 @@
 import type { CalendarPrevProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { ChevronLeftIcon } from '@lucide/vue'
+import { ChevronLeftIcon } from '@/lib/phosphor-icons'
 import { reactiveOmit } from '@vueuse/core'
 import { CalendarPrev, useForwardProps } from 'reka-ui'
 import { cn } from '@/lib/utils.ts'

@@ -27,8 +27,10 @@ interface HostDatabase {
 	resetCharacterData(): Promise<void>;
 }
 
-interface HostConfig {
+export interface HostConfig {
 	get<T>(key: string): Promise<T | null>;
+	get<T>(key: string, fallback: T): Promise<T>;
+	get<T>(key: string, fallback?: T): Promise<T | null>;
 	set<T>(key: string, value: T): Promise<void>;
 	remove(key: string): Promise<void>;
 }
@@ -46,7 +48,7 @@ interface HostDialog {
 	save(options: Record<string, unknown>): Promise<string | null>;
 }
 
-export interface HostMediaFile {
+interface HostMediaFile {
 	id: string;
 	mediaType: string;
 	size: number;
@@ -99,14 +101,14 @@ interface HostDesktop {
 	};
 }
 
-export interface HostUpdateInfo {
+interface HostUpdateInfo {
 	version: string;
 	name: string;
 	notes: string;
 	publishedAt?: string;
 }
 
-export type HostUpdateEvent =
+type HostUpdateEvent =
 	| { type: "download-progress"; percent: number | null }
 	| { type: "downloaded"; path: string }
 	| { type: "error"; message: string };

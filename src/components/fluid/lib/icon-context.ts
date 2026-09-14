@@ -58,7 +58,7 @@ import {
   Calendar,
   Folder,
   SlidersHorizontal,
-} from "lucide-vue-next";
+} from "@/lib/phosphor-icons";
 
 export interface IconComponentProps {
   size?: number;
@@ -151,7 +151,7 @@ const IconKey: InjectionKey<Record<IconName, IconComponent>> = Symbol("fluid-ico
 
 /**
  * 换掉部分或全部图标（传入来自其他图标库的组件）。
- * 未覆盖的名字继续使用默认的 Lucide 组件。
+ * 未覆盖的名字继续使用默认的 Phosphor 组件。
  */
 export function provideIcons(icons?: IconOverrides) {
   const value: Record<IconName, IconComponent> = { ...defaultIcons, ...icons };
@@ -160,7 +160,7 @@ export function provideIcons(icons?: IconOverrides) {
 }
 
 /**
- * 返回单个图标组件；无 Provider 时回退到默认（Lucide）集合。
+ * 返回单个图标组件；无 Provider 时回退到默认（Phosphor）集合。
  */
 export function useIcon(name: IconName): IconComponent {
   const icons = inject(IconKey, null);

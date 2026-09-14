@@ -1,10 +1,21 @@
-import { computed } from "vue";
+import { computed, effectScope } from "vue";
 import { useSyncStore } from "@/features/Database/dbsync-store";
-import { mediaLinks, removeMediaLink } from "@/features/Media/media-link";
-import { type Pulse, usePluginData } from "@/features/Plugin/dataflow";
+import {
+	mediaLinks,
+	removeMediaLink,
+} from "@/features/Plugin/media/media-link";
+import {
+	compactPulses,
+	type Pulse,
+	usePluginData,
+} from "@/features/Plugin/dataflow";
 import { isChatGenerating, setChatGeneration, useChat } from "../chats";
 import { useContainerVersion } from "../containerComposable";
-import { usePureContainers } from "../containers";
+import {
+	markContainerDirty,
+	useContainer,
+	usePureContainers,
+} from "../containers";
 import {
 	type ChatContainer,
 	type ChatMessage,
@@ -12,6 +23,8 @@ import {
 	type Role,
 } from "../types";
 import { evaluateIntervals } from "./interval-services";
+import { usePathProjection } from "./path-projection";
+export type { ReplayGroup } from "./path-projection";
 import {
 	createContainer,
 	currentMessage,
@@ -19,14 +32,8 @@ import {
 	pathForTail,
 } from "./message-service";
 
-export interface ReplayGroup {
-	container: ChatContainer;
-	version: ChatMessage;
-	pulses: Pulse[];
-}
-
 /** A message version is the sole durable owner of its resource Pulses. */
-export function applyVersionPulse(
+function applyVersionPulse(
 	container: ChatContainer,
 	version: ChatMessage,
 	pulse: Pulse,
@@ -34,8 +41,8 @@ export function applyVersionPulse(
 	if (!container.content.some((candidate) => candidate.id === version.id))
 		throw new Error("Pulse 必须绑定到消息容器中的具体版本。");
 	version.meta.pulses ??= [];
-	version.meta.pulses.push(pulse);
-	useSyncStore().markDirty({ type: "container", id: container.id });
+	version.meta.pulses = compactPulses([...version.meta.pulses, pulse]);
+	markContainerDirty(container.conversationid, container.id);
 }
 
 export const toggleEditModeEvent = "pulsarai:conversation-toggle-edit-mode";
@@ -49,21 +56,11 @@ export function useActivePathComposable(chatId: string) {
 	const store = useSyncStore();
 	const chat = useChat(chatId);
 	const collection = usePureContainers(chatId);
-	const activePath = computed(() =>
-		pathForTail(collection.containers.value, chat.value?.lastContainerId),
+	const { activePath, replayGroups, replayPulses } = usePathProjection(
+		collection.containers,
+		() => chat.value?.lastContainerId,
 	);
 	const intervals = computed(() => evaluateIntervals(activePath.value));
-	const replayGroups = computed<ReplayGroup[]>(() =>
-		activePath.value.flatMap((container) => {
-			const version = currentMessage(container);
-			return version
-				? [{ container, version, pulses: version.meta.pulses ?? [] }]
-				: [];
-		}),
-	);
-	const replayPulses = computed(() =>
-		replayGroups.value.map((group) => group.pulses),
-	);
 	function forVersion(container: ChatContainer, version: ChatMessage) {
 		if (container.conversationid !== chatId)
 			throw new Error("消息版本不属于当前会话。");
@@ -77,6 +74,7 @@ export function useActivePathComposable(chatId: string) {
 		const filetree = usePluginData(
 			() => chat.value?.localPluginId ?? "",
 			groups,
+			() => chat.value?.pluginVersionId ?? "",
 		);
 		return {
 			filetree,
@@ -116,16 +114,16 @@ export function useActivePathComposable(chatId: string) {
 			}),
 		);
 		if (container.previousContainer) {
-			const parent = [...collection.containers.value].find(
-				(item) => item.id === container.previousContainer,
+			const parent = collection.containers.value.get(
+				container.previousContainer,
 			);
 			if (parent) {
 				parent.availableNextContainer.push(container.id);
 				parent.activeNextContainer = container.id;
-				store.markDirty({ type: "container", id: parent.id });
+				markContainerDirty(chatId, parent.id, true);
 			}
 		}
-		store.markDirty({ type: "container", id: container.id });
+		markContainerDirty(chatId, container.id, true);
 		if (!current.rootContainerId) current.rootContainerId = container.id;
 		current.lastContainerId = container.id;
 		if (input.role === "user")
@@ -159,13 +157,11 @@ export function useActivePathComposable(chatId: string) {
 						},
 					},
 				];
-		store.markDirty({ type: "container", id: marker.id });
+		markContainerDirty(chatId, marker.id);
 		return marker;
 	}
 	function versionAt(containerId: string, messageId?: string) {
-		const container = [...collection.containers.value].find(
-			(item) => item.id === containerId,
-		);
+		const container = collection.containers.value.get(containerId);
 		if (!container) return null;
 		const version = useContainerVersion(container);
 		if (messageId) {
@@ -187,6 +183,9 @@ export function useActivePathComposable(chatId: string) {
 			generating.value
 		)
 			return null;
+		// Generation may outlive the mounted message bubble that normally watches it.
+		const generationScope = effectScope(true);
+		generationScope.run(() => useContainer(chatId, target.container.id));
 		setChatGeneration(current.id, { messageId: target.message.id });
 		try {
 			const path = pathForTail(
@@ -229,8 +228,9 @@ export function useActivePathComposable(chatId: string) {
 			target.message.type = "error";
 			const detail = error instanceof Error ? error.message : String(error);
 			target.message.content = `> [!CAUTION]\n> **生成失败**：${detail}`;
-			store.markDirty({ type: "container", id: target.container.id });
+			markContainerDirty(chatId, target.container.id);
 		} finally {
+			generationScope.stop();
 			setChatGeneration(current.id);
 		}
 		return versionAt(target.container.id, target.message.id)?.message ?? null;
@@ -252,10 +252,10 @@ export function useActivePathComposable(chatId: string) {
 		containerId: string,
 		deleteDescendants = false,
 	) {
-		const list = store.containers.get(chatId) as Set<ChatContainer> | undefined;
-		const container = [...(list ?? [])].find((item) => item.id === containerId);
+		const list = store.containers.get(chatId);
+		const container = list?.get(containerId);
 		if (!container) return;
-		const byId = new Map([...(list ?? [])].map((item) => [item.id, item]));
+		const byId = list!;
 		const removed = new Set<string>();
 		const collect = (id: string) => {
 			if (removed.has(id)) return;
@@ -280,12 +280,12 @@ export function useActivePathComposable(chatId: string) {
 			);
 			if (parent.activeNextContainer === containerId)
 				parent.activeNextContainer = replacementId;
-			store.markDirty({ type: "container", id: parent.id });
+			markContainerDirty(chatId, parent.id, true);
 		}
 		for (const childId of children) {
 			const child = byId.get(childId)!;
 			child.previousContainer = container.previousContainer ?? null;
-			store.markDirty({ type: "container", id: child.id });
+			markContainerDirty(chatId, child.id, true);
 		}
 		const current = chat.value;
 		if (current) {
@@ -320,8 +320,8 @@ export function useActivePathComposable(chatId: string) {
 		);
 		for (const url of media) await removeMediaLink(url);
 		for (const id of removed) {
-			list?.delete(byId.get(id)!);
-			store.markDirty({ type: "container", id });
+			list?.delete(id);
+			markContainerDirty(chatId, id, true);
 		}
 	}
 	async function send() {

@@ -79,6 +79,34 @@ export const useTabsStore = defineStore("tabs", () => {
 		);
 	}
 
+	function closeRange(
+		target: string | number,
+		predicate: (index: number, targetIndex: number) => boolean,
+	) {
+		const targetIndex = indexOf(tabs.value, target);
+		if (targetIndex < 0) return;
+		for (const tab of tabs.value.filter((_, index) =>
+			predicate(index, targetIndex),
+		))
+			close(tab.id);
+	}
+
+	function closeOthers(target: string | number) {
+		closeRange(target, (index, targetIndex) => index !== targetIndex);
+	}
+	function closeLeft(target: string | number) {
+		closeRange(target, (index, targetIndex) => index < targetIndex);
+	}
+	function closeRight(target: string | number) {
+		closeRange(target, (index, targetIndex) => index > targetIndex);
+	}
+	async function reload(target: string | number) {
+		const tab = tabs.value[indexOf(tabs.value, target)];
+		if (tab?.type !== "chat") return;
+		await sync.unload({ type: "chat", id: tab.id });
+		await sync.load({ type: "chat", id: tab.id });
+	}
+
 	function reorder(fromIndex: number, toIndex: number) {
 		if (
 			fromIndex < 0 ||
@@ -97,5 +125,18 @@ export const useTabsStore = defineStore("tabs", () => {
 		if (tab) activeId.value = tab.id;
 	}
 
-	return { tabs, activeId, activeTab, views, open, close, reorder, active };
+	return {
+		tabs,
+		activeId,
+		activeTab,
+		views,
+		open,
+		close,
+		closeOthers,
+		closeLeft,
+		closeRight,
+		reload,
+		reorder,
+		active,
+	};
 });

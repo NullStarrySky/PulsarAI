@@ -1,29 +1,37 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref, toValue, watch } from "vue";
 import { Image } from "@/components/ui/image";
 import ConversationComposerEditor from "@/features/Conversation/composer/ConversationComposerEditor.vue";
-import { resolveMediaUrl } from "@/features/Media/media-link";
 import StPresetRenderer from "@/features/Migrations/SillyTavern/renderers/StPresetRenderer.vue";
 import StWorldbookRenderer from "@/features/Migrations/SillyTavern/renderers/StWorldbookRenderer.vue";
+import { resolveMediaUrl } from "@/features/Plugin/media/media-link";
+import { type ResourcePath, resourceType } from "../dataflow/types";
+import type { FileApiOptions } from "../dataflow/use-file-api";
+import { useFileApi } from "../dataflow/use-file-api";
 import PluginTypeRenderer from "./PluginTypeRenderer.vue";
 import type { ResourceFile } from "./resource-types";
-import { resourceType } from "./resource-types";
 import PluginCharacterEditor from "./types/character/PluginCharacterEditor.vue";
 import PluginChatEditor from "./types/chat/PluginChatEditor.vue";
 import PluginConfigEditor from "./types/config/PluginConfigEditor.vue";
-import PluginDataEditor from "./types/data/PluginDataEditor.vue";
 import JavaScriptCodeMirrorEditor from "./types/javascript/JavaScriptCodeMirrorEditor.vue";
 import { pluginMediaSource, pluginMediaType } from "./types/media/plugin-media";
 import PluginRegexEditor from "./types/regex/PluginRegexEditor.vue";
 
-const props = defineProps<{
-	file: ResourceFile;
-	modelValue: string;
-	preview: boolean;
-}>();
-const emit = defineEmits<{ "update:modelValue": [value: string] }>();
-const type = computed(() => resourceType(props.file));
-const mediaSource = computed(() => pluginMediaSource(props.file.content));
+const props = defineProps<
+	FileApiOptions & { path: ResourcePath; preview: boolean }
+>();
+const files = useFileApi(props);
+const content = files.useFileContent(() => props.path);
+const file = computed<ResourceFile>(
+	() =>
+		({
+			...(toValue(props.filetree)?.meta[props.path] ?? {}),
+			path: props.path,
+			content: content.value,
+		}) as ResourceFile,
+);
+const type = computed(() => resourceType(props.path));
+const mediaSource = computed(() => pluginMediaSource(content.value));
 const resolvedMediaSource = ref("");
 watch(
 	mediaSource,
@@ -33,7 +41,7 @@ watch(
 	{ immediate: true },
 );
 const mediaKind = computed(() =>
-	pluginMediaType(props.file.content, mediaSource.value),
+	pluginMediaType(content.value, mediaSource.value),
 );
 const codeLanguage = computed<
 	"javascript" | "json" | "markdown" | "vue" | "text"
@@ -41,13 +49,11 @@ const codeLanguage = computed<
 	if (type.value === "javascript") return "javascript";
 	if (type.value === "markdown") return "markdown";
 	if (type.value === "component") return "vue";
-	return props.file.path.endsWith(".json") ? "json" : "text";
+	return props.path.endsWith(".json") ? "json" : "text";
 });
 const parsedJson = computed(() => {
 	try {
-		return props.file.path.endsWith(".json")
-			? JSON.parse(props.modelValue)
-			: null;
+		return props.path.endsWith(".json") ? JSON.parse(content.value) : null;
 	} catch {
 		return null;
 	}
@@ -70,16 +76,15 @@ const isPreset = computed(() =>
 
 <template>
   <div class="h-full min-h-0 overflow-hidden">
-    <ConversationComposerEditor v-if="type === 'markdown' && preview" :model-value="modelValue" placeholder="输入 Markdown 内容" :enable-ai="false" :submit-on-enter="false" full-height class="h-full" @update:model-value="emit('update:modelValue', $event)" />
-    <StWorldbookRenderer v-else-if="isWorldbook && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
-    <StPresetRenderer v-else-if="isPreset && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
-    <PluginCharacterEditor v-else-if="file.path === '/definition.package.json' && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
-    <PluginConfigEditor v-else-if="file.path.endsWith('/config.json') && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
-    <PluginTypeRenderer v-else-if="type === 'component' && preview" :file="file" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
-    <PluginDataEditor v-else-if="type === 'data' && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
-    <PluginRegexEditor v-else-if="(file.path.endsWith('/regex.json') || file.path.endsWith('.regex.json')) && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
-    <PluginChatEditor v-else-if="type === 'chat' && preview" :model-value="modelValue" @update:model-value="emit('update:modelValue', $event)" />
-    <div v-else-if="type === 'media'" class="flex h-full items-center justify-center bg-muted/20 p-4"><video v-if="mediaKind === 'video'" :src="resolvedMediaSource" controls class="max-h-full max-w-full rounded-lg" /><audio v-else-if="mediaKind === 'audio'" :src="resolvedMediaSource" controls /><Image v-else :src="resolvedMediaSource" :alt="file.path" :preview="false" object-fit="contain" class="max-h-full max-w-full" /></div>
-    <JavaScriptCodeMirrorEditor v-else :model-value="modelValue" :language="codeLanguage" frameless @update:model-value="emit('update:modelValue', $event)" />
+    <ConversationComposerEditor v-if="type === 'markdown' && preview" v-model="content" placeholder="输入 Markdown 内容" :enable-ai="false" :submit-on-enter="false" full-height class="h-full" />
+    <StWorldbookRenderer v-else-if="isWorldbook && preview" v-model="content" />
+    <StPresetRenderer v-else-if="isPreset && preview" v-model="content" />
+    <PluginCharacterEditor v-else-if="path === '/definition.package.json' && preview" :path="path" :filetree="filetree" :apply-pulse="applyPulse" />
+    <PluginConfigEditor v-else-if="path.endsWith('/config.json') && preview" :path="path" :filetree="filetree" :apply-pulse="applyPulse" />
+    <PluginTypeRenderer v-else-if="type === 'component' && preview" :file="file" v-model="content" />
+    <PluginRegexEditor v-else-if="(path.endsWith('/regex.json') || path.endsWith('.regex.json')) && preview" :path="path" :filetree="filetree" :apply-pulse="applyPulse" />
+    <PluginChatEditor v-else-if="type === 'chat' && preview" :path="path" :filetree="filetree" :apply-pulse="applyPulse" />
+    <div v-else-if="type === 'media'" class="flex h-full items-center justify-center bg-muted/20 p-4"><video v-if="mediaKind === 'video'" :src="resolvedMediaSource" controls class="max-h-full max-w-full rounded-lg" /><audio v-else-if="mediaKind === 'audio'" :src="resolvedMediaSource" controls /><Image v-else :src="resolvedMediaSource" :alt="path" :preview="false" object-fit="contain" class="max-h-full max-w-full" /></div>
+    <JavaScriptCodeMirrorEditor v-else v-model="content" :language="codeLanguage" frameless />
   </div>
 </template>

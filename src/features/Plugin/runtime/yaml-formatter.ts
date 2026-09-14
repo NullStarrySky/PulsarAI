@@ -58,8 +58,3 @@ function extractItem(text: string) {
 export function extractYAMLFormatter(input: string | string[]) {
 	return (Array.isArray(input) ? input : [input]).map(extractItem);
 }
-
-export function parseSkillDocument(input: string) {
-	const [parsed] = extractYAMLFormatter(input);
-	return { content: parsed?.result ?? "", metadata: parsed?.formatter ?? [] };
-}

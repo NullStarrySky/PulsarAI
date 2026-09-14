@@ -1,6 +1,6 @@
 import type { ChatContainer, ChatMessage } from "../types";
 
-export type JsonValue =
+type JsonValue =
 	| null
 	| boolean
 	| number
@@ -17,20 +17,20 @@ export interface IntervalDefinition {
 export type IntervalOperation =
 	| { kind: "interval.open"; interval: IntervalDefinition }
 	| { kind: "interval.close"; intervalId: string };
-export interface IntervalPosition {
+interface IntervalPosition {
 	containerId: string;
 	messageId: string;
 }
-export interface OpenInterval {
+interface OpenInterval {
 	interval: IntervalDefinition;
 	openedAt: IntervalPosition;
 	visibleContainersAfterOpen: number;
 }
-export interface IntervalSpan extends OpenInterval {
+interface IntervalSpan extends OpenInterval {
 	closedAt: IntervalPosition;
 	closeKind: "explicit" | "auto";
 }
-export interface IntervalDiagnostic {
+interface IntervalDiagnostic {
 	code:
 		| "interval.duplicate-open"
 		| "interval.close-missing"

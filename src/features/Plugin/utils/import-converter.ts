@@ -1,4 +1,4 @@
-import { normalizeResourcePath, resolveNode } from "../dataflow/pulse";
+import { normalizeResourcePath } from "../dataflow/pulse";
 import {
 	defaultFileMeta,
 	defaultFolderMeta,
@@ -10,7 +10,7 @@ import {
 import {
 	generateProceduralAvatarDataUrl,
 	generateProceduralCoverDataUrl,
-} from "../shared/procedural-cover";
+} from "./procedural-cover";
 
 type BuiltinManifest = {
 	plugin: { id: string };
@@ -101,18 +101,6 @@ export const builtinSlotRegistry: readonly SlotRegistration[] = [
 		selectionMode: "none",
 	},
 	{
-		id: "DATA_INJECT",
-		name: "数据注入",
-		parentId: "generation",
-		selectionMode: "none",
-	},
-	{
-		id: "data_prompt",
-		name: "数据提示",
-		parentId: "generation",
-		selectionMode: "none",
-	},
-	{
 		id: "chat",
 		name: "生成入口",
 		parentId: "generation",
@@ -190,20 +178,6 @@ export const builtinSlotRegistry: readonly SlotRegistration[] = [
 		icon: "panel-right",
 		selectionMode: "none",
 	},
-	{
-		id: "topbar-left",
-		name: "顶栏左侧",
-		parentId: "panel",
-		icon: "panel-top",
-		selectionMode: "none",
-	},
-	{
-		id: "topbar-right",
-		name: "顶栏右侧",
-		parentId: "panel",
-		icon: "panel-top",
-		selectionMode: "none",
-	},
 ];
 
 const slotById = new Map(builtinSlotRegistry.map((slot) => [slot.id, slot]));
@@ -232,13 +206,6 @@ const builtinAssets = import.meta.glob("../builtIn/*/**/*", {
 	query: "?url",
 	import: "default",
 }) as Record<string, string>;
-
-export function builtinPluginFolders() {
-	return Object.keys(builtinManifests)
-		.map((path) => path.split("/").at(-2))
-		.filter((folder): folder is string => Boolean(folder))
-		.sort((left, right) => left.localeCompare(right));
-}
 
 function set(target: object, key: string, value: unknown) {
 	Object.defineProperty(target, key, {
@@ -309,7 +276,7 @@ function sourceKey(folder: string, path: string) {
 	return `../builtIn/${folder}/${path.replace(/^\//, "")}`;
 }
 
-export function importBuiltinPlugin(
+function importBuiltinPlugin(
 	folder: string,
 	manifestSource: string,
 ): PluginData {
@@ -397,10 +364,4 @@ export function createLocalPluginData(id: string): PluginData {
 		defaultFileMeta(),
 	);
 	return data;
-}
-
-export function readImportedFile(data: PluginData, path: ResourcePath) {
-	const node = resolveNode(data.tree, path).node;
-	if (typeof node !== "string") throw new Error(`不是文件：${path}`);
-	return node;
 }

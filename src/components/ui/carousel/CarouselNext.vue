@@ -2,7 +2,7 @@
 import type { WithClassAsProps } from './interface'
 
 import type { ButtonVariants } from '@/components/ui/button'
-import { ChevronRightIcon } from '@lucide/vue'
+import { ChevronRightIcon } from '@/lib/phosphor-icons'
 import { cn } from '@/lib/utils.ts'
 import { Button } from '@/components/ui/button'
 import { useCarousel } from './useCarousel'

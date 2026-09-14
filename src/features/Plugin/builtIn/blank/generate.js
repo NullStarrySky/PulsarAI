@@ -1,17 +1,18 @@
-const config = await imports("@/config.json");
-const useMock = config.useMock?.value !== false;
-const useStreamText = Boolean(config.useStreamText?.value);
+export default async function run() {
+	const config = await imports("@/config.json");
+	const useMock = config.useMock?.value !== false;
+	const useStreamText = Boolean(config.useStreamText?.value);
 
-if (useMock) {
-	const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-	reply.meta.generateInfo ??= { startTime: new Date().toISOString() };
-	reply.meta.generateInfo.modelName = "mock-deepseek-v4";
+	if (useMock) {
+		const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+		reply.meta.generateInfo ??= { startTime: new Date().toISOString() };
+		reply.meta.generateInfo.modelName = "mock-deepseek-v4";
 
-	const thinkingText = `The user wants me to output some markdown text for testing rendering. They want various markdown elements. Let me create a nice test markdown output. This is a simple request - I don't need to use any tools, just output markdown text directly.
+		const thinkingText = `The user wants me to output some markdown text for testing rendering. They want various markdown elements. Let me create a nice test markdown output. This is a simple request - I don't need to use any tools, just output markdown text directly.
 
 Let me include various markdown elements: headings, bold, italic, links, images, code blocks, tables, lists, blockquotes, etc. Maybe also include a widget reference? The user just wants to test rendering. I could just output plain markdown. Let me keep it fun with the cat theme (喵).`;
 
-	const outputText = `好的喵~ 这里是一份 Markdown 渲染测试样例，各种元素都覆盖了喵，直接复制或查看渲染效果即可～
+		const outputText = `好的喵~ 这里是一份 Markdown 渲染测试样例，各种元素都覆盖了喵，直接复制或查看渲染效果即可～
 
 ## 标题层级
 
@@ -159,31 +160,33 @@ $$
 
 以上就是全部测试内容喵~ 辛苦你检查渲染效果了，有任何问题随时叫我喵！🐾`;
 
-	// 1. 流式输出思考过程
-	const thinking = { type: "thinking", id: "think-mock-1", message: "" };
-	reply.meta.steps.push(thinking);
-	let currentThinking = "";
-	for (let i = 0; i < thinkingText.length; i += 8) {
-		const chunk = thinkingText.slice(i, i + 8);
-		currentThinking += chunk;
-		thinking.message = currentThinking;
-		await sleep(15);
-	}
+		// 1. 流式输出思考过程
+		const thinking = { type: "thinking", id: "think-mock-1", message: "" };
+		reply.meta.steps.push(thinking);
+		let currentThinking = "";
+		for (let i = 0; i < thinkingText.length; i += 8) {
+			const chunk = thinkingText.slice(i, i + 8);
+			currentThinking += chunk;
+			thinking.message = currentThinking;
+			await sleep(15);
+		}
 
-	await sleep(250);
+		await sleep(250);
 
-	// 2. 流式输出 Markdown 正文
-	for (let i = 0; i < outputText.length; i += 6) {
-		const chunk = outputText.slice(i, i + 6);
-		reply.content += chunk;
-		await sleep(12);
-	}
-} else {
-	const messages = ctx.chat;
-	if (useStreamText) {
-		await agent.streamText({ container: reply, messages });
+		// 2. 流式输出 Markdown 正文
+		for (let i = 0; i < outputText.length; i += 6) {
+			const chunk = outputText.slice(i, i + 6);
+			reply.content += chunk;
+			await sleep(12);
+		}
 	} else {
-		const runner = new agent.ToolLoopAgent({ container: reply });
-		await runner.stream({ messages });
+		const messages = ctx.chat;
+		if (useStreamText) {
+			await agent.streamText({ container: reply, messages });
+		} else {
+			const runner = new agent.ToolLoopAgent({ container: reply });
+			await runner.stream({ messages });
+		}
 	}
+
 }

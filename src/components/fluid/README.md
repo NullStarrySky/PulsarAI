@@ -6,14 +6,14 @@
 
 - `components/ui/` — 全部组件：Button、Badge、Accordion 家族、Card 全家族、Dialog 家族、Dropdown（内联）/ DropdownMenu（弹出）+ MenuItem、RadioGroup/RadioItem、CheckboxGroup/CheckboxItem（含 merge/split 边界动画）、Select 家族、Combobox、Slider（compact/comfortable 双引擎自动分发）、Switch、Tabs 家族、ThinkingIndicator、Tooltip
 - `hooks/` — `useProximityHover`（磁吸邻近高亮测量）、`useMergeSplitBlocks`（选中块合并/分裂边界动画）、`useTouchPrimary`
-- `lib/` — spring 三档令牌、shape/size/surface 上下文、图标注册表（`provideIcons` 可整体替换 Lucide）、`Elevated`（浮层抬升）
+- `lib/` — spring 三档令牌、shape/size/surface 上下文、图标注册表（`provideIcons` 可整体替换 Phosphor）、`Elevated`（浮层抬升）
 - `index.ts` — 统一导出入口
 
 ## 依赖
 
 - `motion-v`（已安装）— 动画引擎
 - `@fontsource-variable/inter`（已安装）— 字重过渡动画依赖 Inter Variable
-- `reka-ui`、`lucide-vue-next`、`clsx`、`tailwind-merge` — 宿主已有
+- `reka-ui`、`@phosphor-icons/vue`、`clsx`、`tailwind-merge` — 宿主已有
 
 ## 样式
 

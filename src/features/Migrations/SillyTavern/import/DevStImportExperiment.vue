@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { Code, Eye, FilePlus2, Play, Upload } from "lucide-vue-next";
 import { computed, ref } from "vue";
-import FileTree, {
-	type FileTreeNode,
-} from "@/components/common/file-tree/FileTree.vue";
 import { Button, TabItem, Tabs, TabsList } from "@/components/fluid";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSyncStore } from "@/features/Database/dbsync-store";
-import { applyPulse as applyPluginPulse } from "@/features/Plugin/dataflow/pulse";
+import FileTree, {
+	type FileTreeNode,
+} from "@/features/Plugin/components/FileTree.vue";
 import { useFileApi } from "@/features/Plugin/dataflow/use-file-api";
+import { useEditablePluginData } from "@/features/Plugin/dataflow/use-plugin-data";
 import { host } from "@/host";
+import { Code, Eye, FilePlus2, Play, Upload } from "@/lib/phosphor-icons";
 import StPresetRenderer from "../renderers/StPresetRenderer.vue";
 import StWorldbookRenderer from "../renderers/StWorldbookRenderer.vue";
 import { applyStImportPlan } from "./st-import-apply";
@@ -25,15 +25,8 @@ import { stTestRenderers } from "./st-test-renderers";
 const sync = useSyncStore();
 void sync.init();
 const localPluginId = computed(() => [...sync.characters][0]?.id ?? "");
-const plugin = computed(() => sync.plugins.get(localPluginId.value) ?? null);
-const world = useFileApi({
-	filetree: plugin,
-	applyPulse: (pulse) => {
-		if (!plugin.value) throw new Error("没有可写入的本地 Plugin。");
-		applyPluginPulse(plugin.value, pulse);
-		sync.markDirty({ type: "plugin", id: localPluginId.value });
-	},
-});
+const workspace = useEditablePluginData(localPluginId);
+const world = useFileApi(workspace);
 const source = ref<StResourceFile | null>(null);
 const plan = ref<StImportPlan | null>(null);
 const error = ref("");
@@ -270,7 +263,7 @@ function handleSelectTreeNode(node: FileTreeNode) {
         <FilePlus2 class="size-4" />应用到测试 World
       </Button>
       <div class="text-[11px] text-muted-foreground leading-relaxed">
-        默认转换不会写入数据库；应用后写入当前本地 Plugin。
+        转换与应用会立即追加到当前 Plugin 版本，并由数据库同步队列持久化。
       </div>
       <div v-if="error" class="rounded-lg bg-destructive/10 p-2 text-xs text-destructive">
         {{ error }}

@@ -4,10 +4,9 @@ import type {
 	ChatContainer,
 	ChatMessage,
 } from "@/features/Conversation/dataflow/types";
-import type { SandboxEnvironment } from "@/features/Sandbox/sandbox";
+import type { SandboxEnvironment } from "@/features/Plugin/runtime/sandbox";
 import { createAgentResourceProvider } from "../agent/runtime/default-agent";
 import type { PluginData, Pulse, ResourcePath } from "../dataflow/types";
-import { parsePluginDataDefinition } from "../resources/types/data/plugin-data";
 import { createPluginEnvironment } from "./environment";
 import type { PluginLogger } from "./logger";
 
@@ -51,16 +50,12 @@ export async function runWorld(input: RunWorldInput): Promise<RunWorldResult> {
 	if (!entryPath) throw new Error("没有已选中的生成流程。");
 	built.environment.sourcePath = entryPath;
 	built.registerCustomTools();
-	for (const path of built.slots.paths("DATA_INJECT")) {
-		const definition = parsePluginDataDefinition(built.files.read(path));
-		const name = definition.varName?.trim();
-		if (!name) continue;
-		if (name in built.environment) throw new Error(`数据变量名冲突：${name}`);
-		built.environment[name] = await built.importAt(path, entryPath);
-	}
 	const agent = createAgentResourceProvider({ environment: built.environment });
 	built.environment.agent = agent;
 	built.environment.AGENT = agent;
-	await built.importAt(entryPath, entryPath);
+	const entry = await built.importAt(entryPath, entryPath);
+	if (typeof entry !== "function")
+		throw new Error("生成流程的默认导出必须是函数。");
+	await entry();
 	return { context: built.environment, entryPath, logger: built.logger };
 }

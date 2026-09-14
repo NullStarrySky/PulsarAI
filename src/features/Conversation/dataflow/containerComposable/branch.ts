@@ -1,6 +1,7 @@
 import { computed, type MaybeRef, unref } from "vue";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import { createContainer } from "../activePathComposable/message-service";
+import { markContainerDirty } from "../containers";
 import type { ChatContainer } from "../types";
 
 /** Chooses or creates the sibling branch for one concrete container. */
@@ -12,10 +13,9 @@ export function useContainerBranch(
 	const siblings = computed(() => {
 		const value = container.value;
 		if (!value?.previousContainer) return value ? [value.id] : [];
-		const all = [...(store.containers.get(value.conversationid) ?? [])];
+		const all = store.containers.get(value.conversationid);
 		return (
-			all.find((item) => item.id === value.previousContainer)
-				?.availableNextContainer ?? [value.id]
+			all?.get(value.previousContainer)?.availableNextContainer ?? [value.id]
 		);
 	});
 	const index = computed(() =>
@@ -30,16 +30,16 @@ export function useContainerBranch(
 	function goto(branchId: string) {
 		const value = container.value;
 		if (!value?.previousContainer || !siblings.value.includes(branchId)) return;
-		const all = [...(store.containers.get(value.conversationid) ?? [])];
-		const parent = all.find((item) => item.id === value.previousContainer);
-		const branch = all.find((item) => item.id === branchId);
+		const all = store.containers.get(value.conversationid);
+		const parent = all?.get(value.previousContainer);
+		const branch = all?.get(branchId);
 		if (!parent || !branch) return;
 		let tail: ChatContainer = branch;
 		parent.activeNextContainer = branchId;
 		const seen = new Set<string>();
 		while (tail.activeNextContainer && !seen.has(tail.id)) {
 			seen.add(tail.id);
-			const next = all.find((item) => item.id === tail.activeNextContainer);
+			const next = all?.get(tail.activeNextContainer);
 			if (!next) break;
 			tail = next;
 		}
@@ -51,7 +51,7 @@ export function useContainerBranch(
 			chat.updatedAt = new Date().toISOString();
 			store.markDirty({ type: "meta", id: chat.id });
 		}
-		store.markDirty({ type: "container", id: parent.id });
+		markContainerDirty(value.conversationid, parent.id, true);
 	}
 	function prev() {
 		const id = siblings.value[index.value - 1];
@@ -64,9 +64,9 @@ export function useContainerBranch(
 	function create() {
 		const value = container.value;
 		if (!value?.previousContainer) return null;
-		const parent = [...(store.containers.get(value.conversationid) ?? [])].find(
-			(item) => item.id === value.previousContainer,
-		);
+		const parent = store.containers
+			.get(value.conversationid)
+			?.get(value.previousContainer);
 		if (!parent) return null;
 		const branch = createContainer({
 			conversationId: value.conversationid,
@@ -76,7 +76,7 @@ export function useContainerBranch(
 		store.addContainer(branch);
 		parent.availableNextContainer.push(branch.id);
 		parent.activeNextContainer = branch.id;
-		store.markDirty({ type: "container", id: parent.id });
+		markContainerDirty(value.conversationid, parent.id, true);
 		const chat = [...store.chatMeta.values()]
 			.map((items) => items.get(value.conversationid))
 			.find(Boolean);
@@ -85,7 +85,7 @@ export function useContainerBranch(
 			chat.updatedAt = new Date().toISOString();
 			store.markDirty({ type: "meta", id: chat.id });
 		}
-		store.markDirty({ type: "container", id: branch.id });
+		markContainerDirty(value.conversationid, branch.id, true);
 		return branch;
 	}
 	return {

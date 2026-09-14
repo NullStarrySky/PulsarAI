@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { HTMLAttributes } from 'vue'
 
-import { MoreHorizontalIcon } from '@lucide/vue'
+import { MoreHorizontalIcon } from '@/lib/phosphor-icons'
 import { cn } from '@/lib/utils.ts'
 
 const props = defineProps<{

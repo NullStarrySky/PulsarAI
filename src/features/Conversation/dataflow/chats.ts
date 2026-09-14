@@ -1,9 +1,10 @@
-import { computed } from "vue";
+import { computed, watch } from "vue";
 import { selectAll } from "@/features/Database/database-service";
 import {
 	registerSyncHandler,
 	useSyncStore,
 } from "@/features/Database/dbsync-store";
+import { latestPluginVersion } from "@/features/Plugin/dataflow/plugin-version";
 import {
 	type ChatGenerationState,
 	type ChatMeta,
@@ -32,6 +33,25 @@ registerSyncHandler<ChatMeta, PersistedChatMeta>("meta", {
 	},
 });
 
+/** Read only persistent fields, without subscribing to runtime generation. */
+export function chatRecord(value: ChatMeta): PersistedChatMeta {
+	return {
+		id: value.id,
+		localPluginId: value.localPluginId,
+		pluginVersionId: value.pluginVersionId,
+		title: value.title,
+		rootContainerId: value.rootContainerId,
+		lastContainerId: value.lastContainerId,
+		lastMessagePreview: value.lastMessagePreview,
+		composerDraft: value.composerDraft,
+		createdAt: value.createdAt,
+		updatedAt: value.updatedAt,
+		lifetime: value.lifetime,
+		pinned: value.pinned,
+		isTemplate: value.isTemplate,
+	};
+}
+
 /** A loaded set of a role's conversations. Its actions are the only mutations. */
 export function useChatList(pluginId: string) {
 	const store = useSyncStore();
@@ -41,7 +61,15 @@ export function useChatList(pluginId: string) {
 	function create(
 		input: Partial<Pick<ChatMeta, "title" | "lifetime" | "isTemplate">> = {},
 	) {
-		const chat = createChatMeta({ localPluginId: pluginId, ...input });
+		const plugin = store.plugins.get(pluginId);
+		const version = plugin && latestPluginVersion(plugin);
+		if (!version)
+			throw new Error(`本地 Plugin 没有可用于会话的版本：${pluginId}`);
+		const chat = createChatMeta({
+			localPluginId: pluginId,
+			pluginVersionId: version.id,
+			...input,
+		});
 		store.addChat(chat);
 		store.markDirty({ type: "meta", id: chat.id });
 		return chat;
@@ -53,9 +81,20 @@ export function useChatList(pluginId: string) {
 	return { chats, create, delete: remove };
 }
 
-/** Thin reactive address lookup; it adds no persistence behavior. */
+/** Scoped mutable chat handle, excluding runtime-only state from persistence. */
 export function useChat(chatId: string) {
-	return computed(() => findChat(chatId) ?? null);
+	const store = useSyncStore();
+	const chat = computed(() => findChat(chatId) ?? null);
+	watch(
+		() => (chat.value ? chatRecord(chat.value) : null),
+		(record) => {
+			if (!record || !chat.value) return;
+			store.trackChatPluginVersion(chat.value);
+			store.markDirty({ type: "meta", id: chatId });
+		},
+		{ deep: true, flush: "sync" },
+	);
+	return chat;
 }
 
 /** Generation is runtime state; changing it must not cause a persistence write. */

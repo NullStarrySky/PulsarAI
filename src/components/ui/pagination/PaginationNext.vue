@@ -3,7 +3,7 @@ import type { PaginationNextProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
 import type { ButtonVariants } from '@/components/ui/button'
-import { ChevronRightIcon } from '@lucide/vue'
+import { ChevronRightIcon } from '@/lib/phosphor-icons'
 import { reactiveOmit } from '@vueuse/core'
 import { PaginationNext, useForwardProps } from 'reka-ui'
 import { cn } from '@/lib/utils.ts'

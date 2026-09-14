@@ -1,20 +1,23 @@
 <script setup lang="ts">
-import { ArrowDown, ArrowUp, Plus, X } from "lucide-vue-next";
 import { computed, ref } from "vue";
 import { Button } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import SettingGroup from "@/features/Setting/components/SettingGroup.vue";
 import SettingItem from "@/features/Setting/components/SettingItem.vue";
-import { builtinPluginFolders } from "../../../utils/import-converter";
+import { ArrowDown, ArrowUp, Plus, X } from "@/lib/phosphor-icons";
+import type { ResourcePath } from "../../../dataflow/types";
+import type { FileApiOptions } from "../../../dataflow/use-file-api";
+import { useFileApi } from "../../../dataflow/use-file-api";
+import { importBuiltinPlugins } from "../../../utils/import-converter";
 import { parseCharacterDefinition } from "./plugin-character";
 
-const props = defineProps<{ modelValue: string }>();
-const emit = defineEmits<{ "update:modelValue": [value: string] }>();
-const definition = computed(() => parseCharacterDefinition(props.modelValue));
+const props = defineProps<FileApiOptions & { path: ResourcePath }>();
+const content = useFileApi(props).useFileContent(() => props.path);
+const definition = computed(() => parseCharacterDefinition(content.value));
 const newPlugin = ref("");
 const availablePlugins = computed(() =>
-	builtinPluginFolders().filter(
+	Object.keys(importBuiltinPlugins()).filter(
 		(folder) => !definition.value.globalPlugins.includes(folder),
 	),
 );
@@ -22,12 +25,12 @@ const availablePlugins = computed(() =>
 function update(key: "name" | "description" | "globalPlugins", value: unknown) {
 	let source: Record<string, unknown> = {};
 	try {
-		const parsed: unknown = JSON.parse(props.modelValue);
+		const parsed: unknown = JSON.parse(content.value);
 		if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
 			source = parsed as Record<string, unknown>;
 	} catch {}
 	source[key] = value;
-	emit("update:modelValue", JSON.stringify(source, null, 2));
+	content.value = JSON.stringify(source, null, 2);
 }
 
 function addPlugin(value = newPlugin.value) {

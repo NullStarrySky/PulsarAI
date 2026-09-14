@@ -1,4 +1,4 @@
-import type { Host } from "../contracts";
+import type { Host, HostConfig } from "../contracts";
 import { mockHostDatabase } from "@/features/Database/mock-database";
 
 declare global {
@@ -158,7 +158,7 @@ export const host: Host = {
 				: mockHostDatabase.resetCharacterData(),
 	},
 	config: {
-		get: (key) => invoke("config", "get", { key }),
+		get: (async (key: string, fallback?: unknown) => ((await invoke("config", "get", { key })) ?? fallback ?? null)) as HostConfig["get"],
 		set: (key, value) => invoke("config", "set", { key, value }),
 		remove: (key) => invoke("config", "remove", { key }),
 	},

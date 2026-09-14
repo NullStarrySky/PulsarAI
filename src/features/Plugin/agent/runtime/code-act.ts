@@ -1,7 +1,7 @@
 import {
-	executeSandboxCodeAsync,
+	createSandboxFunction,
 	type SandboxEnvironment,
-} from "@/features/Sandbox/sandbox";
+} from "@/features/Plugin/runtime/sandbox";
 
 interface CodeActSuccess {
 	ok: true;
@@ -43,7 +43,7 @@ export async function executeCodeAct(
 ): Promise<CodeActResult> {
 	try {
 		const code = validateCodeActFunction(source);
-		const value = await executeSandboxCodeAsync(code, [environment]);
+		const value = await createSandboxFunction(code, [environment])(environment);
 		return {
 			ok: true,
 			value: normalizeCodeActValue(value),

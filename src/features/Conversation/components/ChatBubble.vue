@@ -8,7 +8,7 @@ import {
 	RefreshCw,
 	Trash2,
 	Volume2,
-} from "lucide-vue-next";
+} from "@/lib/phosphor-icons";
 import { computed } from "vue";
 import {
 	Button,

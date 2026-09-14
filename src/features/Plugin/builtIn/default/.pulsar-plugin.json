@@ -30,13 +30,6 @@
 			"treeOrder": 4,
 			"order": 100,
 			"insertion": { "slot": "chat" }
-		},
-		"ConfigController.vue": {
-			"id": "builtin-default-config-controller",
-			"icon": "",
-			"treeOrder": 5,
-			"order": 100,
-			"insertion": { "slot": "panel-left" }
 		}
 	}
 }

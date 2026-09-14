@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { Sliders, Settings, ListOrdered, FileText, Plus, Trash2 } from "lucide-vue-next";
 import {
 	Accordion,
 	AccordionContent,
@@ -12,9 +11,17 @@ import {
 } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+	FileText,
+	ListOrdered,
+	Plus,
+	Settings,
+	Sliders,
+	Trash2,
+} from "@/lib/phosphor-icons";
 
 const props = defineProps<{
-	modelValue: string | Record<string, any>;
+	modelValue: string;
 	editable?: boolean;
 }>();
 
@@ -28,11 +35,7 @@ watch(
 	() => props.modelValue,
 	(val) => {
 		try {
-			if (typeof val === "string") {
-				internalData.value = JSON.parse(val || "{}");
-			} else if (val && typeof val === "object") {
-				internalData.value = JSON.parse(JSON.stringify(val));
-			}
+			internalData.value = JSON.parse(val || "{}");
 		} catch {
 			internalData.value = {};
 		}
@@ -46,7 +49,8 @@ function notifyUpdate() {
 
 const prompts = computed<any[]>({
 	get: () => {
-		if (Array.isArray(internalData.value.prompts)) return internalData.value.prompts;
+		if (Array.isArray(internalData.value.prompts))
+			return internalData.value.prompts;
 		return [];
 	},
 	set: (val) => {

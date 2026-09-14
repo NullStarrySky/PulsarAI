@@ -9,7 +9,7 @@ export interface FilePart {
 	filename?: string;
 	size?: number;
 }
-export interface ActionPart {
+interface ActionPart {
 	type: "action";
 	id: string;
 	label: string;
@@ -43,13 +43,13 @@ export interface ToolCallResult {
 	input: unknown;
 	output: unknown;
 }
-export interface TokenUsage {
+interface TokenUsage {
 	inputTokens?: number;
 	outputTokens?: number;
 	totalTokens?: number;
 }
 
-export interface MessageMeta {
+interface MessageMeta {
 	steps: Array<ThinkingStep | ToolCallStep | ToolCallResult>;
 	intervalOperations?: import("./activePathComposable/interval-services").IntervalOperation[];
 	pulses?: Pulse[];
@@ -92,6 +92,7 @@ export interface ChatContainer {
 export interface PersistedChatMeta {
 	id: string;
 	localPluginId: string;
+	pluginVersionId: string;
 	title: string;
 	rootContainerId: string | null;
 	lastContainerId: string | null;
@@ -136,7 +137,7 @@ export function createDraft(conversationid = ""): ChatContainer {
 }
 
 export function createChatMeta(
-	input: Pick<ChatMeta, "localPluginId"> &
+	input: Pick<ChatMeta, "localPluginId" | "pluginVersionId"> &
 		Partial<Pick<ChatMeta, "title" | "lifetime" | "isTemplate">>,
 ): ChatMeta {
 	const id = crypto.randomUUID();
@@ -144,6 +145,7 @@ export function createChatMeta(
 	return {
 		id,
 		localPluginId: input.localPluginId,
+		pluginVersionId: input.pluginVersionId,
 		title: input.title?.trim() || "新对话",
 		rootContainerId: null,
 		lastContainerId: null,
@@ -153,21 +155,5 @@ export function createChatMeta(
 		lifetime: input.lifetime ?? "persistent",
 		pinned: false,
 		isTemplate: input.isTemplate ?? false,
-	};
-}
-
-export function createChatContainer(
-	input: Pick<ChatContainer, "conversationid" | "role"> &
-		Partial<Pick<ChatContainer, "previousContainer">>,
-): ChatContainer {
-	return {
-		id: crypto.randomUUID(),
-		role: input.role,
-		conversationid: input.conversationid,
-		content: [],
-		activeMessage: 0,
-		availableNextContainer: [],
-		activeNextContainer: null,
-		previousContainer: input.previousContainer ?? null,
 	};
 }

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-vue-next";
 import { computed } from "vue";
 import {
 	Button,
@@ -11,24 +10,27 @@ import {
 	Switch,
 } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "@/lib/phosphor-icons";
+import type { ResourcePath } from "../../../dataflow/types";
+import type { FileApiOptions } from "../../../dataflow/use-file-api";
+import { useFileApi } from "../../../dataflow/use-file-api";
 import {
 	createPluginRegexRule,
 	type PluginRegexRule,
 	parsePluginRegexRules,
 } from "./plugin-regex";
 
-const props = defineProps<{ modelValue: string }>();
-const emit = defineEmits<{ "update:modelValue": [value: string] }>();
-const rules = computed(() => parsePluginRegexRules(props.modelValue));
+const props = defineProps<FileApiOptions & { path: ResourcePath }>();
+const content = useFileApi(props).useFileContent(() => props.path);
+const rules = computed(() => parsePluginRegexRules(content.value));
 
 function write(next: PluginRegexRule[]) {
-	emit("update:modelValue", JSON.stringify(next, null, 2));
+	content.value = JSON.stringify(next, null, 2);
 }
 
 function update(index: number, patch: Partial<PluginRegexRule>) {
-	const next = structuredClone(rules.value);
-	next[index] = { ...next[index]!, ...patch };
-	write(next);
+	Object.assign(rules.value[index]!, patch);
+	write(rules.value);
 }
 
 function remove(index: number) {
@@ -38,9 +40,11 @@ function remove(index: number) {
 function move(index: number, delta: number) {
 	const target = index + delta;
 	if (target < 0 || target >= rules.value.length) return;
-	const next = structuredClone(rules.value);
-	[next[index], next[target]] = [next[target]!, next[index]!];
-	write(next);
+	[rules.value[index], rules.value[target]] = [
+		rules.value[target]!,
+		rules.value[index]!,
+	];
+	write(rules.value);
 }
 </script>
 

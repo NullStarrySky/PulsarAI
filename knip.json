@@ -1,10 +1,6 @@
 {
 	"$schema": "https://unpkg.com/knip@6/schema.json",
 	"entry": [
-		"src/main.ts",
-		"vite.config.ts",
-		"scripts/run-electron.ts",
-		"scripts/run-tauri.ts",
 		"host/desktop-electron/main.mjs",
 		"host/desktop-electron/preload.cjs",
 		"host/mobile-tauri/index.ts",
@@ -16,11 +12,24 @@
 		"host/**/*.{ts,mjs,cjs}",
 		"scripts/**/*.ts",
 		"docs/.vitepress/**/*.{ts,vue}",
-		"vite.config.ts"
+		"src/**/*.css"
 	],
 	"ignore": [
 		"src/components/**",
 		"src/features/Migrations/**",
-		"src/features/SubWindow/**"
+		"src/features/Tabs/subWindow/**"
+	],
+	"ignoreDependencies": [
+		"@ai-sdk/provider-utils",
+		"@codemirror/lang-javascript",
+		"@codemirror/lang-json",
+		"@codemirror/lang-vue",
+		"@tanstack/vue-table",
+		"@tauri-apps/cli",
+		"codemirror",
+		"embla-carousel-vue",
+		"vaul-vue",
+		"vee-validate",
+		"vue-sonner"
 	]
 }

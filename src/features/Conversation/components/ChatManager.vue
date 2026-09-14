@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MessageCircle, Pin, Plus, Search, Trash2, X } from "lucide-vue-next";
+import { MessageCircle, Pin, Plus, Search, Trash2, X } from "@/lib/phosphor-icons";
 import { computed, ref } from "vue";
 import { Badge, Button } from "@/components/fluid";
 import { Input } from "@/components/ui/input";

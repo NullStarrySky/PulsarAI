@@ -8,29 +8,54 @@ import {
 	createLocalPluginData,
 	importBuiltinPlugins,
 } from "../utils/import-converter";
-import { parsePluginPath, replayPluginData } from "./pulse";
-import type { PluginData, Pulse, ReplayGroups } from "./types";
+import {
+	appendPluginVersion,
+	createPluginVersion,
+	latestPluginVersion,
+	preparePluginDocument,
+	replayPluginVersion,
+	usePluginVersion,
+} from "./plugin-version";
+import { applyPulse, parsePluginPath, replayPluginData } from "./pulse";
+import type { PluginData, PluginDocument, Pulse, ReplayGroups } from "./types";
 import { type GlobalPluginData, mergePluginData } from "./use-tree-merge";
 
 const builtinPlugins = importBuiltinPlugins();
 
-function findPlugin(pluginId: string): PluginData | undefined {
-	return useSyncStore().plugins.get(pluginId) as PluginData | undefined;
+function findPlugin(pluginId: string): PluginDocument | undefined {
+	return useSyncStore().plugins.get(pluginId) as PluginDocument | undefined;
 }
 
-registerSyncHandler<PluginData>("plugin", {
+registerSyncHandler<PluginDocument>("plugin", {
 	table: "resource_worlds",
-	recordId: (id) => `local:${id}`,
 	value: findPlugin,
+	recordId: (id) => `local:${id}`,
 });
 
-/** A thin reactive lookup of persisted source content; it never applies conversation Pulses. */
-export function usePurePluginData(pluginId: MaybeRefOrGetter<string>) {
-	return computed(() => findPlugin(toValue(pluginId)) ?? null);
+/** Replays one saved version, plus unsaved edits only when no version is pinned. */
+export function usePurePluginData(
+	pluginId: MaybeRefOrGetter<string>,
+	versionId?: MaybeRefOrGetter<string | undefined>,
+) {
+	const selectedVersion = usePluginVersion(pluginId, versionId);
+	return computed(() => {
+		const id = toValue(pluginId);
+		const document = findPlugin(id);
+		if (!document) return null;
+		const requestedVersion = versionId ? toValue(versionId) : undefined;
+		const version = selectedVersion.value;
+		if (!version)
+			throw new Error(
+				requestedVersion !== undefined
+					? `Plugin 版本不存在：${requestedVersion}`
+					: `Plugin 没有可加载的版本：${id}`,
+			);
+		return replayPluginVersion(document, version.id);
+	});
 }
 
 /** Static built-ins are ordinary global source trees; callers may provide a different set later. */
-export function useGlobalPluginData() {
+function useGlobalPluginData() {
 	return computed<GlobalPluginData>(() => builtinPlugins);
 }
 
@@ -57,7 +82,7 @@ function routePulse(pulse: Pulse): { folder: string | null; pulse: Pulse } {
 	};
 }
 
-/** Replays each source independently, then mounts only the role's enabled folders. */
+/** Replays and mounts every source, including inactive sources visible to resource UI. */
 export function replayAndMergePluginData(
 	local: PluginData,
 	global: GlobalPluginData,
@@ -80,33 +105,59 @@ export function replayAndMergePluginData(
 		}
 	});
 	const replayedLocal = replayPluginData(local, localGroups);
-	const enabled = parseCharacterDefinition(
-		replayedLocal.tree["definition.package.json"],
-	).globalPlugins;
-	const replayedGlobal = Object.fromEntries(
-		Object.entries(global).map(([folder, source]) => [
-			folder,
-			replayPluginData(
-				source,
-				globalGroups.get(folder) ?? groups.map(() => []),
+	const replayedGlobal: GlobalPluginData = {};
+	for (const [folder, source] of Object.entries(global))
+		Object.defineProperty(replayedGlobal, folder, {
+			value: replayPluginData(source, globalGroups.get(folder) ?? []),
+			enumerable: true,
+		});
+	return mergePluginData(replayedLocal, replayedGlobal);
+}
+
+/** Read-only active projection over the same replay result; no subtree or meta cloning. */
+export function useActivePluginData(
+	filetree: MaybeRefOrGetter<PluginData | null>,
+) {
+	return computed<PluginData | null>(() => {
+		const data = toValue(filetree);
+		if (!data) return null;
+		const enabled = parseCharacterDefinition(
+			data.tree["definition.package.json"],
+		).globalPlugins;
+		const global = data.tree.global;
+		const enabledSet = new Set(enabled);
+		return {
+			id: data.id,
+			tree: {
+				...data.tree,
+				global: Object.fromEntries(
+					enabled.flatMap((folder) =>
+						global &&
+						typeof global !== "string" &&
+						Object.hasOwn(global, folder)
+							? [[folder, global[folder]!]]
+							: [],
+					),
+				),
+			},
+			meta: Object.fromEntries(
+				Object.entries(data.meta).filter(
+					([path]) =>
+						!path.startsWith("/global/") || enabledSet.has(path.split("/")[2]!),
+				),
 			),
-		]),
-	) as GlobalPluginData;
-	const selected: GlobalPluginData = {};
-	for (const folder of enabled) {
-		const source = replayedGlobal[folder];
-		if (source) selected[folder] = source;
-	}
-	return mergePluginData(replayedLocal, selected);
+		};
+	});
 }
 
 /** The current conversation view: source content plus every active-version replay group. */
 export function usePluginData(
 	pluginId: MaybeRefOrGetter<string>,
 	replayGroups: MaybeRefOrGetter<ReplayGroups>,
+	versionId?: MaybeRefOrGetter<string | undefined>,
 	globalPlugins: MaybeRefOrGetter<GlobalPluginData> = useGlobalPluginData(),
 ) {
-	const source = usePurePluginData(pluginId);
+	const source = usePurePluginData(pluginId, versionId);
 	return computed(() => {
 		const value = source.value;
 		return value
@@ -119,20 +170,46 @@ export function usePluginData(
 	});
 }
 
+function applyPluginPulse(id: string, pulse: Pulse) {
+	const store = useSyncStore();
+	const plugin = findPlugin(id);
+	if (!plugin) throw new Error(`Plugin 尚未加载：${id}`);
+	const version = latestPluginVersion(plugin);
+	if (!version) throw new Error(`Plugin 没有可编辑的版本：${id}`);
+	applyPulse(replayPluginVersion(plugin, version.id), pulse);
+	if (store.isPluginVersionUsed(id, version.id))
+		plugin.versions.push(createPluginVersion(plugin, [pulse]));
+	else appendPluginVersion(version, pulse);
+	store.markDirty({ type: "plugin", id });
+	store.refreshCharacter(id);
+}
+
+/** Editable source-local latest-version projection. Every edit updates the head version. */
+export function useEditablePluginData(pluginId: MaybeRefOrGetter<string>) {
+	const filetree = usePurePluginData(pluginId);
+	return {
+		filetree,
+		applyPulse: (pulse: Pulse) => applyPluginPulse(toValue(pluginId), pulse),
+	};
+}
+
 export function useCharacterList() {
 	const store = useSyncStore();
 	const characters = computed(() => new Set(store.characters));
 
 	async function create() {
 		const id = crypto.randomUUID();
-		store.addPlugin(id, createLocalPluginData(`local:${id}`));
-		store.markDirty({ type: "plugin", id });
+		const source = createLocalPluginData(`local:${id}`);
+		const document = preparePluginDocument(source);
+		store.addPlugin(id, document);
 		await store._sync({ type: "plugin", id });
 		return [...store.characters].find((character) => character.id === id)!;
 	}
 
 	async function importCharacter() {
-		const { useBackupStore } = await import("@/features/Backup/backup-store");
+		const { useBackupStore } = await import(
+			"@/features/Environment/backup/backup-store"
+		);
 		const id = await useBackupStore().importResourceArchive("update");
 		return id
 			? ([...store.characters].find((character) => character.id === id) ?? null)

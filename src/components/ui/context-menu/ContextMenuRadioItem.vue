@@ -2,7 +2,7 @@
 import type { ContextMenuRadioItemEmits, ContextMenuRadioItemProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { CheckIcon } from '@lucide/vue'
+import { CheckIcon } from '@/lib/phosphor-icons'
 import { reactiveOmit } from '@vueuse/core'
 import {
   ContextMenuItemIndicator,

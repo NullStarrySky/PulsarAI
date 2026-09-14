@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
 
-import { Loader2Icon } from '@lucide/vue'
+import { Loader2Icon } from '@/lib/phosphor-icons'
 import { cn } from '@/lib/utils.ts'
 
 const props = defineProps<{

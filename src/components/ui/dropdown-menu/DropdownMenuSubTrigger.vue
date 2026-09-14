@@ -2,7 +2,7 @@
 import type { DropdownMenuSubTriggerProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { ChevronRightIcon } from '@lucide/vue'
+import { ChevronRightIcon } from '@/lib/phosphor-icons'
 import { reactiveOmit } from '@vueuse/core'
 import {
   DropdownMenuSubTrigger,

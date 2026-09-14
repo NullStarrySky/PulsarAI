@@ -1,10 +1,14 @@
-import { defineStore } from "pinia";
-import { reactive, shallowReactive, type WatchStopHandle, watch } from "vue";
+import { acceptHMRUpdate, defineStore } from "pinia";
+import { reactive, shallowReactive } from "vue";
 import type {
 	ChatContainer,
 	ChatMeta,
 } from "@/features/Conversation/dataflow/types";
-import type { PluginData } from "@/features/Plugin/dataflow/types";
+import {
+	latestPluginVersion,
+	replayPluginVersion,
+} from "@/features/Plugin/dataflow/plugin-version";
+import type { PluginDocument } from "@/features/Plugin/dataflow/types";
 import {
 	type CharacterData,
 	characterFromPlugin,
@@ -55,16 +59,20 @@ function parseDirtyKey(key: string): DirtyTarget {
 
 /**
  * The only in-memory source for conversation data. Features mutate these
- * collections, watchers mark them dirty, and this store writes batches later.
+ * collections; feature actions mark persistent changes dirty for batched writes.
  */
 export const useSyncStore = defineStore("dbsync", () => {
 	const characters = reactive(new Set<CharacterData>());
-	const plugins = reactive(new Map<string, PluginData>());
+	const plugins = reactive(new Map<string, PluginDocument>());
 	const chatMeta = shallowReactive(new Map<string, Map<string, ChatMeta>>());
-	const containers = shallowReactive(new Map<string, Set<ChatContainer>>());
-	const characterWatchers = new Map<string, WatchStopHandle>();
-	const metaWatchers = new Map<string, WatchStopHandle>();
-	const containerWatchers = new Map<string, WatchStopHandle>();
+	const containers = shallowReactive(
+		new Map<string, Map<string, ChatContainer>>(),
+	);
+	const chatPluginVersions = new Map<
+		string,
+		{ pluginId: string; versionId: string }
+	>();
+	const pluginVersionUses = new Map<string, Map<string, number>>();
 	const dirty = new Set<string>();
 	const loadedChatLists = new Set<string>();
 	const loadedChats = new Set<string>();
@@ -87,50 +95,47 @@ export const useSyncStore = defineStore("dbsync", () => {
 		schedule();
 	}
 
-	function watchMeta(_pluginId: string, chatId: string, value: ChatMeta) {
-		const key = `meta:${chatId}`;
-		metaWatchers.get(key)?.();
-		// Keep runtime-only generation progress out of both the record and dirty queue.
-		metaWatchers.set(
-			key,
-			watch(
-				() => ({
-					id: value.id,
-					localPluginId: value.localPluginId,
-					title: value.title,
-					rootContainerId: value.rootContainerId,
-					lastContainerId: value.lastContainerId,
-					lastMessagePreview: value.lastMessagePreview,
-					composerDraft: value.composerDraft,
-					createdAt: value.createdAt,
-					updatedAt: value.updatedAt,
-					lifetime: value.lifetime,
-					pinned: value.pinned,
-					isTemplate: value.isTemplate,
-				}),
-				() => markDirty({ type: "meta", id: chatId }),
-				{ deep: true },
-			),
+	function trackChatPluginVersion(value: ChatMeta) {
+		const previous = chatPluginVersions.get(value.id);
+		if (
+			previous?.pluginId === value.localPluginId &&
+			previous.versionId === value.pluginVersionId
+		)
+			return;
+		if (previous) {
+			const versions = pluginVersionUses.get(previous.pluginId)!;
+			const count = versions.get(previous.versionId)! - 1;
+			if (count) versions.set(previous.versionId, count);
+			else versions.delete(previous.versionId);
+		}
+		chatPluginVersions.set(value.id, {
+			pluginId: value.localPluginId,
+			versionId: value.pluginVersionId,
+		});
+		const versions = pluginVersionUses.get(value.localPluginId) ?? new Map();
+		pluginVersionUses.set(value.localPluginId, versions);
+		versions.set(
+			value.pluginVersionId,
+			(versions.get(value.pluginVersionId) ?? 0) + 1,
 		);
 	}
 
-	function watchContainers(chatId: string, value: Set<ChatContainer>) {
-		const key = `container:${chatId}`;
-		containerWatchers.get(key)?.();
-		containerWatchers.set(
-			key,
-			watch(
-				value,
-				() => {
-					for (const item of value as Set<{ id?: string }>)
-						if (item.id) markDirty({ type: "container", id: item.id });
-				},
-				{ deep: true },
-			),
-		);
+	function untrackChatPluginVersion(chatId: string) {
+		const previous = chatPluginVersions.get(chatId);
+		if (!previous) return;
+		chatPluginVersions.delete(chatId);
+		const versions = pluginVersionUses.get(previous.pluginId)!;
+		const count = versions.get(previous.versionId)! - 1;
+		if (count) versions.set(previous.versionId, count);
+		else versions.delete(previous.versionId);
+	}
+
+	function isPluginVersionUsed(pluginId: string, versionId: string) {
+		return (pluginVersionUses.get(pluginId)?.get(versionId) ?? 0) > 0;
 	}
 
 	function addChat(value: ChatMeta) {
+		trackChatPluginVersion(value);
 		let list = chatMeta.get(value.localPluginId);
 		if (!list) {
 			list = shallowReactive(new Map<string, ChatMeta>());
@@ -138,26 +143,25 @@ export const useSyncStore = defineStore("dbsync", () => {
 		}
 		const chat = reactive(value) as ChatMeta;
 		list.set(value.id, chat);
-		watchMeta(value.localPluginId, value.id, chat);
 		return chat;
 	}
 
 	function addContainers(chatId: string, values: ChatContainer[]) {
 		const list = shallowReactive(
-			new Set<ChatContainer>(
-				values.map((value) => reactive(value) as ChatContainer),
+			new Map<string, ChatContainer>(
+				values.map((value) => [value.id, reactive(value) as ChatContainer]),
 			),
 		);
 		containers.set(chatId, list);
-		watchContainers(chatId, list);
 		return list;
 	}
 
 	function addContainer(value: ChatContainer) {
 		let list = containers.get(value.conversationid);
 		if (!list) list = addContainers(value.conversationid, []);
-		list.add(reactive(value) as ChatContainer);
-		return [...list].find((item) => item.id === value.id)!;
+		const container = reactive(value) as ChatContainer;
+		list.set(value.id, container);
+		return container;
 	}
 
 	function refreshCharacter(id: string) {
@@ -167,27 +171,21 @@ export const useSyncStore = defineStore("dbsync", () => {
 			if (current) characters.delete(current);
 			return;
 		}
-		const next = characterFromPlugin(id, plugin);
+		const version = latestPluginVersion(plugin);
+		if (!version) throw new Error(`Plugin 没有可加载的版本：${id}`);
+		const next = characterFromPlugin(
+			id,
+			replayPluginVersion(plugin, version.id),
+		);
 		if (current) Object.assign(current, next);
 		else characters.add(next);
 	}
 
-	function addPlugin(id: string, value: PluginData) {
-		characterWatchers.get(id)?.();
-		const plugin = reactive(value) as PluginData;
+	function addPlugin(id: string, value: PluginDocument) {
+		const plugin = reactive(value) as PluginDocument;
 		plugins.set(id, plugin);
 		refreshCharacter(id);
-		characterWatchers.set(
-			id,
-			watch(
-				() => plugins.get(id),
-				() => {
-					refreshCharacter(id);
-					markDirty({ type: "plugin", id });
-				},
-				{ deep: true },
-			),
-		);
+		markDirty({ type: "plugin", id });
 		return plugin;
 	}
 
@@ -196,15 +194,12 @@ export const useSyncStore = defineStore("dbsync", () => {
 		const chat = [...chatMeta.values()]
 			.map((list) => list.get(chatId))
 			.find(Boolean);
-		for (const container of containers.get(chatId) ?? [])
+		for (const container of containers.get(chatId)?.values() ?? [])
 			markDirty({ type: "container", id: container.id });
 		if (chat) markDirty({ type: "meta", id: chat.id });
-		containerWatchers.get(`container:${chatId}`)?.();
-		containerWatchers.delete(`container:${chatId}`);
 		containers.delete(chatId);
 		if (chat) {
-			metaWatchers.get(`meta:${chat.id}`)?.();
-			metaWatchers.delete(`meta:${chat.id}`);
+			untrackChatPluginVersion(chat.id);
 			chatMeta.get(chat.localPluginId)?.delete(chat.id);
 		}
 		loadedChats.delete(chatId);
@@ -215,13 +210,19 @@ export const useSyncStore = defineStore("dbsync", () => {
 		initialized = true;
 		hydrating++;
 		try {
-			const rows = await selectAll<PluginData>("resource_worlds");
-			for (const row of rows) {
+			const [plugins, chats] = await Promise.all([
+				selectAll<PluginDocument>("resource_worlds"),
+				selectAll<ChatMeta>("conversations"),
+			]);
+			for (const row of plugins) {
 				const value = row.value;
 				if (!value.id?.startsWith("local:")) continue;
 				const id = value.id.slice("local:".length);
 				addPlugin(id, value);
 			}
+			for (const row of chats)
+				if (row.value.localPluginId && row.value.pluginVersionId)
+					trackChatPluginVersion(row.value);
 		} finally {
 			hydrating--;
 		}
@@ -305,8 +306,6 @@ export const useSyncStore = defineStore("dbsync", () => {
 				const id = (chat as { id: string }).id;
 				if (loadedChats.has(id)) continue;
 				await _sync({ type: "meta", id });
-				metaWatchers.get(`meta:${id}`)?.();
-				metaWatchers.delete(`meta:${id}`);
 				list?.delete(id);
 			}
 			return;
@@ -317,30 +316,22 @@ export const useSyncStore = defineStore("dbsync", () => {
 			.map((list) => list.get(target.id))
 			.find(Boolean);
 		if (chat) await _sync({ type: "meta", id: chat.id });
-		for (const item of (containers.get(target.id) as Set<{ id: string }>) ?? [])
+		for (const item of containers.get(target.id)?.values() ?? [])
 			await _sync({ type: "container", id: item.id });
-		containerWatchers.get(`container:${target.id}`)?.();
-		containerWatchers.delete(`container:${target.id}`);
 		containers.delete(target.id);
 		if (chat && !loadedChatLists.has(chat.localPluginId)) {
-			metaWatchers.get(`meta:${target.id}`)?.();
-			metaWatchers.delete(`meta:${target.id}`);
 			chatMeta.get(chat.localPluginId)?.delete(chat.id);
 		}
 	}
 
-	/** Drop every cached record and its watchers. Persistent records are untouched. */
+	/** Drop cached records. Scoped use functions own their watchers. */
 	function clearAll() {
 		if (timer) clearTimeout(timer);
 		timer = undefined;
-		for (const stop of characterWatchers.values()) stop();
-		for (const stop of metaWatchers.values()) stop();
-		for (const stop of containerWatchers.values()) stop();
-		characterWatchers.clear();
-		metaWatchers.clear();
-		containerWatchers.clear();
 		characters.clear();
 		plugins.clear();
+		chatPluginVersions.clear();
+		pluginVersionUses.clear();
 		chatMeta.clear();
 		containers.clear();
 		dirty.clear();
@@ -351,7 +342,6 @@ export const useSyncStore = defineStore("dbsync", () => {
 
 	return {
 		characters,
-		characterWatchers,
 		plugins,
 		chatMeta,
 		containers,
@@ -363,8 +353,14 @@ export const useSyncStore = defineStore("dbsync", () => {
 		clearAll,
 		addChat,
 		addPlugin,
+		refreshCharacter,
+		isPluginVersionUsed,
+		trackChatPluginVersion,
 		removeChat,
 		addContainers,
 		addContainer,
 	};
 });
+
+if (import.meta.hot)
+	import.meta.hot.accept(acceptHMRUpdate(useSyncStore, import.meta.hot));

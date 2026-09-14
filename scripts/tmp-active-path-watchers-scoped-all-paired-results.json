@@ -1,0 +1,86 @@
+{
+  "runtime": "1.3.14",
+  "cpu": "Intel(R) Core(TM) i5-1035G1 CPU @ 1.00GHz",
+  "rows": [
+    {
+      "n": 1000,
+      "kind": "version",
+      "mode": "current",
+      "paired": "yes",
+      "action": 0.142,
+      "derive": 6.078,
+      "flush": 0.008,
+      "total": 6.237
+    },
+    {
+      "n": 1000,
+      "kind": "version",
+      "mode": "indexed",
+      "paired": "yes",
+      "action": 0.179,
+      "derive": 3.662,
+      "flush": 0.008,
+      "total": 3.85
+    },
+    {
+      "n": 1000,
+      "kind": "branch",
+      "mode": "current",
+      "paired": "yes",
+      "action": 0.23,
+      "derive": 10.318,
+      "flush": 0.107,
+      "total": 10.648
+    },
+    {
+      "n": 1000,
+      "kind": "branch",
+      "mode": "indexed",
+      "paired": "yes",
+      "action": 0.301,
+      "derive": 4.864,
+      "flush": 0.119,
+      "total": 5.284
+    },
+    {
+      "n": 10000,
+      "kind": "version",
+      "mode": "current",
+      "paired": "yes",
+      "action": 0.165,
+      "derive": 80.227,
+      "flush": 0.01,
+      "total": 80.404
+    },
+    {
+      "n": 10000,
+      "kind": "version",
+      "mode": "indexed",
+      "paired": "yes",
+      "action": 0.176,
+      "derive": 47.806,
+      "flush": 0.011,
+      "total": 47.994
+    },
+    {
+      "n": 10000,
+      "kind": "branch",
+      "mode": "current",
+      "paired": "yes",
+      "action": 1.076,
+      "derive": 162.568,
+      "flush": 0.195,
+      "total": 163.496
+    },
+    {
+      "n": 10000,
+      "kind": "branch",
+      "mode": "indexed",
+      "paired": "yes",
+      "action": 1.19,
+      "derive": 63.815,
+      "flush": 0.218,
+      "total": 66.974
+    }
+  ]
+}

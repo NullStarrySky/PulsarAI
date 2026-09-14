@@ -1,4 +1,4 @@
-import { type MaybeRefOrGetter, toValue } from "vue";
+import { computed, type MaybeRefOrGetter, toValue } from "vue";
 import { listFolder, parentPath, readFile, resolveNode } from "./pulse";
 import type {
 	FileMeta,
@@ -36,7 +36,18 @@ export function useFileApi(options: FileApiOptions) {
 		if (parent && parent !== "/" && !exists(parent))
 			apply({ kind: "folder.mkdir", path: parent });
 	}
+	function useFileContent(path: MaybeRefOrGetter<ResourcePath>) {
+		return computed({
+			get: () => readFile(current(), toValue(path)),
+			set: (content: string) => {
+				const resolved = toValue(path);
+				if (content !== readFile(current(), resolved))
+					apply({ kind: "file.write", path: resolved, content });
+			},
+		});
+	}
 	return {
+		useFileContent,
 		read: (path: ResourcePath) => readFile(current(), path),
 		ls: (path: ResourcePath = "/") => listFolder(current(), path),
 		exists,
@@ -45,7 +56,15 @@ export function useFileApi(options: FileApiOptions) {
 			apply({ kind: "file.write", path, content });
 		},
 		edit(path: ResourcePath, find: string, replace: string) {
-			apply({ kind: "file.replace", path, find, replace });
+			const content = readFile(current(), path);
+			if (!find || !content.includes(find))
+				throw new Error(`文件中未找到待替换文本：${path}`);
+			// Persist the resulting field value so repeated edits can be compacted.
+			apply({
+				kind: "file.write",
+				path,
+				content: content.replace(find, replace),
+			});
 		},
 		mkdir(path: ResourcePath) {
 			apply({ kind: "folder.mkdir", path });

@@ -1,6 +1,5 @@
 import {
 	isStepCount,
-	type LanguageModel,
 	type ModelMessage,
 	ToolLoopAgent,
 	type ToolSet,
@@ -8,27 +7,26 @@ import {
 } from "ai";
 import { z } from "zod";
 import type { ChatMessage } from "@/features/Conversation/dataflow/types";
-
-import { getDefaultChatModel } from "@/features/defaultConfigs/default-config-service";
-import type { ReasoningEffort } from "@/features/ModelConnection/model-reference";
-import { parseModelReference } from "@/features/ModelConnection/model-reference";
+import type { SandboxEnvironment } from "@/features/Plugin/runtime/sandbox";
+import { createToolLoopAgent, streamText } from "@/features/Request/ai-sdk";
+import { useRequestDefaults } from "@/features/Request/defaults";
 import {
-	generateText,
-	hydrateModel,
-	streamText,
-} from "@/features/ModelConnection/services/model-ai";
-import type { SandboxEnvironment } from "@/features/Sandbox/sandbox";
+	parseModelReference,
+	type ReasoningEffort,
+} from "@/features/Request/provider/shared/model-reference";
+import { useRequestStore } from "@/features/Request/request-store";
+import type { ModelSelection } from "@/features/Request/types";
 import { askUser } from "./ask-user";
 import { executeCodeAct } from "./code-act";
 
 export interface CreateDefaultAgentResourcesInput {
 	environment?: SandboxEnvironment;
-	modelName?: string;
+	modelName?: string | ModelSelection;
 	onCodeAct?: () => void;
 }
 
 interface DefaultAgentResources {
-	model: LanguageModel;
+	model: ModelSelection;
 	modelName: string;
 	reasoning?: ReasoningEffort;
 	instructions: string;
@@ -41,7 +39,7 @@ interface DefaultAgentResources {
  * The persisted reply target supplied by Conversation generation. Plugins pass
  * this as `container` when constructing the sandbox ToolLoopAgent wrapper.
  */
-export type AgentOutputContainer = ChatMessage;
+type AgentOutputContainer = ChatMessage;
 
 interface ContainerToolLoopAgent {
 	stream: (input: { messages: ModelMessage[] }) => Promise<void>;
@@ -77,9 +75,9 @@ const codeActInstructions = [
 	"To delegate a bounded task, call `await generate({ plugin?, environment?, prompt })` inside the function. The plugin is a global source folder name; it defaults to blank, and an omitted environment uses an in-memory temporary conversation.",
 	"Plugin tool functions, when their prompt is present in the compiled context, are ordinary functions directly on ctx. Call the documented function name inside codeAct.",
 	"Inspect slot contracts with `slot.list()` / `get()`. `slot.paths('<name>')` returns selected resource paths; pass them to `await parse(...)` for recursive macro expansion. A chat resource returns pure message[] without authoring labels or disabled entries.",
-	"World write/edit/mkdir/move/remove and writable .data wrapper operations update the current message-bound World immediately. A resource contributes to its referenced slot only when it is selected; files stay directly readable either way.",
+	"World write/edit/mkdir/move/remove update the current message-bound World immediately. A resource contributes to its referenced slot only when it is selected; files stay directly readable either way.",
 	"Resource paths beginning with `/` address the local tree; `/global/<source-folder>/path` addresses a shared source. In source code, `@/path` remains local to the source folder. Use open(path), close(path), or toggle(path) only for resources, never folders or slots.",
-	"Read and update .data through its documented wrapper facade when possible. Persisted data values must remain pure JSON.",
+	"Use imports(path) to load resources. JS imports synchronously return the default export without invoking it; explicitly call imports(path)(...args). Keep persistent state in ordinary JSON and expose actions and derived values from JS composables. Read current JSON with JSON.parse(read(path)) and persist changes with write/edit. Imports are cached by resolved absolute path for this generation, preserving module closures. Use read(path) to get JS source text.",
 	"The tool result contains either `{ ok: true, value }` or `{ ok: false, error }`; inspect errors and correct the next function.",
 ].join("\n");
 
@@ -102,12 +100,27 @@ function createCodeActTool(
 async function createDefaultAgentResources(
 	input: CreateDefaultAgentResourcesInput,
 ): Promise<DefaultAgentResources> {
-	const modelName = input.modelName || (await getDefaultChatModel());
-	const reasoning = parseModelReference(modelName).reasoning;
+	const configuredModel =
+		input.modelName || useRequestDefaults().defaults.defaultChatModel;
+	const parsedModel =
+		typeof configuredModel === "string"
+			? parseModelReference(configuredModel)
+			: {
+					providerId: configuredModel.providerId,
+					modelId: configuredModel.modelId,
+					reasoning: undefined,
+				};
+	const modelName = `${parsedModel.providerId}/${parsedModel.modelId}`;
+	const reasoning = parsedModel.reasoning;
 	const tools = createCodeActTool(input.environment ?? {}, input.onCodeAct);
+	await useRequestStore().initialize();
 
 	return {
-		model: hydrateModel(modelName, "chat") as LanguageModel,
+		model: {
+			providerId: parsedModel.providerId,
+			modelId: parsedModel.modelId,
+			kind: "text",
+		},
 		modelName,
 		reasoning,
 		instructions: codeActInstructions,
@@ -134,15 +147,26 @@ export function createAgentResourceProvider(
 		async stream({ messages }: { messages: ModelMessage[] }) {
 			const runtime = await prepare();
 			const output = this.input.container;
-			const runner = new ToolLoopAgent({
-				model: runtime.model,
-				reasoning: runtime.reasoning,
-				allowSystemInMessages: true,
-				instructions: runtime.instructions,
-				tools: runtime.tools,
-				activeTools: ["codeAct"],
-				stopWhen: runtime.stopWhen,
-			});
+			const runner = createToolLoopAgent(
+				{
+					providerId: runtime.model.providerId,
+					modelId: runtime.model.modelId,
+					kind: "text",
+				},
+				{
+					model: runtime.model,
+					reasoning: runtime.reasoning,
+					allowSystemInMessages: true,
+					instructions: runtime.instructions,
+					tools: runtime.tools,
+					activeTools: ["codeAct"],
+					stopWhen: runtime.stopWhen,
+				},
+				(options) =>
+					new ToolLoopAgent(
+						options as ConstructorParameters<typeof ToolLoopAgent>[0],
+					),
+			) as ToolLoopAgent<never, ToolSet, any>;
 			const thinkingById = new Map<string, string>();
 			const generateInfo = (output.meta.generateInfo ??= {
 				startTime: new Date().toISOString(),
@@ -243,7 +267,11 @@ export function createAgentResourceProvider(
 		try {
 			generateInfo.modelName = runtime.modelName;
 			const result = streamText({
-				model: runtime.model,
+				model: {
+					providerId: runtime.model.providerId,
+					modelId: runtime.model.modelId,
+					kind: "text",
+				},
 				messages,
 				system: runtime.instructions,
 				allowSystemInMessages: true,
@@ -288,16 +316,5 @@ export function createAgentResourceProvider(
 		ToolLoopAgent: ContainerBoundToolLoopAgent,
 		streamText: streamTextFn,
 		askUser,
-	};
-}
-export async function generateAuxiliaryText(messages: ModelMessage[]) {
-	const modelName = await getDefaultChatModel();
-	const result = await generateText({
-		model: hydrateModel(modelName, "chat") as LanguageModel,
-		messages,
-	});
-	return {
-		text: result.text,
-		modelName,
 	};
 }

@@ -1,14 +1,14 @@
 import { push } from "notivue";
 import { computed, type MaybeRef, reactive, ref, unref } from "vue";
-import { useSyncStore } from "@/features/Database/dbsync-store";
-import { useTranslateStore } from "@/features/Translate/translate-store";
+import { markContainerDirty } from "../containers";
+import { useEnvironmentStore } from "@/features/Environment/store";
 import { currentMessage } from "../activePathComposable/message-service";
 import type { ChatContainer, ChatMessage, ThinkingStep } from "../types";
 
 export function useContainerMessage(
 	source: MaybeRef<ChatContainer | null | undefined>,
 ) {
-	const translateStore = useTranslateStore();
+	const environment = useEnvironmentStore();
 	const container = computed(() => unref(source));
 	const current = computed(() => currentMessage(container.value));
 	const thinking = computed(
@@ -26,7 +26,7 @@ export function useContainerMessage(
 	const translating = ref(false);
 	function markDirty() {
 		if (container.value)
-			useSyncStore().markDirty({ type: "container", id: container.value.id });
+			markContainerDirty(container.value.conversationid, container.value.id);
 	}
 	function setContent(content: string) {
 		const message = current.value;
@@ -61,13 +61,13 @@ export function useContainerMessage(
 		if (!current.value?.content.trim() || translating.value) return;
 		translating.value = true;
 		try {
-			const translatedContent = await translateStore.translateText(
+			const translatedContent = await environment.translateText(
 				current.value.content,
 			);
 			if (translatedContent) {
 				setTranslation({
 					translatedContent,
-					targetLanguage: translateStore.state.targetLanguage,
+					targetLanguage: environment.translateSettings.targetLanguage,
 					lastUpdated: new Date().toISOString(),
 				});
 				push.success("翻译完成");

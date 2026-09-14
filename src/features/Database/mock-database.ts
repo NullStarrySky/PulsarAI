@@ -70,18 +70,16 @@ export const mockHostDatabase = {
 		field: "localPluginId" | "conversationid",
 		value: string,
 	): Promise<Array<{ id: string | null; value: T }>> {
-		return mockHostDatabase
-			.selectAll<T>(tableName)
-			.then((rows) =>
-				rows.filter((row) => {
-					const val = row.value as Record<string, unknown> | null | undefined;
-					if (!val) return false;
-					return (
-						val[field] === value ||
-						(field === "conversationid" && val["conversationId"] === value)
-					);
-				}),
-			);
+		return mockHostDatabase.selectAll<T>(tableName).then((rows) =>
+			rows.filter((row) => {
+				const val = row.value as Record<string, unknown> | null | undefined;
+				if (!val) return false;
+				return (
+					val[field] === value ||
+					(field === "conversationid" && val["conversationId"] === value)
+				);
+			}),
+		);
 	},
 	selectOne<T>(tableName: string, id: string): Promise<T | null> {
 		const value = table(tableName).get(id);
@@ -108,12 +106,3 @@ export const mockHostDatabase = {
 		return Promise.resolve();
 	},
 };
-
-export function resetMockHostDatabase() {
-	state.tables = new Map();
-}
-
-/** Read one raw stored value (no clone) for assertions/debugging. */
-export function peekTable(tableName: string): Map<string, StoredValue> {
-	return state.tables.get(tableName) ?? new Map();
-}

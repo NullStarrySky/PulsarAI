@@ -37,7 +37,7 @@ import {
 	speak,
 	stop,
 } from "tauri-plugin-tts-api";
-import type { Host } from "../contracts";
+import type { Host, HostConfig } from "../contracts";
 import { EdgeTtsTauriWebSocket } from "./edge-tts-websocket";
 
 const command = <T>(name: string, payload?: Record<string, unknown>) =>
@@ -58,7 +58,7 @@ export const host: Host = {
 		resetCharacterData: () => command("database_reset_character_data"),
 	},
 	config: {
-		get: (key) => command("config_get", { key }),
+		get: (async (key: string, fallback?: unknown) => ((await command("config_get", { key })) ?? fallback ?? null)) as HostConfig["get"],
 		set: (key, value) => command("config_set", { key, value }),
 		remove: (key) => command("config_delete", { key }),
 	},

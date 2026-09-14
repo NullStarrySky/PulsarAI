@@ -1,5 +1,5 @@
 import type { ModelMessage } from "ai";
-import { readMediaLink } from "@/features/Media/media-link";
+import { readMediaLink } from "@/features/Plugin/media/media-link";
 import type {
 	AdditionalParts,
 	ChatContainer,
@@ -54,21 +54,20 @@ export function currentMessage(
 }
 
 export function pathForTail(
-	containers: Iterable<ChatContainer>,
+	containers: ReadonlyMap<string, ChatContainer>,
 	tailId?: string | null,
 ): ChatContainer[] {
-	const byId = new Map([...containers].map((item) => [item.id, item]));
 	const path: ChatContainer[] = [];
 	const seen = new Set<string>();
-	let current = tailId ? byId.get(tailId) : undefined;
+	let current = tailId ? containers.get(tailId) : undefined;
 	while (current && !seen.has(current.id)) {
 		seen.add(current.id);
-		path.unshift(current);
+		path.push(current);
 		current = current.previousContainer
-			? byId.get(current.previousContainer)
+			? containers.get(current.previousContainer)
 			: undefined;
 	}
-	return path;
+	return path.reverse();
 }
 
 export async function modelMessagesFromPath(

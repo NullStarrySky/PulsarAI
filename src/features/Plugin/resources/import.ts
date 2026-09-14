@@ -1,4 +1,3 @@
-import { executeSandboxCodeAsync } from "@/features/Sandbox/sandbox";
 import { readFile, resolveResourcePath } from "../dataflow/pulse";
 import {
 	type PluginData,
@@ -7,10 +6,7 @@ import {
 } from "../dataflow/types";
 import { evaluateResourceCondition } from "./resource-condition";
 import { parsePluginChatContext } from "./types/chat/plugin-chat";
-import {
-	createDataFacade,
-	parsePluginDataDefinition,
-} from "./types/data/plugin-data";
+import { importJavaScript } from "./types/javascript/plugin-javascript";
 
 export interface ResourceImportEnvironment extends Record<string, unknown> {
 	imports?: (path: string | string[]) => unknown | Promise<unknown>;
@@ -48,19 +44,7 @@ export function importResource(
 	if (type === "markdown" || type === "text" || type === "component")
 		return source;
 	if (type === "chat") return parsePluginChatContext(source);
-	if (type === "data") {
-		const definition = parsePluginDataDefinition(source);
-		return createDataFacade(
-			{
-				name: resolvedPath.split("/").at(-1) ?? resolvedPath,
-				wrapperSource: definition.wrapperSource,
-			},
-			definition.initialValue,
-			{ readonly: true },
-		);
-	}
 	if (type === "json") return parseJson(source);
-	if (type === "javascript")
-		return executeSandboxCodeAsync(source, [environment]);
+	if (type === "javascript") return importJavaScript(source, environment);
 	return source;
 }

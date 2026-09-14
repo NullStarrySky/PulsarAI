@@ -1,4 +1,4 @@
-async () => {
+export default async function buildContext() {
 	async function messagesForSlot(id) {
 		const values = await Promise.all(
 			slot.paths(id, "global").map((path) => parse(path)),
@@ -19,7 +19,6 @@ async () => {
 		"after_char",
 		"user",
 		"document",
-		"data_prompt",
 		"toolFunction",
 		"chat",
 	])
@@ -31,7 +30,8 @@ async () => {
 	}
 
 	for (const path of slot.paths("CTX_PROCESS_BEFORE_REGEX", "global")) {
-		const next = await imports(path, { messages });
+		const process = imports(path);
+		const next = await process(messages);
 		if (Array.isArray(next)) messages = next;
 	}
 

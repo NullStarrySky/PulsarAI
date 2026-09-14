@@ -24,17 +24,31 @@ export interface FileMeta {
 }
 
 export type ResourceMeta = FolderMeta | FileMeta;
-export type MetaMap = Record<ResourcePath, ResourceMeta>;
+type MetaMap = Record<ResourcePath, ResourceMeta>;
 
-/** One persisted local Plugin source document. */
+/** Original source or replayed in-memory projection, without version history. */
 export interface PluginData {
 	id: string;
 	tree: ResourceTree;
 	meta: MetaMap;
 }
 
+/** A saved projection from the original Plugin source. It stays mutable until a chat uses it. */
+export interface PluginVersion {
+	id: string;
+	parentId: string | null;
+	createdAt: string;
+	/** Compacted cumulative Pulses replayed directly over the original source. */
+	pulses: Pulse[];
+}
+
+/** The on-disk Plugin record: immutable original content plus saved versions. */
+export interface PluginDocument extends PluginData {
+	versions: PluginVersion[];
+}
+
 /** A single replayable filesystem primitive. */
-export type Atom =
+type Atom =
 	| { kind: "file.write"; path: ResourcePath; content: string }
 	| { kind: "file.replace"; path: ResourcePath; find: string; replace: string }
 	| { kind: "file.meta.patch"; path: ResourcePath; patch: Partial<FileMeta> }
@@ -55,7 +69,6 @@ export type ReplayGroups = Pulse[][];
 export type PluginResourceType =
 	| "markdown"
 	| "chat"
-	| "data"
 	| "javascript"
 	| "json"
 	| "media"
@@ -65,7 +78,6 @@ export type PluginResourceType =
 export function resourceType(path: string): PluginResourceType {
 	const normalized = path.trim().toLowerCase();
 	if (normalized.endsWith(".chat.json")) return "chat";
-	if (normalized.endsWith(".data.json")) return "data";
 	if (/\.(md|markdown)$/i.test(normalized)) return "markdown";
 	if (/\.(js|mjs|cjs|ts)$/i.test(normalized)) return "javascript";
 	if (/\.json$/i.test(normalized)) return "json";

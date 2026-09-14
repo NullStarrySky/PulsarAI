@@ -1,5 +1,5 @@
 import { computed, type MaybeRef, unref } from "vue";
-import { useSyncStore } from "@/features/Database/dbsync-store";
+import { markContainerDirty } from "../containers";
 import type {
 	IntervalDefinition,
 	IntervalOperation,
@@ -40,7 +40,7 @@ export function useContainerIntervals(
 		if (!target || !owner) return;
 		target.meta.intervalOperations ??= [];
 		target.meta.intervalOperations.push(operation);
-		useSyncStore().markDirty({ type: "container", id: owner.id });
+		markContainerDirty(owner.conversationid, owner.id);
 		return operation;
 	}
 	function open(interval: IntervalDefinition) {

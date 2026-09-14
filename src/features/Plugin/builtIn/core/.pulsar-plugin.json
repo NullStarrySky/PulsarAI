@@ -10,7 +10,11 @@
 	},
 	"ignore": [".pulsar-plugin.json", "**/.gitkeep"],
 	"nodes": {
-		"/": { "id": "builtin-root", "icon": "", "treeOrder": 0 },
+		"/": {
+			"id": "builtin-root",
+			"icon": "",
+			"treeOrder": 0
+		},
 		"AGENTS.md": {
 			"id": "builtin-agents",
 			"icon": "",
@@ -28,7 +32,9 @@
 			"icon": "",
 			"treeOrder": 4,
 			"order": 100,
-			"insertion": { "slot": "chat" }
+			"insertion": {
+				"slot": "chat"
+			}
 		},
 		"prompt.md": {
 			"id": "builtin-prompt",
@@ -59,78 +65,114 @@
 			"icon": "",
 			"treeOrder": 6,
 			"order": 100,
-			"insertion": { "slot": "generatePath" }
+			"insertion": {
+				"slot": "generatePath"
+			}
 		},
 		"regex.json": {
 			"id": "builtin-regex",
 			"icon": "",
 			"treeOrder": 7,
 			"order": 100,
-			"insertion": { "slot": "REGEX" }
+			"insertion": {
+				"slot": "REGEX"
+			}
 		},
-		"context": { "id": "builtin-context", "icon": "", "treeOrder": 8 },
+		"context": {
+			"id": "builtin-context",
+			"icon": "",
+			"treeOrder": 8
+		},
 		"context/build.js": {
 			"id": "builtin-context-build",
 			"icon": "",
 			"treeOrder": 0,
 			"order": 100,
-			"insertion": { "slot": "CTX_BUILD" }
+			"insertion": {
+				"slot": "CTX_BUILD"
+			}
 		},
 		"context/before-regex.js": {
 			"id": "builtin-context-before-regex",
 			"icon": "",
 			"treeOrder": 1,
 			"order": 100,
-			"insertion": { "slot": "CTX_PROCESS_BEFORE_REGEX" }
+			"insertion": {
+				"slot": "CTX_PROCESS_BEFORE_REGEX"
+			}
 		},
-		"context/data.data.json": {
-			"id": "builtin-context-data",
+		"components": {
+			"id": "builtin-components",
 			"icon": "",
-			"treeOrder": 2,
-			"order": 100,
-			"insertion": { "slot": "DATA_INJECT" }
+			"treeOrder": 8
 		},
-		"context/data.chat.json": {
-			"id": "builtin-context-data-prompt",
+		"background": {
+			"id": "builtin-background",
 			"icon": "",
-			"treeOrder": 3,
-			"order": 100,
-			"insertion": { "slot": "data_prompt" }
+			"treeOrder": 9
 		},
-		"components": { "id": "builtin-components", "icon": "", "treeOrder": 8 },
-		"background": { "id": "builtin-background", "icon": "", "treeOrder": 9 },
 		"background/classroom.png": {
 			"id": "builtin-background-classroom",
 			"icon": "",
 			"treeOrder": 0,
 			"order": 100,
-			"insertion": { "slot": "background" }
+			"insertion": {
+				"slot": "background"
+			}
 		},
-		"tools": { "id": "builtin-tools", "icon": "", "treeOrder": 10 },
-		"action": { "id": "builtin-action", "icon": "", "treeOrder": 11 },
+		"tools": {
+			"id": "builtin-tools",
+			"icon": "",
+			"treeOrder": 10
+		},
+		"action": {
+			"id": "builtin-action",
+			"icon": "",
+			"treeOrder": 11
+		},
 		"action/goal.js": {
 			"id": "builtin-action-goal",
 			"icon": "",
 			"treeOrder": 0,
 			"order": 100,
-			"insertion": { "slot": "COMMAND" }
+			"insertion": {
+				"slot": "COMMAND"
+			}
 		},
 		"action/process.js": {
 			"id": "builtin-action-process",
 			"icon": "",
 			"treeOrder": 1,
 			"order": 100,
-			"insertion": { "slot": "COMMAND" }
+			"insertion": {
+				"slot": "COMMAND"
+			}
 		},
-		"goal": { "id": "builtin-goal", "icon": "", "treeOrder": 12 },
+		"goal": {
+			"id": "builtin-goal",
+			"icon": "",
+			"treeOrder": 12
+		},
 		"goal/goal.data": {
 			"id": "builtin-goal-data",
 			"icon": "",
 			"treeOrder": 0,
 			"order": 100
 		},
-		"temp": { "id": "builtin-temp", "icon": "", "treeOrder": 13 },
-		"cache": { "id": "builtin-cache", "icon": "", "treeOrder": 14 },
-		"skill": { "id": "builtin-skill", "icon": "", "treeOrder": 15 }
+		"temp": {
+			"id": "builtin-temp",
+			"icon": "",
+			"treeOrder": 13
+		},
+		"cache": {
+			"id": "builtin-cache",
+			"icon": "",
+			"treeOrder": 14
+		},
+		"skill": {
+			"id": "builtin-skill",
+			"icon": "",
+			"treeOrder": 15
+		}
 	}
 }

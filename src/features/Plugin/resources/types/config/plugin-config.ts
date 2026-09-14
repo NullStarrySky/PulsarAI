@@ -1,10 +1,11 @@
-import type { ModelApiType } from "@/features/ModelConnection/model-provider";
+import type { ModelSelection, RequestKind } from "@/features/Request/types";
 
 export type PluginConfigValue =
 	| null
 	| boolean
 	| number
 	| string
+	| ModelSelection
 	| PluginConfigValue[]
 	| { [key: string]: PluginConfigValue };
 
@@ -37,7 +38,7 @@ type PluginConfigRenderer =
 			placeholder?: string;
 			options: Array<{ label: string; value: PluginConfigValue }>;
 	  })
-	| (PluginConfigRendererBase & { name: "ModelSelect"; apiType?: ModelApiType })
+	| (PluginConfigRendererBase & { name: "ModelSelect"; apiType?: RequestKind })
 	| (PluginConfigRendererBase & { name: "MediaSelect"; allowEmpty?: boolean })
 	| (PluginConfigRendererBase & {
 			/** A plugin-provided renderer name; props remain plain JSON. */
@@ -48,6 +49,8 @@ type PluginConfigRenderer =
 
 export interface PluginConfigEntry {
 	renderer: PluginConfigRenderer;
+	/** Authoring fallback used when an entry has not been customized. */
+	defaultValue?: PluginConfigValue;
 	value: PluginConfigValue;
 }
 

@@ -12,9 +12,8 @@ const chatSchema = z.object({
 		}),
 	),
 });
-
 export type PluginChatMessage = z.infer<typeof chatSchema>["message"][number];
-export type PluginChatContext = z.infer<typeof chatSchema>;
+type PluginChatContext = z.infer<typeof chatSchema>;
 
 function createPluginChatContext(): PluginChatContext {
 	return { message: [] };

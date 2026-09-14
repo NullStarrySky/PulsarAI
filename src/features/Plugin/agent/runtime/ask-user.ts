@@ -30,7 +30,6 @@ export const askUserSchema = z.object({
 	questions: z.array(askUserQuestionSchema).min(1),
 });
 export type AskUserInput = z.infer<typeof askUserSchema>;
-export type AskUserQuestion = z.infer<typeof askUserQuestionSchema>;
 export type AskUserAnswer = string | string[] | boolean;
 export type AskUserResult =
 	| { answers: Record<string, AskUserAnswer>; cancelled: false }
