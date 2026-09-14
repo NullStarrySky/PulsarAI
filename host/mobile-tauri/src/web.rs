@@ -82,7 +82,9 @@ pub(crate) async fn model_proxy_fetch(
         .send()
         .await
         .map_err(|error| error.to_string())?;
-    let status = response.status().as_u16();
+    let status = response.status();
+    let url = response.url().to_string();
+    let status_text = status.canonical_reason().unwrap_or_default().to_string();
     let headers = response
         .headers()
         .iter()
@@ -100,7 +102,84 @@ pub(crate) async fn model_proxy_fetch(
         .to_vec();
 
     Ok(ProxyFetchResponse {
-        status,
+        url,
+        status: status.as_u16(),
+        status_text,
+        redirected: false,
+        headers,
+        body,
+    })
+}
+
+fn proxy_fetch_client(request: &ProxyFetchRequest) -> Result<reqwest::Client, String> {
+    let redirect = request.redirect.as_deref().unwrap_or("follow");
+    let policy = match redirect {
+        "follow" => reqwest::redirect::Policy::limited(10),
+        "manual" | "error" => reqwest::redirect::Policy::none(),
+        _ => return Err("request.redirect 必须是 follow、manual 或 error。".to_string()),
+    };
+    let timeout = request.timeout.unwrap_or(30_000);
+    if !(1..=120_000).contains(&timeout) {
+        return Err("request.timeout 必须是 1 到 120000 之间的整数。".to_string());
+    }
+    reqwest::Client::builder()
+        .redirect(policy)
+        .timeout(std::time::Duration::from_millis(timeout))
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn proxy_fetch(request: ProxyFetchRequest) -> Result<ProxyFetchResponse, String> {
+    let method = reqwest::Method::from_bytes(request.method.as_bytes())
+        .map_err(|error| error.to_string())?;
+    let initial_url = reqwest::Url::parse(&request.url).map_err(|error| error.to_string())?;
+    if !matches!(initial_url.scheme(), "http" | "https") {
+        return Err("只允许 HTTP(S) 代理请求。".to_string());
+    }
+    let client = proxy_fetch_client(&request)?;
+    let redirect = request.redirect.clone();
+    let mut headers = HeaderMap::new();
+    for header in request.headers {
+        headers.insert(
+            HeaderName::from_str(&header.name).map_err(|error| error.to_string())?,
+            HeaderValue::from_str(&header.value).map_err(|error| error.to_string())?,
+        );
+    }
+    let response = client
+        .request(method, initial_url.clone())
+        .headers(headers)
+        .body(request.body.unwrap_or_default())
+        .send()
+        .await
+        .map_err(|error| format!("网络请求失败：{error}"))?;
+    if redirect.as_deref() == Some("error") && response.status().is_redirection() {
+        return Err(format!("网络请求遇到重定向：{}", response.status()));
+    }
+    let status = response.status();
+    let redirected = response.url() != &initial_url;
+    let url = response.url().to_string();
+    let status_text = status.canonical_reason().unwrap_or_default().to_string();
+    let headers = response
+        .headers()
+        .iter()
+        .filter_map(|(name, value)| {
+            value.to_str().ok().map(|value| ProxyHeader {
+                name: name.to_string(),
+                value: value.to_string(),
+            })
+        })
+        .collect();
+    let body = response
+        .bytes()
+        .await
+        .map_err(|error| format!("网络响应读取失败：{error}"))?
+        .to_vec();
+    Ok(ProxyFetchResponse {
+        url,
+        status: status.as_u16(),
+        status_text,
+        redirected,
         headers,
         body,
     })

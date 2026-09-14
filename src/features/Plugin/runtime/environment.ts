@@ -1,6 +1,7 @@
 import type { ModelMessage } from "ai";
 import { toValue } from "vue";
 import { mediaLink } from "@/features/Plugin/media/media-link";
+import { proxyFetch } from "@/features/Environment/utils/proxy-fetch";
 import {
 	resolveSandboxMessagesAsync,
 	resolveSandboxTextAsync,
@@ -113,18 +114,62 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 		const absolute = (path: string) => resolve(from, path);
 		const fs = Object.freeze({
 			read: (path: string) => files.read(absolute(path)),
-			write: (path: string, content: string) =>
-				files.write(absolute(path), content),
-			edit: (path: string, find: string, replace: string) =>
-				files.edit(absolute(path), find, replace),
-			mkdir: (path: string) => files.mkdir(absolute(path)),
-			move: (source: string, target: string) =>
-				files.move(absolute(source), absolute(target)),
-			copy: (source: string, target: string) =>
-				files.copy(absolute(source), absolute(target)),
-			remove: (path: string) => files.remove(absolute(path)),
+			write: (
+				path: string,
+				content: string,
+				options?: { parents?: boolean; overwrite?: boolean },
+			) => files.write(absolute(path), content, options),
+			edit: (
+				path: string,
+				find: string,
+				replace: string,
+				options?: { all?: boolean; expectedMatches?: number },
+			) => files.edit(absolute(path), find, replace, options),
+			mkdir: (path: string, options?: { parents?: boolean; existOk?: boolean }) =>
+				files.mkdir(absolute(path), options),
+			move: (
+				source: string,
+				target: string,
+				options?: { parents?: boolean; overwrite?: boolean },
+			) => files.move(absolute(source), absolute(target), options),
+			copy: (
+				source: string,
+				target: string,
+				options?: { parents?: boolean; overwrite?: boolean },
+			) => files.copy(absolute(source), absolute(target), options),
+			remove: (path: string, options?: { missingOk?: boolean }) =>
+				files.remove(absolute(path), options),
+			append: (path: string, content: string, options?: { parents?: boolean }) =>
+				files.append(absolute(path), content, options),
+			touch: (path: string, options?: { parents?: boolean }) =>
+				files.touch(absolute(path), options),
+			rmdir: (path: string, options?: { missingOk?: boolean }) =>
+				files.rmdir(absolute(path), options),
 			exists: (path: string) => files.exists(absolute(path)),
-			ls: (path = ".") => files.ls(absolute(path)),
+			stat: (path: string) => files.stat(absolute(path)),
+			list: (path = ".", options?: { limit?: number }) =>
+				files.list(absolute(path), options),
+			find: (
+				path = ".",
+				options?: { name?: string; kind?: "file" | "folder"; limit?: number },
+			) => files.find(absolute(path), options),
+			search: (
+				query: string,
+				path = ".",
+				options?: { context?: number; limit?: number },
+			) => files.search(query, absolute(path), options),
+			readLines: (
+				path: string,
+				options?: { startLine?: number; endLine?: number; limit?: number },
+			) => files.readLines(absolute(path), options),
+			tree: (path = ".", options?: { limit?: number; maxDepth?: number }) =>
+				files.tree(absolute(path), options),
+			zip: (path = ".") => files.zip(absolute(path)),
+			unzip: (
+				input: Uint8Array | number[],
+				path = ".",
+				options?: { parents?: boolean; overwrite?: boolean },
+			) => files.unzip(input, absolute(path), options),
 			import: (path: string | string[]) => importAt(path, from),
 			run: (path: string | string[]) => importAt(path, from),
 			parse: (path: string | string[], extra?: SandboxEnvironment) =>
@@ -144,8 +189,19 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 			move: fs.move,
 			copy: fs.copy,
 			remove: fs.remove,
+			append: fs.append,
+			touch: fs.touch,
+			rmdir: fs.rmdir,
 			exists: fs.exists,
-			ls: fs.ls,
+			stat: fs.stat,
+			list: fs.list,
+			find: fs.find,
+			search: fs.search,
+			readLines: fs.readLines,
+			tree: fs.tree,
+			zip: fs.zip,
+			unzip: fs.unzip,
+			fetch: proxyFetch,
 			logger,
 			ctx: root,
 		};
@@ -166,7 +222,14 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 		read_docs: builtinDocs,
 		generateImageToPath,
 		media: Object.freeze({ link: mediaLink }),
+		fetch: proxyFetch,
 		now: () => new Date().toISOString(),
+	});
+	Object.defineProperty(root, "__runCodeActTransaction", {
+		value: files.transaction,
+		configurable: false,
+		enumerable: false,
+		writable: false,
 	});
 	function registerCustomTools() {
 		const collisions = new Set(Object.keys(root));

@@ -233,6 +233,58 @@ async function modelProxyFetch(request) {
 	};
 }
 
+function proxyFetchTimeout(value) {
+	if (value === undefined) return 30_000;
+	if (!Number.isInteger(value) || value < 1 || value > 120_000)
+		throw new Error("request.timeout must be an integer between 1 and 120000.");
+	return value;
+}
+
+async function proxyFetch(request) {
+	const input = request && typeof request === "object" ? request : {};
+	const url = new URL(requiredString(input.url, "request.url"));
+	if (!/^https?:$/.test(url.protocol))
+		throw new Error("Only HTTP(S) proxy requests are allowed.");
+	const redirect = input.redirect ?? "follow";
+	if (!new Set(["follow", "manual", "error"]).has(redirect))
+		throw new Error("request.redirect must be follow, manual, or error.");
+	const headers = new Headers();
+	for (const header of Array.isArray(input.headers) ? input.headers : [])
+		headers.set(String(header.name ?? ""), String(header.value ?? ""));
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), proxyFetchTimeout(input.timeout));
+	try {
+		const response = await fetch(url, {
+			method: typeof input.method === "string" ? input.method : "GET",
+			headers,
+			body: Array.isArray(input.body) ? Uint8Array.from(input.body) : undefined,
+			redirect,
+			signal: controller.signal,
+		});
+		return {
+			url: response.url,
+			status: response.status,
+			statusText: response.statusText,
+			redirected: response.redirected,
+			headers: [...response.headers.entries()].map(([name, value]) => ({
+				name,
+				value,
+			})),
+			body: [...new Uint8Array(await response.arrayBuffer())],
+		};
+	} catch (error) {
+		const detail =
+			error?.cause instanceof Error
+				? error.cause.message
+				: error instanceof Error
+					? error.message
+					: String(error);
+		throw new Error(`网络请求失败：${detail}`);
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
 async function exaWebSearch(request) {
 	if (request?.provider === "playwright") {
 		throw new Error(
@@ -592,6 +644,7 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
 	}
 	if (namespace === "network") {
 		if (method === "modelProxyFetch") return modelProxyFetch(payload.request);
+		if (method === "proxyFetch") return proxyFetch(payload.request);
 		if (method === "webSearch") return exaWebSearch(payload.request);
 	}
 	if (namespace === "notifications" && method === "send") {

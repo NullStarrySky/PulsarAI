@@ -6,13 +6,20 @@ import {
 	type FolderMeta,
 	type PluginData,
 	type Pulse,
+	type ResourceEntry,
+	type ResourceListResult,
 	type ResourceMeta,
 	type ResourceNode,
 	type ResourcePath,
+	type ResourceSearchMatch,
+	type ResourceSearchResult,
+	type ResourceStat,
+	type ResourceTreeEntry,
+	type ResourceTreeResult,
 	type ResourceTree,
 } from "./types";
 
-type ResolvedNode = {
+export type ResolvedNode = {
 	node: ResourceNode;
 	parent: ResourceTree | null;
 	name: string | null;
@@ -427,8 +434,239 @@ export function readFile(data: PluginData, path: ResourcePath) {
 	return resolved.node;
 }
 
-export function listFolder(data: PluginData, path: ResourcePath = "/") {
-	return Object.keys(resolveFolder(data.tree, path)).sort((left, right) =>
-		left.localeCompare(right),
-	);
+function entry(
+	path: ResourcePath,
+	name: string,
+	node: ResourceNode,
+): ResourceEntry {
+	return { path, name, kind: isResourceTree(node) ? "folder" : "file" };
+}
+
+/** Returns one resource's identity, type, and a detached metadata snapshot. */
+export function statResource(data: PluginData, path: ResourcePath): ResourceStat {
+	const resolved = resolveNode(data.tree, path);
+	return {
+		...entry(resolved.path, resolved.name ?? "/", resolved.node),
+		meta: data.meta[resolved.path]
+			? structuredClone(data.meta[resolved.path])
+			: null,
+	};
+}
+
+function resourcePath(parent: ResourcePath, name: string): ResourcePath {
+	return parent === "/" ? `/${name}` : `${parent}/${name}`;
+}
+
+function validateLimit(limit: number) {
+	if (!Number.isInteger(limit) || limit < 1)
+		throw new Error(`查询上限必须是正整数：${limit}`);
+}
+
+/** Lists direct children with enough information for a later File API call. */
+export function listFolder(
+	data: PluginData,
+	path: ResourcePath = "/",
+	limit = 100,
+): ResourceListResult {
+	validateLimit(limit);
+	const folder = resolveFolder(data.tree, path);
+	const parent = normalizeResourcePath(path);
+	const entries = Object.entries(folder)
+		.map(([name, node]) =>
+			entry(resourcePath(parent, name), name, node),
+		)
+		.sort((left, right) => left.name.localeCompare(right.name));
+	return { entries: entries.slice(0, limit), truncated: entries.length > limit };
+}
+
+/** Recursively finds resource entries below a file or folder path. */
+export function findResources(
+	data: PluginData,
+	path: ResourcePath,
+	match: (entry: ResourceEntry) => boolean,
+	limit = 100,
+): ResourceListResult {
+	validateLimit(limit);
+	const root = resolveNode(data.tree, path);
+	const entries: ResourceEntry[] = [];
+	let truncated = false;
+	const visit = (node: ResourceNode, currentPath: ResourcePath, name: string) => {
+		if (truncated) return;
+		const current = entry(currentPath, name, node);
+		if (match(current)) {
+			if (entries.length === limit) {
+				truncated = true;
+				return;
+			}
+			entries.push(current);
+		}
+		if (!isResourceTree(node)) return;
+		for (const [childName, child] of Object.entries(node).sort(([left], [right]) =>
+			left.localeCompare(right),
+		))
+			visit(child, resourcePath(currentPath, childName), childName);
+	};
+	if (typeof root.node === "string") visit(root.node, root.path, root.name ?? "");
+	else
+		for (const [name, node] of Object.entries(root.node).sort(([left], [right]) =>
+			left.localeCompare(right),
+		))
+			visit(node, resourcePath(root.path, name), name);
+	return { entries, truncated };
+}
+
+export interface SearchResourcesOptions {
+	context?: number;
+	limit?: number;
+	offset?: number;
+	caseSensitive?: boolean;
+	regex?: boolean;
+	wholeWord?: boolean;
+	maxDepth?: number;
+	extensions?: string[];
+}
+
+function nonNegativeInteger(value: number, name: string) {
+	if (!Number.isInteger(value) || value < 0)
+		throw new Error(`${name}必须是非负整数：${value}`);
+}
+
+function escapeRegex(value: string) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function searchMatcher(query: string, options: SearchResourcesOptions) {
+	if (!query) throw new Error("搜索文本不能为空。");
+	if (options.regex && options.wholeWord)
+		throw new Error("正则搜索不能同时使用 wholeWord。");
+	try {
+		return new RegExp(
+			options.regex
+				? query
+				: options.wholeWord
+					? `\\b${escapeRegex(query)}\\b`
+					: escapeRegex(query),
+			options.caseSensitive === false ? "i" : "",
+		);
+	} catch (error) {
+		throw new Error(
+			`无效的搜索正则：${error instanceof Error ? error.message : String(error)}`,
+		);
+	}
+}
+
+function hasExtension(path: ResourcePath, extensions?: string[]) {
+	if (!extensions) return true;
+	return extensions.some((extension) => path.toLowerCase().endsWith(extension.toLowerCase()));
+}
+
+/** Returns a bounded, nested directory view without exposing mutable tree nodes. */
+export function treeResources(
+	data: PluginData,
+	path: ResourcePath = "/",
+	options: { limit?: number; maxDepth?: number } = {},
+): ResourceTreeResult {
+	const limit = options.limit ?? 100;
+	const maxDepth = options.maxDepth ?? Number.POSITIVE_INFINITY;
+	validateLimit(limit);
+	if (maxDepth !== Number.POSITIVE_INFINITY) nonNegativeInteger(maxDepth, "最大深度");
+	const root = resolveNode(data.tree, path);
+	const entries: ResourceTreeEntry[] = [];
+	let count = 0;
+	let truncated = false;
+	const visit = (
+		node: ResourceNode,
+		currentPath: ResourcePath,
+		name: string,
+		depth: number,
+	): ResourceTreeEntry | null => {
+		if (count === limit) {
+			truncated = true;
+			return null;
+		}
+		count += 1;
+		const current: ResourceTreeEntry = entry(currentPath, name, node);
+		if (!isResourceTree(node) || depth === maxDepth) return current;
+		const children: ResourceTreeEntry[] = [];
+		for (const [childName, child] of Object.entries(node).sort(([left], [right]) =>
+			left.localeCompare(right),
+		)) {
+			const childEntry = visit(child, resourcePath(currentPath, childName), childName, depth + 1);
+			if (childEntry) children.push(childEntry);
+			if (truncated) break;
+		}
+		if (children.length) current.children = children;
+		return current;
+	};
+	if (isResourceTree(root.node)) {
+		for (const [name, node] of Object.entries(root.node).sort(([left], [right]) =>
+			left.localeCompare(right),
+		)) {
+			const current = visit(node, resourcePath(root.path, name), name, 1);
+			if (current) entries.push(current);
+			if (truncated) break;
+		}
+	} else {
+		const current = visit(root.node, root.path, root.name ?? "", 0);
+		if (current) entries.push(current);
+	}
+	return { entries, truncated };
+}
+
+/** Searches literal text in one file or every file below a folder. */
+export function searchResources(
+	data: PluginData,
+	query: string,
+	path: ResourcePath,
+	options: SearchResourcesOptions = {},
+): ResourceSearchResult {
+	const context = options.context ?? 0;
+	const limit = options.limit ?? 100;
+	const offset = options.offset ?? 0;
+	const maxDepth = options.maxDepth ?? Number.POSITIVE_INFINITY;
+	if (!Number.isInteger(context) || context < 0)
+		throw new Error(`搜索上下文必须是非负整数：${context}`);
+	validateLimit(limit);
+	nonNegativeInteger(offset, "搜索偏移");
+	if (maxDepth !== Number.POSITIVE_INFINITY) nonNegativeInteger(maxDepth, "最大深度");
+	if (options.extensions?.some((extension) => !extension))
+		throw new Error("扩展名不能为空。");
+	const matcher = searchMatcher(query, options);
+	const matches: ResourceSearchMatch[] = [];
+	let skipped = 0;
+	let truncated = false;
+	const root = resolveNode(data.tree, path);
+	const visit = (node: ResourceNode, currentPath: ResourcePath, depth: number) => {
+		if (truncated) return;
+		if (typeof node !== "string") {
+			if (depth === maxDepth) return;
+			for (const [name, child] of Object.entries(node).sort(([left], [right]) =>
+				left.localeCompare(right),
+			))
+				visit(child, resourcePath(currentPath, name), depth + 1);
+			return;
+		}
+		if (!hasExtension(currentPath, options.extensions)) return;
+		const lines = node.split("\n");
+		for (const [index, text] of lines.entries()) {
+			if (!matcher.test(text)) continue;
+			if (skipped < offset) {
+				skipped += 1;
+				continue;
+			}
+			if (matches.length === limit) {
+				truncated = true;
+				return;
+			}
+			matches.push({
+				path: currentPath,
+				line: index + 1,
+				text,
+				before: lines.slice(Math.max(0, index - context), index),
+				after: lines.slice(index + 1, index + context + 1),
+			});
+		}
+	};
+	visit(root.node, root.path, 0);
+	return { matches, truncated, nextOffset: truncated ? offset + matches.length : null };
 }

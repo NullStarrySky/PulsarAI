@@ -149,6 +149,29 @@ interface HostNotifications {
 	send(input: { title: string; body: string }): Promise<void>;
 }
 
+export interface HostProxyHeader {
+	name: string;
+	value: string;
+}
+
+export interface HostProxyFetchRequest {
+	url: string;
+	method: string;
+	headers: HostProxyHeader[];
+	body?: number[];
+	redirect?: RequestRedirect;
+	timeout?: number;
+}
+
+export interface HostProxyFetchResponse {
+	url: string;
+	status: number;
+	statusText: string;
+	redirected: boolean;
+	headers: HostProxyHeader[];
+	body: number[];
+}
+
 export interface Host {
 	target: HostTarget;
 	database: HostDatabase;
@@ -169,6 +192,7 @@ export interface Host {
 	network: {
 		webSearch<T>(request: unknown): Promise<T>;
 		modelProxyFetch<T>(request: unknown): Promise<T>;
+		proxyFetch(request: HostProxyFetchRequest): Promise<HostProxyFetchResponse>;
 	};
 	local: {
 		invoke<T>(

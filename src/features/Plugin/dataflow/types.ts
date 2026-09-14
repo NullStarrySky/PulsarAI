@@ -7,6 +7,15 @@ export interface ResourceTree {
 
 export type ResourceNode = ResourceTree | string;
 
+export type ResourceKind = "file" | "folder";
+
+/** A serializable resource-tree entry returned by File API queries. */
+export interface ResourceEntry {
+	path: ResourcePath;
+	name: string;
+	kind: ResourceKind;
+}
+
 export interface FolderMeta {
 	selectionMode: "none" | "single" | "multiple";
 	/** Optional source-local global-slot path for a local slot folder. */
@@ -24,6 +33,49 @@ export interface FileMeta {
 }
 
 export type ResourceMeta = FolderMeta | FileMeta;
+
+export interface ResourceStat extends ResourceEntry {
+	meta: ResourceMeta | null;
+}
+
+export interface ResourceListResult {
+	entries: ResourceEntry[];
+	truncated: boolean;
+}
+
+export interface ResourceTreeEntry extends ResourceEntry {
+	children?: ResourceTreeEntry[];
+}
+
+export interface ResourceTreeResult {
+	entries: ResourceTreeEntry[];
+	truncated: boolean;
+}
+
+export interface ResourceSearchMatch {
+	path: ResourcePath;
+	line: number;
+	text: string;
+	before: string[];
+	after: string[];
+}
+
+export interface ResourceSearchResult {
+	matches: ResourceSearchMatch[];
+	truncated: boolean;
+	nextOffset: number | null;
+}
+
+export interface ResourceReadLine {
+	line: number;
+	text: string;
+}
+
+export interface ResourceReadLinesResult {
+	lines: ResourceReadLine[];
+	truncated: boolean;
+}
+
 type MetaMap = Record<ResourcePath, ResourceMeta>;
 
 /** Original source or replayed in-memory projection, without version history. */

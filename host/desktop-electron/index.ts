@@ -224,6 +224,7 @@ export const host: Host = {
 		webSearch: (request) => invoke("network", "webSearch", { request }),
 		modelProxyFetch: (request) =>
 			invoke("network", "modelProxyFetch", { request }),
+		proxyFetch: (request) => invoke("network", "proxyFetch", { request }),
 	},
 	local: {
 		invoke: (area, command, payload) =>

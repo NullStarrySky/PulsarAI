@@ -15,6 +15,10 @@ interface CodeActFailure {
 
 export type CodeActResult = CodeActSuccess | CodeActFailure;
 
+type CodeActEnvironment = SandboxEnvironment & {
+	__runCodeActTransaction?: <T>(run: () => T | Promise<T>) => T | Promise<T>;
+};
+
 function validateCodeActFunction(source: string) {
 	const code = source.trim();
 	const isFunction =
@@ -43,7 +47,11 @@ export async function executeCodeAct(
 ): Promise<CodeActResult> {
 	try {
 		const code = validateCodeActFunction(source);
-		const value = await createSandboxFunction(code, [environment])(environment);
+		const execute = () =>
+			createSandboxFunction(code, [environment])(environment);
+		const transaction = (environment as CodeActEnvironment)
+			.__runCodeActTransaction;
+		const value = await (transaction ? transaction(execute) : execute());
 		return {
 			ok: true,
 			value: normalizeCodeActValue(value),

@@ -99,6 +99,7 @@ export const host: Host = {
 	network: {
 		webSearch: (request) => command("web_search", { request }),
 		modelProxyFetch: (request) => command("model_proxy_fetch", { request }),
+		proxyFetch: (request) => command("proxy_fetch", { request }),
 	},
 	local: {
 		invoke: (area, name, payload) => command(`${area}_${name}`, payload),

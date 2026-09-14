@@ -79,11 +79,19 @@ struct ProxyFetchRequest {
     method: String,
     headers: Vec<ProxyHeader>,
     body: Option<Vec<u8>>,
+    #[serde(default)]
+    redirect: Option<String>,
+    #[serde(default)]
+    timeout: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ProxyFetchResponse {
+    url: String,
     status: u16,
+    status_text: String,
+    redirected: bool,
     headers: Vec<ProxyHeader>,
     body: Vec<u8>,
 }
@@ -310,6 +318,7 @@ pub fn run() {
             lan_sync_fetch,
             lan_sync_push,
             model_proxy_fetch,
+            proxy_fetch,
             web_search,
             stt_whisper_candle_models,
             stt_whisper_candle_download,
