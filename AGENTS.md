@@ -1,7 +1,5 @@
 # PulsarAI Agent Guide
 
-Database、Conversation 与 Plugin 的当前文件职责和端到端数据流见 [`dataFlow.md`](./dataFlow.md)。
-
 ## Hard Rules
 
 - Do not run `bun run build` unless the user explicitly asks for production packaging or build verification.

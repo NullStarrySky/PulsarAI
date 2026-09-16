@@ -3,15 +3,12 @@
 	"entry": [
 		"host/desktop-electron/main.mjs",
 		"host/desktop-electron/preload.cjs",
-		"host/mobile-tauri/index.ts",
-		"docs/.vitepress/config.ts",
-		"docs/.vitepress/theme/index.ts"
+		"host/mobile-tauri/index.ts"
 	],
 	"project": [
 		"src/**/*.{ts,tsx,vue}",
 		"host/**/*.{ts,mjs,cjs}",
 		"scripts/**/*.ts",
-		"docs/.vitepress/**/*.{ts,vue}",
 		"src/**/*.css"
 	],
 	"ignore": [
