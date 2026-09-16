@@ -216,7 +216,6 @@ export const host: Host = {
 		send: (input) => invoke("notifications", "send", input),
 	},
 	external: { open: (url) => invoke("desktop", "openExternal", { url }) },
-	backup: { invoke: (command, payload) => invoke("backup", command, payload) },
 	migration: {
 		invoke: (command, payload) => invoke("migration", command, payload),
 	},

@@ -1,5 +1,4 @@
 import { host } from "@/host";
-import { markLocalDatabaseChange } from "./sync-metadata";
 
 export interface DatabaseRecord<T> {
 	id: string | null;
@@ -30,13 +29,10 @@ export async function selectOne<T>(
 export async function upsert<T>(table: string, id: string, value: T) {
 	const raw = JSON.parse(JSON.stringify(value));
 	await host.database.upsert(table, id, raw);
-	markLocalDatabaseChange(table, id, false, raw);
 }
 
 export async function remove(table: string, id: string) {
-	const previous = await selectOne(table, id);
 	await host.database.remove(table, id);
-	markLocalDatabaseChange(table, id, true, previous);
 }
 
 export async function resetCharacterData() {

@@ -94,7 +94,6 @@ export const host: Host = {
 		send: (input) => sendNotification({ ...input, autoCancel: true }),
 	},
 	external: { open: openUrl },
-	backup: { invoke: (name, payload) => command(name, payload) },
 	migration: { invoke: (name, payload) => command(name, payload) },
 	network: {
 		webSearch: (request) => command("web_search", { request }),

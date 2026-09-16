@@ -4,7 +4,6 @@ async fn app_db<'a>(app: &AppHandle, state: &'a AppState) -> Result<&'a Surreal<
     state
         .db
         .get_or_try_init(|| async {
-            apply_pending_restore(app)?;
             let data_dir = app_data_dir(app)?;
             fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
             let db_path = data_dir.join("surrealdb");

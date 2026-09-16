@@ -62,8 +62,7 @@ reuse that container instead of extending the conversation path.
 persistence. It keeps the last direct content write and merges metadata fields
 within one group, retaining structural dependency order. File API `edit`
 records the resulting content as `file.write`. Different versions and message
-groups are never compacted together. Database sync vectors remain separate
-from these domain version IDs.
+groups are never compacted together.
 
 ## Paths and source scope
 

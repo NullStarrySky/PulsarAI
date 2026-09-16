@@ -1,19 +1,8 @@
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{
-    collections::HashSet,
     fs,
-    io::{Read, Write},
-    net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
-    str::FromStr,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
-    thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use surrealdb::{
     engine::local::{Db, SurrealKv},
@@ -32,20 +21,6 @@ use migration::{
 struct AppState {
     db: OnceCell<Surreal<Db>>,
     http: reqwest::Client,
-    lan_sync: LanSyncState,
-}
-
-#[derive(Default)]
-struct LanSyncState {
-    server: Mutex<Option<LanSyncServer>>,
-    snapshot: Arc<Mutex<serde_json::Value>>,
-    pending: Arc<Mutex<Vec<serde_json::Value>>>,
-}
-
-struct LanSyncServer {
-    port: u16,
-    stop: Arc<AtomicBool>,
-    handle: Option<thread::JoinHandle<()>>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -96,61 +71,6 @@ struct ProxyFetchResponse {
     body: Vec<u8>,
 }
 
-#[derive(Debug, Serialize)]
-struct BackupInfo {
-    id: String,
-    name: String,
-    path: String,
-    #[serde(rename = "createdAt")]
-    created_at: String,
-    size: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct BackupManifest {
-    version: u8,
-    created_at: String,
-    kind: String,
-    #[serde(default)]
-    files: Vec<BackupFileEntry>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct BackupFileEntry {
-    path: String,
-    object: String,
-    size: u64,
-    compressed_size: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct PendingRestore {
-    backup_path: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct BackupResourceSnapshot {
-    local_plugins: Vec<serde_json::Value>,
-    conversations: Vec<serde_json::Value>,
-    containers: Vec<serde_json::Value>,
-    worlds: Vec<serde_json::Value>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ResourceArchivePayload {
-    #[serde(rename = "rootType")]
-    root_type: String,
-    #[serde(rename = "rootId")]
-    root_id: String,
-    snapshot: BackupResourceSnapshot,
-}
-
-#[derive(Debug, Serialize)]
-struct LanSyncStatus {
-    running: bool,
-    port: Option<u16>,
-}
-
 fn normalize_table_name(table: &str) -> Result<String, String> {
     if table
         .chars()
@@ -166,33 +86,21 @@ fn strip_file_url(value: &str) -> &str {
     value.strip_prefix("file://").unwrap_or(value)
 }
 
-fn timestamp_millis() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or_default()
-}
-
 fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map_err(|error| error.to_string())
 }
 
-mod backup;
-mod backup_commands;
 mod database;
 mod files;
 
-mod lan_sync;
 mod media;
 mod migration;
 mod piper_tts;
 mod stt;
 mod web;
 
-use backup_commands::*;
 use database::*;
 use files::*;
-use lan_sync::*;
 use media::*;
 use migration::{
     migration_read_binary, migration_read_png_character, migration_read_text, migration_scan_path,
@@ -258,7 +166,6 @@ pub fn run() {
         .manage(AppState {
             db: OnceCell::const_new(),
             http: reqwest::Client::new(),
-            lan_sync: LanSyncState::default(),
         })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
@@ -301,22 +208,6 @@ pub fn run() {
             media_read,
             media_url,
             media_delete,
-            backup_list,
-            backup_create,
-            backup_restore,
-            backup_read_resources,
-            backup_restore_resource_files,
-            backup_delete,
-            resource_archive_write,
-            resource_archive_read,
-            resource_archive_restore_files,
-            lan_sync_start,
-            lan_sync_stop,
-            lan_sync_status,
-            lan_sync_publish,
-            lan_sync_take_pending,
-            lan_sync_fetch,
-            lan_sync_push,
             model_proxy_fetch,
             proxy_fetch,
             web_search,

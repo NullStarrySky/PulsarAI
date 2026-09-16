@@ -470,42 +470,6 @@ async function media(method, payload) {
 	throw new Error(`Unsupported media operation: ${method}`);
 }
 
-async function readResourceBundleDirectory(root) {
-	const files = {};
-	const pending = [root];
-	let total = 0;
-	while (pending.length) {
-		const current = pending.pop();
-		for (const entry of await readdir(current, { withFileTypes: true })) {
-			const target = path.join(current, entry.name);
-			if (entry.isSymbolicLink()) continue;
-			if (entry.isDirectory()) pending.push(target);
-			else if (entry.isFile()) {
-				const bytes = await readFile(target);
-				total += bytes.length;
-				if (total > 64 * 1024 * 1024) throw new Error("资源文件夹超过 64 MiB 限制。");
-				files[path.relative(root, target).replaceAll("\\", "/")] = [...bytes];
-			}
-		}
-	}
-	return files;
-}
-
-async function resourceBundle(method, payload) {
-	const target = requiredString(payload?.path, "path");
-	if (method === "resource_bundle_write") {
-		const bytes = Array.isArray(payload?.bytes) ? Uint8Array.from(payload.bytes) : null;
-		if (!bytes) throw new Error("资源压缩包内容无效。");
-		await writeFile(target, bytes);
-		return;
-	}
-	if (method === "resource_bundle_read") {
-		const meta = await stat(target);
-		return meta.isDirectory() ? readResourceBundleDirectory(target) : [...await readFile(target)];
-	}
-	throw new Error(`Unsupported backup operation: ${method}`);
-}
-
 function executeEnvironmentCommand(name) {
 	const commands = {
 		"node-version": ["node", ["--version"]],
@@ -657,7 +621,6 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
 	}
 	if (namespace === "migration") return migration(method, payload);
 	if (namespace === "media") return media(method, payload);
-	if (namespace === "backup") return resourceBundle(method, payload);
 	throw new Error(`Unsupported host operation: ${namespace}.${method}`);
 }
 

@@ -3,7 +3,6 @@
 export * from "@phosphor-icons/vue";
 export {
 	PhArchive as Archive,
-	PhArchive as ArchiveRestore,
 	PhArrowDown as ArrowDown,
 	PhArrowDown as ArrowDownIcon,
 	PhArrowDown as History,
@@ -11,7 +10,6 @@ export {
 	PhArrowElbowDownRight as CornerDownRight,
 	PhArrowLeft as ArrowLeft,
 	PhArrowRight as ArrowRight,
-	PhArrowSquareDown as DatabaseBackup,
 	PhArrowSquareOut as Maximize2,
 	PhArrowSquareOut as ExternalLink,
 	PhArrowsClockwise as ArrowsClockwise,
@@ -109,7 +107,6 @@ export {
 	PhRocket as Rocket,
 	PhScan as ScanSearch,
 	PhShield as Shield,
-	PhShieldCheck as ShieldCheck,
 	PhSidebar as PanelLeft,
 	PhSidebarSimple as PanelRight,
 	PhSidebarSimple as PanelLeftIcon,

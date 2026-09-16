@@ -206,19 +206,8 @@ export function useCharacterList() {
 		return [...store.characters].find((character) => character.id === id)!;
 	}
 
-	async function importCharacter() {
-		const { useBackupStore } = await import(
-			"@/features/Environment/backup/backup-store"
-		);
-		const id = await useBackupStore().importResourceArchive("update");
-		return id
-			? ([...store.characters].find((character) => character.id === id) ?? null)
-			: null;
-	}
-
 	return {
 		characters: readonly(characters),
 		create,
-		import: importCharacter,
 	};
 }

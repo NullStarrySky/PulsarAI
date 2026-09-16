@@ -2,7 +2,6 @@ import { markRaw } from "vue";
 import DefaultSettingsPage from "@/features/Request/components/DefaultSettingsPage.vue";
 import RequestSettingsPage from "@/features/Request/components/RequestSettingsPage.vue";
 import {
-	ArchiveRestore,
 	Brain,
 	ChartNoAxesCombined,
 	CreditCard,
@@ -14,7 +13,6 @@ import {
 	Settings,
 	Star,
 } from "@/lib/phosphor-icons";
-import BackupSettingsPage from "../backup/BackupSettingsPage.vue";
 import type { EnvironmentSettingPage } from "../defaults";
 import AboutSettingsPage from "./about/AboutSettingsPage.vue";
 import AppearanceSettingsPage from "./appearance/AppearanceSettingsPage.vue";
@@ -52,14 +50,6 @@ export function createBuiltInSettingPages(): EnvironmentSettingPage[] {
 		{
 			meta: { id: "appearance.theme", icon: markRaw(Palette), title: "主题" },
 			component: markRaw(AppearanceSettingsPage),
-		},
-		{
-			meta: {
-				id: "data.backup",
-				icon: markRaw(ArchiveRestore),
-				title: "版本管理",
-			},
-			component: markRaw(BackupSettingsPage),
 		},
 		{
 			meta: { id: "provider.models", icon: markRaw(Brain), title: "模型" },

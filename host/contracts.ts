@@ -182,10 +182,6 @@ export interface Host {
 	platform: HostPlatform;
 	notifications: HostNotifications;
 	external: { open(url: string): Promise<void> };
-	/** Shared, typed command groups that do not belong in renderer feature code. */
-	backup: {
-		invoke<T>(command: string, payload?: Record<string, unknown>): Promise<T>;
-	};
 	migration: {
 		invoke<T>(command: string, payload: { path: string }): Promise<T>;
 	};
