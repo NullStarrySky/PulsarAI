@@ -16,26 +16,27 @@ export interface ResourceEntry {
 	kind: ResourceKind;
 }
 
-export interface FolderMeta {
-	selectionMode: "none" | "single" | "multiple";
-	/** Optional source-local global-slot path for a local slot folder. */
-	parent?: ResourcePath;
-}
-
 export interface FileMeta {
 	resourceSelected: boolean;
-	/** Stable source-local path of a slot below localSlot/. */
+	/** Logical path declared by the owning source's local.slot.json. */
 	slot?: ResourcePath;
 	priority: number;
-	condition?: string;
-	/** Defaults to enabled; false keeps the authored condition without applying it. */
-	conditionEnabled?: boolean;
+	condition?: ResourceCondition[];
 }
 
-export type ResourceMeta = FolderMeta | FileMeta;
+export interface ResourceCondition {
+	type: string;
+	param: Record<string, unknown>;
+	link: "and" | "or" | "xor" | null;
+}
+
+export interface ResourceFile extends FileMeta {
+	path: ResourcePath;
+	content: string;
+}
 
 export interface ResourceStat extends ResourceEntry {
-	meta: ResourceMeta | null;
+	meta: FileMeta | null;
 }
 
 export interface ResourceListResult {
@@ -76,7 +77,7 @@ export interface ResourceReadLinesResult {
 	truncated: boolean;
 }
 
-type MetaMap = Record<ResourcePath, ResourceMeta>;
+export type MetaMap = Record<ResourcePath, FileMeta>;
 
 /** Original source or replayed in-memory projection, without version history. */
 export interface PluginData {
@@ -104,11 +105,6 @@ type Atom =
 	| { kind: "file.write"; path: ResourcePath; content: string }
 	| { kind: "file.replace"; path: ResourcePath; find: string; replace: string }
 	| { kind: "file.meta.patch"; path: ResourcePath; patch: Partial<FileMeta> }
-	| {
-			kind: "folder.meta.patch";
-			path: ResourcePath;
-			patch: Partial<FolderMeta>;
-	  }
 	| { kind: "folder.mkdir"; path: ResourcePath }
 	| { kind: "node.remove"; path: ResourcePath }
 	| { kind: "node.move"; from: ResourcePath; to: ResourcePath }
@@ -141,8 +137,4 @@ export function resourceType(path: string): PluginResourceType {
 
 export function defaultFileMeta(): FileMeta {
 	return { resourceSelected: true, priority: 100 };
-}
-
-export function defaultFolderMeta(): FolderMeta {
-	return { selectionMode: "none" };
 }

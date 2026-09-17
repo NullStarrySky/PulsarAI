@@ -1,9 +1,21 @@
-import { computed, type MaybeRefOrGetter, readonly, toValue } from "vue";
+import {
+	computed,
+	type MaybeRefOrGetter,
+	reactive,
+	readonly,
+	toValue,
+	watch,
+} from "vue";
+import { isPluginVersionUsed } from "@/features/Conversation/dataflow/conversations";
 import {
 	registerSyncHandler,
 	useSyncStore,
 } from "@/features/Database/dbsync-store";
-import { parseCharacterDefinition } from "../resources/types/character/plugin-character";
+import {
+	type CharacterData,
+	characterFromPlugin,
+	parseCharacterDefinition,
+} from "../resources/types/character/plugin-character";
 import {
 	createLocalPluginData,
 	importBuiltinPlugins,
@@ -21,15 +33,44 @@ import type { PluginData, PluginDocument, Pulse, ReplayGroups } from "./types";
 import { type GlobalPluginData, mergePluginData } from "./use-tree-merge";
 
 const builtinPlugins = importBuiltinPlugins();
+export function refreshCharacter(id: CharacterData["id"]) {
+	const store = useSyncStore();
+	const plugin = findPlugin(id);
+	if (!plugin) return;
+	const version = latestPluginVersion(plugin);
+	if (!version) throw new Error(`Plugin 没有可加载的版本：${id}`);
+	const next = characterFromPlugin(id, replayPluginVersion(plugin, version.id));
+	const current = store.characters.get(id);
+	if (
+		current?.name === next.name &&
+		current.description === next.description &&
+		current.avatarUrl === next.avatarUrl &&
+		current.coverUrl === next.coverUrl
+	)
+		return;
+	store.characters.set(id, next);
+	store.markDirty({ type: "character", id });
+}
 
 function findPlugin(pluginId: string): PluginDocument | undefined {
 	return useSyncStore().plugins.get(pluginId) as PluginDocument | undefined;
+}
+
+async function loadPluginEnvironment(pluginId: string) {
+	if (!pluginId) return;
+	const store = useSyncStore();
+	if (!findPlugin(pluginId)) await store.load({ type: "plugin", id: pluginId });
+	await store.load({ type: "conversationList", id: pluginId });
 }
 
 registerSyncHandler<PluginDocument>("plugin", {
 	table: "resource_worlds",
 	value: findPlugin,
 	recordId: (id) => `local:${id}`,
+});
+registerSyncHandler<CharacterData>("character", {
+	table: "resource_characters",
+	value: (id) => useSyncStore().characters.get(id),
 });
 
 /** Replays one saved version, plus unsaved edits only when no version is pinned. */
@@ -150,13 +191,20 @@ export function useActivePluginData(
 	});
 }
 
-/** The current conversation view: source content plus every active-version replay group. */
+/** The current conversation view. `loadEnvironment` also loads the Plugin's bound conversation metadata. */
 export function usePluginData(
 	pluginId: MaybeRefOrGetter<string>,
 	replayGroups: MaybeRefOrGetter<ReplayGroups>,
 	versionId?: MaybeRefOrGetter<string | undefined>,
+	loadEnvironment = false,
 	globalPlugins: MaybeRefOrGetter<GlobalPluginData> = useGlobalPluginData(),
 ) {
+	if (loadEnvironment)
+		watch(
+			() => toValue(pluginId),
+			(id) => void loadPluginEnvironment(id),
+			{ immediate: true },
+		);
 	const source = usePurePluginData(pluginId, versionId);
 	return computed(() => {
 		const value = source.value;
@@ -177,11 +225,11 @@ function applyPluginPulse(id: string, pulse: Pulse) {
 	const version = latestPluginVersion(plugin);
 	if (!version) throw new Error(`Plugin 没有可编辑的版本：${id}`);
 	applyPulse(replayPluginVersion(plugin, version.id), pulse);
-	if (store.isPluginVersionUsed(id, version.id))
+	if (isPluginVersionUsed(id, version.id))
 		plugin.versions.push(createPluginVersion(plugin, [pulse]));
 	else appendPluginVersion(version, pulse);
 	store.markDirty({ type: "plugin", id });
-	store.refreshCharacter(id);
+	refreshCharacter(id);
 }
 
 /** Editable source-local latest-version projection. Every edit updates the head version. */
@@ -195,19 +243,36 @@ export function useEditablePluginData(pluginId: MaybeRefOrGetter<string>) {
 
 export function useCharacterList() {
 	const store = useSyncStore();
-	const characters = computed(() => new Set(store.characters));
+	const characters = computed(() => new Set(store.characters.values()));
 
 	async function create() {
+		await store.init();
 		const id = crypto.randomUUID();
 		const source = createLocalPluginData(`local:${id}`);
 		const document = preparePluginDocument(source);
-		store.addPlugin(id, document);
-		await store._sync({ type: "plugin", id });
-		return [...store.characters].find((character) => character.id === id)!;
+		store.plugins.set(id, reactive(document) as PluginDocument);
+		store.markDirty({ type: "plugin", id });
+		refreshCharacter(id);
+		await store._sync();
+		return store.characters.get(id)!;
+	}
+
+	async function remove(id: CharacterData["id"]) {
+		await store.init();
+		await store.load({ type: "conversationList", id });
+		if (store.conversationMeta.get(id)?.size)
+			throw new Error("角色仍有关联会话，不能删除。");
+		if (!store.characters.has(id)) return;
+		store.plugins.delete(id);
+		store.markDirty({ type: "plugin", id });
+		store.characters.delete(id);
+		store.markDirty({ type: "character", id });
+		await store._sync();
 	}
 
 	return {
 		characters: readonly(characters),
 		create,
+		remove,
 	};
 }

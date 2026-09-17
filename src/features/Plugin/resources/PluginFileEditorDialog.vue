@@ -2,7 +2,11 @@
 import { computed, ref, toValue } from "vue";
 import { Button } from "@/components/fluid";
 import { useFloatingSurface } from "@/features/Environment/floating-surface";
-import type { FileMeta, ResourcePath } from "../dataflow/types";
+import type {
+	FileMeta,
+	ResourceCondition,
+	ResourcePath,
+} from "../dataflow/types";
 import type { FileApiOptions } from "../dataflow/use-file-api";
 import PluginResourceConditionEditor from "./PluginResourceConditionEditor.vue";
 import PluginResourceRenderer from "./PluginResourceRenderer.vue";
@@ -26,20 +30,12 @@ const floating = useFloatingSurface({
 	persistGeometry: true,
 });
 
-function updateCondition(condition: string) {
+function updateCondition(condition: ResourceCondition[]) {
 	if (!props.path) return;
 	props.applyPulse({
 		kind: "file.meta.patch",
 		path: props.path,
 		patch: { condition },
-	});
-}
-function updateConditionEnabled(conditionEnabled: boolean) {
-	if (!props.path) return;
-	props.applyPulse({
-		kind: "file.meta.patch",
-		path: props.path,
-		patch: { conditionEnabled },
 	});
 }
 </script>
@@ -58,10 +54,8 @@ function updateConditionEnabled(conditionEnabled: boolean) {
 			</header>
 			<PluginResourceConditionEditor
 				v-if="fileMeta && path"
-				:model-value="fileMeta.condition ?? ''"
-				:enabled="fileMeta.conditionEnabled !== false"
+				:model-value="fileMeta.condition ?? []"
 				@update:model-value="updateCondition"
-				@update:enabled="updateConditionEnabled"
 			/>
 			<PluginResourceRenderer
 				v-if="fileMeta"

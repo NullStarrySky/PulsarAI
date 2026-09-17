@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { Button, Switch } from "@/components/fluid";
-import AppIcon from "@/features/Environment/components/AppIcon.vue";
 import SettingPage from "@/features/Environment/setting/SettingPage.vue";
-import { useEnvironmentStore } from "@/features/Environment/store";
+import AppIcon from "@/features/UI/AppIcon.vue";
+import { useUIStore } from "@/features/UI/store";
 import { Info, RefreshCcw } from "@/lib/phosphor-icons";
 
 const version = "0.1.0";
@@ -13,7 +13,7 @@ const autoCheckUpdates = ref(
 const checking = ref(false);
 const updateStatus = ref("");
 const changelogOpen = ref(false);
-const layout = useEnvironmentStore();
+const layout = useUIStore();
 
 watch(autoCheckUpdates, (enabled) => {
 	localStorage.setItem("pulsarai:auto-check-updates", String(enabled));

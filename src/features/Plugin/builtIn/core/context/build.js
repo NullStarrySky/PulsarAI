@@ -14,22 +14,22 @@ export default async function buildContext() {
 
 	let messages = [];
 	for (const id of [
-		"before_char",
-		"character",
-		"after_char",
-		"user",
-		"document",
-		"toolFunction",
-		"chat",
+		"/context/before_char",
+		"/role/character",
+		"/context/after_char",
+		"/role/user",
+		"/context/document",
+		"/document-library/toolFunction",
+		"/generation/chat",
 	])
 		messages.push(...(await messagesForSlot(id)));
 
 	for (let depth = 6; depth >= 0; depth -= 1) {
-		const injected = await messagesForSlot(`depth:${depth}`);
+		const injected = await messagesForSlot(`/depth/${depth}`);
 		messages.splice(Math.max(0, messages.length - depth), 0, ...injected);
 	}
 
-	for (const path of slot.paths("CTX_PROCESS_BEFORE_REGEX", "global")) {
+	for (const path of slot.paths("/generation/CTX_PROCESS_BEFORE_REGEX", "global")) {
 		const process = imports(path);
 		const next = await process(messages);
 		if (Array.isArray(next)) messages = next;
@@ -37,7 +37,7 @@ export default async function buildContext() {
 
 	const rules = (
 		await Promise.all(
-			slot.paths("REGEX", "global").map((path) => imports(path)),
+			slot.paths("/generation/REGEX", "global").map((path) => imports(path)),
 		)
 	)
 		.flat()

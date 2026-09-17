@@ -6,17 +6,16 @@ import {
 	tool,
 } from "ai";
 import { z } from "zod";
-import type { ChatMessage } from "@/features/Conversation/dataflow/types";
+import type { ConversationMessage } from "@/features/Conversation/dataflow/types";
 import type { SandboxEnvironment } from "@/features/Plugin/runtime/sandbox";
 import { createToolLoopAgent, streamText } from "@/features/Request/ai-sdk";
 import { useRequestDefaults } from "@/features/Request/defaults";
+import { useRequestStore } from "@/features/Request/request-store";
+import type { ModelSelection } from "@/features/Request/types";
 import {
 	parseModelReference,
 	type ReasoningEffort,
-} from "@/features/Request/provider/shared/model-reference";
-import { useRequestStore } from "@/features/Request/request-store";
-import type { ModelSelection } from "@/features/Request/types";
-import { askUser } from "./ask-user";
+} from "@/features/Request/types";
 import { executeCodeAct } from "./code-act";
 
 export interface CreateDefaultAgentResourcesInput {
@@ -29,7 +28,6 @@ interface DefaultAgentResources {
 	model: ModelSelection;
 	modelName: string;
 	reasoning?: ReasoningEffort;
-	instructions: string;
 	tools: ToolSet;
 	stopWhen: ReturnType<typeof isStepCount>;
 	finish: () => Promise<void>;
@@ -39,7 +37,7 @@ interface DefaultAgentResources {
  * The persisted reply target supplied by Conversation generation. Plugins pass
  * this as `container` when constructing the sandbox ToolLoopAgent wrapper.
  */
-type AgentOutputContainer = ChatMessage;
+type AgentOutputContainer = ConversationMessage;
 
 interface ContainerToolLoopAgent {
 	stream: (input: { messages: ModelMessage[] }) => Promise<void>;
@@ -53,7 +51,6 @@ export interface AgentResourceProvider {
 		container: AgentOutputContainer;
 		messages: ModelMessage[];
 	}) => Promise<void>;
-	askUser: typeof askUser;
 }
 
 const jsInputSchema = z.object({
@@ -64,34 +61,13 @@ const jsInputSchema = z.object({
 		),
 });
 
-const codeActInstructions = [
-	"Use the single codeAct tool for every API operation.",
-	"When user input is needed to continue, call await agent.askUser({ questions: [{ id, question, kind: 'text' | 'select' | 'multi-select' | 'boolean', options?, placeholder? }] }) inside codeAct and handle its { answers, cancelled } result. Boolean questions use true for accept and false for reject.",
-	"Never narrate private planning, tool selection, or tool execution in the final text. Those are recorded separately by the runtime.",
-	"Use normal text only for the final user-facing answer after the necessary tool calls are complete.",
-	"Submit one JavaScript function in the form `async function () { ... return value; }`.",
-	"The function must contain an explicit return. Use only APIs documented in the current context.",
-	"World mutations made in one codeAct call commit together only when the function returns successfully; an exception rolls them back.",
-	"Return plain serializable data. Preserve resource paths when later calls may need to follow the result.",
-	"To delegate a bounded task, call `await generate({ plugin?, environment?, prompt })` inside the function. The plugin is a global source folder name; it defaults to blank, and an omitted environment uses an in-memory temporary conversation.",
-	"Plugin tool functions, when their prompt is present in the compiled context, are ordinary functions directly on ctx. Call the documented function name inside codeAct.",
-	"Use list(path?, { limit? }) to enumerate direct resource entries, tree(path?, { maxDepth?, limit? }) for nested entries, find(path?, { name?, kind?, limit? }) to recurse, and stat(path) to inspect one resource and its metadata snapshot. Queries return entries plus truncated. search(text, path?, { context?, offset?, caseSensitive?, regex?, wholeWord?, maxDepth?, extensions? }) returns text matches plus nextOffset for paging; readLines(path, { startLine?, endLine?, limit? }) gives bounded text reads. zip(path?) returns a serializable ZIP byte array; unzip(bytes, path?, { parents?, overwrite? }) extracts UTF-8 text resources.",
-	"write(path, content, { parents?, overwrite? }) overwrites by default; mkdir(path, { parents?, existOk? }) creates parent folders by default. move/copy require a distinct target and accept { parents?, overwrite? }; remove/rmdir accept { missingOk? }. append creates or extends a file, touch creates an empty file when missing, and rmdir rejects non-empty folders.",
-	"fetch(url, init?) sends a general HTTP(S) request through the Host proxy and returns a standard Response. It supports curl-like method, headers, body, redirect: 'follow' | 'manual' | 'error', and timeout in milliseconds (1–120000). Use await response.text(), json(), or arrayBuffer(); non-2xx responses are returned normally, so inspect response.ok and response.status.",
-	"Inspect slot contracts with `slot.list()` / `get()`. `slot.paths('<name>')` returns selected resource paths; pass them to `await parse(...)` for recursive macro expansion. A chat resource returns pure message[] without authoring labels or disabled entries.",
-	"World write/edit/mkdir/move/remove update the current message-bound World immediately. A resource contributes to its referenced slot only when it is selected; files stay directly readable either way.",
-	"Resource paths beginning with `/` address the local tree; `/global/<source-folder>/path` addresses a shared source. In source code, `@/path` remains local to the source folder. Use open(path), close(path), or toggle(path) only for resources, never folders or slots.",
-	"Use imports(path) to load resources. JS imports synchronously return the default export without invoking it; explicitly call imports(path)(...args). Keep persistent state in ordinary JSON and expose actions and derived values from JS composables. Read current JSON with JSON.parse(read(path)) and persist changes with write/edit. Imports are cached by resolved absolute path for this generation, preserving module closures. Use read(path) to get JS source text.",
-	"The tool result contains either `{ ok: true, value }` or `{ ok: false, error }`; inspect errors and correct the next function.",
-].join("\n");
-
 function createCodeActTool(
 	environment: SandboxEnvironment,
 	onCodeAct?: () => void,
 ) {
 	return {
 		codeAct: tool({
-			description: codeActInstructions,
+			description: "Execute one JavaScript function with an explicit return.",
 			inputSchema: jsInputSchema,
 			execute: async (input) => {
 				onCodeAct?.();
@@ -117,7 +93,7 @@ async function createDefaultAgentResources(
 	const modelName = `${parsedModel.providerId}/${parsedModel.modelId}`;
 	const reasoning = parsedModel.reasoning;
 	const tools = createCodeActTool(input.environment ?? {}, input.onCodeAct);
-	await useRequestStore().initialize();
+	await useRequestStore().init();
 
 	return {
 		model: {
@@ -127,7 +103,6 @@ async function createDefaultAgentResources(
 		},
 		modelName,
 		reasoning,
-		instructions: codeActInstructions,
 		tools,
 		stopWhen: isStepCount(8),
 		finish: async () => {},
@@ -161,7 +136,6 @@ export function createAgentResourceProvider(
 					model: runtime.model,
 					reasoning: runtime.reasoning,
 					allowSystemInMessages: true,
-					instructions: runtime.instructions,
 					tools: runtime.tools,
 					activeTools: ["codeAct"],
 					stopWhen: runtime.stopWhen,
@@ -277,7 +251,6 @@ export function createAgentResourceProvider(
 					kind: "text",
 				},
 				messages,
-				system: runtime.instructions,
 				allowSystemInMessages: true,
 				...(runtime.reasoning
 					? { reasoning: runtime.reasoning }
@@ -319,6 +292,5 @@ export function createAgentResourceProvider(
 	return {
 		ToolLoopAgent: ContainerBoundToolLoopAgent,
 		streamText: streamTextFn,
-		askUser,
 	};
 }

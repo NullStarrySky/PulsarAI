@@ -1,6 +1,5 @@
 import type { GenerateImageResult } from "../../ai-sdk";
-import { emptyModels, param, secret } from "../shared/definition";
-import type { ProviderRegistration } from "../shared/registration";
+import { emptyModels, param, secret, type ProviderRegistration } from "../definition";
 import { generateComfyUIImages } from "./client";
 
 async function generateImage({

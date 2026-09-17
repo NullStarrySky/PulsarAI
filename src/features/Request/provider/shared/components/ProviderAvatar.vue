@@ -12,12 +12,11 @@ const props = defineProps<{
 const variant = useProviderIconVariant();
 
 const iconSrc = computed(() => {
-	const fallback = providerIconUrl(
-		props.providerId || props.name,
+	return providerIconUrl(
+		props.iconId || props.providerId || props.name,
 		props.src,
 		variant.value,
 	);
-	return providerIconUrl(props.iconId, fallback, variant.value);
 });
 </script>
 

@@ -2,14 +2,14 @@
 import { computed, onMounted, ref, shallowRef } from "vue";
 import { Button } from "@/components/fluid";
 import type {
-	ChatContainer as ChatMessageContainer,
-	ChatMeta as Conversation,
+	ConversationMeta as Conversation,
+	ConversationContainer as ConversationMessageContainer,
 } from "@/features/Conversation/dataflow/types";
-import { selectAll } from "@/features/Database/database-service";
-import { useSyncStore } from "@/features/Database/dbsync-store";
 import SettingGroup from "@/features/Environment/setting/SettingGroup.vue";
 import SettingItem from "@/features/Environment/setting/SettingItem.vue";
 import SettingPage from "@/features/Environment/setting/SettingPage.vue";
+import { useCharacterList } from "@/features/Plugin/dataflow/use-plugin-data";
+import { host } from "@/host";
 
 interface StatisticEvent {
 	id: string;
@@ -25,11 +25,10 @@ interface HeatmapDay {
 const diskMode = ref<"type" | "package">("type");
 const events = ref<StatisticEvent[]>([]);
 const loaded = ref(false);
-const sync = useSyncStore();
 const allChats = shallowRef<Conversation[]>([]);
-const allContainers = shallowRef<ChatMessageContainer[]>([]);
+const allContainers = shallowRef<ConversationMessageContainer[]>([]);
 
-const localPlugins = computed(() => [...sync.characters]);
+const localPlugins = computed(() => [...useCharacterList().characters.value]);
 const packageCount = computed(() => localPlugins.value.length);
 const conversationCount = computed(() => allChats.value.length);
 const messageCount = computed(() =>
@@ -105,7 +104,7 @@ const sizeByPackage = computed(() =>
 			pkgConversations.map((conversationItem) => conversationItem.id),
 		);
 		const pkgContainers = allContainers.value.filter((container) =>
-			conversationIds.has(container.conversationid),
+			conversationIds.has(container.conversationId),
 		);
 		return {
 			id: item.id,
@@ -129,15 +128,16 @@ const totalSize = computed(() =>
 
 async function initialize() {
 	if (loaded.value) return;
-	events.value = (await selectAll<StatisticEvent>("statistic_events")).map(
-		(item) => item.value,
-	);
-	await sync.init();
-	allChats.value = (await selectAll<Conversation>("conversations")).map(
-		(item) => item.value,
-	);
+	events.value = (
+		await host.database.selectAll<StatisticEvent>("statistic_events")
+	).map((item) => item.value);
+	allChats.value = (
+		await host.database.selectAll<Conversation>("conversations")
+	).map((item) => item.value);
 	allContainers.value = (
-		await selectAll<ChatMessageContainer>("message_containers")
+		await host.database.selectAll<ConversationMessageContainer>(
+			"message_containers",
+		)
 	).map((item) => item.value);
 	loaded.value = true;
 }

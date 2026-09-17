@@ -15,6 +15,7 @@ export interface ThemeDefinition {
 	name: string;
 	className: string;
 	accent: string;
+	secondary: string;
 	css?: string;
 }
 
@@ -44,6 +45,7 @@ function parseThemeCss(
 		(fallbackId === "default" ? "" : `theme-${slugify(fallbackId)}`);
 	const id = className ? className.replace(/^theme-/, "") : fallbackId;
 	const accent = parseCssVariable(css, "--primary") ?? "oklch(0.7 0.18 260)";
+	const secondary = parseCssVariable(css, "--secondary") ?? accent;
 	const name =
 		fallbackName === "Imported Theme" ? toTitleCase(id) : fallbackName;
 
@@ -52,6 +54,7 @@ function parseThemeCss(
 		name,
 		className,
 		accent,
+		secondary,
 		css:
 			className && !css.includes(`.${className}`)
 				? wrapCssInClass(css, className)

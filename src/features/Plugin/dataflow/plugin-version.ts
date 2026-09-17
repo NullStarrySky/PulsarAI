@@ -2,6 +2,7 @@ import { computed, type MaybeRefOrGetter, toRaw, toValue, watch } from "vue";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import { compactPulses, replayPluginData } from "./pulse";
 import type { PluginData, PluginDocument, PluginVersion, Pulse } from "./types";
+import { refreshCharacter } from "./use-plugin-data";
 
 export function latestPluginVersion(document: PluginDocument) {
 	return document.versions.at(-1) ?? null;
@@ -33,7 +34,7 @@ export function usePluginVersion(
 		(value) => {
 			if (!value) return;
 			store.markDirty({ type: "plugin", id: value.id });
-			store.refreshCharacter(value.id);
+			refreshCharacter(value.id);
 		},
 		{ deep: true, flush: "sync" },
 	);

@@ -1,4 +1,4 @@
-import type { ChatContainer, ChatMessage } from "../types";
+import type { ConversationContainer, ConversationMessage } from "../types";
 
 type JsonValue =
 	| null
@@ -46,7 +46,9 @@ export interface IntervalProjection {
 	diagnostics: IntervalDiagnostic[];
 }
 
-function activeMessage(container: ChatContainer): ChatMessage | null {
+function activeMessage(
+	container: ConversationContainer,
+): ConversationMessage | null {
 	return (
 		container.content[container.activeMessage ?? 0] ??
 		container.content[0] ??
@@ -56,7 +58,7 @@ function activeMessage(container: ChatContainer): ChatMessage | null {
 
 /** Reduces the selected versions along one active conversation path. */
 export function evaluateIntervals(
-	activePath: ChatContainer[],
+	activePath: ConversationContainer[],
 ): IntervalProjection {
 	const open = new Map<string, OpenInterval>();
 	const spans: IntervalSpan[] = [];

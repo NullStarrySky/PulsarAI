@@ -7,18 +7,18 @@ import {
 	watch,
 } from "vue";
 import { containerChanges } from "../containers";
-import type { ChatContainer, ChatMessage } from "../types";
+import type { ConversationContainer, ConversationMessage } from "../types";
 import { currentMessage } from "./message-service";
 
 export interface ReplayGroup {
-	container: ChatContainer;
-	version: ChatMessage;
-	pulses: NonNullable<ChatMessage["meta"]["pulses"]>;
+	container: ConversationContainer;
+	version: ConversationMessage;
+	pulses: NonNullable<ConversationMessage["meta"]["pulses"]>;
 }
 
 /** Lazy per-consumer projection: notifications accumulate until its next read. */
 export function usePathProjection(
-	source: MaybeRefOrGetter<ReadonlyMap<string, ChatContainer>>,
+	source: MaybeRefOrGetter<ReadonlyMap<string, ConversationContainer>>,
 	tail: MaybeRefOrGetter<string | null | undefined>,
 ) {
 	const branches = new Set<string>(),
@@ -26,8 +26,8 @@ export function usePathProjection(
 	const branchRevision = ref(0),
 		groupRevision = ref(0);
 	let positions = new Map<string, number>();
-	let collection: ReadonlyMap<string, ChatContainer> | undefined;
-	const idOf = (container: ChatContainer) => toRaw(container).id;
+	let collection: ReadonlyMap<string, ConversationContainer> | undefined;
+	const idOf = (container: ConversationContainer) => toRaw(container).id;
 	watch(
 		() => containerChanges(toValue(source)).value,
 		(change) => {
@@ -42,7 +42,7 @@ export function usePathProjection(
 		{ flush: "sync" },
 	);
 
-	const activePath = computed<ChatContainer[]>((previous) => {
+	const activePath = computed<ConversationContainer[]>((previous) => {
 		branchRevision.value;
 		const all = toValue(source),
 			tailId = toValue(tail);
@@ -53,7 +53,7 @@ export function usePathProjection(
 			if (index !== undefined) limit = Math.min(limit, index);
 		}
 		branches.clear();
-		const suffix: ChatContainer[] = [],
+		const suffix: ConversationContainer[] = [],
 			seen = new Set<string>();
 		let current = tailId ? all.get(tailId) : undefined,
 			prefixLength = 0;
@@ -89,10 +89,10 @@ export function usePathProjection(
 		return path;
 	});
 
-	let previousPath: ChatContainer[] | undefined;
+	let previousPath: ConversationContainer[] | undefined;
 	let groupPositions = new Map<string, number>();
 	const emptyPulses: ReplayGroup["pulses"] = [];
-	const makeGroup = (container: ChatContainer): ReplayGroup | null => {
+	const makeGroup = (container: ConversationContainer): ReplayGroup | null => {
 		const version = currentMessage(container);
 		return version
 			? { container, version, pulses: version.meta.pulses ?? emptyPulses }

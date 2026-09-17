@@ -1,10 +1,17 @@
-import { computed, shallowRef, type ShallowRef, watch } from "vue";
+import {
+	computed,
+	reactive,
+	type ShallowRef,
+	shallowReactive,
+	shallowRef,
+	watch,
+} from "vue";
 import {
 	registerSyncHandler,
 	useSyncStore,
 } from "@/features/Database/dbsync-store";
 import { compactPulses } from "@/features/Plugin/dataflow/pulse";
-import type { ChatContainer } from "./types";
+import type { ConversationContainer } from "./types";
 
 export interface ContainerChange {
 	id: string;
@@ -13,11 +20,11 @@ export interface ContainerChange {
 // Runtime notification channels follow the lifetime of their loaded container Map.
 // This holds no watcher or scope handles.
 const changes = new WeakMap<
-	ReadonlyMap<string, ChatContainer>,
+	ReadonlyMap<string, ConversationContainer>,
 	ShallowRef<ContainerChange | null>
 >();
 export function containerChanges(
-	containers: ReadonlyMap<string, ChatContainer>,
+	containers: ReadonlyMap<string, ConversationContainer>,
 ) {
 	let change = changes.get(containers);
 	if (!change) {
@@ -28,18 +35,18 @@ export function containerChanges(
 }
 
 export function markContainerDirty(
-	chatId: string,
+	conversationId: string,
 	id: string,
 	isBranchChange = false,
 ) {
 	const store = useSyncStore();
 	store.markDirty({ type: "container", id });
-	const containers = store.containers.get(chatId);
+	const containers = store.containers.get(conversationId);
 	if (containers) containerChanges(containers).value = { id, isBranchChange };
 }
 
-function containersForChat(chatId: string) {
-	return useSyncStore().containers.get(chatId);
+function containersForChat(conversationId: string) {
+	return useSyncStore().containers.get(conversationId);
 }
 
 function findContainerById(containerId: string) {
@@ -49,7 +56,7 @@ function findContainerById(containerId: string) {
 	}
 }
 
-registerSyncHandler<ChatContainer>("container", {
+registerSyncHandler<ConversationContainer>("container", {
 	table: "message_containers",
 	value: findContainerById,
 	serialize(container) {
@@ -68,17 +75,47 @@ registerSyncHandler<ChatContainer>("container", {
 	},
 });
 
-export function usePureContainers(chatId: string) {
-	const empty = new Map<string, ChatContainer>();
-	const containers = computed(() => containersForChat(chatId) ?? empty);
+export function addContainers(
+	conversationId: string,
+	values: ConversationContainer[],
+) {
+	for (const container of values)
+		for (const message of container.content) message.final ??= true;
+	const list = shallowReactive(
+		new Map(
+			values.map((value) => [
+				value.id,
+				reactive(value) as ConversationContainer,
+			]),
+		),
+	);
+	useSyncStore().containers.set(conversationId, list);
+	return list;
+}
+
+export function addContainer(value: ConversationContainer) {
+	for (const message of value.content) message.final ??= true;
+	const store = useSyncStore();
+	const list =
+		store.containers.get(value.conversationId) ??
+		addContainers(value.conversationId, []);
+	const container = reactive(value) as ConversationContainer;
+	list.set(value.id, container);
+	store.markDirty({ type: "container", id: value.id });
+	return container;
+}
+
+export function usePureContainers(conversationId: string) {
+	const empty = new Map<string, ConversationContainer>();
+	const containers = computed(() => containersForChat(conversationId) ?? empty);
 	return { containers };
 }
 
 /** A scoped mutable container handle; only this container is marked dirty. */
-export function useContainer(chatId: string, containerId: string) {
+export function useContainer(conversationId: string, containerId: string) {
 	const store = useSyncStore();
 	const container = computed(
-		() => store.containers.get(chatId)?.get(containerId) ?? null,
+		() => store.containers.get(conversationId)?.get(containerId) ?? null,
 	);
 	let previous = container.value;
 	let parent = previous?.previousContainer;
@@ -88,7 +125,7 @@ export function useContainer(chatId: string, containerId: string) {
 		(value) => {
 			if (value)
 				markContainerDirty(
-					chatId,
+					conversationId,
 					containerId,
 					value !== previous ||
 						value.previousContainer !== parent ||

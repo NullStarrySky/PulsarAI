@@ -7,6 +7,7 @@ const resourceTables = [
 	"resource_message_containers",
 	"resource_conversations",
 	"resource_worlds",
+	"resource_characters",
 ];
 
 function assertTable(table) {

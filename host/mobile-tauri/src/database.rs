@@ -333,6 +333,7 @@ pub(crate) async fn database_reset_character_data(
          DELETE resource_message_containers; \
          DELETE resource_conversations; \
          DELETE resource_worlds; \
+         DELETE resource_characters; \
          COMMIT TRANSACTION;",
         )
         .await

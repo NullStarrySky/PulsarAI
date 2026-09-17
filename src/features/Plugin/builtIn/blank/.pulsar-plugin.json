@@ -17,12 +17,18 @@
 			"treeOrder": 0,
 			"order": 100
 		},
+		"local.slot.json": {
+			"id": "builtin-blank-local-slots",
+			"icon": "",
+			"treeOrder": 1,
+			"order": 100
+		},
 		"generate.js": {
 			"id": "builtin-blank-generate",
 			"icon": "",
 			"treeOrder": 1,
 			"order": 100,
-			"insertion": { "slot": "generatePath" }
+			"insertion": { "slot": "/generation/generatePath" }
 		}
 	}
 }

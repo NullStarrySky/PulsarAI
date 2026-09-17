@@ -1,11 +1,11 @@
 import { computed, type MaybeRef, unref } from "vue";
-import { markContainerDirty } from "../containers";
 import type {
 	IntervalDefinition,
 	IntervalOperation,
 } from "../activePathComposable/interval-services";
 import { currentMessage } from "../activePathComposable/message-service";
-import type { ChatContainer } from "../types";
+import { markContainerDirty } from "../containers";
+import type { ConversationContainer } from "../types";
 
 function isJsonValue(value: unknown, seen = new Set<object>()): boolean {
 	if (
@@ -27,7 +27,7 @@ function isJsonValue(value: unknown, seen = new Set<object>()): boolean {
 
 /** Interval operations belong to the active version of one message container. */
 export function useContainerIntervals(
-	source: MaybeRef<ChatContainer | null | undefined>,
+	source: MaybeRef<ConversationContainer | null | undefined>,
 ) {
 	const container = computed(() => unref(source));
 	const message = computed(() => currentMessage(container.value));
@@ -40,7 +40,7 @@ export function useContainerIntervals(
 		if (!target || !owner) return;
 		target.meta.intervalOperations ??= [];
 		target.meta.intervalOperations.push(operation);
-		markContainerDirty(owner.conversationid, owner.id);
+		markContainerDirty(owner.conversationId, owner.id);
 		return operation;
 	}
 	function open(interval: IntervalDefinition) {

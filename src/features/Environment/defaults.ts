@@ -1,4 +1,3 @@
-import type { Component } from "vue";
 import type { ModelSelection } from "@/features/Request/types";
 import type { ThemeDefinition, ThemeMode } from "./theme/theme-registry";
 
@@ -13,6 +12,7 @@ export interface FontDefinition {
 	sans: string;
 	serif: string;
 	mono: string;
+	source?: string;
 }
 
 export interface AppearanceSettings {
@@ -28,6 +28,7 @@ export interface AppearanceSettings {
 	interactiveCodePreview: boolean;
 	agentLoadingStyle: AgentLoadingStyle;
 	zenFrameEnabled: boolean;
+	glassEffectEnabled: boolean;
 	zenFrameWidth: number;
 	frameColorMode: "auto" | "custom";
 	frameCustomColor: string;
@@ -67,12 +68,6 @@ export interface RuntimePreferences {
 	replyCompletionOnlyWhenBackground: boolean;
 }
 
-export interface EnvironmentSettingPage {
-	meta: { id: string; icon: Component; title: string };
-	component?: Component;
-	tabs?: Array<{ id: string; title: string; component: Component }>;
-}
-
 export const EXA_API_KEY_SECRET = "webSearch.exa.apiKey";
 
 /* -------------------------------------------------------------------------- */
@@ -93,6 +88,7 @@ export function getDefaultAppearance(): AppearanceSettings {
 		interactiveCodePreview: false,
 		agentLoadingStyle: "drive",
 		zenFrameEnabled: true,
+		glassEffectEnabled: true,
 		zenFrameWidth: 6,
 		frameColorMode: "auto",
 		frameCustomColor: "#1e1e24",
@@ -123,14 +119,6 @@ export function getDefaultTranslateSettings(): TranslateState {
 		llmModel: null,
 		prompt:
 			"你是专业翻译助手。请把输入内容从 {{sourceLanguage}} 翻译为 {{targetLanguage}}，保留原文格式，不要添加解释。",
-	};
-}
-
-export function getDefaultHotkeys(): Record<string, string> {
-	return {
-		settings: "Ctrl+,",
-		toggleEditMode: "Ctrl+Shift+E",
-		resetCharacterData: "Ctrl+Shift+R",
 	};
 }
 
@@ -168,31 +156,21 @@ export function getBuiltInFonts(): FontDefinition[] {
 	];
 }
 
-export function createImportedFont(
+export function createUploadedFont(
 	name: string,
-	family: string,
+	source: string,
 ): FontDefinition {
 	const fonts = getBuiltInFonts();
+	const family = `${JSON.stringify(name)}, sans-serif`;
 	return {
 		id: `custom-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
 		name,
 		sans: family,
 		serif: family,
 		mono: fonts[0].mono,
+		source,
 	};
 }
-
-export const environmentHotkeyLabels = {
-	settings: { title: "打开设置", description: "打开应用设置。" },
-	toggleEditMode: {
-		title: "切换编辑子对话模式",
-		description: "插入或关闭内联编辑区间。",
-	},
-	resetCharacterData: {
-		title: "清空全部角色数据",
-		description: "清空角色包、对话和插件；保留设置、模型和密钥。",
-	},
-} as const;
 
 export const translateLanguages = [
 	{ id: "auto", name: "自动检测" },

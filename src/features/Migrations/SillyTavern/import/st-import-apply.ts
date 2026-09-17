@@ -1,22 +1,20 @@
 import { normalizeResourcePath } from "@/features/Plugin/dataflow/pulse";
-import type { PluginData, ResourceTree } from "@/features/Plugin/dataflow/types";
-import { builtinSlotRegistry } from "@/features/Plugin/utils/import-converter";
-import {
-	slotContractPath,
-	type StImportFile,
-	type StImportPlan,
-} from "./st-import-plan";
+import type {
+	PluginData,
+	ResourceCondition,
+	ResourceTree,
+} from "@/features/Plugin/dataflow/types";
+import type { StImportFile, StImportPlan } from "./st-import-plan";
 
 export interface StImportWorldWriter {
 	exists(path: string): boolean;
 	mkdir(path: string): void;
 	write(path: string, content: string): void;
-	updateFolderMeta(path: string, patch: { parent?: string }): void;
 	updateFileMeta(
 		path: string,
 		patch: {
 			slot?: string;
-			condition?: string;
+			condition?: ResourceCondition[];
 			priority?: number;
 			resourceSelected?: boolean;
 		},
@@ -67,37 +65,18 @@ export function mergeImportPlanToPluginData(
 			current = current[part] as ResourceTree;
 		}
 		for (const [name, node] of Object.entries(plan.tree)) {
-			if (name === "localSlot") {
-				if (
-					!target.tree.localSlot ||
-					typeof target.tree.localSlot === "string"
-				) {
-					target.tree.localSlot = {};
-				}
-				deepMergeTrees(
-					target.tree.localSlot as ResourceTree,
-					node as ResourceTree,
-				);
+			if (typeof node === "string") {
+				current[name] = node;
 			} else {
-				if (typeof node === "string") {
-					current[name] = node;
-				} else {
-					if (!current[name] || typeof current[name] === "string") {
-						current[name] = {};
-					}
-					deepMergeTrees(current[name] as ResourceTree, node);
+				if (!current[name] || typeof current[name] === "string") {
+					current[name] = {};
 				}
+				deepMergeTrees(current[name] as ResourceTree, node);
 			}
 		}
 		for (const { path, meta } of plan.metaList) {
-			if (path.startsWith("/localSlot")) {
-				target.meta[path] = meta;
-			} else {
-				const remountedPath = normalizeResourcePath(
-					`${normalizedTarget}${path}`,
-				);
-				target.meta[remountedPath] = meta;
-			}
+			const remountedPath = normalizeResourcePath(`${normalizedTarget}${path}`);
+			target.meta[remountedPath] = meta;
 		}
 	}
 	return target;
@@ -152,23 +131,19 @@ function writeFile(
 			? file.content
 			: JSON.stringify(file.content, null, 2),
 	);
-	const slot = file.slotId ? ensureLocalSlot(writer, file.slotId) : undefined;
+	const slot = file.slot;
 	writer.updateFileMeta(path, {
 		...(slot ? { slot } : {}),
-		...(file.condition ? { condition: file.condition } : {}),
+		...(file.condition
+			? {
+					condition: [
+						{ type: "custom", param: { code: file.condition }, link: null },
+					],
+				}
+			: {}),
 		...(file.priority !== undefined ? { priority: file.priority } : {}),
 		resourceSelected: file.resourceSelected !== false,
 	});
-}
-
-function ensureLocalSlot(writer: StImportWorldWriter, slotId: string) {
-	const root = "/localSlot";
-	if (!writer.exists(root)) writer.mkdir(root);
-	const path = join(root, slotId);
-	if (!writer.exists(path)) writer.mkdir(path);
-	const contract = slotContractPath(slotId);
-	if (contract) writer.updateFolderMeta(path, { parent: contract });
-	return path;
 }
 
 function uniquePath(

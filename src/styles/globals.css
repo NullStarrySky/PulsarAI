@@ -34,6 +34,16 @@ html.native-window-dragging #app {
 	-webkit-app-region: no-drag;
 }
 
+.glass-effect-frame {
+	background-color: color-mix(in srgb, var(--zen-frame-bg, var(--background)) 94%, transparent);
+}
+
+.glass-effect-surface,
+.glass-effect-surface .app-content-surface {
+	background-color: color-mix(in srgb, var(--background) 92%, transparent);
+	backdrop-filter: blur(28px) saturate(140%);
+}
+
 @font-face {
 	font-family: "Fira Code";
 	src: url("../assets/fonts/fira-code.woff2") format("woff2");

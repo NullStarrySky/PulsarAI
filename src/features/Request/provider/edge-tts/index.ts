@@ -1,6 +1,5 @@
 import type { SpeechModelV4 } from "@ai-sdk/provider";
-import { emptyModels, param } from "../shared/definition";
-import type { ProviderRegistration } from "../shared/registration";
+import { emptyModels, param, type ProviderRegistration } from "../definition";
 import { synthesizeWithEdgeTts } from "./client";
 
 const model: SpeechModelV4 = {

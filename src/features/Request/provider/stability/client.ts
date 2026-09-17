@@ -1,5 +1,5 @@
 import { modelProxyFetch } from "../shared/custom-fetch";
-import type { GeneratedImage } from "../shared/image";
+import type { GeneratedImage } from "../../types";
 
 const STABILITY_API_KEY_NAME = "stability_API_KEY";
 const paths: Record<string, string> = {

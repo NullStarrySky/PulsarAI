@@ -9,15 +9,14 @@ import {
 	Switch,
 } from "@/components/fluid";
 import type { WindowCloseBehavior } from "@/features/Environment/defaults";
-import { useEnvironmentStore } from "@/features/Environment/store";
-import SettingGroup from "../../setting/SettingGroup.vue";
-import SettingItem from "../../setting/SettingItem.vue";
-import SettingPage from "../../setting/SettingPage.vue";
+import SettingGroup from "@/features/Environment/setting/SettingGroup.vue";
+import SettingItem from "@/features/Environment/setting/SettingItem.vue";
+import SettingPage from "@/features/Environment/setting/SettingPage.vue";
+import { useWindowLifecycleStore } from "@/features/UI/window-lifecycle-store";
 
 const compactMode = ref(false);
 const enableAnimations = ref(true);
-const store = useEnvironmentStore();
-const appearance = store.appearance;
+const store = useWindowLifecycleStore();
 
 function setCloseBehavior(value: unknown) {
 	if (value === "ask" || value === "exit" || value === "tray") {

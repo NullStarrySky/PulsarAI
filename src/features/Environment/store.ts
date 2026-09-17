@@ -1,17 +1,14 @@
 import { useMagicKeys, useStyleTag } from "@vueuse/core";
 import { defineStore } from "pinia";
 import { computed, ref, watch, watchEffect } from "vue";
-import { resetCharacterDataAction } from "@/features/Conversation/clear-data";
-import { toggleEditModeAction } from "@/features/Conversation/dataflow/activePathComposable";
 import { useRequestDefaults } from "@/features/Request/defaults";
 import { host } from "@/host";
 import {
 	type AppearanceSettings,
-	createImportedFont,
-	type EnvironmentSettingPage,
+	createUploadedFont,
+	type FontDefinition,
 	getBuiltInFonts,
 	getDefaultAppearance,
-	getDefaultHotkeys,
 	getDefaultRuntimePreferences,
 	getDefaultTranslateSettings,
 	getDefaultWebSearchSettings,
@@ -20,9 +17,12 @@ import {
 	type WebSearchProviderId,
 	type WebSearchResult,
 	type WebSearchSettings,
-	type WindowCloseBehavior,
 } from "./defaults";
-import { builtInSettingPages } from "./pages";
+import {
+	applyHotkeyBindings,
+	createEnvironmentHotkeys,
+	getHotkeyBindings,
+} from "./hotkeys";
 import { builtInThemes, normalizeImportedTheme } from "./theme/theme-registry";
 import { applyTheme, isCssColorDark } from "./utils/theme-dom";
 import {
@@ -63,6 +63,12 @@ export const useEnvironmentStore = defineStore("environment", () => {
 	const appearanceVarsStyle = useStyleTag("", {
 		id: "pulsarai-appearance-vars",
 	});
+	watch(
+		() => appearance.value.glassEffectEnabled,
+		(enabled) =>
+			void host.desktop?.window.setBackgroundMaterial(enabled ? "mica" : "none"),
+		{ immediate: true },
+	);
 
 	function importThemeCss(css: string) {
 		if (!css.trim()) throw new Error("主题 CSS 不能为空。");
@@ -75,13 +81,19 @@ export const useEnvironmentStore = defineStore("environment", () => {
 		return theme;
 	}
 
-	function importFont(name: string, family: string) {
-		const font = createImportedFont(name, family);
+	async function importFont(file: File) {
+		if (!/\.(woff2?|ttf|otf)$/i.test(file.name)) {
+			throw new Error("请选择 WOFF、WOFF2、TTF 或 OTF 字体文件。");
+		}
+		const name = file.name.replace(/\.[^.]+$/, "");
+		const font = createUploadedFont(name, await readFileAsDataUrl(file));
+		await loadFont(font);
 		appearance.value.customFonts = [
 			...appearance.value.customFonts.filter((item) => item.id !== font.id),
 			font,
 		];
 		appearance.value.fontId = font.id;
+		return font;
 	}
 
 	function applyAppearance() {
@@ -94,6 +106,7 @@ export const useEnvironmentStore = defineStore("environment", () => {
 			.map((theme) => theme.css ?? "")
 			.join("\n\n");
 		customCssStyle.css.value = appearance.value.customCss;
+		void loadFont(activeFont.value);
 
 		appearanceVarsStyle.css.value = `
 :root {
@@ -131,7 +144,7 @@ body {
 	}
 
 	/* Group 2: 快捷键 (Hotkeys) */
-	const hotkeys = ref<Record<string, string>>(getDefaultHotkeys());
+	const hotkeys = ref(createEnvironmentHotkeys());
 
 	/* Group 4: 网络搜索 (WebSearch) */
 	const webSearchSettings = ref<WebSearchSettings>(
@@ -184,64 +197,13 @@ body {
 		() => {
 			void host.config.set("appearance", appearance.value);
 			applyAppearance();
-			void host.config.set("hotkeys", hotkeys.value);
+			void host.config.set("hotkeys", getHotkeyBindings(hotkeys.value));
 			void host.config.set("webSearch.settings", webSearchSettings.value);
 			void host.config.set("translate", translateSettings.value);
 			void host.config.set("runtime", runtime.value);
 		},
 		{ deep: true },
 	);
-
-	/* Group 7: 窗口与设置生命周期 (Window & Lifecycle) */
-	const settingsOpen = ref(false);
-	const immersiveConversation = ref(false);
-	const closeBehavior = ref<WindowCloseBehavior>("ask");
-	const closePromptOpen = ref(false);
-	const rememberCloseChoice = ref(false);
-
-	function setCloseBehavior(value: WindowCloseBehavior) {
-		closeBehavior.value = value;
-		void host.config.set("windowCloseBehavior", value);
-	}
-
-	async function handleCloseRequest() {
-		if (closeBehavior.value === "ask") {
-			rememberCloseChoice.value = false;
-			closePromptOpen.value = true;
-			return;
-		}
-		await applyCloseChoice(closeBehavior.value);
-	}
-
-	function dismissClosePrompt() {
-		closePromptOpen.value = false;
-		rememberCloseChoice.value = false;
-	}
-
-	async function chooseCloseBehavior(
-		choice: Exclude<WindowCloseBehavior, "ask">,
-	) {
-		if (rememberCloseChoice.value) setCloseBehavior(choice);
-		closePromptOpen.value = false;
-		rememberCloseChoice.value = false;
-		await applyCloseChoice(choice);
-	}
-
-	async function applyCloseChoice(choice: Exclude<WindowCloseBehavior, "ask">) {
-		if (choice === "tray") await host.desktop?.window.hide();
-		else await host.desktop?.window.close();
-	}
-
-	/* Group 8: 设置页面注册表 (Setting Pages) */
-	const settingPages = ref<EnvironmentSettingPage[]>(builtInSettingPages);
-
-	function registerSettingPage(page: EnvironmentSettingPage) {
-		const index = settingPages.value.findIndex(
-			(item) => item.meta.id === page.meta.id,
-		);
-		if (index < 0) settingPages.value.push(page);
-		else settingPages.value[index] = page;
-	}
 
 	/* Shared config facade */
 	const config = host.config;
@@ -254,24 +216,21 @@ body {
 			storedWebSearch,
 			storedTranslate,
 			storedRuntime,
-			storedCloseBehavior,
 		] = await Promise.all([
 			host.config.get<AppearanceSettings>("appearance"),
-			host.config.get<Record<string, string>>("hotkeys"),
+			host.config.get<Record<string, string | null>>("hotkeys"),
 			host.config.get<WebSearchSettings>("webSearch.settings"),
 			host.config.get<TranslateState>("translate"),
 			host.config.get<RuntimePreferences>("runtime"),
-			host.config.get<WindowCloseBehavior>("windowCloseBehavior"),
 		]);
 
 		if (storedAppearance) Object.assign(appearance.value, storedAppearance);
-		if (storedHotkeys) Object.assign(hotkeys.value, storedHotkeys);
+		if (storedHotkeys) applyHotkeyBindings(hotkeys.value, storedHotkeys);
 		if (storedWebSearch)
 			Object.assign(webSearchSettings.value, storedWebSearch);
 		if (storedTranslate)
 			Object.assign(translateSettings.value, storedTranslate);
 		if (storedRuntime) Object.assign(runtime.value, storedRuntime);
-		if (storedCloseBehavior) closeBehavior.value = storedCloseBehavior;
 		await useRequestDefaults().initialize();
 
 		applyAppearance();
@@ -301,24 +260,36 @@ body {
 		/* Translate actions */
 		translateText,
 
-		/* Window & dialog state & actions */
-		settingsOpen,
-		immersiveConversation,
-		closeBehavior,
-		closePromptOpen,
-		rememberCloseChoice,
-		settingPages,
-		registerSettingPage,
-		setCloseBehavior,
-		handleCloseRequest,
-		dismissClosePrompt,
-		chooseCloseBehavior,
-
 		/* Shared config facade */
 		config,
 		initialize,
 	};
 });
+
+const loadedFontIds = new Set<string>();
+
+async function loadFont(font: FontDefinition): Promise<void> {
+	if (
+		!font.source ||
+		loadedFontIds.has(font.id) ||
+		typeof document === "undefined"
+	)
+		return;
+	const face = new FontFace(font.name, `url(${JSON.stringify(font.source)})`);
+	const loadedFace = await face.load();
+	document.fonts.add(loadedFace);
+	loadedFontIds.add(font.id);
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onerror = () =>
+			reject(reader.error ?? new Error(`无法读取字体：${file.name}`));
+		reader.onload = () => resolve(String(reader.result));
+		reader.readAsDataURL(file);
+	});
+}
 
 /* -------------------------------------------------------------------------- */
 /*                           Composable & Functions                           */
@@ -328,16 +299,11 @@ export function useEnvironmentHotkeys() {
 	const environment = useEnvironmentStore();
 	const keys = useMagicKeys({ passive: false });
 	watchEffect((onCleanup) => {
-		const bindings = [
-			[environment.hotkeys.settings, () => (environment.settingsOpen = true)],
-			[environment.hotkeys.toggleEditMode, toggleEditModeAction],
-			[environment.hotkeys.resetCharacterData, resetCharacterDataAction],
-		] as const;
-		const stops = bindings.map(([hotkey, run]) =>
+		const stops = Object.values(environment.hotkeys).map((hotkey) =>
 			watch(
-				() => (hotkey ? keys[hotkey]?.value : false),
+				() => (hotkey.keyBinding ? keys[hotkey.keyBinding]?.value : false),
 				(pressed) => {
-					if (pressed) void run();
+					if (pressed) void hotkey.action();
 				},
 			),
 		);

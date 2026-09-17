@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { RotateCcw, X } from "@/lib/phosphor-icons";
 
 defineProps<{
-	modelValue: string;
+	modelValue: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -36,7 +36,7 @@ function record(event: KeyboardEvent) {
   <div class="flex w-full items-center justify-end gap-2">
     <Input
       class="h-9 min-w-0 flex-1 text-right font-mono"
-      :model-value="modelValue"
+      :model-value="modelValue ?? ''"
       placeholder="点击后按下快捷键"
       readonly
       @keydown="record"

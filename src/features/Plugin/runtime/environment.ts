@@ -1,19 +1,15 @@
-import type { ModelMessage } from "ai";
 import { toValue } from "vue";
-import { mediaLink } from "@/features/Plugin/media/media-link";
 import { proxyFetch } from "@/features/Environment/utils/proxy-fetch";
-import {
-	resolveSandboxMessagesAsync,
-	resolveSandboxTextAsync,
-	type SandboxEnvironment,
-} from "@/features/Plugin/runtime/sandbox";
+import { mediaLink } from "@/features/Plugin/media/media-link";
+import type { SandboxEnvironment } from "@/features/Plugin/runtime/sandbox";
 import { generateImageToPath } from "@/features/Request/ai-sdk";
 import { resolveResourcePath } from "../dataflow/pulse";
-import type { PluginData, ResourcePath } from "../dataflow/types";
+import type { ResourcePath } from "../dataflow/types";
 import { type FileApiOptions, useFileApi } from "../dataflow/use-file-api";
 import { useActivePluginData } from "../dataflow/use-plugin-data";
 import { useSlot } from "../dataflow/use-slot";
 import { importResource } from "../resources/import";
+import { askUser } from "./ask-user";
 import { PluginLogger } from "./logger";
 import { extractYAMLFormatter } from "./yaml-formatter";
 
@@ -21,12 +17,6 @@ export interface PluginEnvironmentOptions extends FileApiOptions {
 	sourcePath: ResourcePath;
 	context?: SandboxEnvironment;
 	logger?: PluginLogger;
-}
-
-function isModelMessage(value: unknown): value is ModelMessage {
-	return Boolean(
-		value && typeof value === "object" && "role" in value && "content" in value,
-	);
 }
 
 function builtinDocs(id?: string) {
@@ -67,48 +57,39 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 	function importAt(
 		request: string | string[],
 		from: ResourcePath,
+		extra: SandboxEnvironment = {},
 	): unknown | Promise<unknown> {
 		if (Array.isArray(request)) {
-			const values = request.map((path) => importAt(path, from));
+			const values = request.map((path) => importAt(path, from, extra));
 			return values.some((value) => value instanceof Promise)
 				? Promise.all(values).then((items) => items.flat())
 				: values.flat();
 		}
 		const path = resolve(from, request);
-		if (importRegistry.has(path)) return importRegistry.get(path);
+		const cacheable = Object.keys(extra).length === 0;
+		if (cacheable && importRegistry.has(path)) return importRegistry.get(path);
 		if (importing.has(path)) throw new Error(`循环导入：${path}`);
-		const child = scoped(path);
+		const child = { ...scoped(path), ...extra };
 		logger.append(`导入文件：${path}`, 0, "import", path);
 		importing.add(path);
 		try {
 			const value = importResource(data(), path, child);
-			importRegistry.set(path, value);
+			if (cacheable) importRegistry.set(path, value);
 			return value;
 		} finally {
 			importing.delete(path);
 		}
 	}
-	async function parseAt(
+	function parseAt(
 		request: string | string[],
 		from: ResourcePath,
 		extra: SandboxEnvironment = {},
-	) {
-		const environment = { ...scoped(from), ...extra };
-		const imported = await importAt(request, from);
-		if (typeof imported === "string")
-			return resolveSandboxTextAsync(imported, [environment], { logger });
-		if (Array.isArray(imported)) {
-			if (imported.every(isModelMessage))
-				return resolveSandboxMessagesAsync(imported, [environment], { logger });
-			return Promise.all(
-				imported.map((item) =>
-					typeof item === "string"
-						? resolveSandboxTextAsync(item, [environment], { logger })
-						: item,
-				),
+	): unknown | Promise<unknown> {
+		if (Array.isArray(request))
+			return Promise.all(request.map((path) => parseAt(path, from, extra))).then(
+				(values) => values.flat(),
 			);
-		}
-		return imported;
+		return importAt(request, from, extra);
 	}
 	function scoped(from: ResourcePath): SandboxEnvironment {
 		const absolute = (path: string) => resolve(from, path);
@@ -222,6 +203,7 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 		read_docs: builtinDocs,
 		generateImageToPath,
 		media: Object.freeze({ link: mediaLink }),
+		askUser,
 		fetch: proxyFetch,
 		now: () => new Date().toISOString(),
 	});
@@ -231,44 +213,6 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 		enumerable: false,
 		writable: false,
 	});
-	function registerCustomTools() {
-		const collisions = new Set(Object.keys(root));
-		const paths: ResourcePath[] = [];
-		const collect = (tree: PluginData["tree"], prefix = "/") => {
-			for (const [name, node] of Object.entries(tree)) {
-				const path = prefix === "/" ? `/${name}` : `${prefix}/${name}`;
-				if (typeof node === "string") paths.push(path);
-				else collect(node, path);
-			}
-		};
-		const active = activeFiletree.value;
-		if (!active) throw new Error("Plugin 资源尚未加载。");
-		collect(active.tree);
-		const tools = paths
-			.flatMap((path) => {
-				const match = /\/tools\/([^/]+)\/tool\.js$/i.exec(path);
-				if (!match || !files.exists(path.replace(/tool\.js$/i, "prompt.md")))
-					return [];
-				const meta = data().meta[path];
-				return meta && "priority" in meta
-					? [{ path, name: match[1]!, priority: meta.priority }]
-					: [];
-			})
-			.sort(
-				(left, right) =>
-					right.priority - left.priority || left.path.localeCompare(right.path),
-			);
-		for (const tool of tools) {
-			if (collisions.has(tool.name))
-				throw new Error(`工具函数名称与 ctx 冲突：${tool.name}`);
-			const callable = importAt(tool.path, tool.path);
-			if (typeof callable !== "function")
-				throw new Error(`工具默认导出必须是函数：${tool.path}`);
-			root[tool.name] = callable;
-			collisions.add(tool.name);
-		}
-		return tools.map(({ name, path }) => ({ name, path }));
-	}
 	function dispose() {
 		importRegistry.clear();
 		importing.clear();
@@ -283,6 +227,5 @@ export function createPluginEnvironment(options: PluginEnvironmentOptions) {
 		importRegistry,
 		dispose,
 		parseAt,
-		registerCustomTools,
 	};
 }

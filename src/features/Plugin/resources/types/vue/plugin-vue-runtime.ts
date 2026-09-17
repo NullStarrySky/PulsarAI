@@ -2,10 +2,9 @@ import * as Vue from "vue";
 import { type Component, defineAsyncComponent, markRaw } from "vue";
 import { loadModule } from "vue3-sfc-loader";
 import * as FluidComponents from "@/components/fluid";
-import * as DatabaseService from "@/features/Database/database-service";
 import { host } from "@/host";
 import * as PhosphorIcons from "@/lib/phosphor-icons";
-import type { ResourceFile } from "../../resource-types";
+import type { ResourceFile } from "../../../dataflow/types";
 
 export interface PluginVueRuntimeResult {
 	component: Component | null;
@@ -18,7 +17,6 @@ async function loadPluginVueModule(source: string, filename = "component.vue") {
 			vue: Vue,
 			"@/lib/phosphor-icons": PhosphorIcons,
 			"@/components/fluid": FluidComponents,
-			"@/features/Database/database-service": DatabaseService,
 			"@/host": { host },
 		} as Record<string, unknown>,
 		getFile: async (url: string) =>

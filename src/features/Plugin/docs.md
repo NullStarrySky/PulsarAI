@@ -11,12 +11,11 @@ Every document is a folder tree. Folder and file keys are stable node IDs;
 name path is a convenience lookup and must resolve exactly one node; use
 `/self/$<id>` or `/global/$<source-id>/$<id>` when a stable reference is
 needed. A file owns its content, slot reference, selection
-state, priority and optional condition. Folders directly below `/self/slot/`
-are global slot contracts. Every source root (`/self/` and each
-`/global/<source>/`) owns a `localSlot/` tree; its descendant folders define
-local slots and may point at a global contract through their stable `parent`
-path. A file stores its local-slot ID path in `slot`, so renaming either folder
-does not invalidate membership.
+state, priority and optional condition. The local source's `global.slot.json`
+defines the complete slot tree. Every source root owns a `local.slot.json`
+whose leaf paths declare which of those slots that source may contribute to.
+A file stores one logical slot path such as `/chat`; there is no slot folder or
+folder metadata.
 
 `usePluginData()` routes the active message path's Pulses to their owning local
 or global source, replays every source independently, and mounts all global
@@ -75,11 +74,10 @@ resource's own source root. There is no `@pluginId/...` syntax.
 `PluginAssetTreePanel` renders the same World through the shared generic file
 tree:
 
-- Assets: physical `/global` and `/self` trees, including each `localSlot/`.
-- Slots: global contracts with their contributed resources, independent of
-  source.
-- Sources: source folder → `slot` (the source's global-slot contributions)
-  and `localSlot` (its local definitions) → local slot → resource.
+- Assets: physical local and `/global` trees, including the slot JSON files.
+- Slots: global slot definitions with their contributed resources, independent
+  of source.
+- Sources: source folder → declared logical slots → resource.
 
 Only Slots and Sources resource rows receive a selection switch and its hover
 icon treatment; Assets stays a pure filesystem view. Slot icons override the
@@ -104,8 +102,10 @@ in the host media container. `useWorld.remove` remains an ordinary World-file
 operation and intentionally does not delete that host file. Agent code receives
 `generateImageToPath(options)` alongside its existing Image Generation options:
 it writes the first generated image to `options.path` (or `temp` by default) and
-returns `Promise<string>` with the media ID. Use `media.link(id)` to emit the
-stored result in Markdown or an HTML media tag.
+returns `Promise<string>` with the media ID. Use `media.link(id)` directly in
+Markdown, for example `![generated image](media://<uuid>)`; the conversation
+renderer resolves that link through the host media container. It also works as
+the `src` of an HTML media tag.
 
 ## JavaScript modules and persistent state
 

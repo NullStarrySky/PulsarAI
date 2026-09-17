@@ -1,3 +1,10 @@
+import { normalizeResourcePath } from "@/features/Plugin/dataflow/pulse";
+import type {
+	FileMeta,
+	MetaMap,
+	ResourcePath,
+	ResourceTree,
+} from "@/features/Plugin/dataflow/types";
 import type {
 	LocalPluginMigrationArtifact,
 	MigratedLorebookEntry,
@@ -22,19 +29,6 @@ import type {
 	SillyTavernWorldbookSource,
 } from "../convert/source-types";
 
-import { normalizeResourcePath } from "@/features/Plugin/dataflow/pulse";
-import {
-	defaultFileMeta,
-	defaultFolderMeta,
-	type FileMeta,
-	type FolderMeta,
-	type MetaMap,
-	type ResourceMeta,
-	type ResourcePath,
-	type ResourceTree,
-} from "@/features/Plugin/dataflow/types";
-import { builtinSlotRegistry } from "@/features/Plugin/utils/import-converter";
-
 export type StImportKind =
 	| "character"
 	| "worldbook"
@@ -47,8 +41,8 @@ export type StImportKind =
 export interface StImportFile {
 	path: string;
 	content: unknown;
-	/** Builtin global slot the file contributes through (character, user, before_char, after_char, document, depth:N, REGEX, chat). */
-	slotId?: string;
+	/** Explicit logical slot path in global.slot.json. */
+	slot?: ResourcePath;
 	condition?: string;
 	priority?: number;
 	resourceSelected?: boolean;
@@ -57,7 +51,7 @@ export interface StImportFile {
 export interface StImportBundle {
 	tree: ResourceTree;
 	meta: MetaMap;
-	metaList: Array<{ path: ResourcePath; meta: ResourceMeta }>;
+	metaList: Array<{ path: ResourcePath; meta: FileMeta }>;
 }
 
 export interface StImportPlan {
@@ -69,7 +63,7 @@ export interface StImportPlan {
 	files: StImportFile[];
 	tree: ResourceTree;
 	meta: MetaMap;
-	metaList: Array<{ path: ResourcePath; meta: ResourceMeta }>;
+	metaList: Array<{ path: ResourcePath; meta: FileMeta }>;
 	diagnostics: string[];
 	/** Character card extras consumed by the package import flow. */
 	character?: { name: string; description: string; iconDataUrl?: string };
@@ -230,20 +224,6 @@ function isClearlyStResource(value: unknown, kind: StImportKind) {
 		: "chat_completion_source" in value;
 }
 
-export function slotContractPath(id: string): string | undefined {
-	const slot = builtinSlotRegistry.find((item) => item.id === id);
-	if (!slot) return undefined;
-	const parts = [slot.name];
-	let parentId = slot.parentId;
-	while (parentId) {
-		const parent = builtinSlotRegistry.find((item) => item.id === parentId);
-		if (!parent) break;
-		parts.unshift(parent.name);
-		parentId = parent.parentId;
-	}
-	return `/slot/${parts.join("/")}`;
-}
-
 export function createImportBundle(
 	files: StImportFile[],
 	name: string,
@@ -251,9 +231,9 @@ export function createImportBundle(
 ): StImportBundle {
 	const tree: ResourceTree = {};
 	const meta: MetaMap = {};
-	const metaList: Array<{ path: ResourcePath; meta: ResourceMeta }> = [];
+	const metaList: Array<{ path: ResourcePath; meta: FileMeta }> = [];
 
-	const addMeta = (path: ResourcePath, itemMeta: ResourceMeta) => {
+	const addMeta = (path: ResourcePath, itemMeta: FileMeta) => {
 		meta[path] = itemMeta;
 		metaList.push({ path, meta: itemMeta });
 	};
@@ -261,16 +241,11 @@ export function createImportBundle(
 	const ensureFolder = (absPath: ResourcePath): ResourceTree => {
 		const parts = absPath.split("/").filter(Boolean);
 		let current = tree;
-		let currentPath = "";
 		for (const part of parts) {
-			currentPath = `${currentPath}/${part}`;
 			const existing = current[part];
 			if (!existing || typeof existing === "string") {
 				const nextFolder: ResourceTree = {};
 				current[part] = nextFolder;
-				if (!meta[currentPath]) {
-					addMeta(currentPath, defaultFolderMeta());
-				}
 				current = nextFolder;
 			} else {
 				current = existing;
@@ -296,27 +271,15 @@ export function createImportBundle(
 		const fileMeta: FileMeta = {
 			resourceSelected: file.resourceSelected !== false,
 			priority: file.priority ?? 100,
-			...(file.condition ? { condition: file.condition } : {}),
+			...(file.condition
+				? {
+						condition: [
+							{ type: "custom", param: { code: file.condition }, link: null },
+						],
+					}
+				: {}),
+			...(file.slot ? { slot: file.slot } : {}),
 		};
-
-		if (file.slotId) {
-			const slotFolder = `/localSlot/${file.slotId}`;
-			fileMeta.slot = slotFolder;
-
-			const localSlotTree = ensureFolder("/localSlot");
-			if (
-				!localSlotTree[file.slotId] ||
-				typeof localSlotTree[file.slotId] === "string"
-			) {
-				localSlotTree[file.slotId] = {};
-				const contract = slotContractPath(file.slotId);
-				const folderMeta: FolderMeta = {
-					selectionMode: "none",
-					...(contract ? { parent: contract } : {}),
-				};
-				addMeta(slotFolder, folderMeta);
-			}
-		}
 
 		addMeta(absPath, fileMeta);
 	}
@@ -438,7 +401,7 @@ function characterPlan(
 	files.push({
 		path: "info.md",
 		content: markdown.trim(),
-		slotId: "character",
+		slot: "/role/character",
 	});
 	appendLorebookFiles(files, artifact.embeddedLorebooks);
 	if (artifact.regexRules.length) files.push(regexFile(artifact.regexRules));
@@ -482,7 +445,7 @@ function worldbookPlan(
 	const artifact = conversion.artifacts.find(
 		(item) => item.kind === "worldbook",
 	);
-	if (!artifact || artifact.kind !== "worldbook") {
+	if (artifact?.kind !== "worldbook") {
 		throw new Error("世界书转换失败。");
 	}
 	const files: StImportFile[] = [];
@@ -535,14 +498,14 @@ function presetPlan(
 					content: message.content,
 				})),
 			},
-			slotId: "chat",
+			slot: "/generation/chat",
 		},
 	];
 	for (const [index, document] of artifact.depthDocuments.entries()) {
 		files.push({
 			path: `depth/${String(index + 1).padStart(3, "0")}-${safeName(document.name)}.md`,
 			content: document.content,
-			slotId: `depth:${Math.min(document.depth, 4)}`,
+			slot: `/depth/${Math.min(document.depth, 4)}`,
 			priority: document.order,
 			resourceSelected: document.enabled,
 		});
@@ -614,7 +577,7 @@ function personaPlan(
 			{
 				path: `${safeName(name)}.md`,
 				content: markdown,
-				slotId: "user",
+				slot: "/role/user",
 			},
 		],
 		diagnostics: artifact?.diagnostics.map((item) => item.message) ?? [],
@@ -629,7 +592,7 @@ function appendLorebookFiles(
 		files.push({
 			path: `lorebooks/${String(index + 1).padStart(3, "0")}-${safeName(lorebookEntry.name)}.md`,
 			content: lorebookEntry.content,
-			slotId: clampDepthSlot(lorebookEntry.insertionTarget),
+			slot: clampDepthSlot(lorebookEntry.insertionTarget),
 			condition: lorebookEntry.condition,
 			priority: lorebookEntry.order,
 			resourceSelected: lorebookEntry.enabled,
@@ -638,14 +601,19 @@ function appendLorebookFiles(
 }
 
 function regexFile(rules: MigratedRegexRule[]): StImportFile {
-	return { path: "regex.json", content: rules, slotId: "REGEX" };
+	return { path: "regex.json", content: rules, slot: "/generation/REGEX" };
 }
 
-/** 内置深度插槽只有 0-4，更深的条目收敛到 depth:4。 */
+/** 内置深度插槽只有 0-4，更深的条目收敛到 /depth/4。 */
 function clampDepthSlot(insertionTarget: string) {
 	const match = /^depth:(\d+)$/.exec(insertionTarget);
-	if (!match) return insertionTarget;
-	return `depth:${Math.min(Number(match[1]), 4)}`;
+	if (match) return `/depth/${Math.min(Number(match[1]), 4)}`;
+	const knownSlots: Record<string, string> = {
+		before_char: "/context/before_char",
+		after_char: "/context/after_char",
+		document: "/context/document",
+	};
+	return knownSlots[insertionTarget] ?? `/${insertionTarget}`;
 }
 
 function singleSnapshot(): SillyTavernSourceSnapshot {

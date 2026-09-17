@@ -1,5 +1,4 @@
 import { computed, type MaybeRef, unref } from "vue";
-import { markContainerDirty } from "../containers";
 import {
 	isTextMediaType,
 	mediaLink,
@@ -7,10 +6,11 @@ import {
 	writeMedia,
 } from "@/features/Plugin/media/media-link";
 import { currentMessage } from "../activePathComposable/message-service";
-import type { ChatContainer, FilePart, ReferencePart } from "../types";
+import { markContainerDirty } from "../containers";
+import type { ConversationContainer, FilePart, ReferencePart } from "../types";
 
 export function useContainerAttachments(
-	source: MaybeRef<ChatContainer | null | undefined>,
+	source: MaybeRef<ConversationContainer | null | undefined>,
 ) {
 	const container = computed(() => unref(source));
 	const message = computed(() => currentMessage(container.value));
@@ -26,7 +26,7 @@ export function useContainerAttachments(
 	);
 	function markDirty() {
 		if (container.value)
-			markContainerDirty(container.value.conversationid, container.value.id);
+			markContainerDirty(container.value.conversationId, container.value.id);
 	}
 	async function fromFile(file: File): Promise<FilePart> {
 		const mediaType = file.type || "application/octet-stream";

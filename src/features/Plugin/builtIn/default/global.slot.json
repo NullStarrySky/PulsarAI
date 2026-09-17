@@ -1,0 +1,39 @@
+{
+	"role": {
+		"user": { "selectionMode": "none" },
+		"character": { "selectionMode": "none" }
+	},
+	"context": {
+		"before_char": { "selectionMode": "none" },
+		"after_char": { "selectionMode": "none" },
+		"document": { "selectionMode": "none" }
+	},
+	"generation": {
+		"generatePath": { "selectionMode": "single", "icon": "play" },
+		"CTX_BUILD": { "selectionMode": "single" },
+		"CTX_PROCESS_BEFORE_REGEX": { "selectionMode": "none" },
+		"REGEX": { "selectionMode": "none", "icon": "regex" },
+		"chat": { "selectionMode": "single", "icon": "messages-square" }
+	},
+	"depth": {
+		"0": { "selectionMode": "none" },
+		"1": { "selectionMode": "none" },
+		"2": { "selectionMode": "none" },
+		"3": { "selectionMode": "none" },
+		"4": { "selectionMode": "none" }
+	},
+	"resource": {
+		"COMMAND": { "selectionMode": "none", "icon": "terminal" },
+		"MODE": { "selectionMode": "none", "icon": "pencil-line" },
+		"background": { "selectionMode": "single", "icon": "image" }
+	},
+	"document-library": {
+		"toolFunction": { "selectionMode": "none", "icon": "wrench" },
+		"skill": { "selectionMode": "none", "icon": "book-open" }
+	},
+	"panel": {
+		"panel-top": { "selectionMode": "none", "icon": "panel-top" },
+		"panel-left": { "selectionMode": "none", "icon": "panel-left" },
+		"panel-right": { "selectionMode": "none", "icon": "panel-right" }
+	}
+}

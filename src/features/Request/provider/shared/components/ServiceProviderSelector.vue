@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Check, ChevronDown, Search } from "@/lib/phosphor-icons";
-import type { ServiceProviderView } from "../service-provider";
+import type { ServiceProviderView } from "@/features/Request/types";
 import ProviderAvatar from "./ProviderAvatar.vue";
 
 const props = defineProps<{

@@ -1,10 +1,10 @@
 import { push } from "notivue";
 import { computed, type MaybeRef, unref } from "vue";
 import { currentMessage } from "../activePathComposable/message-service";
-import type { ChatContainer } from "../types";
+import type { ConversationContainer } from "../types";
 
 export function useContainerActions(
-	source: MaybeRef<ChatContainer | null | undefined>,
+	source: MaybeRef<ConversationContainer | null | undefined>,
 ) {
 	const content = computed(() => currentMessage(unref(source))?.content ?? "");
 	async function copy() {

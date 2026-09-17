@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import SettingForm from "@/features/Environment/setting/SettingForm.vue";
 import SettingFormField from "@/features/Environment/setting/SettingFormField.vue";
 import ServiceProviderSettingsLayout from "@/features/Request/provider/shared/components/ServiceProviderSettingsLayout.vue";
-import type { ServiceProviderView } from "@/features/Request/provider/shared/service-provider";
+import type { ServiceProviderView } from "@/features/Request/types";
 import { host } from "@/host";
 import {
 	EXA_API_KEY_SECRET,

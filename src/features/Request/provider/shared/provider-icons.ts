@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 
-const iconModules = import.meta.glob("./icons/{dark,light}/*.png", {
+const iconModules = import.meta.glob("../../icons/{dark,light}/*.png", {
 	eager: true,
 	query: "?url",
 	import: "default",

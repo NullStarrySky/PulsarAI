@@ -1,21 +1,26 @@
 import { executeSandboxCode } from "@/features/Plugin/runtime/sandbox";
+import type { ResourceCondition } from "../dataflow/types";
 
 export type ResourceConditionFunction =
 	| "include"
 	| "exclude"
 	| "probability"
 	| "custom";
-export type ResourceConditionRow = {
-	id: string;
-	functionName: ResourceConditionFunction;
-	value: string;
-};
 export const resourceConditionDefinitions = [
 	{ id: "include", label: "包含", placeholder: "关键词或 /正则/" },
 	{ id: "exclude", label: "不包含", placeholder: "关键词或 /正则/" },
 	{ id: "probability", label: "概率", placeholder: "百分比" },
 	{ id: "custom", label: "自定义", placeholder: "JavaScript 条件" },
 ] as const;
+
+export function createResourceCondition(
+	type: ResourceConditionFunction = "include",
+): ResourceCondition {
+	if (type === "probability")
+		return { type, param: { percentage: 100 }, link: null };
+	if (type === "custom") return { type, param: { code: "" }, link: null };
+	return { type, param: { keyword: "", depth: 4 }, link: null };
+}
 
 function messageText(message: unknown) {
 	if (!message || typeof message !== "object") return "";
@@ -87,14 +92,31 @@ function createResourceConditionEnvironment(
 }
 
 export function evaluateResourceCondition(
-	source: string | undefined,
+	conditions: ResourceCondition[] | undefined,
 	environment: Record<string, unknown>,
 ) {
-	if (!source?.trim()) return true;
-	return Boolean(
-		executeSandboxCode(source, [
-			environment,
-			createResourceConditionEnvironment(environment.chat),
-		]),
-	);
+	const helpers = createResourceConditionEnvironment(environment.chat);
+	const evaluate = ({ type, param }: ResourceCondition) => {
+		if (type === "include") return helpers.include(param.keyword, param.depth);
+		if (type === "exclude") return helpers.exclude(param.keyword, param.depth);
+		if (type === "probability") return helpers.probability(param.percentage);
+		if (type === "custom")
+			return Boolean(
+				executeSandboxCode(String(param.code ?? ""), [environment, helpers]),
+			);
+		return false;
+	};
+	if (!conditions?.length) return true;
+	let result = evaluate(conditions[0]!);
+	for (let index = 0; index < conditions.length - 1; index += 1) {
+		const link = conditions[index]!.link;
+		const next = evaluate(conditions[index + 1]!);
+		result =
+			link === "or"
+				? result || next
+				: link === "xor"
+					? result !== next
+					: result && next;
+	}
+	return result;
 }

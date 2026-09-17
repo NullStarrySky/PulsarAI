@@ -1,6 +1,6 @@
 import { unzipSync } from "fflate";
 import { modelProxyFetch } from "../shared/custom-fetch";
-import type { GeneratedImage } from "../shared/image";
+import type { GeneratedImage } from "../../types";
 
 const NOVELAI_API_KEY_NAME = "novelai_IMAGE_API_KEY";
 const maxSeed = 4294967295;

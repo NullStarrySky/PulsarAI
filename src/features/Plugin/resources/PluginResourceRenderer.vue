@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { computed, ref, toValue, watch } from "vue";
+import { type Component, computed, ref, toValue, watch } from "vue";
 import { Image } from "@/components/ui/image";
-import ConversationComposerEditor from "@/features/Conversation/composer/ConversationComposerEditor.vue";
+import Composer from "@/features/Conversation/components/Composer.vue";
 import StPresetRenderer from "@/features/Migrations/SillyTavern/renderers/StPresetRenderer.vue";
 import StWorldbookRenderer from "@/features/Migrations/SillyTavern/renderers/StWorldbookRenderer.vue";
 import { resolveMediaUrl } from "@/features/Plugin/media/media-link";
-import { type ResourcePath, resourceType } from "../dataflow/types";
+import {
+	type ResourceFile,
+	type ResourcePath,
+	resourceType,
+} from "../dataflow/types";
 import type { FileApiOptions } from "../dataflow/use-file-api";
 import { useFileApi } from "../dataflow/use-file-api";
 import PluginTypeRenderer from "./PluginTypeRenderer.vue";
-import type { ResourceFile } from "./resource-types";
 import PluginCharacterEditor from "./types/character/PluginCharacterEditor.vue";
 import PluginChatEditor from "./types/chat/PluginChatEditor.vue";
 import PluginConfigEditor from "./types/config/PluginConfigEditor.vue";
@@ -18,7 +21,7 @@ import { pluginMediaSource, pluginMediaType } from "./types/media/plugin-media";
 import PluginRegexEditor from "./types/regex/PluginRegexEditor.vue";
 
 const props = defineProps<
-	FileApiOptions & { path: ResourcePath; preview: boolean }
+	FileApiOptions & { path: ResourcePath; preview: boolean; imported?: unknown }
 >();
 const files = useFileApi(props);
 const content = files.useFileContent(() => props.path);
@@ -31,6 +34,12 @@ const file = computed<ResourceFile>(
 		}) as ResourceFile,
 );
 const type = computed(() => resourceType(props.path));
+const importedComponent = computed<Component | null>(() =>
+	type.value === "component" &&
+	(typeof props.imported === "object" || typeof props.imported === "function")
+		? (props.imported as Component)
+		: null,
+);
 const mediaSource = computed(() => pluginMediaSource(content.value));
 const resolvedMediaSource = ref("");
 watch(
@@ -76,11 +85,12 @@ const isPreset = computed(() =>
 
 <template>
   <div class="h-full min-h-0 overflow-hidden">
-    <ConversationComposerEditor v-if="type === 'markdown' && preview" v-model="content" placeholder="输入 Markdown 内容" :enable-ai="false" :submit-on-enter="false" full-height class="h-full" />
+    <Composer v-if="type === 'markdown' && preview" v-model="content" placeholder="输入 Markdown 内容" :enable-ai="false" :submit-on-enter="false" full-height class="h-full" />
     <StWorldbookRenderer v-else-if="isWorldbook && preview" v-model="content" />
     <StPresetRenderer v-else-if="isPreset && preview" v-model="content" />
     <PluginCharacterEditor v-else-if="path === '/definition.package.json' && preview" :path="path" :filetree="filetree" :apply-pulse="applyPulse" />
     <PluginConfigEditor v-else-if="path.endsWith('/config.json') && preview" :path="path" :filetree="filetree" :apply-pulse="applyPulse" />
+    <component v-else-if="type === 'component' && preview && importedComponent" :is="importedComponent" :file="file" :path="path" :model-value="content" />
     <PluginTypeRenderer v-else-if="type === 'component' && preview" :file="file" v-model="content" />
     <PluginRegexEditor v-else-if="(path.endsWith('/regex.json') || path.endsWith('.regex.json')) && preview" :path="path" :filetree="filetree" :apply-pulse="applyPulse" />
     <PluginChatEditor v-else-if="type === 'chat' && preview" :path="path" :filetree="filetree" :apply-pulse="applyPulse" />

@@ -1,8 +1,8 @@
 import type { ModelMessage } from "ai";
 import type { MaybeRefOrGetter } from "vue";
 import type {
-	ChatContainer,
-	ChatMessage,
+	ConversationContainer,
+	ConversationMessage,
 } from "@/features/Conversation/dataflow/types";
 import type { SandboxEnvironment } from "@/features/Plugin/runtime/sandbox";
 import { createAgentResourceProvider } from "../agent/runtime/default-agent";
@@ -12,8 +12,8 @@ import type { PluginLogger } from "./logger";
 
 export interface RunWorldInput {
 	conversationId: string;
-	container: ChatContainer;
-	message: ChatMessage;
+	container: ConversationContainer;
+	message: ConversationMessage;
 	prompt: string;
 	chat: ModelMessage[];
 	filetree: MaybeRefOrGetter<PluginData | null>;
@@ -46,10 +46,10 @@ export async function runWorld(input: RunWorldInput): Promise<RunWorldResult> {
 			reply,
 		},
 	});
-	const entryPath = input.entryPath ?? built.slots.paths("generatePath")[0];
+	const entryPath =
+		input.entryPath ?? built.slots.paths("/generation/generatePath")[0];
 	if (!entryPath) throw new Error("没有已选中的生成流程。");
 	built.environment.sourcePath = entryPath;
-	built.registerCustomTools();
 	const agent = createAgentResourceProvider({ environment: built.environment });
 	built.environment.agent = agent;
 	built.environment.AGENT = agent;

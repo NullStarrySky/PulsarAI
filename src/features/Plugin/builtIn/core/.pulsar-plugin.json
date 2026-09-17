@@ -27,13 +27,19 @@
 			"treeOrder": 2,
 			"order": 100
 		},
+		"local.slot.json": {
+			"id": "builtin-local-slots",
+			"icon": "",
+			"treeOrder": 3,
+			"order": 100
+		},
 		"default.chat.json": {
 			"id": "builtin-default-chat",
 			"icon": "",
 			"treeOrder": 4,
 			"order": 100,
 			"insertion": {
-				"slot": "chat"
+				"slot": "/generation/chat"
 			}
 		},
 		"prompt.md": {
@@ -66,7 +72,7 @@
 			"treeOrder": 6,
 			"order": 100,
 			"insertion": {
-				"slot": "generatePath"
+				"slot": "/generation/generatePath"
 			}
 		},
 		"regex.json": {
@@ -75,7 +81,7 @@
 			"treeOrder": 7,
 			"order": 100,
 			"insertion": {
-				"slot": "REGEX"
+				"slot": "/generation/REGEX"
 			}
 		},
 		"context": {
@@ -89,7 +95,7 @@
 			"treeOrder": 0,
 			"order": 100,
 			"insertion": {
-				"slot": "CTX_BUILD"
+				"slot": "/generation/CTX_BUILD"
 			}
 		},
 		"context/before-regex.js": {
@@ -98,7 +104,7 @@
 			"treeOrder": 1,
 			"order": 100,
 			"insertion": {
-				"slot": "CTX_PROCESS_BEFORE_REGEX"
+				"slot": "/generation/CTX_PROCESS_BEFORE_REGEX"
 			}
 		},
 		"components": {
@@ -117,7 +123,7 @@
 			"treeOrder": 0,
 			"order": 100,
 			"insertion": {
-				"slot": "background"
+				"slot": "/resource/background"
 			}
 		},
 		"tools": {
@@ -136,7 +142,7 @@
 			"treeOrder": 0,
 			"order": 100,
 			"insertion": {
-				"slot": "COMMAND"
+				"slot": "/resource/COMMAND"
 			}
 		},
 		"action/process.js": {
@@ -145,7 +151,7 @@
 			"treeOrder": 1,
 			"order": 100,
 			"insertion": {
-				"slot": "COMMAND"
+				"slot": "/resource/COMMAND"
 			}
 		},
 		"goal": {

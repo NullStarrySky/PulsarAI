@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { Button, TabItem, Tabs, TabsList } from "@/components/fluid";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSyncStore } from "@/features/Database/dbsync-store";
@@ -7,7 +7,10 @@ import FileTree, {
 	type FileTreeNode,
 } from "@/features/Plugin/components/FileTree.vue";
 import { useFileApi } from "@/features/Plugin/dataflow/use-file-api";
-import { useEditablePluginData } from "@/features/Plugin/dataflow/use-plugin-data";
+import {
+	useCharacterList,
+	useEditablePluginData,
+} from "@/features/Plugin/dataflow/use-plugin-data";
 import { host } from "@/host";
 import { Code, Eye, FilePlus2, Play, Upload } from "@/lib/phosphor-icons";
 import StPresetRenderer from "../renderers/StPresetRenderer.vue";
@@ -22,9 +25,19 @@ import {
 } from "./st-import-plan";
 import { stTestRenderers } from "./st-test-renderers";
 
+const characters = useCharacterList();
 const sync = useSyncStore();
 void sync.init();
-const localPluginId = computed(() => [...sync.characters][0]?.id ?? "");
+const localPluginId = computed(
+	() => [...characters.characters.value][0]?.id ?? "",
+);
+watch(
+	localPluginId,
+	(id) => {
+		if (id) void sync.load({ type: "plugin", id });
+	},
+	{ immediate: true },
+);
 const workspace = useEditablePluginData(localPluginId);
 const world = useFileApi(workspace);
 const source = ref<StResourceFile | null>(null);
@@ -128,7 +141,10 @@ const planTreeNodes = computed<FileTreeNode[]>(() => {
 	if (!plan.value) return [];
 	const { tree, meta } = plan.value;
 
-	function treeToNodes(currentTree: Record<string, any>, prefix = ""): FileTreeNode[] {
+	function treeToNodes(
+		currentTree: Record<string, any>,
+		prefix = "",
+	): FileTreeNode[] {
 		const list: FileTreeNode[] = [];
 		for (const [name, node] of Object.entries(currentTree)) {
 			const fullPath = prefix ? `${prefix}/${name}` : name;
@@ -158,7 +174,7 @@ const planTreeNodes = computed<FileTreeNode[]>(() => {
 					type: "file",
 					icon,
 					suffix: fileMeta?.slot
-						? `slot: ${fileMeta.slot.replace("/localSlot/", "")}`
+						? `slot: ${fileMeta.slot.slice(1)}`
 						: undefined,
 					data: { content: node, path: absPath },
 				});

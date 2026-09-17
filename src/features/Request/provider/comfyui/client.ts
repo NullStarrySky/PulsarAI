@@ -1,5 +1,5 @@
 import { modelProxyFetch } from "../shared/custom-fetch";
-import type { GeneratedImage } from "../shared/image";
+import type { GeneratedImage } from "../../types";
 
 const COMFYUI_RUNPOD_API_KEY_NAME = "comfyui_RUNPOD_API_KEY";
 type ComfyUISettings = {

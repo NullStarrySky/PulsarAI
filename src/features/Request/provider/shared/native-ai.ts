@@ -31,7 +31,6 @@ import type {
 	TranscriptionModel,
 } from "ai";
 import { modelProxyFetch } from "./custom-fetch";
-import { HuggingFaceImageModel } from "./huggingface-image-model";
 
 export type HydratableModel =
 	| string
@@ -147,10 +146,6 @@ const providerConfigs: Record<string, ProviderHydrationConfig> = {
 
 const providerBuilders: Record<string, ProviderBuilder> = {
 	...nativeProviderBuilders,
-	huggingface: (config) => ({
-		image: (modelId: string) =>
-			new HuggingFaceImageModel(modelId, config.apiKeyName, config.baseURL),
-	}),
 };
 
 export function registerProviderHydration(provider: {
@@ -191,15 +186,6 @@ function registerOpenAICompatibleProvider(
 	baseURL: string,
 	apiKeyName: string,
 ) {
-	if (providerId === "huggingface") {
-		providerConfigs[providerId] = {
-			baseURL,
-			apiKeyName,
-			kindMap: { image: "image" },
-		};
-		providerBuilders[providerId] = providerBuilders.huggingface;
-		return;
-	}
 	providerConfigs[providerId] = {
 		baseURL,
 		apiKeyName,
@@ -218,7 +204,7 @@ function registerOpenAICompatibleProvider(
 }
 
 export function unregisterProviderHydration(providerId: string) {
-	if (nativeProviderBuilders[providerId] || providerId === "huggingface")
+	if (nativeProviderBuilders[providerId])
 		return;
 	delete providerConfigs[providerId];
 	delete providerBuilders[providerId];

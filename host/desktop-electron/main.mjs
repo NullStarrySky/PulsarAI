@@ -10,10 +10,13 @@ import {
 	dialog,
 	ipcMain,
 	Notification,
+	Menu,
 	protocol,
 	shell,
+	Tray,
 } from "electron";
 import { createDatabase } from "./database.mjs";
+import { claimConversation, releaseConversations } from "./conversation-window-registry.mjs";
 import { hydrateSecretPlaceholders, secretPreview } from "./secret-utils.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -24,10 +27,14 @@ const applicationIcon = path.join(
 	process.platform === "win32" ? "icon.ico" : "icon.png",
 );
 const windows = new Map();
+const openConversations = new Map();
+const closingSubWindows = new WeakSet();
 let mainWindow;
 let database;
 let availableUpdate = null;
 let downloadedUpdatePath = null;
+let tray;
+let mainWindowClosing = false;
 
 const windowOptions = {
 	width: 970,
@@ -36,7 +43,9 @@ const windowOptions = {
 	minHeight: 480,
 	frame: false,
 	center: true,
-	backgroundColor: "#0b0d10",
+	transparent: true,
+	backgroundMaterial: "mica",
+	backgroundColor: "#00000000",
 	icon: applicationIcon,
 	webPreferences: {
 		preload: path.join(directory, "preload.cjs"),
@@ -70,6 +79,29 @@ function sendTo(label, event, payload) {
 	if (!target || target.isDestroyed())
 		throw new Error(`Window '${label}' is unavailable.`);
 	target.webContents.send(`pulsar:host:event:${event}`, payload);
+}
+
+function ensureTray() {
+	if (tray) return tray;
+	tray = new Tray(applicationIcon);
+	tray.setToolTip("PulsarAI");
+	tray.setContextMenu(
+		Menu.buildFromTemplate([
+			{
+				label: "退出",
+				click: () => {
+					mainWindowClosing = true;
+					app.quit();
+				},
+			},
+		]),
+	);
+	tray.on("click", () => {
+		if (!mainWindow || mainWindow.isDestroyed()) return;
+		mainWindow.show();
+		mainWindow.focus();
+	});
+	return tray;
 }
 
 function newerVersion(candidate, current) {
@@ -536,11 +568,45 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
 	}
 	if (namespace === "window") {
 		const target = senderWindow(event);
+		if (method === "switchConversation") {
+			const id = requiredString(payload.id, "id");
+			const existing = claimConversation(openConversations, target, id);
+			if (existing) {
+				if (existing.isMinimized()) existing.restore();
+				existing.show();
+				existing.focus();
+				return false;
+			}
+			return true;
+		}
+		if (method === "releaseConversation") {
+			const id = requiredString(payload.id, "id");
+			if (openConversations.get(id) === target) openConversations.delete(id);
+			return;
+		}
+		if (method === "isConversationOpen") {
+			const owner = openConversations.get(requiredString(payload.id, "id"));
+			return Boolean(owner && !owner.isDestroyed());
+		}
 		if (method === "minimize") return target?.minimize();
 		if (method === "toggleMaximize")
 			return target?.isMaximized() ? target.unmaximize() : target?.maximize();
-		if (method === "close") return target?.close();
-		if (method === "hide") return target?.hide();
+		if (method === "setBackgroundMaterial") {
+			if (process.platform === "win32")
+				target?.setBackgroundMaterial(
+					payload.material === "none" ? "none" : "mica",
+				);
+			return;
+		}
+		if (method === "close") {
+			if (target === mainWindow) mainWindowClosing = true;
+			else if (target) closingSubWindows.add(target);
+			return target?.close();
+		}
+		if (method === "hide") {
+			if (target === mainWindow) ensureTray();
+			return target?.hide();
+		}
 	}
 	if (namespace === "desktop") {
 		if (method === "openExternal")
@@ -571,17 +637,39 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
 	if (namespace === "subWindow") {
 		if (method === "create") {
 			const label = requiredString(payload.label, "label");
-			const parent = mainWindow;
+			const parent = mainWindow ?? senderWindow(event);
+			const conversationId = payload.conversationId;
+			const existing = conversationId && openConversations.get(conversationId);
+			if (existing && !existing.isDestroyed()) {
+				if (existing.isMinimized()) existing.restore();
+				existing.show();
+				existing.focus();
+				return false;
+			}
+			const named = windows.get(label);
+			if (named && !named.isDestroyed()) {
+				named.show();
+				named.focus();
+				return false;
+			}
 			const child = new BrowserWindow({
 				...windowOptions,
 				width: payload.width ?? 980,
 				height: payload.height ?? 720,
 				title: payload.title ?? "PulsarAI",
-				parent,
 				show: !payload.hidden,
 			});
 			windows.set(label, child);
-			child.on("closed", () => windows.delete(label));
+			if (conversationId) openConversations.set(conversationId, child);
+			child.on("close", (closeEvent) => {
+				if (closingSubWindows.has(child)) return;
+				closeEvent.preventDefault();
+				sendTo(label, "window:close-request");
+			});
+			child.on("closed", () => {
+				windows.delete(label);
+				releaseConversations(openConversations, child);
+			});
 			child.webContents.setWindowOpenHandler(({ url }) => {
 				void shell.openExternal(url);
 				return { action: "deny" };
@@ -590,9 +678,9 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
 				requiredString(payload.url, "url"),
 				parent.webContents.getURL(),
 			).toString();
-			if (rendererUrl) await child.loadURL(url);
-			else
-				await child.loadFile(
+			try {
+				if (rendererUrl) await child.loadURL(url);
+				else await child.loadFile(
 					path.join(directory, "..", "..", "dist", "index.html"),
 					{
 						query: {
@@ -600,7 +688,11 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
 						},
 					},
 				);
-			return;
+			} catch (error) {
+				child.destroy();
+				throw error;
+			}
+			return true;
 		}
 		if (method === "send")
 			return sendTo(payload.label, payload.event, payload.payload);
@@ -626,6 +718,15 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
 
 async function createMainWindow() {
 	mainWindow = new BrowserWindow(windowOptions);
+	mainWindow.on("close", (event) => {
+		if (mainWindowClosing) return;
+		event.preventDefault();
+		sendTo("main", "window:close-request");
+	});
+	mainWindow.on("closed", () => {
+		releaseConversations(openConversations, mainWindow);
+		mainWindow = undefined;
+	});
 	mainWindow.webContents.setWindowOpenHandler(({ url }) => {
 		void shell.openExternal(url);
 		return { action: "deny" };
@@ -660,5 +761,6 @@ app.on("window-all-closed", () => {
 	if (process.platform !== "darwin") app.quit();
 });
 app.on("before-quit", () => {
+	mainWindowClosing = true;
 	void database?.close();
 });

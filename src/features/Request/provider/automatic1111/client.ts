@@ -1,5 +1,5 @@
 import { modelProxyFetch } from "../shared/custom-fetch";
-import type { GeneratedImage } from "../shared/image";
+import type { GeneratedImage } from "../../types";
 
 const AUTOMATIC1111_BASIC_AUTH_NAME = "automatic1111_BASIC_AUTH";
 type Automatic1111Settings = {

@@ -38,10 +38,9 @@ async function refresh() {
 		props.type === "piper"
 			? await listPiperModels()
 			: await listWhisperModels();
-	await store.upsertModels(
-		providerId(),
-		kind(),
-		models.value.map((item) => ({
+	const provider = store.providers.get(providerId());
+	if (provider) {
+		provider.models[kind()] = models.value.map((item) => ({
 			id: item.id,
 			displayName: item.id,
 			enabled: true,
@@ -49,8 +48,8 @@ async function refresh() {
 				version: item.version,
 				...(item.language ? { language: item.language } : {}),
 			},
-		})),
-	);
+		}));
+	}
 }
 async function download() {
 	const size = Number(form.size);

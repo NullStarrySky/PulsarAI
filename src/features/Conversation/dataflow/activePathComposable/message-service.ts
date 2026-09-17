@@ -2,22 +2,24 @@ import type { ModelMessage } from "ai";
 import { readMediaLink } from "@/features/Plugin/media/media-link";
 import type {
 	AdditionalParts,
-	ChatContainer,
-	ChatMessage,
+	ConversationContainer,
+	ConversationMessage,
 	Role,
 } from "../types";
 
 export function createMessage(
 	input: {
-		type?: ChatMessage["type"];
+		type?: ConversationMessage["type"];
 		content?: string;
+		final?: boolean;
 		parts?: AdditionalParts[];
 	} = {},
-): ChatMessage {
+): ConversationMessage {
 	return {
 		id: crypto.randomUUID(),
 		type: input.type ?? "message",
 		content: input.content ?? "",
+		final: input.final ?? true,
 		parts: input.parts ?? [],
 		createdAt: new Date().toISOString(),
 		meta: { steps: [] },
@@ -28,14 +30,21 @@ export function createContainer(input: {
 	conversationId: string;
 	role: Role;
 	content?: string;
+	final?: boolean;
 	parts?: AdditionalParts[];
 	previousContainer?: string | null;
-}): ChatContainer {
+}): ConversationContainer {
 	return {
 		id: crypto.randomUUID(),
 		role: input.role,
-		conversationid: input.conversationId,
-		content: [createMessage({ content: input.content, parts: input.parts })],
+		conversationId: input.conversationId,
+		content: [
+			createMessage({
+				content: input.content,
+				parts: input.parts,
+				final: input.final,
+			}),
+		],
 		activeMessage: 0,
 		availableNextContainer: [],
 		activeNextContainer: null,
@@ -44,8 +53,8 @@ export function createContainer(input: {
 }
 
 export function currentMessage(
-	container: ChatContainer | null | undefined,
-): ChatMessage | null {
+	container: ConversationContainer | null | undefined,
+): ConversationMessage | null {
 	return (
 		container?.content[container.activeMessage ?? 0] ??
 		container?.content[0] ??
@@ -54,10 +63,10 @@ export function currentMessage(
 }
 
 export function pathForTail(
-	containers: ReadonlyMap<string, ChatContainer>,
+	containers: ReadonlyMap<string, ConversationContainer>,
 	tailId?: string | null,
-): ChatContainer[] {
-	const path: ChatContainer[] = [];
+): ConversationContainer[] {
+	const path: ConversationContainer[] = [];
 	const seen = new Set<string>();
 	let current = tailId ? containers.get(tailId) : undefined;
 	while (current && !seen.has(current.id)) {
@@ -71,7 +80,7 @@ export function pathForTail(
 }
 
 export async function modelMessagesFromPath(
-	path: ChatContainer[],
+	path: ConversationContainer[],
 ): Promise<ModelMessage[]> {
 	const messages: ModelMessage[] = [];
 	for (const container of path) {

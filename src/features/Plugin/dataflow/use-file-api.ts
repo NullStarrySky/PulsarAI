@@ -16,7 +16,6 @@ import {
 import { unzipResources, zipResources } from "./resource-archive";
 import type {
 	FileMeta,
-	FolderMeta,
 	PluginData,
 	Pulse,
 	ResourceKind,
@@ -422,9 +421,6 @@ export function useFileApi(options: FileApiOptions) {
 		},
 		updateFileMeta(path: ResourcePath, patch: Partial<FileMeta>) {
 			apply({ kind: "file.meta.patch", path, patch });
-		},
-		updateFolderMeta(path: ResourcePath, patch: Partial<FolderMeta>) {
-			apply({ kind: "folder.meta.patch", path, patch });
 		},
 		transaction,
 	};

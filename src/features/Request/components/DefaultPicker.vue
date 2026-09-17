@@ -15,6 +15,7 @@ import { Check, ChevronDown } from "@/lib/phosphor-icons";
 import { useRequestStore } from "../request-store";
 import type { ModelSelection, RequestKind } from "../types";
 import ParamDefinitionRenderer from "./ParamDefinitionRenderer.vue";
+import ProviderAvatar from "../provider/shared/components/ProviderAvatar.vue";
 
 const props = withDefaults(
 	defineProps<{
@@ -30,7 +31,9 @@ const emit = defineEmits<{
 }>();
 const store = useRequestStore();
 const provider = computed(() =>
-	props.modelValue ? store.provider(props.modelValue.providerId) : undefined,
+	props.modelValue
+		? store.providers.get(props.modelValue.providerId)
+		: undefined,
 );
 const model = computed(() =>
 	provider.value?.models[props.kind].find(
@@ -38,7 +41,7 @@ const model = computed(() =>
 	),
 );
 const providers = computed(() =>
-	store.providers.filter(
+	[...store.providers.values()].filter(
 		(item) =>
 			item.enabled && item.models[props.kind].some((model) => model.enabled),
 	),
@@ -64,9 +67,14 @@ function updateParam(paramName: string, value: unknown) {
 	).find((key) =>
 		provider.value!.params[key].some((item) => item.paramName === paramName),
 	);
-	if (group) void store.patchParam(provider.value.id, group, paramName, value);
+	if (group) {
+		const definition = provider.value.params[group].find(
+			(item) => item.paramName === paramName,
+		);
+		if (definition) definition.value = value;
+	}
 }
-onMounted(() => void store.initialize());
+onMounted(() => void store.init());
 </script>
 
 <template>
@@ -75,7 +83,7 @@ onMounted(() => void store.initialize());
       <DropdownMenuTrigger as-child><Button variant="outline" class="w-full justify-between sm:w-80"><span class="truncate">{{ model?.displayName || emptyLabel }}</span><ChevronDown class="size-4" /></Button></DropdownMenuTrigger>
       <DropdownMenuContent class="w-72" align="start"><DropdownMenuGroup>
         <DropdownMenuItem v-if="allowEmpty" @select="emit('update:modelValue', null)"><Check :class="modelValue ? 'opacity-0' : 'opacity-100'" />{{ emptyLabel }}</DropdownMenuItem>
-        <DropdownMenuSub v-for="item in providers" :key="item.id"><DropdownMenuSubTrigger>{{ item.name }}</DropdownMenuSubTrigger><DropdownMenuSubContent class="w-64"><DropdownMenuItem v-for="candidate in item.models[kind].filter((value) => value.enabled)" :key="candidate.id" @select="select(item.id, candidate.id)"><Check :class="modelValue?.providerId === item.id && modelValue?.modelId === candidate.id ? 'opacity-100' : 'opacity-0'" />{{ candidate.displayName }}</DropdownMenuItem></DropdownMenuSubContent></DropdownMenuSub>
+        <DropdownMenuSub v-for="item in providers" :key="item.id"><DropdownMenuSubTrigger class="gap-2"><ProviderAvatar :name="item.name" :src="item.iconUrl" :provider-id="item.id" :icon-id="item.icon" />{{ item.name }}</DropdownMenuSubTrigger><DropdownMenuSubContent class="w-64"><DropdownMenuItem v-for="candidate in item.models[kind].filter((value) => value.enabled)" :key="candidate.id" @select="select(item.id, candidate.id)"><Check :class="modelValue?.providerId === item.id && modelValue?.modelId === candidate.id ? 'opacity-100' : 'opacity-0'" /><ProviderAvatar :name="candidate.displayName" :src="candidate.icon" :provider-id="item.id" :icon-id="item.icon" />{{ candidate.displayName }}</DropdownMenuItem></DropdownMenuSubContent></DropdownMenuSub>
       </DropdownMenuGroup></DropdownMenuContent>
     </DropdownMenu>
     <div v-if="defaultParams.length" class="space-y-1 rounded-md border p-2"><ParamDefinitionRenderer v-for="definition in defaultParams" :key="definition.paramName" :definition="definition" @update:value="updateParam(definition.paramName, $event)" /></div>

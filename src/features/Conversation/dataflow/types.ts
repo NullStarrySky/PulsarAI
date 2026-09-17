@@ -1,4 +1,4 @@
-import type { Pulse } from "@/features/Plugin/dataflow";
+import type { Pulse } from "@/features/Plugin/dataflow/types";
 
 export type Role = "user" | "assistant" | "system";
 
@@ -67,21 +67,23 @@ interface MessageMeta {
 	};
 }
 
-export interface ChatMessage {
+export interface ConversationMessage {
 	id: string;
 	type: "message" | "error";
 	content: string;
+	/** False while its stream is accepting input; completed messages are final. */
+	final: boolean;
 	createdAt: string;
 	parts?: AdditionalParts[];
 	favorite?: boolean;
 	meta: MessageMeta;
 }
 
-export interface ChatContainer {
+export interface ConversationContainer {
 	id: string;
 	role: Role;
-	conversationid: string;
-	content: ChatMessage[];
+	conversationId: string;
+	content: ConversationMessage[];
 	activeMessage?: number | null;
 	availableNextContainer: string[];
 	activeNextContainer?: string | null;
@@ -89,7 +91,7 @@ export interface ChatContainer {
 }
 
 /** Fields that are permitted to reach the conversations table. */
-export interface PersistedChatMeta {
+export interface PersistedConversationMeta {
 	id: string;
 	localPluginId: string;
 	pluginVersionId: string;
@@ -97,7 +99,7 @@ export interface PersistedChatMeta {
 	rootContainerId: string | null;
 	lastContainerId: string | null;
 	lastMessagePreview?: string;
-	composerDraft: ChatContainer;
+	composerDraft: ConversationContainer;
 	createdAt: string;
 	updatedAt: string;
 	lifetime: "persistent" | "app";
@@ -106,24 +108,25 @@ export interface PersistedChatMeta {
 }
 
 /** Runtime-only generation progress. It deliberately has no database shape. */
-export interface ChatGenerationState {
+export interface ConversationGenerationState {
 	messageId?: string;
 }
 
-export interface ChatMeta extends PersistedChatMeta {
-	generation?: ChatGenerationState;
+export interface ConversationMeta extends PersistedConversationMeta {
+	generation?: ConversationGenerationState;
 }
 
-export function createDraft(conversationid = ""): ChatContainer {
+export function createDraft(conversationId = ""): ConversationContainer {
 	return {
 		id: "draft-container",
 		role: "user",
-		conversationid,
+		conversationId,
 		content: [
 			{
 				id: "draft-message",
 				type: "message",
 				content: "",
+				final: true,
 				createdAt: new Date().toISOString(),
 				parts: [],
 				meta: { steps: [] },
@@ -136,10 +139,10 @@ export function createDraft(conversationid = ""): ChatContainer {
 	};
 }
 
-export function createChatMeta(
-	input: Pick<ChatMeta, "localPluginId" | "pluginVersionId"> &
-		Partial<Pick<ChatMeta, "title" | "lifetime" | "isTemplate">>,
-): ChatMeta {
+export function createConversationMeta(
+	input: Pick<ConversationMeta, "localPluginId" | "pluginVersionId"> &
+		Partial<Pick<ConversationMeta, "title" | "lifetime" | "isTemplate">>,
+): ConversationMeta {
 	const id = crypto.randomUUID();
 	const now = new Date().toISOString();
 	return {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import SettingForm from "@/features/Environment/setting/SettingForm.vue";
 import SettingFormField from "@/features/Environment/setting/SettingFormField.vue";
-import type { ServiceProviderView } from "../service-provider";
+import type { ServiceProviderView } from "@/features/Request/types";
 import ServiceProviderSelector from "./ServiceProviderSelector.vue";
 
 defineProps<{

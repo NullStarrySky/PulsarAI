@@ -1,12 +1,16 @@
 import { push } from "notivue";
 import { computed, type MaybeRef, reactive, ref, unref } from "vue";
-import { markContainerDirty } from "../containers";
 import { useEnvironmentStore } from "@/features/Environment/store";
 import { currentMessage } from "../activePathComposable/message-service";
-import type { ChatContainer, ChatMessage, ThinkingStep } from "../types";
+import { markContainerDirty } from "../containers";
+import type {
+	ConversationContainer,
+	ConversationMessage,
+	ThinkingStep,
+} from "../types";
 
 export function useContainerMessage(
-	source: MaybeRef<ChatContainer | null | undefined>,
+	source: MaybeRef<ConversationContainer | null | undefined>,
 ) {
 	const environment = useEnvironmentStore();
 	const container = computed(() => unref(source));
@@ -26,7 +30,7 @@ export function useContainerMessage(
 	const translating = ref(false);
 	function markDirty() {
 		if (container.value)
-			markContainerDirty(container.value.conversationid, container.value.id);
+			markContainerDirty(container.value.conversationId, container.value.id);
 	}
 	function setContent(content: string) {
 		const message = current.value;
@@ -36,7 +40,7 @@ export function useContainerMessage(
 		markDirty();
 	}
 	function setTranslation(
-		translation: NonNullable<ChatMessage["meta"]["translation"]>,
+		translation: NonNullable<ConversationMessage["meta"]["translation"]>,
 	) {
 		const message = current.value;
 		if (!message) return;

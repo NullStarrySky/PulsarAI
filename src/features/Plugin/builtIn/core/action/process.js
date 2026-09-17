@@ -3,7 +3,7 @@ export default async function run() {
 	if (!String(goalState || "").trim()) {
 		reply.content = "当前没有可执行的 goal。先使用 /goal 设置目标和待办。";
 	} else {
-		const context = (await Promise.all(slot.paths("CTX_BUILD").map((path) => imports(path)()))).flat();
+		const context = (await Promise.all(slot.paths("/generation/CTX_BUILD").map((path) => imports(path)()))).flat();
 		const messages = [
 			...context,
 			{

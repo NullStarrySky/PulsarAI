@@ -1,7 +1,6 @@
 import { normalizeResourcePath } from "../dataflow/pulse";
 import {
 	defaultFileMeta,
-	defaultFolderMeta,
 	type FileMeta,
 	type PluginData,
 	type ResourcePath,
@@ -18,179 +17,10 @@ type BuiltinManifest = {
 		string,
 		{
 			order?: number;
-			insertion?: {
-				slot: string;
-				condition?: string;
-				conditionEnabled?: boolean;
-			};
+			insertion?: { slot: ResourcePath; condition?: FileMeta["condition"] };
 		}
 	>;
 };
-
-export interface SlotRegistration {
-	id: string;
-	name: string;
-	parentId?: string;
-	icon?: string;
-	selectionMode: "none" | "single" | "multiple";
-}
-
-/**
- * The slot registry is materialized as ordinary folders below a local Plugin's
- * `/slot/`. IDs are only import-time shorthand; runtime code addresses the
- * resulting name paths.
- */
-export const builtinSlotRegistry: readonly SlotRegistration[] = [
-	{ id: "role", name: "角色", icon: "user-round", selectionMode: "none" },
-	{ id: "user", name: "用户角色", parentId: "role", selectionMode: "none" },
-	{
-		id: "character",
-		name: "系统角色",
-		parentId: "role",
-		selectionMode: "none",
-	},
-	{
-		id: "context",
-		name: "上下文位置",
-		icon: "text-align-left",
-		selectionMode: "none",
-	},
-	{
-		id: "before_char",
-		name: "角色之前",
-		parentId: "context",
-		selectionMode: "none",
-	},
-	{
-		id: "after_char",
-		name: "角色之后",
-		parentId: "context",
-		selectionMode: "none",
-	},
-	{ id: "document", name: "顶部", parentId: "context", selectionMode: "none" },
-	{
-		id: "generation",
-		name: "生成流程",
-		icon: "workflow",
-		selectionMode: "none",
-	},
-	{
-		id: "generatePath",
-		name: "主流程",
-		parentId: "generation",
-		icon: "play",
-		selectionMode: "single",
-	},
-	{
-		id: "CTX_BUILD",
-		name: "上下文构建",
-		parentId: "generation",
-		selectionMode: "single",
-	},
-	{
-		id: "CTX_PROCESS_BEFORE_REGEX",
-		name: "上下文处理器",
-		parentId: "generation",
-		selectionMode: "none",
-	},
-	{
-		id: "REGEX",
-		name: "正则",
-		parentId: "generation",
-		icon: "regex",
-		selectionMode: "none",
-	},
-	{
-		id: "chat",
-		name: "生成入口",
-		parentId: "generation",
-		icon: "messages-square",
-		selectionMode: "single",
-	},
-	{ id: "depth", name: "深度", icon: "list-numbers", selectionMode: "none" },
-	...Array.from({ length: 5 }, (_, depth) => ({
-		id: `depth:${depth}`,
-		name: String(depth),
-		parentId: "depth",
-		selectionMode: "none" as const,
-	})),
-	{ id: "resource", name: "资源", icon: "files", selectionMode: "none" },
-	{
-		id: "COMMAND",
-		name: "指令",
-		parentId: "resource",
-		icon: "terminal",
-		selectionMode: "none",
-	},
-	{
-		id: "MODE",
-		name: "模式",
-		parentId: "resource",
-		icon: "pencil-line",
-		selectionMode: "none",
-	},
-	{
-		id: "background",
-		name: "背景图片",
-		parentId: "resource",
-		icon: "image",
-		selectionMode: "single",
-	},
-	{
-		id: "document-library",
-		name: "文档",
-		icon: "file-text",
-		selectionMode: "none",
-	},
-	{
-		id: "toolFunction",
-		name: "工具",
-		parentId: "document-library",
-		icon: "wrench",
-		selectionMode: "none",
-	},
-	{
-		id: "skill",
-		name: "skill",
-		parentId: "document-library",
-		icon: "book-open",
-		selectionMode: "none",
-	},
-	{ id: "panel", name: "面板", icon: "sidebar", selectionMode: "none" },
-	{
-		id: "panel-top",
-		name: "顶部面板",
-		parentId: "panel",
-		icon: "panel-top",
-		selectionMode: "none",
-	},
-	{
-		id: "panel-left",
-		name: "左侧面板",
-		parentId: "panel",
-		icon: "panel-left",
-		selectionMode: "none",
-	},
-	{
-		id: "panel-right",
-		name: "右侧面板",
-		parentId: "panel",
-		icon: "panel-right",
-		selectionMode: "none",
-	},
-];
-
-const slotById = new Map(builtinSlotRegistry.map((slot) => [slot.id, slot]));
-
-function builtinSlotPath(id: string) {
-	const names: string[] = [];
-	let current = slotById.get(id);
-	while (current) {
-		names.unshift(current.name);
-		current = current.parentId ? slotById.get(current.parentId) : undefined;
-	}
-	return names.length ? `/slot/${names.join("/")}` : `/slot/${id}`;
-}
 
 const builtinManifests = import.meta.glob("../builtIn/*/.pulsar-plugin.json", {
 	eager: true,
@@ -220,20 +50,15 @@ function ensureFolder(data: PluginData, path: ResourcePath) {
 	const normalized = normalizeResourcePath(path);
 	if (normalized === "/") return data.tree;
 	let tree = data.tree;
-	let current = "";
 	for (const name of normalized.slice(1).split("/")) {
-		current += `/${name}`;
 		const existing = tree[name];
 		if (typeof existing === "string")
-			throw new Error(`内置资源目录冲突：${current}`);
+			throw new Error(`内置资源目录冲突：${normalized}`);
 		if (!existing) {
 			const next: ResourceTree = {};
 			set(tree, name, next);
-			set(data.meta, current, defaultFolderMeta());
 			tree = next;
-		} else {
-			tree = existing;
-		}
+		} else tree = existing;
 	}
 	return tree;
 }
@@ -251,25 +76,6 @@ function writeBuiltinFile(
 	);
 	set(parent, normalized.slice(normalized.lastIndexOf("/") + 1), content);
 	set(data.meta, normalized, meta);
-}
-
-function localSlot(data: PluginData, slot: string) {
-	const path = `/localSlot/${slot}`;
-	ensureFolder(data, path);
-	set(data.meta, path, {
-		...defaultFolderMeta(),
-		parent: builtinSlotPath(slot),
-	});
-	return path;
-}
-
-function materializeSlotRegistry(data: PluginData) {
-	ensureFolder(data, "/slot");
-	for (const slot of builtinSlotRegistry) {
-		const path = builtinSlotPath(slot.id);
-		ensureFolder(data, path);
-		set(data.meta, path, { selectionMode: slot.selectionMode });
-	}
 }
 
 function sourceKey(folder: string, path: string) {
@@ -299,9 +105,8 @@ function importBuiltinPlugin(
 			priority: definition.order ?? 100,
 			...(definition.insertion
 				? {
-						slot: localSlot(data, definition.insertion.slot),
+						slot: definition.insertion.slot,
 						condition: definition.insertion.condition,
-						conditionEnabled: definition.insertion.conditionEnabled,
 					}
 				: {}),
 		});
@@ -309,23 +114,29 @@ function importBuiltinPlugin(
 	return data;
 }
 
-/** Built-ins are imported as ordinary source-local trees; no World-only shape survives. */
+/** Built-ins are ordinary source trees; their slot declarations are ordinary JSON files. */
 export function importBuiltinPlugins() {
 	return Object.fromEntries(
 		Object.entries(builtinManifests).map(([key, source]) => {
 			const folder = key.split("/").at(-2);
-			if (!folder) throw new Error(`无效的内置 Plugin 路径：${key}`);
-			const data = importBuiltinPlugin(folder, source);
-			return [folder, data];
+			if (!folder) throw new Error(`无效的内置 Plugin 文件夹：${key}`);
+			return [folder, importBuiltinPlugin(folder, source)];
 		}),
 	);
 }
 
-/** New local Plugins start as an ordinary editable source tree. */
+function defaultGlobalSlotSource() {
+	const source = builtinTextFiles["../builtIn/default/global.slot.json"];
+	if (!source) throw new Error("内置默认 Plugin 缺少 global.slot.json。");
+	return source;
+}
+
+/** New local Plugins copy the default built-in's file-defined slot contract. */
 export function createLocalPluginData(id: string): PluginData {
 	const data: PluginData = { id, tree: {}, meta: {} };
-	materializeSlotRegistry(data);
-	ensureFolder(data, "/localSlot");
+	const slots = defaultGlobalSlotSource();
+	writeBuiltinFile(data, "/global.slot.json", slots, defaultFileMeta());
+	writeBuiltinFile(data, "/local.slot.json", slots, defaultFileMeta());
 	writeBuiltinFile(
 		data,
 		"/definition.package.json",

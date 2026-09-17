@@ -2,32 +2,86 @@
 import { ref } from "vue";
 import { Button, Switch } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2 } from "@/lib/phosphor-icons";
-import { useRequestStore } from "../request-store";
-import type { Provider, RequestKind } from "../types";
+import { Plus, RefreshCw, Trash2 } from "@/lib/phosphor-icons";
+import { invokeRequestFunction } from "../provider";
+import ProviderAvatar from "../provider/shared/components/ProviderAvatar.vue";
+import type { ModelDefinition, Provider, RequestKind } from "../types";
 
 const props = defineProps<{ provider: Provider; kind: RequestKind }>();
-const store = useRequestStore();
 const id = ref("");
-async function add() {
+const refreshing = ref(false);
+const refreshError = ref("");
+let refreshGeneration = 0;
+
+function add() {
 	const value = id.value.trim();
-	if (!value) return;
-	await store.addModel(props.provider.id, props.kind, {
+	if (!value || props.provider.models[props.kind].some((model) => model.id === value))
+		return;
+	props.provider.models[props.kind].push({
 		id: value,
 		displayName: value,
 		enabled: true,
 	});
 	id.value = "";
 }
-function toggle(modelId: string, enabled: boolean) {
-	const model = props.provider.models[props.kind].find(
-		(item) => item.id === modelId,
+
+function merge(provider: Provider, kind: RequestKind, models: ModelDefinition[]) {
+	const current = new Map(
+		provider.models[kind].map((model) => [model.id, model]),
 	);
-	if (!model) return;
-	model.enabled = enabled;
-	void store.save(props.provider);
+	for (const model of models) {
+		const existing = current.get(model.id);
+		current.set(model.id, {
+			...model,
+			enabled: existing?.enabled ?? model.enabled,
+		});
+	}
+	provider.models[kind] = [...current.values()];
 }
+
+async function refresh() {
+	if (!props.provider.modelGetter) return;
+	const provider = props.provider;
+	const requestKind = props.kind;
+	const generation = ++refreshGeneration;
+	refreshing.value = true;
+	refreshError.value = "";
+	try {
+		const result = await invokeRequestFunction<
+			Partial<Record<RequestKind, ModelDefinition[]>> | ModelDefinition[]
+		>(provider.modelGetter, { provider });
+		if (Array.isArray(result)) merge(provider, requestKind, result);
+		else {
+			for (const resultKind of [
+				"text",
+				"image",
+				"video",
+				"speech",
+				"transcribe",
+			] as const) {
+				if (resultKind === requestKind && result[resultKind])
+					merge(provider, resultKind, result[resultKind]);
+			}
+		}
+	} catch (error) {
+		if (generation === refreshGeneration)
+			refreshError.value = error instanceof Error ? error.message : String(error);
+	} finally {
+		if (generation === refreshGeneration) refreshing.value = false;
+	}
+}
+
 </script>
+
 <template>
-  <div class="space-y-2"><div v-for="model in provider.models[kind]" :key="model.id" class="flex items-center gap-2 rounded-md border px-3 py-2"><Switch :model-value="model.enabled" @update:model-value="toggle(model.id, Boolean($event))" /><span class="min-w-0 flex-1 truncate text-sm">{{ model.displayName }}</span><Button size="icon" variant="ghost" @click="store.removeModel(provider.id, kind, model.id)"><Trash2 class="size-4" /></Button></div><div class="flex gap-2"><Input v-model="id" placeholder="模型 ID" @keyup.enter="add" /><Button size="sm" @click="add"><Plus class="size-4" />添加</Button></div></div>
+  <div class="space-y-2">
+    <div v-for="model in provider.models[kind]" :key="model.id" class="flex items-center gap-2 rounded-md border px-3 py-2">
+      <Switch :model-value="model.enabled" @update:model-value="model.enabled = Boolean($event)" />
+      <ProviderAvatar :name="model.displayName" :src="model.icon" :provider-id="provider.id" :icon-id="provider.icon" />
+      <span class="min-w-0 flex-1 truncate text-sm">{{ model.displayName }}</span>
+      <Button size="icon" variant="ghost" @click="provider.models[kind] = provider.models[kind].filter((item) => item.id !== model.id)"><Trash2 class="size-4" /></Button>
+    </div>
+    <p v-if="refreshError" class="text-xs text-destructive">{{ refreshError }}</p>
+    <div class="flex gap-2"><Input v-model="id" placeholder="模型 ID" @keyup.enter="add" /><Button v-if="provider.modelGetter" size="icon" variant="outline" :disabled="refreshing" title="获取模型" @click="refresh"><RefreshCw class="size-4" /></Button><Button size="sm" @click="add"><Plus class="size-4" />添加</Button></div>
+  </div>
 </template>

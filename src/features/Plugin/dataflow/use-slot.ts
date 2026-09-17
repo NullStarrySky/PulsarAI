@@ -1,13 +1,15 @@
 import { computed, toValue } from "vue";
-import { builtinSlotRegistry } from "../utils/import-converter";
-import { isResourceTree, normalizeResourcePath, parentPath } from "./pulse";
-import type {
-	FileMeta,
-	FolderMeta,
-	PluginData,
-	ResourceMeta,
-	ResourcePath,
-} from "./types";
+import {
+	globalSlotDefinitionFile,
+	isSlotMeta,
+	localSlotDefinitionFile,
+	parseSlotDef,
+	type SlotDef,
+	type SlotMeta,
+	slotMetaAt,
+} from "../resources/types/slot";
+import { normalizeResourcePath } from "./pulse";
+import type { FileMeta, PluginData, ResourcePath } from "./types";
 import { type FileApiOptions, useFileApi } from "./use-file-api";
 
 export interface SlotResource {
@@ -19,8 +21,9 @@ export interface SlotResource {
 export interface PluginSlot {
 	path: ResourcePath;
 	name: string;
+	description?: string;
 	icon?: string;
-	selectionMode: FolderMeta["selectionMode"];
+	selectionMode: SlotMeta["selectionMode"];
 	resources: SlotResource[];
 	selectedResources: SlotResource[];
 	children: PluginSlot[];
@@ -32,140 +35,118 @@ function fileName(path: string) {
 	return path.slice(path.lastIndexOf("/") + 1);
 }
 
+function sourceRoot(path: ResourcePath) {
+	const parts = path.split("/").filter(Boolean);
+	return parts[0] === "global" && parts[1] ? `/global/${parts[1]}` : "/";
+}
+
+function localSlotDef(data: PluginData, source: ResourcePath) {
+	const path =
+		source === "/"
+			? `/${localSlotDefinitionFile}`
+			: `${source}/${localSlotDefinitionFile}`;
+	const sourceFile = data.tree;
+	const content = path
+		.split("/")
+		.filter(Boolean)
+		.reduce<PluginData["tree"] | string | undefined>(
+			(current, name) =>
+				typeof current === "object" && current !== null
+					? current[name]
+					: undefined,
+			sourceFile,
+		);
+	return parseSlotDef(typeof content === "string" ? content : undefined);
+}
+
 function walkFiles(
 	tree: PluginData["tree"],
 	path: ResourcePath,
-	visit: (path: ResourcePath, meta: FileMeta) => void,
 	meta: PluginData["meta"],
+	visit: (path: ResourcePath, meta: FileMeta) => void,
 ) {
 	for (const [name, node] of Object.entries(tree)) {
 		const childPath = path === "/" ? `/${name}` : `${path}/${name}`;
 		if (typeof node === "string") {
 			const file = meta[childPath];
-			if (file && "priority" in file) visit(childPath, file);
-			continue;
-		}
-		walkFiles(node, childPath, visit, meta);
+			if (file) visit(childPath, file);
+		} else walkFiles(node, childPath, meta, visit);
 	}
 }
 
-function registryIcon(path: ResourcePath) {
-	const name = fileName(path);
-	return builtinSlotRegistry.find((slot) => slot.name === name)?.icon;
-}
-
-function resolveSlotPath(data: PluginData, input: string) {
+function slotPath(definition: SlotDef, input: string) {
 	if (input.startsWith("/")) return normalizeResourcePath(input);
-	const registered = builtinSlotRegistry.find(
-		(slot) => slot.id === input || slot.name === input,
-	);
-	if (registered) {
-		const parts: string[] = [];
-		let current: (typeof builtinSlotRegistry)[number] | undefined = registered;
-		while (current) {
-			parts.unshift(current.name);
-			current = current.parentId
-				? builtinSlotRegistry.find((slot) => slot.id === current?.parentId)
-				: undefined;
+	const matches: string[] = [];
+	const visit = (node: SlotDef, prefix = "") => {
+		for (const [name, child] of Object.entries(node)) {
+			const path = `${prefix}/${name}`;
+			if (isSlotMeta(child)) {
+				if (name === input) matches.push(path);
+			} else visit(child, path);
 		}
-		return `/slot/${parts.join("/")}`;
-	}
-	const matches = Object.keys(data.meta).filter((path) => {
-		const meta = data.meta[path];
-		return Boolean(meta && "selectionMode" in meta && fileName(path) === input);
-	});
+	};
+	visit(definition);
 	if (matches.length === 1) return matches[0]!;
 	if (matches.length > 1) throw new Error(`插槽名称不唯一：${input}`);
 	throw new Error(`未知插槽：${input}`);
 }
 
-function directSlotPath(data: PluginData, path: ResourcePath) {
-	const seen = new Set<string>();
-	let current: string | null = path;
-	while (current && !seen.has(current)) {
-		seen.add(current);
-		const meta: ResourceMeta | undefined = data.meta[current];
-		if (meta && "selectionMode" in meta && current.startsWith("/slot/"))
-			return current;
-		if (meta && "parent" in meta && meta.parent) {
-			current = meta.parent;
-			continue;
-		}
-		current = parentPath(current);
-	}
-	return null;
-}
-
-/**
- * Resolves the local `/slot/` contract and every source-local `localSlot/`
- * contribution against one replayed file tree.
- */
+/** Reads slot contracts exclusively from global.slot.json and local.slot.json files. */
 export function useSlot(options: UseSlotOptions) {
 	const fileApi = useFileApi(options);
+	const definition = computed(() => {
+		const data = toValue(options.filetree);
+		return parseSlotDef(
+			typeof data?.tree[globalSlotDefinitionFile.slice(1)] === "string"
+				? data.tree[globalSlotDefinitionFile.slice(1)]
+				: undefined,
+		);
+	});
 	const slots = computed<PluginSlot[]>(() => {
 		const data = toValue(options.filetree);
 		if (!data) return [];
 		const resources = new Map<string, SlotResource[]>();
-		walkFiles(
-			data.tree,
-			"/",
-			(path, meta) => {
-				if (!meta.slot) return;
-				const slotPath = directSlotPath(data, meta.slot);
-				if (!slotPath) return;
-				const current = resources.get(slotPath) ?? [];
-				current.push({ path, name: fileName(path), meta });
-				resources.set(slotPath, current);
-			},
-			data.meta,
-		);
-
-		const build = (path: ResourcePath): PluginSlot | null => {
-			const meta = data.meta[path];
-			if (!meta || !("selectionMode" in meta)) return null;
-			const children: PluginSlot[] = [];
-			const folder =
-				path === "/slot"
-					? data.tree.slot
-					: path
-							.slice("/slot/".length)
-							.split("/")
-							.reduce<PluginData["tree"] | string | undefined>(
-								(current, name) =>
-									isResourceTree(current) ? current[name] : undefined,
-								data.tree.slot,
-							);
-			if (isResourceTree(folder)) {
-				for (const name of Object.keys(folder).sort((left, right) =>
-					left.localeCompare(right),
-				)) {
-					const child = build(`${path}/${name}`);
-					if (child) children.push(child);
-				}
-			}
-			const allResources = (resources.get(path) ?? []).sort(
-				(left, right) =>
-					left.meta.priority - right.meta.priority ||
-					left.path.localeCompare(right.path),
-			);
-			const selected = allResources.filter(
-				(resource) => resource.meta.resourceSelected,
-			);
-			return {
-				path,
-				name: fileName(path),
-				icon: registryIcon(path),
-				selectionMode: meta.selectionMode,
-				resources: allResources,
-				selectedResources:
-					meta.selectionMode === "single" ? selected.slice(0, 1) : selected,
-				children,
-			};
-		};
-		if (!isResourceTree(data.tree.slot)) return [];
-		return Object.keys(data.tree.slot)
-			.sort((left, right) => left.localeCompare(right))
-			.flatMap((name) => build(`/slot/${name}`) ?? []);
+		walkFiles(data.tree, "/", data.meta, (path, meta) => {
+			if (
+				!meta.slot ||
+				!slotMetaAt(definition.value, meta.slot) ||
+				!slotMetaAt(localSlotDef(data, sourceRoot(path)), meta.slot)
+			)
+				return;
+			const current = resources.get(meta.slot) ?? [];
+			current.push({ path, name: fileName(path), meta });
+			resources.set(meta.slot, current);
+		});
+		const build = (node: SlotDef, prefix = ""): PluginSlot[] =>
+			Object.entries(node)
+				.sort(([left], [right]) => left.localeCompare(right))
+				.map(([name, child]) => {
+					const path = `${prefix}/${name}`;
+					const meta = isSlotMeta(child) ? child : null;
+					const children = meta ? [] : build(child, path);
+					const allResources = (resources.get(path) ?? []).sort(
+						(left, right) =>
+							left.meta.priority - right.meta.priority ||
+							left.path.localeCompare(right.path),
+					);
+					const selected = allResources.filter(
+						(resource) => resource.meta.resourceSelected,
+					);
+					return {
+						path,
+						name,
+						description: meta?.description,
+						icon: meta?.icon,
+						selectionMode: meta?.selectionMode ?? "none",
+						resources: allResources,
+						selectedResources:
+							meta?.selectionMode === "single"
+								? selected.slice(0, 1)
+								: selected,
+						children,
+					};
+				});
+		return build(definition.value);
 	});
 	const flatSlots = computed(() => {
 		const result: PluginSlot[] = [];
@@ -177,9 +158,7 @@ export function useSlot(options: UseSlotOptions) {
 		return result;
 	});
 	function get(input: string) {
-		const data = toValue(options.filetree);
-		if (!data) return null;
-		const path = resolveSlotPath(data, input);
+		const path = slotPath(definition.value, input);
 		return flatSlots.value.find((slot) => slot.path === path) ?? null;
 	}
 	function paths(input: string) {
@@ -190,18 +169,13 @@ export function useSlot(options: UseSlotOptions) {
 	}
 	function setSelected(path: ResourcePath, selected: boolean) {
 		const data = toValue(options.filetree);
-		if (!data) throw new Error("Plugin 资源尚未加载。");
-		const file = data.meta[path];
-		if (!file || !("priority" in file))
-			throw new Error(`不是资源文件：${path}`);
-		const slotPath = file.slot ? directSlotPath(data, file.slot) : null;
-		const slot = slotPath ? get(slotPath) : null;
-		if (selected && slot?.selectionMode === "single") {
-			for (const other of slot.resources) {
+		const file = data?.meta[path];
+		if (!data || !file) throw new Error(`不是资源文件：${path}`);
+		const slot = file.slot ? get(file.slot) : null;
+		if (selected && slot?.selectionMode === "single")
+			for (const other of slot.resources)
 				if (other.path !== path && other.meta.resourceSelected)
 					fileApi.updateFileMeta(other.path, { resourceSelected: false });
-			}
-		}
 		fileApi.updateFileMeta(path, { resourceSelected: selected });
 	}
 	return {
@@ -214,19 +188,20 @@ export function useSlot(options: UseSlotOptions) {
 		select: (path: ResourcePath) => setSelected(path, true),
 		unselect: (path: ResourcePath) => setSelected(path, false),
 		toggle: (path: ResourcePath) => {
-			const data = toValue(options.filetree);
-			const file = data?.meta[path];
-			if (!file || !("priority" in file))
-				throw new Error(`不是资源文件：${path}`);
+			const file = toValue(options.filetree)?.meta[path];
+			if (!file) throw new Error(`不是资源文件：${path}`);
 			setSelected(path, !file.resourceSelected);
 		},
-		assign: (path: ResourcePath, localSlotPath?: ResourcePath) => {
-			if (localSlotPath) {
-				const data = toValue(options.filetree);
-				if (!data || !directSlotPath(data, localSlotPath))
-					throw new Error(`不是已注册的来源插槽：${localSlotPath}`);
-			}
-			fileApi.updateFileMeta(path, { slot: localSlotPath });
+		assign: (path: ResourcePath, slot?: ResourcePath) => {
+			const data = toValue(options.filetree);
+			if (
+				slot &&
+				(!data ||
+					!slotMetaAt(definition.value, slot) ||
+					!slotMetaAt(localSlotDef(data, sourceRoot(path)), slot))
+			)
+				throw new Error(`不是来源已声明的插槽：${slot}`);
+			fileApi.updateFileMeta(path, { slot });
 		},
 	};
 }

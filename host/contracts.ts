@@ -68,10 +68,15 @@ interface HostMedia {
 }
 
 interface HostDesktopWindow {
+	switchConversation(id: string): Promise<boolean>;
+	releaseConversation(id: string): Promise<void>;
+	isConversationOpen(id: string): Promise<boolean>;
 	minimize(): Promise<void>;
 	toggleMaximize(): Promise<void>;
+	setBackgroundMaterial(material: "mica" | "none"): Promise<void>;
 	close(): Promise<void>;
 	hide(): Promise<void>;
+	onCloseRequest(listener: () => void): () => void;
 }
 
 interface HostDesktop {
@@ -88,7 +93,8 @@ interface HostDesktop {
 			width?: number;
 			height?: number;
 			hidden?: boolean;
-		}): Promise<void>;
+			conversationId?: string;
+		}): Promise<boolean>;
 		send(label: string, event: string, payload: unknown): Promise<void>;
 		listen(event: string, listener: (payload: unknown) => void): () => void;
 		close(label: string): Promise<void>;

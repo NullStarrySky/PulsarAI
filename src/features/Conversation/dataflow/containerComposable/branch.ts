@@ -1,19 +1,19 @@
 import { computed, type MaybeRef, unref } from "vue";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import { createContainer } from "../activePathComposable/message-service";
-import { markContainerDirty } from "../containers";
-import type { ChatContainer } from "../types";
+import { addContainer, markContainerDirty } from "../containers";
+import type { ConversationContainer } from "../types";
 
 /** Chooses or creates the sibling branch for one concrete container. */
 export function useContainerBranch(
-	source: MaybeRef<ChatContainer | null | undefined>,
+	source: MaybeRef<ConversationContainer | null | undefined>,
 ) {
 	const store = useSyncStore();
 	const container = computed(() => unref(source));
 	const siblings = computed(() => {
 		const value = container.value;
 		if (!value?.previousContainer) return value ? [value.id] : [];
-		const all = store.containers.get(value.conversationid);
+		const all = store.containers.get(value.conversationId);
 		return (
 			all?.get(value.previousContainer)?.availableNextContainer ?? [value.id]
 		);
@@ -30,11 +30,11 @@ export function useContainerBranch(
 	function goto(branchId: string) {
 		const value = container.value;
 		if (!value?.previousContainer || !siblings.value.includes(branchId)) return;
-		const all = store.containers.get(value.conversationid);
+		const all = store.containers.get(value.conversationId);
 		const parent = all?.get(value.previousContainer);
 		const branch = all?.get(branchId);
 		if (!parent || !branch) return;
-		let tail: ChatContainer = branch;
+		let tail: ConversationContainer = branch;
 		parent.activeNextContainer = branchId;
 		const seen = new Set<string>();
 		while (tail.activeNextContainer && !seen.has(tail.id)) {
@@ -43,15 +43,15 @@ export function useContainerBranch(
 			if (!next) break;
 			tail = next;
 		}
-		const chat = [...store.chatMeta.values()]
-			.map((items) => items.get(value.conversationid))
+		const conversation = [...store.conversationMeta.values()]
+			.map((items) => items.get(value.conversationId))
 			.find(Boolean);
-		if (chat) {
-			chat.lastContainerId = tail.id;
-			chat.updatedAt = new Date().toISOString();
-			store.markDirty({ type: "meta", id: chat.id });
+		if (conversation) {
+			conversation.lastContainerId = tail.id;
+			conversation.updatedAt = new Date().toISOString();
+			store.markDirty({ type: "meta", id: conversation.id });
 		}
-		markContainerDirty(value.conversationid, parent.id, true);
+		markContainerDirty(value.conversationId, parent.id, true);
 	}
 	function prev() {
 		const id = siblings.value[index.value - 1];
@@ -65,27 +65,27 @@ export function useContainerBranch(
 		const value = container.value;
 		if (!value?.previousContainer) return null;
 		const parent = store.containers
-			.get(value.conversationid)
+			.get(value.conversationId)
 			?.get(value.previousContainer);
 		if (!parent) return null;
 		const branch = createContainer({
-			conversationId: value.conversationid,
+			conversationId: value.conversationId,
 			role: value.role,
 			previousContainer: value.previousContainer,
 		});
-		store.addContainer(branch);
+		addContainer(branch);
 		parent.availableNextContainer.push(branch.id);
 		parent.activeNextContainer = branch.id;
-		markContainerDirty(value.conversationid, parent.id, true);
-		const chat = [...store.chatMeta.values()]
-			.map((items) => items.get(value.conversationid))
+		markContainerDirty(value.conversationId, parent.id, true);
+		const conversation = [...store.conversationMeta.values()]
+			.map((items) => items.get(value.conversationId))
 			.find(Boolean);
-		if (chat) {
-			chat.lastContainerId = branch.id;
-			chat.updatedAt = new Date().toISOString();
-			store.markDirty({ type: "meta", id: chat.id });
+		if (conversation) {
+			conversation.lastContainerId = branch.id;
+			conversation.updatedAt = new Date().toISOString();
+			store.markDirty({ type: "meta", id: conversation.id });
 		}
-		markContainerDirty(value.conversationid, branch.id, true);
+		markContainerDirty(value.conversationId, branch.id, true);
 		return branch;
 	}
 	return {

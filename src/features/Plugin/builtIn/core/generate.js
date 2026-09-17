@@ -1,7 +1,7 @@
 export default async function run() {
 	const config = await imports("@/config.json");
 	const useStreamText = Boolean(config.useStreamText?.value);
-	const messages = (await Promise.all(slot.paths("CTX_BUILD").map((path) => imports(path)()))).flat();
+	const messages = (await Promise.all(slot.paths("/generation/CTX_BUILD").map((path) => imports(path)()))).flat();
 
 	if (useStreamText) {
 		await agent.streamText({ container: reply, messages });

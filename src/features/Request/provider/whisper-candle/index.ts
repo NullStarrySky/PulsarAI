@@ -1,6 +1,5 @@
-import { emptyModels, param } from "../shared/definition";
-import type { ProviderRegistration } from "../shared/registration";
-import { transcribeWithWhisper } from "./client";
+import { emptyModels, param, type ProviderRegistration } from "../definition";
+import { listWhisperModels, transcribeWithWhisper } from "./client";
 export const whisperCandle: ProviderRegistration = {
 	provider: {
 		id: "whisper-candle",
@@ -19,9 +18,21 @@ export const whisperCandle: ProviderRegistration = {
 			provider: [],
 		},
 		models: emptyModels(),
+		modelGetter: "whisperCandleModels",
 		requestOverride: { transcribe: "whisperCandleTranscribe" },
 	},
 	functions: {
+		whisperCandleModels: async () => ({
+			transcribe: (await listWhisperModels()).map((item) => ({
+				id: item.id,
+				displayName: item.id,
+				enabled: true,
+				extraInfo: {
+					version: item.version,
+					...(item.language ? { language: item.language } : {}),
+				},
+			})),
+		}),
 		whisperCandleTranscribe: async ({ modelId, options }: any) => {
 			if (!(options.audio instanceof Uint8Array))
 				throw new Error(

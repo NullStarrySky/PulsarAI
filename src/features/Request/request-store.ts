@@ -1,15 +1,12 @@
 import { defineStore } from "pinia";
+import { reactive, toRaw, watch } from "vue";
+import { host } from "@/host";
+import { localRequestProviders } from "./provider";
 import {
-	remove,
-	selectAll,
-	upsert,
-} from "@/features/Database/database-service";
-import { invokeRequestFunction, localRequestProviders } from "./provider";
-import type {
-	ModelApiType,
-	ModelProviderDefinition,
-} from "./provider/shared/legacy-model-catalog";
-import { builtinModelProviders } from "./provider/shared/model-catalog";
+	builtinModelProviders,
+	type ModelApiType,
+	type ModelProviderDefinition,
+} from "./provider/shared/model-catalog";
 import type {
 	ModelDefinition,
 	ParamDefinition,
@@ -34,6 +31,15 @@ function param(paramName: string, value: unknown): ParamDefinition {
 		paramComponent: { component: "input", componentParam: {} },
 		defaultValue: value,
 		value,
+	};
+}
+
+function secret(name: string): ParamDefinition {
+	return {
+		...param("apiKeyName", name),
+		title: "API Key",
+		customBlockComponent: "SecretInput",
+		paramComponent: { component: "secret", componentParam: { name } },
 	};
 }
 
@@ -65,12 +71,13 @@ function fromModelProvider(source: ModelProviderDefinition): Provider {
 		id: source.id,
 		name: source.name,
 		description: source.description,
-		icon: source.iconUrl ?? source.icon,
+		icon: source.icon,
+		iconUrl: source.iconUrl,
 		enabled: source.enabled,
 		params: {
 			basic: [
 				param("baseURL", source.baseUrl),
-				param("apiKeyName", source.apiKeyName),
+				secret(source.apiKeyName),
 			],
 			text: [],
 			image: [],
@@ -80,6 +87,7 @@ function fromModelProvider(source: ModelProviderDefinition): Provider {
 			provider: [],
 		},
 		models,
+		modelGetter: source.modelGetter,
 		...(source.transport === "openai-compatible"
 			? { hydrator: "openai-compatible" }
 			: {}),
@@ -87,148 +95,77 @@ function fromModelProvider(source: ModelProviderDefinition): Provider {
 	};
 }
 
-function cloneBuiltinProviders() {
+function builtinProviders() {
 	return [
 		...builtinModelProviders.map(fromModelProvider),
 		...structuredClone(localRequestProviders),
-	];
+	] as Provider[];
 }
 
-export const useRequestStore = defineStore("request", {
-	state: () => ({
-		providers: cloneBuiltinProviders() as Provider[],
-		loaded: false,
-	}),
-	actions: {
-		async initialize() {
-			if (this.loaded) return;
-			const persisted = await selectAll<Provider>(table);
-			const byId = new Map(
-				this.providers.map((provider) => [provider.id, provider]),
-			);
-			for (const { value } of persisted) byId.set(value.id, value);
-			this.providers = [...byId.values()];
-			this.loaded = true;
-		},
-		provider(id: string) {
-			return this.providers.find((provider) => provider.id === id);
-		},
-		async save(provider: Provider) {
-			const index = this.providers.findIndex((item) => item.id === provider.id);
-			if (index < 0) this.providers.push(provider);
-			else this.providers[index] = provider;
-			await upsert(table, provider.id, provider);
-		},
-		async addProvider(provider: Provider) {
-			const id = provider.id.trim();
-			if (!id || this.provider(id)) throw new Error("提供商 id 为空或已存在。");
-			provider.id = id;
-			this.providers.push(provider);
-			await this.save(provider);
-		},
-		async deleteProvider(providerId: string) {
-			if (!this.provider(providerId)) return;
-			this.providers = this.providers.filter((item) => item.id !== providerId);
-			await remove(table, providerId);
-		},
-		async patchProvider(providerId: string, patch: Partial<Provider>) {
-			const provider = this.provider(providerId);
-			if (!provider) return;
-			Object.assign(provider, patch);
-			await this.save(provider);
-		},
-		async addModel(
-			providerId: string,
-			kind: RequestKind,
-			model: ModelDefinition,
-		) {
-			const provider = this.provider(providerId);
-			if (!provider) return;
-			if (provider.models[kind].some((item) => item.id === model.id)) {
-				throw new Error("该类型下的模型 id 已存在。");
+function snapshot(providers: Map<string, Provider>) {
+	return new Map(
+		[...providers].map(([id, provider]) => [
+			id,
+			JSON.stringify(toRaw(provider)),
+		]),
+	);
+}
+
+/** Provider records stay in memory; a watcher batches their persistence like dbsync. */
+export const useRequestStore = defineStore("request", () => {
+	const providers = reactive(
+		new Map(builtinProviders().map((provider) => [provider.id, provider])),
+	);
+	let loaded = false;
+	let initPromise: Promise<void> | undefined;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	let pendingSync = Promise.resolve();
+	let persisted = snapshot(providers);
+
+	function scheduleSync() {
+		if (!loaded || timer) return;
+		timer = setTimeout(() => {
+			timer = undefined;
+			void _sync();
+		}, 500);
+	}
+
+	async function _sync() {
+		if (timer) clearTimeout(timer);
+		timer = undefined;
+		const next = snapshot(providers);
+		const flush = pendingSync.then(async () => {
+			for (const [id, value] of next) {
+				if (persisted.get(id) === value) continue;
+				await host.database.upsert(table, id, JSON.parse(value));
 			}
-			provider.models[kind].push(model);
-			await this.save(provider);
-		},
-		async upsertModels(
-			providerId: string,
-			kind: RequestKind,
-			models: ModelDefinition[],
-		) {
-			const provider = this.provider(providerId);
-			if (!provider) return 0;
-			let added = 0;
-			for (const model of models) {
-				const existing = provider.models[kind].find(
-					(item) => item.id === model.id,
-				);
-				if (existing)
-					Object.assign(existing, { ...model, enabled: existing.enabled });
-				else {
-					provider.models[kind].push(model);
-					added += 1;
-				}
+			for (const id of persisted.keys()) {
+				if (!next.has(id)) await host.database.remove(table, id);
 			}
-			await this.save(provider);
-			return added;
-		},
-		async removeModel(providerId: string, kind: RequestKind, modelId: string) {
-			const provider = this.provider(providerId);
-			if (!provider) return;
-			provider.models[kind] = provider.models[kind].filter(
-				(item) => item.id !== modelId,
-			);
-			await this.save(provider);
-		},
-		async refreshModels(providerId: string) {
-			const provider = this.provider(providerId);
-			if (!provider?.modelGetter) return 0;
-			const result = await invokeRequestFunction<
-				Partial<Record<RequestKind, ModelDefinition[]>> | ModelDefinition[]
-			>(provider.modelGetter, { provider });
-			let added = 0;
-			if (Array.isArray(result)) {
-				added += await this.upsertModels(providerId, "text", result);
-			} else {
-				for (const kind of [
-					"text",
-					"image",
-					"video",
-					"speech",
-					"transcribe",
-				] as const) {
-					if (result[kind])
-						added += await this.upsertModels(providerId, kind, result[kind]);
-				}
-			}
-			return added;
-		},
-		async patchParam(
-			providerId: string,
-			kind: keyof Provider["params"],
-			paramName: string,
-			value: unknown,
-		) {
-			const provider = this.provider(providerId);
-			const definition = provider?.params[kind].find(
-				(item) => item.paramName === paramName,
-			);
-			if (!provider || !definition) return;
-			definition.value = value;
-			await this.save(provider);
-		},
-	},
+			persisted = next;
+		});
+		pendingSync = flush.catch((error) => {
+			console.error("Request provider persistence failed.", error);
+		});
+		return flush;
+	}
+
+	watch(providers, scheduleSync, { deep: true, flush: "post" });
+
+	function init() {
+		if (loaded) return Promise.resolve();
+		return (initPromise ??= host.database
+			.selectAll<Provider>(table)
+			.then((rows) => {
+				for (const { value } of rows) providers.set(value.id, value);
+				persisted = snapshot(providers);
+				loaded = true;
+			})
+			.catch((error) => {
+				initPromise = undefined;
+				throw error;
+			}));
+	}
+
+	return { providers, init, _sync };
 });
-
-export function requestKindForApiType(
-	apiType: ModelApiType,
-): RequestKind | undefined {
-	return kindByApiType[apiType];
-}
-
-export function requestModels(
-	provider: Provider,
-	kind: RequestKind,
-): ModelDefinition[] {
-	return provider.models[kind];
-}

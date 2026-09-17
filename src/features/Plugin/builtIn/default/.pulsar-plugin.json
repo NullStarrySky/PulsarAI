@@ -18,6 +18,18 @@
 			"treeOrder": 0,
 			"order": 100
 		},
+		"global.slot.json": {
+			"id": "builtin-default-global-slots",
+			"icon": "",
+			"treeOrder": 1,
+			"order": 100
+		},
+		"local.slot.json": {
+			"id": "builtin-default-local-slots",
+			"icon": "",
+			"treeOrder": 2,
+			"order": 100
+		},
 		"prompt.md": {
 			"id": "builtin-default-prompt",
 			"icon": "",
@@ -29,7 +41,7 @@
 			"icon": "",
 			"treeOrder": 4,
 			"order": 100,
-			"insertion": { "slot": "chat" }
+			"insertion": { "slot": "/generation/chat" }
 		}
 	}
 }

@@ -1,6 +1,6 @@
 export default async function run() {
 	const goalState = read("@/goal/goal.data");
-	const context = (await Promise.all(slot.paths("CTX_BUILD").map((path) => imports(path)()))).flat();
+	const context = (await Promise.all(slot.paths("/generation/CTX_BUILD").map((path) => imports(path)()))).flat();
 	const messages = [
 		...context,
 		{

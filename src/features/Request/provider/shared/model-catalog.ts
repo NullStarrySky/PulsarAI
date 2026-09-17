@@ -1,11 +1,45 @@
-import type { ModelProviderDefinition } from "./legacy-model-catalog";
 import { providerIconUrl } from "./provider-icons";
+
+export type ModelApiType =
+	| "chat"
+	| "image"
+	| "video"
+	| "embedding"
+	| "asr"
+	| "tts";
+
+export interface CatalogModel {
+	id: string;
+	name: string;
+	apiType: ModelApiType;
+	contextSize?: number;
+	knowledgeCutoff?: string;
+	iconUrl?: string;
+	enabled: boolean;
+}
+
+export interface ModelProviderDefinition {
+	id: string;
+	name: string;
+	description?: string;
+	icon?: string;
+	iconUrl?: string;
+	baseUrl: string;
+	apiKeyName: string;
+	enabled: boolean;
+	builtIn?: boolean;
+	runtime?: "remote" | "local-heavy";
+	transport?: "ai-sdk" | "openai-compatible";
+	modelGetter?: string;
+	models: CatalogModel[];
+}
 
 function nativeProvider(
 	id: string,
 	name: string,
 	description: string,
 	baseUrl = "",
+	modelGetter?: string,
 ): ModelProviderDefinition {
 	return {
 		id,
@@ -19,6 +53,7 @@ function nativeProvider(
 		builtIn: true,
 		runtime: "remote",
 		transport: "ai-sdk",
+		...(modelGetter ? { modelGetter } : {}),
 		models: [],
 	};
 }
@@ -30,6 +65,7 @@ export const builtinModelProviders: ModelProviderDefinition[] = [
 			"OpenAI",
 			"OpenAI 官方 AI SDK Provider。",
 			"https://api.openai.com/v1",
+			"listOpenAIModels",
 		),
 		enabled: true,
 		models: [
@@ -66,38 +102,6 @@ export const builtinModelProviders: ModelProviderDefinition[] = [
 				enabled: false,
 			},
 			{ id: "whisper-1", name: "Whisper", apiType: "asr", enabled: false },
-		],
-	},
-	{
-		id: "huggingface",
-		name: "Hugging Face",
-		description: "Inference Providers 图片服务。",
-		icon: "huggingface",
-		iconUrl: providerIconUrl("huggingface"),
-		baseUrl: "https://router.huggingface.co",
-		apiKeyName: "huggingface_API_KEY",
-		enabled: false,
-		builtIn: true,
-		runtime: "remote",
-		models: [
-			{
-				id: "black-forest-labs/FLUX.1-dev",
-				name: "FLUX.1 dev",
-				apiType: "image",
-				enabled: true,
-			},
-			{
-				id: "black-forest-labs/FLUX.1-schnell",
-				name: "FLUX.1 schnell",
-				apiType: "image",
-				enabled: true,
-			},
-			{
-				id: "stabilityai/stable-diffusion-xl-base-1.0",
-				name: "Stable Diffusion XL Base 1.0",
-				apiType: "image",
-				enabled: true,
-			},
 		],
 	},
 	{

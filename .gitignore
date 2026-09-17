@@ -15,12 +15,6 @@ docs/.vitepress/dist
 src-tauri/target
 *.local
 temp/
-refs/
-/scripts/code-stats.ts
-react-backup/
-
-
-
 
 
 # Editor directories and files

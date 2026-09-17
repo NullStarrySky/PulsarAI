@@ -1,22 +1,28 @@
 <script setup lang="ts">
-import { watch } from "vue";
+import { onMounted, watch } from "vue";
 import { provideShape } from "@/components/fluid";
-import AppShell from "@/features/Environment/components/AppShell.vue";
 import { useEnvironmentStore } from "@/features/Environment/store";
-import AskUserComponent from "@/features/Plugin/agent/components/AskUserComponent.vue";
+import AppShell from "@/features/UI/AppShell.vue";
+import SubWindowContainer from "@/features/UI/subWindow/SubWindowContainer.vue";
+import SubWindowSurface from "@/features/UI/subWindow/SubWindowSurface.vue";
+import { readSubWindowParamsFromLocation } from "@/features/UI/subWindow/sub-window-protocol";
 
 const environment = useEnvironmentStore();
-const shapeCtx = provideShape(environment.appearance.shapeVariant ?? "rounded");
+const shape = provideShape(environment.appearance.shapeVariant ?? "rounded");
+const subWindowParams = readSubWindowParamsFromLocation();
 
 watch(
 	() => environment.appearance.shapeVariant,
-	(val) => {
-		if (val) shapeCtx.setShape(val);
-	},
+	(value) => value && shape.setShape(value),
 );
+onMounted(() => void environment.initialize());
 </script>
 
 <template>
-  <AppShell />
-  <AskUserComponent />
+  <SubWindowContainer
+    v-if="subWindowParams"
+    :component="SubWindowSurface"
+    :window-params="subWindowParams"
+  />
+  <AppShell v-else />
 </template>

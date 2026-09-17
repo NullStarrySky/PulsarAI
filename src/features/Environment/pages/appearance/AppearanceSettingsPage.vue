@@ -34,7 +34,7 @@ import {
 	Monitor,
 	Moon,
 	Sun,
-	Type,
+	Upload,
 } from "@/lib/phosphor-icons";
 
 const store = useEnvironmentStore();
@@ -43,8 +43,7 @@ const themeFileInput = ref<HTMLInputElement | null>(null);
 const themeImportOpen = ref(false);
 const themeCss = ref("");
 const themeFileName = ref("");
-const fontName = ref("");
-const fontFamily = ref("");
+const fontFileInput = ref<HTMLInputElement | null>(null);
 
 const activeAccent = computed(() => store.activeTheme.accent);
 const themeModeOptions = [
@@ -88,13 +87,18 @@ function importTheme() {
 	}
 }
 
-function importFont() {
-	const name = fontName.value.trim();
-	const family = fontFamily.value.trim();
-	if (!name || !family) return;
-	store.importFont(name, family);
-	fontName.value = "";
-	fontFamily.value = "";
+async function importFont(event: Event) {
+	const input = event.target as HTMLInputElement;
+	const file = input.files?.[0];
+	if (!file) return;
+	try {
+		const font = await store.importFont(file);
+		push.success(`已导入字体：${font.name}`);
+	} catch (error) {
+		push.error(error instanceof Error ? error.message : "字体导入失败");
+	} finally {
+		input.value = "";
+	}
 }
 </script>
 
@@ -132,7 +136,9 @@ function importFont() {
           :class="appearance.themeId === theme.id && 'bg-muted text-foreground shadow-sm'"
           @click="appearance.themeId = theme.id"
         >
-          <span class="size-9 shrink-0 rounded-full ring-1 ring-border/70" :style="{ backgroundColor: theme.accent }" />
+          <span class="relative size-9 shrink-0 rounded-full ring-1 ring-border/70" :style="{ backgroundColor: theme.accent }">
+            <span class="absolute -bottom-0.5 -right-0.5 size-4 rounded-full border-2 border-background" :style="{ backgroundColor: theme.secondary ?? theme.accent }" />
+          </span>
           <span class="min-w-0 flex-1">
             <span class="block truncate text-sm font-medium">{{ theme.name }}</span>
             <span class="mt-0.5 block truncate text-xs text-muted-foreground">{{ themeDescription(theme.id) }}</span>
@@ -163,7 +169,7 @@ function importFont() {
         </template>
       </SettingFormField>
 
-      <SettingFormField title="字体" description="选择字体方案。">
+      <SettingFormField title="字体" description="选择界面字体；上传后的字体也会在这里出现。">
         <Select v-model="appearance.fontId">
           <SelectTrigger class="ml-auto w-40"><SelectValue placeholder="选择字体" /></SelectTrigger>
           <SelectContent>
@@ -176,13 +182,13 @@ function importFont() {
         </Select>
       </SettingFormField>
 
-      <SettingFormField title="导入字体" description="填写字体名称和 CSS font-family 值。">
-        <div class="ml-auto grid w-full max-w-xl grid-cols-[1fr_1fr_auto] gap-2">
-          <Input v-model="fontName" class="h-9" placeholder="名称" />
-          <Input v-model="fontFamily" class="h-9" placeholder="字体族" />
-          <Button variant="outline" size="icon" title="导入字体" @click="importFont">
-            <Type class="size-4" />
+      <SettingFormField title="上传字体" description="支持 WOFF、WOFF2、TTF 和 OTF；字体会保存在本机，可随时重新选择。">
+        <div class="ml-auto">
+          <Button variant="outline" @click="fontFileInput?.click()">
+            <Upload data-icon="inline-start" />
+            上传字体文件
           </Button>
+          <input ref="fontFileInput" type="file" accept=".woff,.woff2,.ttf,.otf,font/woff,font/woff2,font/ttf,font/otf" class="hidden" @change="importFont" />
         </div>
       </SettingFormField>
 
@@ -275,6 +281,16 @@ function importFont() {
       </SettingFormField>
 
       <SettingFormField
+        title="玻璃化效果"
+        description="为主界面加入半透明背景和模糊效果。"
+      >
+        <Switch
+          v-model="appearance.glassEffectEnabled"
+          aria-label="启用玻璃化效果"
+        />
+      </SettingFormField>
+
+      <SettingFormField
         v-if="appearance.zenFrameEnabled"
         title="Zen 边框宽度"
         description="调整应用内容与窗口边缘之间的包裹宽度。"
@@ -312,7 +328,7 @@ function importFont() {
     </section>
 
     <Dialog v-model:open="themeImportOpen">
-      <DialogContent class="flex h-[min(52rem,88vh)] max-h-[88vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl mobile:h-[100dvh] mobile:max-h-none mobile:w-screen mobile:rounded-none mobile:border-0">
+      <DialogContent class="flex h-[min(52rem,88vh)] max-h-[88vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl mobile:h-dvh mobile:max-h-none mobile:w-screen mobile:rounded-none mobile:border-0">
         <DialogHeader class="shrink-0 border-b px-5 pb-4 pt-5 mobile:pr-14">
           <DialogTitle>导入 CSS 主题</DialogTitle>
           <DialogDescription>
@@ -340,7 +356,7 @@ function importFont() {
             </div>
             <Textarea
               v-model="themeCss"
-              class="min-h-[32rem] resize-y font-mono text-xs leading-5 mobile:min-h-[65dvh]"
+              class="min-h-128 resize-y font-mono text-xs leading-5 mobile:min-h-[65dvh]"
               placeholder="粘贴主题 CSS，或点击上方按钮读取文件……"
               spellcheck="false"
             />

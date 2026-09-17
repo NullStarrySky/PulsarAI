@@ -1,7 +1,10 @@
 import type { SpeechModelV4 } from "@ai-sdk/provider";
-import { emptyModels, param } from "../shared/definition";
-import type { ProviderRegistration } from "../shared/registration";
-import { PIPER_TTS_PROVIDER_ID, synthesizeWithPiper } from "./client";
+import { emptyModels, param, type ProviderRegistration } from "../definition";
+import {
+	PIPER_TTS_PROVIDER_ID,
+	listPiperModels,
+	synthesizeWithPiper,
+} from "./client";
 
 function model(modelId: string): SpeechModelV4 {
 	return {
@@ -40,9 +43,21 @@ export const piper: ProviderRegistration = {
 			provider: [],
 		},
 		models: emptyModels(),
+		modelGetter: "piperModels",
 		requestOverride: { generateSpeech: "piperGenerateSpeech" },
 	},
 	functions: {
+		piperModels: async () => ({
+			speech: (await listPiperModels()).map((item) => ({
+				id: item.id,
+				displayName: item.id,
+				enabled: true,
+				extraInfo: {
+					version: item.version,
+					...(item.language ? { language: item.language } : {}),
+				},
+			})),
+		}),
 		piperGenerateSpeech: ({ modelId, options, native }: any) =>
 			native({ ...options, model: model(modelId ?? "") }),
 	},

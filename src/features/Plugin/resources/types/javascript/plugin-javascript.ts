@@ -1,4 +1,4 @@
-import { parse } from "acorn";
+import { parse, tokenizer } from "acorn";
 import type { SandboxEnvironment } from "../../../runtime/sandbox";
 
 /** Evaluate a source-scoped module once; loading never invokes its export. */
@@ -11,6 +11,22 @@ export function importJavaScript(
 			ecmaVersion: "latest",
 			sourceType: "module",
 		});
+		const tokens = tokenizer(source, {
+			ecmaVersion: "latest",
+			sourceType: "module",
+		});
+		for (
+			let token = tokens.getToken();
+			token.type.label !== "eof";
+			token = tokens.getToken()
+		) {
+			if (
+				(token.type.label === "string" || token.type.label === "template") &&
+				typeof token.value === "string" &&
+				/\{\{[\s\S]*?\}\}|\[\[[\s\S]*?\]\]/.test(token.value)
+			)
+				throw new Error("Plugin JS 不支持宏；请在文本或聊天资源中使用宏。");
+		}
 		let binding = "__pulsarDefault";
 		while (source.includes(binding)) binding += "_";
 		let found = false;

@@ -1,4 +1,4 @@
-import type { ParamDefinition, Provider, RequestKind } from "../types";
+import type { ParamDefinition } from "../types";
 
 const blockedSegments = new Set(["__proto__", "constructor", "prototype"]);
 
@@ -43,25 +43,6 @@ export function setParamPath(
 		throw new Error(`参数 ${path} 重复。`);
 	}
 	current[key] = value;
-}
-
-export function buildRequestParams(provider: Provider, kind: RequestKind) {
-	const params: Record<string, unknown> = {};
-	for (const definition of [
-		...provider.params.basic,
-		...provider.params[kind],
-	]) {
-		if (!definition.paramName.trim()) continue;
-		setParamPath(params, definition.paramName, definition.value);
-	}
-	const providerOptions: Record<string, unknown> = {};
-	for (const definition of provider.params.provider) {
-		if (!definition.paramName.trim()) continue;
-		setParamPath(providerOptions, definition.paramName, definition.value);
-	}
-	if (Object.keys(providerOptions).length)
-		params.providerOptions = providerOptions;
-	return params;
 }
 
 export function defaultParam(definition: ParamDefinition) {

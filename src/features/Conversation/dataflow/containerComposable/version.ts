@@ -1,13 +1,13 @@
 import { computed, type MaybeRef, unref } from "vue";
-import { markContainerDirty } from "../containers";
 import {
 	createMessage,
 	currentMessage,
 } from "../activePathComposable/message-service";
-import type { ChatContainer } from "../types";
+import { markContainerDirty } from "../containers";
+import type { ConversationContainer } from "../types";
 
 export function useContainerVersion(
-	source: MaybeRef<ChatContainer | null | undefined>,
+	source: MaybeRef<ConversationContainer | null | undefined>,
 ) {
 	const container = computed(() => unref(source));
 	const index = computed(() => container.value?.activeMessage ?? 0);
@@ -20,7 +20,7 @@ export function useContainerVersion(
 		const value = container.value;
 		if (!value || next < 0 || next >= value.content.length) return;
 		value.activeMessage = next;
-		markContainerDirty(value.conversationid, value.id);
+		markContainerDirty(value.conversationId, value.id);
 	}
 	function prev() {
 		goto(index.value - 1);
@@ -33,7 +33,7 @@ export function useContainerVersion(
 		if (!value) return null;
 		value.content.push(createMessage(input));
 		value.activeMessage = value.content.length - 1;
-		markContainerDirty(value.conversationid, value.id);
+		markContainerDirty(value.conversationId, value.id);
 		return current.value;
 	}
 	function remove(target = index.value) {
@@ -47,7 +47,7 @@ export function useContainerVersion(
 			return null;
 		const [message] = value.content.splice(target, 1);
 		value.activeMessage = Math.min(target, value.content.length - 1);
-		markContainerDirty(value.conversationid, value.id);
+		markContainerDirty(value.conversationId, value.id);
 		return message ?? null;
 	}
 	return {

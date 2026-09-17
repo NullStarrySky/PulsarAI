@@ -7,8 +7,11 @@ import { useContainerMessage } from "./message";
 import { useContainerVersion } from "./version";
 
 /** All behaviour scoped to one persisted message container. */
-export function useContainerComposable(chatId: string, containerId: string) {
-	const container = useContainer(chatId, containerId);
+export function useContainerComposable(
+	conversationId: string,
+	containerId: string,
+) {
+	const container = useContainer(conversationId, containerId);
 	return {
 		container,
 		version: useContainerVersion(container),

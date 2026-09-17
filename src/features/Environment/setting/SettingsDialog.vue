@@ -8,28 +8,30 @@ import {
 	DialogContent,
 	DialogDescription,
 	DialogTitle,
-	Dropdown,
-	MenuItem,
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+	DropdownSearch,
 	TabItem,
 	Tabs,
 	TabsList,
 } from "@/components/fluid";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useFloatingSurface } from "@/features/Environment/floating-surface";
 import { useResponsiveStore } from "@/features/Environment/responsive-store";
-import { useEnvironmentStore } from "@/features/Environment/store";
-import { Menu, Search, X } from "@/lib/phosphor-icons";
-import { cn } from "@/lib/utils";
+import { useUIStore } from "@/features/UI/store";
+import { ChevronDown, X } from "@/lib/phosphor-icons";
 
-const layout = useEnvironmentStore();
+const layout = useUIStore();
 const responsive = useResponsiveStore();
 const { settingsOpen } = storeToRefs(layout);
 const { isMobileLayout } = storeToRefs(responsive);
-const activePageId = ref("");
-const activeTabId = ref("");
-const sidebarOpen = ref(true);
-const settingsSearch = ref("");
+const {
+	settingsPageId: activePageId,
+	settingsTabId: activeTabId,
+	settingsSearch,
+} = storeToRefs(layout);
 const dialog = ref<HTMLElement | { $el?: unknown } | null>(null);
 const floating = useFloatingSurface({
 	surfaceId: "settings",
@@ -79,15 +81,10 @@ watchEffect(() => {
 	}
 });
 
-watchEffect(() => {
-	if (settingsOpen.value && isMobileLayout.value) sidebarOpen.value = false;
-});
-
 function selectPage(pageId: string) {
 	activePageId.value = pageId;
 	const page = layout.settingPages.find((item) => item.meta.id === pageId);
 	activeTabId.value = page?.tabs?.[0]?.id ?? "";
-	if (isMobileLayout.value) sidebarOpen.value = false;
 }
 </script>
 
@@ -107,66 +104,31 @@ function selectPage(pageId: string) {
         <DialogDescription>管理 Pulsar 的应用设置。</DialogDescription>
       </div>
 
-      <div class="relative grid min-h-0 flex-1 grid-cols-[15rem_minmax(0,1fr)] overflow-hidden mobile:grid-cols-1">
-        <button
-          v-if="isMobileLayout && sidebarOpen"
-          type="button"
-          class="absolute inset-0 z-20 bg-foreground/20"
-          aria-label="关闭设置导航"
-          @click="sidebarOpen = false"
-        />
-
-        <aside
-          :class="cn(
-            'min-h-0 overflow-hidden border-r border-border/60 bg-muted/45',
-            isMobileLayout && [
-              'absolute inset-y-0 left-0 z-30 w-[min(19rem,88vw)] shadow-xl transition-transform',
-              sidebarOpen ? 'translate-x-0' : '-translate-x-full',
-            ],
-          )"
-        >
-          <nav class="flex h-full min-h-0 flex-col">
-            <div class="relative shrink-0 px-4 pb-3 pt-4">
-              <div data-floating-drag-handle class="absolute inset-x-0 top-0 h-14 cursor-grab active:cursor-grabbing" />
-              <div data-floating-drag-handle class="mb-3 flex h-7 cursor-grab items-center gap-2 px-1 active:cursor-grabbing">
-                <h2 class="text-base font-semibold">设置</h2>
-                <kbd class="rounded-md bg-background/65 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">Ctrl+,</kbd>
-              </div>
-              <div class="relative">
-                <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input v-model="settingsSearch" class="h-10 rounded-xl border-0 bg-background/55 pl-9 shadow-none" placeholder="搜索" />
-              </div>
-            </div>
-
-            <ScrollArea class="min-h-0 flex-1">
-              <div class="px-2 pb-4">
-                <Dropdown
-                  v-if="filteredPages.length > 0"
-                  :checked-index="activePageIndex"
-                  :shadow-level="0"
-                  class="w-full bg-transparent border-0 shadow-none gap-0.5"
-                >
-                  <MenuItem
-                    v-for="(page, idx) in filteredPages"
+      <main class="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-background/30">
+          <header data-floating-drag-handle class="relative shrink-0 cursor-grab px-7 pb-3 pt-5 active:cursor-grabbing mobile:pl-16 mobile:pr-4">
+            <div data-floating-drag-handle class="absolute inset-x-0 top-0 h-14 cursor-grab active:cursor-grabbing" />
+            <div class="flex min-h-9 items-center justify-between gap-4">
+              <DropdownMenu>
+                <DropdownMenuTrigger>
+                  <Button variant="outline" class="max-w-[min(20rem,calc(100vw-9rem))] justify-between gap-3" aria-label="选择设置页面">
+                    <span class="flex min-w-0 items-center gap-2"><component :is="activePage?.meta.icon" class="size-4 shrink-0" /><span class="truncate text-base">{{ activePage?.meta.title ?? "设置" }}</span></span>
+                    <ChevronDown class="size-4 shrink-0 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent :checked-index="activePageIndex" class="w-64">
+                  <DropdownSearch v-model="settingsSearch" placeholder="搜索设置" />
+                  <DropdownMenuItem
+                    v-for="(page, index) in filteredPages"
                     :key="page.meta.id"
-                    :index="idx"
+                    :index="index"
                     :icon="page.meta.icon"
                     :label="page.meta.title"
                     :checked="activePage?.meta.id === page.meta.id"
                     @select="selectPage(page.meta.id)"
                   />
-                </Dropdown>
-                <p v-else class="px-3 py-10 text-center text-xs text-muted-foreground">没有匹配的设置</p>
-              </div>
-            </ScrollArea>
-          </nav>
-        </aside>
-
-        <main class="relative flex min-h-0 min-w-0 flex-col overflow-hidden bg-background/30">
-          <header data-floating-drag-handle class="relative shrink-0 cursor-grab px-7 pb-3 pt-5 active:cursor-grabbing mobile:pl-16 mobile:pr-4">
-            <div data-floating-drag-handle class="absolute inset-x-0 top-0 h-14 cursor-grab active:cursor-grabbing" />
-            <div class="flex min-h-9 items-center justify-between gap-4">
-              <h1 data-floating-drag-handle class="truncate text-xl font-semibold tracking-tight cursor-grab active:cursor-grabbing">{{ activePage?.meta.title ?? "设置" }}</h1>
+                  <p v-if="filteredPages.length === 0" class="px-3 py-6 text-center text-xs text-muted-foreground">没有匹配的设置</p>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <DialogClose as-child>
                 <Button variant="ghost" size="icon" class="size-9 rounded-full text-muted-foreground" title="关闭设置">
                   <X />
@@ -190,20 +152,11 @@ function selectPage(pageId: string) {
             </Tabs>
           </header>
 
-          <Button
-            v-if="isMobileLayout && !sidebarOpen"
-            class="absolute left-4 top-5 z-20 size-9 rounded-full"
-            size="icon"
-            variant="ghost"
-            title="打开设置导航"
-            @click="sidebarOpen = true"
-          >
-            <Menu />
-          </Button>
-
-          <div class="min-h-0 flex-1 overflow-hidden">
-            <component :is="activeComponent" v-if="activeComponent" :key="`${activePage?.meta.id}:${activeTabId}`" />
-          </div>
+          <ScrollArea class="min-h-0 flex-1">
+            <div class="min-h-full px-7 pb-8 pt-2 mobile:px-4 mobile:pb-5">
+              <component :is="activeComponent" v-if="activeComponent" :key="`${activePage?.meta.id}:${activeTabId}`" />
+            </div>
+          </ScrollArea>
 
           <div
             v-if="!isMobileLayout"
@@ -211,8 +164,7 @@ function selectPage(pageId: string) {
             class="absolute inset-x-0 bottom-0 z-10 h-4 cursor-grab active:cursor-grabbing"
             aria-hidden="true"
           />
-        </main>
-      </div>
+      </main>
     </DialogContent>
   </Dialog>
 </template>

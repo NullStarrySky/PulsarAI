@@ -1,0 +1,13 @@
+{
+	"generation": {
+		"chat": { "selectionMode": "single" },
+		"generatePath": { "selectionMode": "single" },
+		"CTX_BUILD": { "selectionMode": "single" },
+		"CTX_PROCESS_BEFORE_REGEX": { "selectionMode": "none" },
+		"REGEX": { "selectionMode": "none" }
+	},
+	"resource": {
+		"background": { "selectionMode": "single" },
+		"COMMAND": { "selectionMode": "none" }
+	}
+}

@@ -1,8 +1,11 @@
 import { host } from "@/host";
 import type { GenerateImageResult } from "../../ai-sdk";
-import { emptyModels, param, secret } from "../shared/definition";
-import type { ProviderRegistration } from "../shared/registration";
-import { generateAutomatic1111Images } from "./client";
+import { emptyModels, param, secret, type ProviderRegistration } from "../definition";
+import type { Provider } from "../../types";
+import {
+	generateAutomatic1111Images,
+	testAutomatic1111Connection,
+} from "./client";
 
 async function generateImage({
 	options,
@@ -53,9 +56,41 @@ export const automatic1111: ProviderRegistration = {
 			...emptyModels(),
 			image: [{ id: "txt2img", displayName: "txt2img", enabled: true }],
 		},
+		modelGetter: "automatic1111Models",
 		requestOverride: { generateImage: "automatic1111GenerateImage" },
 	},
-	functions: { automatic1111GenerateImage: generateImage },
+	functions: {
+		automatic1111GenerateImage: generateImage,
+		automatic1111Models: async ({ provider }: { provider: Provider }) => {
+			const value = (name: string, fallback: string | number) =>
+				provider.params.basic
+					.concat(provider.params.image)
+					.find((item) => item.paramName === name)?.value ?? fallback;
+			const catalog = await testAutomatic1111Connection(
+				{
+					protocol: value("protocol", "http") === "https" ? "https" : "http",
+					host: String(value("host", "127.0.0.1")),
+					port: Number(value("port", 7860)),
+					model: String(value("model", "")),
+					sampler: String(value("sampler", "Euler a")),
+					scheduler: String(value("scheduler", "Automatic")),
+					width: Number(value("width", 832)),
+					height: Number(value("height", 1216)),
+					steps: Number(value("steps", 28)),
+					cfg: Number(value("cfg", 7)),
+					negativePrompt: String(value("negativePrompt", "")),
+				},
+				await host.secrets.has("automatic1111_BASIC_AUTH"),
+			);
+			return {
+				image: catalog.models.map((id) => ({
+					id,
+					displayName: id,
+					enabled: true,
+				})),
+			};
+		},
+	},
 };
 function text(value: unknown) {
 	const result = typeof value === "string" ? value.trim() : "";

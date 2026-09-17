@@ -233,10 +233,17 @@ export const host: Host = {
 	webSocket: DesktopWebSocket,
 	desktop: {
 		window: {
+			switchConversation: (id) => invoke("window", "switchConversation", { id }),
+			releaseConversation: (id) => invoke("window", "releaseConversation", { id }),
+			isConversationOpen: (id) => invoke("window", "isConversationOpen", { id }),
 			minimize: () => invoke("window", "minimize"),
 			toggleMaximize: () => invoke("window", "toggleMaximize"),
+			setBackgroundMaterial: (material) =>
+				invoke("window", "setBackgroundMaterial", { material }),
 			close: () => invoke("window", "close"),
 			hide: () => invoke("window", "hide"),
+			onCloseRequest: (listener) =>
+				bridge ? bridge.listen("window:close-request", listener) : () => {},
 		},
 		openExternal: (url) => invoke("desktop", "openExternal", { url }),
 		executeEnvironmentCommand: (name) =>

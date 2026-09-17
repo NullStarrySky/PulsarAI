@@ -1,18 +1,5 @@
-import type { Component } from "vue";
-
-export const TOME = Symbol("tome");
-export type Tome = typeof TOME;
-
 export type RequestKind = "text" | "image" | "video" | "speech" | "transcribe";
 export type ParamGroup = "basic" | RequestKind | "provider";
-export type FunctionalString = string;
-export type ComponentString = string;
-export type BuiltInFunctionKey = string;
-export type BuiltInComponentKey = string;
-export type RequestValue = unknown;
-
-export type BuiltInFunctions = Map<BuiltInFunctionKey, Function>;
-export type BuiltInComponents = Map<BuiltInComponentKey, Component>;
 
 export interface ParamDefinition {
 	/** Dot-separated destination below the request object. */
@@ -20,14 +7,14 @@ export interface ParamDefinition {
 	enableInDefault: boolean;
 	title?: string;
 	description?: string;
-	customBlockComponent?: ComponentString | BuiltInComponentKey;
+	customBlockComponent?: string;
 	paramComponent: {
-		component: ComponentString | BuiltInComponentKey;
+		component: string;
 		componentParam: unknown;
 	};
-	defaultValue: RequestValue;
-	value: RequestValue;
-	valueChecker?: FunctionalString | BuiltInFunctionKey;
+	defaultValue: unknown;
+	value: unknown;
+	valueChecker?: string;
 }
 
 export interface ModelDefinition {
@@ -40,16 +27,14 @@ export interface ModelDefinition {
 	extraInfo?: Record<string, string>;
 }
 
-export type ProviderHydrator = FunctionalString | BuiltInFunctionKey;
-
 export interface RequestOverride {
-	generateText?: FunctionalString | BuiltInFunctionKey;
-	streamText?: FunctionalString | BuiltInFunctionKey;
-	generateImage?: FunctionalString | BuiltInFunctionKey;
-	generateVideo?: FunctionalString | BuiltInFunctionKey;
-	generateSpeech?: FunctionalString | BuiltInFunctionKey;
-	transcribe?: FunctionalString | BuiltInFunctionKey;
-	ToolLoopAgent?: FunctionalString | BuiltInFunctionKey;
+	generateText?: string;
+	streamText?: string;
+	generateImage?: string;
+	generateVideo?: string;
+	generateSpeech?: string;
+	transcribe?: string;
+	ToolLoopAgent?: string;
 }
 
 export interface Provider {
@@ -57,27 +42,86 @@ export interface Provider {
 	name: string;
 	description?: string;
 	icon?: string;
+	iconUrl?: string;
 	enabled: boolean;
 	params: Record<ParamGroup, ParamDefinition[]>;
-	modelGetter?: FunctionalString | BuiltInFunctionKey;
+	modelGetter?: string;
 	models: Record<RequestKind, ModelDefinition[]>;
 	/** Builds an AI SDK model from this Provider and the selected model id. */
-	hydrator?: ProviderHydrator;
+	hydrator?: string;
 	requestOverride: RequestOverride;
 }
-
-export type ParamDefinitionPreset = Map<
-	string,
-	Record<ParamGroup, ParamDefinition[]>
->;
-
-/** Creation-time templates; providers retain their own mutable definitions. */
-export const paramDefinitionPreset: ParamDefinitionPreset = new Map();
 
 export interface ModelSelection {
 	providerId: string;
 	modelId: string;
 	kind: RequestKind;
+}
+
+export interface GeneratedImage {
+	mediaType: string;
+	uint8Array: Uint8Array;
+	base64: string;
+}
+
+export interface ServiceProviderView {
+	id: string;
+	name: string;
+	description?: string;
+	icon?: string;
+	iconUrl?: string;
+	enabled: boolean;
+	source: "model" | "feature";
+}
+
+export type ReasoningEffort =
+	| "none"
+	| "minimal"
+	| "low"
+	| "medium"
+	| "high"
+	| "xhigh";
+export type ThinkingLevel = "auto" | ReasoningEffort;
+
+export const thinkingLevelOptions = [
+	{ value: "auto", label: "自动" },
+	{ value: "none", label: "关闭" },
+	{ value: "minimal", label: "最小" },
+	{ value: "low", label: "低" },
+	{ value: "medium", label: "中" },
+	{ value: "high", label: "高" },
+	{ value: "xhigh", label: "超高" },
+] as const satisfies ReadonlyArray<{ value: ThinkingLevel; label: string }>;
+
+const reasoningEfforts = new Set<ReasoningEffort>(
+	thinkingLevelOptions
+		.map((option) => option.value)
+		.filter((value): value is ReasoningEffort => value !== "auto"),
+);
+
+export interface ParsedModelReference {
+	providerId: string;
+	modelId: string;
+	thinkingLevel: ThinkingLevel;
+	reasoning?: ReasoningEffort;
+}
+
+export function parseModelReference(reference: string): ParsedModelReference {
+	const [providerId = "", ...segments] = reference.trim().split("/");
+	const possibleReasoning = segments[segments.length - 1] as
+		| ReasoningEffort
+		| undefined;
+	const reasoning =
+		possibleReasoning && reasoningEfforts.has(possibleReasoning)
+			? possibleReasoning
+			: undefined;
+	if (reasoning) segments.pop();
+	return {
+		providerId,
+		modelId: segments.join("/"),
+		thinkingLevel: reasoning ?? "auto",
+		...(reasoning ? { reasoning } : {}),
+	};
 }
 
 export type SpeechBoundaryType = "WordBoundary" | "SentenceBoundary";

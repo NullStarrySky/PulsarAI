@@ -13,15 +13,15 @@ import {
 import { writeMedia } from "@/features/Plugin/media/media-link";
 import { createSandboxFunction } from "@/features/Plugin/runtime/sandbox";
 import { useRequestDefaults } from "./defaults";
-import { builtInFunctions } from "./provider";
 import {
 	hydrateModel as hydrateLegacyModel,
 	type HydratableModel as LegacyHydratableModel,
 	registerProviderHydration,
 } from "./provider/shared/native-ai";
+import { builtInFunctions } from "./provider";
 import { useRequestStore } from "./request-store";
 import type { ModelSelection, Provider, RequestKind } from "./types";
-import { buildRequestParams } from "./utils/params";
+import { useModel } from "./use-model";
 
 export type HydratableModel =
 	| ModelSelection
@@ -32,7 +32,6 @@ export type HydratableModel =
 	| TranscriptionModel
 	| SpeechModel;
 
-type Operation = keyof Provider["requestOverride"];
 export type GenerateImageResult = Awaited<ReturnType<typeof baseGenerateImage>>;
 type WithModel<T> = T extends { model: unknown }
 	? Omit<T, "model"> & { model: HydratableModel }
@@ -70,7 +69,7 @@ function providerFor(model: HydratableModel, kind: RequestKind) {
 	return {
 		selection,
 		provider: selection
-			? useRequestStore().provider(selection.providerId)
+			? useRequestStore().providers.get(selection.providerId)
 			: undefined,
 	};
 }
@@ -111,14 +110,13 @@ function legacyKind(kind: RequestKind) {
 export function hydrateRequestModel(model: HydratableModel, kind: RequestKind) {
 	const { provider, selection } = providerFor(model, kind);
 	if (!provider || !selection) return model as LegacyHydratableModel;
-	if (!provider.enabled) throw new Error(`提供商 ${provider.name} 未启用。`);
 	if (
 		!provider.models[kind].some(
 			(item) => item.id === selection.modelId && item.enabled,
 		)
-	) {
+	)
 		throw new Error(`模型 ${selection.modelId} 未启用或不支持 ${kind}。`);
-	}
+	useModel(provider, selection.modelId);
 	const hydrator = provider.hydrator;
 	if (!hydrator || hydrator === "ai-sdk" || hydrator === "openai-compatible") {
 		return hydrateFromProvider(provider, selection.modelId, kind);
@@ -131,67 +129,82 @@ export function hydrateRequestModel(model: HydratableModel, kind: RequestKind) {
 	return result as LegacyHydratableModel;
 }
 
-function requestInput<T extends { model: HydratableModel }>(
-	kind: RequestKind,
-	input: T,
-) {
-	const { provider, selection } = providerFor(input.model, kind);
-	const params = provider ? buildRequestParams(provider, kind) : {};
-	const options = {
-		...params,
-		...input,
-	};
-	return { provider, selection, options };
-}
-
-function call<T extends { model: HydratableModel }, R>(
-	operation: Operation,
-	kind: RequestKind,
-	input: T,
-	native: (options: Record<string, unknown>) => R,
-): R {
-	const { provider, selection, options } = requestInput(kind, input);
-	const override = provider?.requestOverride[operation];
-	const callNative = (next: Record<string, unknown> = options) =>
-		native({
-			...next,
-			model: hydrateRequestModel(
-				(next.model as HydratableModel | undefined) ?? input.model,
-				kind,
-			),
-		});
-	if (!override) return callNative();
-	const fn = builtInFunctions.get(override) ?? createSandboxFunction(override);
-	return fn({
-		provider,
-		modelId: selection?.modelId,
-		options,
-		native: callNative,
-	}) as R;
-}
-
 export function generateText(
 	options: WithModel<Parameters<typeof baseGenerateText>[0]>,
 ) {
-	return call("generateText", "text", options, (input) =>
-		baseGenerateText(input as Parameters<typeof baseGenerateText>[0]),
-	);
+	const { provider, selection } = providerFor(options.model, "text");
+	if (!provider || !selection)
+		return baseGenerateText(options as Parameters<typeof baseGenerateText>[0]);
+	const model = useModel(provider, selection.modelId);
+	const input = {
+		...model.param,
+		...(Object.keys(model.providerParam).length
+			? { providerOptions: model.providerParam }
+			: {}),
+		...options,
+	};
+	const native = (next: Record<string, unknown> = input) =>
+		baseGenerateText({
+			...next,
+			model: hydrateRequestModel(
+				(next.model as HydratableModel | undefined) ?? options.model,
+				"text",
+			),
+		} as Parameters<typeof baseGenerateText>[0]);
+	return model.override?.("generateText", input, native) ?? native();
 }
 
 export function streamText(
 	options: WithModel<Parameters<typeof baseStreamText>[0]>,
 ) {
-	return call("streamText", "text", options, (input) =>
-		baseStreamText(input as Parameters<typeof baseStreamText>[0]),
-	);
+	const { provider, selection } = providerFor(options.model, "text");
+	if (!provider || !selection)
+		return baseStreamText(options as Parameters<typeof baseStreamText>[0]);
+	const model = useModel(provider, selection.modelId);
+	const input = {
+		...model.param,
+		...(Object.keys(model.providerParam).length
+			? { providerOptions: model.providerParam }
+			: {}),
+		...options,
+	};
+	const native = (next: Record<string, unknown> = input) =>
+		baseStreamText({
+			...next,
+			model: hydrateRequestModel(
+				(next.model as HydratableModel | undefined) ?? options.model,
+				"text",
+			),
+		} as Parameters<typeof baseStreamText>[0]);
+	return model.override?.("streamText", input, native) ?? native();
 }
 
 export function generateImage(options: GenerateImageOptions) {
 	const model = options.model ?? useRequestDefaults().defaults.imageModel;
 	if (!model) throw new Error("尚未配置图片生成模型。");
-	return call("generateImage", "image", { ...options, model }, (input) =>
-		baseGenerateImage(input as Parameters<typeof baseGenerateImage>[0]),
-	);
+	const inputOptions = { ...options, model };
+	const { provider, selection } = providerFor(model, "image");
+	if (!provider || !selection)
+		return baseGenerateImage(
+			inputOptions as Parameters<typeof baseGenerateImage>[0],
+		);
+	const selected = useModel(provider, selection.modelId);
+	const input = {
+		...selected.param,
+		...(Object.keys(selected.providerParam).length
+			? { providerOptions: selected.providerParam }
+			: {}),
+		...inputOptions,
+	};
+	const native = (next: Record<string, unknown> = input) =>
+		baseGenerateImage({
+			...next,
+			model: hydrateRequestModel(
+				(next.model as HydratableModel | undefined) ?? model,
+				"image",
+			),
+		} as Parameters<typeof baseGenerateImage>[0]);
+	return selected.override?.("generateImage", input, native) ?? native();
 }
 
 export async function generateImageToPath(
@@ -208,26 +221,76 @@ export async function generateImageToPath(
 export function generateVideo(
 	options: { model: HydratableModel } & Record<string, unknown>,
 ) {
-	return call("generateVideo", "video", options, () => {
+	const { provider, selection } = providerFor(options.model, "video");
+	if (!provider || !selection)
 		throw new Error("此提供商没有实现 generateVideo override。");
-	});
+	const model = useModel(provider, selection.modelId);
+	const input = {
+		...model.param,
+		...(Object.keys(model.providerParam).length
+			? { providerOptions: model.providerParam }
+			: {}),
+		...options,
+	};
+	const native = () => {
+		throw new Error("此提供商没有实现 generateVideo override。");
+	};
+	return model.override?.("generateVideo", input, native) ?? native();
 }
 
 export function generateSpeech(options: GenerateSpeechOptions) {
 	const model = options.model ?? useRequestDefaults().defaults.speechModel;
 	if (!model) throw new Error("尚未配置语音生成模型。");
-	return call("generateSpeech", "speech", { ...options, model }, (input) =>
-		baseGenerateSpeech(input as Parameters<typeof baseGenerateSpeech>[0]),
-	);
+	const inputOptions = { ...options, model };
+	const { provider, selection } = providerFor(model, "speech");
+	if (!provider || !selection)
+		return baseGenerateSpeech(
+			inputOptions as Parameters<typeof baseGenerateSpeech>[0],
+		);
+	const selected = useModel(provider, selection.modelId);
+	const input = {
+		...selected.param,
+		...(Object.keys(selected.providerParam).length
+			? { providerOptions: selected.providerParam }
+			: {}),
+		...inputOptions,
+	};
+	const native = (next: Record<string, unknown> = input) =>
+		baseGenerateSpeech({
+			...next,
+			model: hydrateRequestModel(
+				(next.model as HydratableModel | undefined) ?? model,
+				"speech",
+			),
+		} as Parameters<typeof baseGenerateSpeech>[0]);
+	return selected.override?.("generateSpeech", input, native) ?? native();
 }
 
 export function transcribe(options: TranscribeOptions) {
 	const model =
 		options.model ?? useRequestDefaults().defaults.transcriptionModel;
 	if (!model) throw new Error("尚未配置语音转写模型。");
-	return call("transcribe", "transcribe", { ...options, model }, (input) =>
-		baseTranscribe(input as Parameters<typeof baseTranscribe>[0]),
-	);
+	const inputOptions = { ...options, model };
+	const { provider, selection } = providerFor(model, "transcribe");
+	if (!provider || !selection)
+		return baseTranscribe(inputOptions as Parameters<typeof baseTranscribe>[0]);
+	const selected = useModel(provider, selection.modelId);
+	const input = {
+		...selected.param,
+		...(Object.keys(selected.providerParam).length
+			? { providerOptions: selected.providerParam }
+			: {}),
+		...inputOptions,
+	};
+	const native = (next: Record<string, unknown> = input) =>
+		baseTranscribe({
+			...next,
+			model: hydrateRequestModel(
+				(next.model as HydratableModel | undefined) ?? model,
+				"transcribe",
+			),
+		} as Parameters<typeof baseTranscribe>[0]);
+	return selected.override?.("transcribe", input, native) ?? native();
 }
 
 /** Lets Provider overrides wrap ToolLoopAgent without creating a second Agent path. */
@@ -237,17 +300,25 @@ export function createToolLoopAgent<T>(
 	native: (options: Record<string, unknown>) => T,
 ): T {
 	const { provider, selection } = providerFor(model, "text");
-	const override = provider?.requestOverride.ToolLoopAgent;
-	const callNative = (next: Record<string, unknown> = options) =>
-		native({ ...next, model: hydrateRequestModel(model, "text") });
-	if (!override) return callNative();
-	const fn = builtInFunctions.get(override) ?? createSandboxFunction(override);
-	const result = fn({
-		provider,
-		modelId: selection?.modelId,
-		options,
-		native: callNative,
-	});
+	if (!provider || !selection)
+		return native({ ...options, model: hydrateRequestModel(model, "text") });
+	const selected = useModel(provider, selection.modelId);
+	const input = {
+		...selected.param,
+		...(Object.keys(selected.providerParam).length
+			? { providerOptions: selected.providerParam }
+			: {}),
+		...options,
+	};
+	const callNative = (next: Record<string, unknown> = input) =>
+		native({
+			...next,
+			model: hydrateRequestModel(
+				(next.model as HydratableModel | undefined) ?? model,
+				"text",
+			),
+		});
+	const result = selected.override?.("ToolLoopAgent", input, callNative) ?? callNative();
 	if (result instanceof Promise) {
 		throw new Error("ToolLoopAgent override 必须同步返回 Agent 实例。");
 	}

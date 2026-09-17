@@ -1,22 +1,19 @@
 import { toRaw } from "vue";
 import {
 	defaultFileMeta,
-	defaultFolderMeta,
 	type FileMeta,
-	type FolderMeta,
 	type PluginData,
 	type Pulse,
 	type ResourceEntry,
 	type ResourceListResult,
-	type ResourceMeta,
 	type ResourceNode,
 	type ResourcePath,
 	type ResourceSearchMatch,
 	type ResourceSearchResult,
 	type ResourceStat,
+	type ResourceTree,
 	type ResourceTreeEntry,
 	type ResourceTreeResult,
-	type ResourceTree,
 } from "./types";
 
 export type ResolvedNode = {
@@ -148,32 +145,8 @@ function moveMeta(
 	if (!copy) for (const [path] of entries) delete meta[path];
 	for (const [path, value] of entries) {
 		const nextPath = `${to}${path.slice(from.length)}`;
-		const next = (copy ? structuredClone(value) : value) as ResourceMeta;
-		if ("slot" in next && next.slot && sameOrChild(next.slot, from))
-			next.slot = `${to}${next.slot.slice(from.length)}`;
-		if ("parent" in next && next.parent && sameOrChild(next.parent, from))
-			next.parent = `${to}${next.parent.slice(from.length)}`;
+		const next = copy ? structuredClone(value) : value;
 		set(meta, nextPath, next);
-	}
-}
-
-/** Rewrites references owned by resources outside a moved subtree. */
-function rewriteMetaReferences(
-	meta: PluginData["meta"],
-	from: ResourcePath,
-	to: ResourcePath,
-) {
-	for (const [path, value] of Object.entries(meta)) {
-		let changed = false;
-		if ("slot" in value && value.slot && sameOrChild(value.slot, from)) {
-			value.slot = `${to}${value.slot.slice(from.length)}`;
-			changed = true;
-		}
-		if ("parent" in value && value.parent && sameOrChild(value.parent, from)) {
-			value.parent = `${to}${value.parent.slice(from.length)}`;
-			changed = true;
-		}
-		if (changed) set(meta, path, value);
 	}
 }
 
@@ -190,14 +163,6 @@ function requireFileMeta(data: PluginData, path: ResourcePath) {
 	} as FileMeta;
 }
 
-function requireFolderMeta(data: PluginData, path: ResourcePath) {
-	const current = data.meta[path];
-	return {
-		...defaultFolderMeta(),
-		...(current && "selectionMode" in current ? current : {}),
-	} as FolderMeta;
-}
-
 function createFolders(data: PluginData, path: ResourcePath) {
 	const normalized = normalizeResourcePath(path);
 	if (normalized === "/") return;
@@ -209,15 +174,12 @@ function createFolders(data: PluginData, path: ResourcePath) {
 		if (existing === undefined) {
 			const next: ResourceTree = {};
 			set(current, part, next);
-			set(data.meta, currentPath, defaultFolderMeta());
 			current = next;
 			continue;
 		}
 		if (!isResourceTree(existing))
 			throw new Error(`文件不能作为文件夹：${currentPath}`);
 		current = existing;
-		if (!data.meta[currentPath])
-			set(data.meta, currentPath, defaultFolderMeta());
 	}
 }
 
@@ -268,18 +230,6 @@ export function applyPulse(data: PluginData, pulse: Pulse): PluginData {
 			});
 			return data;
 		}
-		case "folder.meta.patch": {
-			const resolved = resolveNode(data.tree, pulse.path);
-			if (!isResourceTree(resolved.node))
-				throw new Error(`不是文件夹：${pulse.path}`);
-			if (resolved.path === "/")
-				throw new Error("资源根目录没有可编辑元数据。");
-			set(data.meta, resolved.path, {
-				...requireFolderMeta(data, resolved.path),
-				...pulse.patch,
-			});
-			return data;
-		}
 		case "node.remove": {
 			const resolved = resolveNode(data.tree, pulse.path);
 			if (!resolved.parent || !resolved.name)
@@ -304,7 +254,6 @@ export function applyPulse(data: PluginData, pulse: Pulse): PluginData {
 			delete source.parent[source.name];
 			set(targetParent, targetName, source.node);
 			moveMeta(data.meta, from, to);
-			rewriteMetaReferences(data.meta, from, to);
 			return data;
 		}
 		case "node.copy": {
@@ -334,7 +283,7 @@ function compactPulseSegment(segment: readonly Pulse[]): Pulse[] {
 		string,
 		{
 			index: number;
-			pulse: Extract<Pulse, { kind: "file.meta.patch" | "folder.meta.patch" }>;
+			pulse: Extract<Pulse, { kind: "file.meta.patch" }>;
 		}
 	>();
 	const contents = new Map<
@@ -356,8 +305,7 @@ function compactPulseSegment(segment: readonly Pulse[]): Pulse[] {
 				previous.pulse = pulse;
 			}
 		}
-		if (pulse.kind !== "file.meta.patch" && pulse.kind !== "folder.meta.patch")
-			continue;
+		if (pulse.kind !== "file.meta.patch") continue;
 		const key = `${pulse.kind}:${normalizeResourcePath(pulse.path)}`;
 		const previous = patches.get(key);
 		if (!previous) {
@@ -403,8 +351,7 @@ export function compactPulses(pulses: readonly Pulse[]): Pulse[] {
 					(item) =>
 						(item.kind === "file.write" ||
 							item.kind === "file.replace" ||
-							item.kind === "file.meta.patch" ||
-							item.kind === "folder.meta.patch") &&
+							item.kind === "file.meta.patch") &&
 						sameOrChild(
 							normalizeResourcePath(item.path),
 							normalizeResourcePath(path),
@@ -443,7 +390,10 @@ function entry(
 }
 
 /** Returns one resource's identity, type, and a detached metadata snapshot. */
-export function statResource(data: PluginData, path: ResourcePath): ResourceStat {
+export function statResource(
+	data: PluginData,
+	path: ResourcePath,
+): ResourceStat {
 	const resolved = resolveNode(data.tree, path);
 	return {
 		...entry(resolved.path, resolved.name ?? "/", resolved.node),
@@ -472,11 +422,12 @@ export function listFolder(
 	const folder = resolveFolder(data.tree, path);
 	const parent = normalizeResourcePath(path);
 	const entries = Object.entries(folder)
-		.map(([name, node]) =>
-			entry(resourcePath(parent, name), name, node),
-		)
+		.map(([name, node]) => entry(resourcePath(parent, name), name, node))
 		.sort((left, right) => left.name.localeCompare(right.name));
-	return { entries: entries.slice(0, limit), truncated: entries.length > limit };
+	return {
+		entries: entries.slice(0, limit),
+		truncated: entries.length > limit,
+	};
 }
 
 /** Recursively finds resource entries below a file or folder path. */
@@ -490,7 +441,11 @@ export function findResources(
 	const root = resolveNode(data.tree, path);
 	const entries: ResourceEntry[] = [];
 	let truncated = false;
-	const visit = (node: ResourceNode, currentPath: ResourcePath, name: string) => {
+	const visit = (
+		node: ResourceNode,
+		currentPath: ResourcePath,
+		name: string,
+	) => {
 		if (truncated) return;
 		const current = entry(currentPath, name, node);
 		if (match(current)) {
@@ -501,15 +456,16 @@ export function findResources(
 			entries.push(current);
 		}
 		if (!isResourceTree(node)) return;
-		for (const [childName, child] of Object.entries(node).sort(([left], [right]) =>
-			left.localeCompare(right),
+		for (const [childName, child] of Object.entries(node).sort(
+			([left], [right]) => left.localeCompare(right),
 		))
 			visit(child, resourcePath(currentPath, childName), childName);
 	};
-	if (typeof root.node === "string") visit(root.node, root.path, root.name ?? "");
+	if (typeof root.node === "string")
+		visit(root.node, root.path, root.name ?? "");
 	else
-		for (const [name, node] of Object.entries(root.node).sort(([left], [right]) =>
-			left.localeCompare(right),
+		for (const [name, node] of Object.entries(root.node).sort(
+			([left], [right]) => left.localeCompare(right),
 		))
 			visit(node, resourcePath(root.path, name), name);
 	return { entries, truncated };
@@ -557,7 +513,9 @@ function searchMatcher(query: string, options: SearchResourcesOptions) {
 
 function hasExtension(path: ResourcePath, extensions?: string[]) {
 	if (!extensions) return true;
-	return extensions.some((extension) => path.toLowerCase().endsWith(extension.toLowerCase()));
+	return extensions.some((extension) =>
+		path.toLowerCase().endsWith(extension.toLowerCase()),
+	);
 }
 
 /** Returns a bounded, nested directory view without exposing mutable tree nodes. */
@@ -569,7 +527,8 @@ export function treeResources(
 	const limit = options.limit ?? 100;
 	const maxDepth = options.maxDepth ?? Number.POSITIVE_INFINITY;
 	validateLimit(limit);
-	if (maxDepth !== Number.POSITIVE_INFINITY) nonNegativeInteger(maxDepth, "最大深度");
+	if (maxDepth !== Number.POSITIVE_INFINITY)
+		nonNegativeInteger(maxDepth, "最大深度");
 	const root = resolveNode(data.tree, path);
 	const entries: ResourceTreeEntry[] = [];
 	let count = 0;
@@ -588,10 +547,15 @@ export function treeResources(
 		const current: ResourceTreeEntry = entry(currentPath, name, node);
 		if (!isResourceTree(node) || depth === maxDepth) return current;
 		const children: ResourceTreeEntry[] = [];
-		for (const [childName, child] of Object.entries(node).sort(([left], [right]) =>
-			left.localeCompare(right),
+		for (const [childName, child] of Object.entries(node).sort(
+			([left], [right]) => left.localeCompare(right),
 		)) {
-			const childEntry = visit(child, resourcePath(currentPath, childName), childName, depth + 1);
+			const childEntry = visit(
+				child,
+				resourcePath(currentPath, childName),
+				childName,
+				depth + 1,
+			);
 			if (childEntry) children.push(childEntry);
 			if (truncated) break;
 		}
@@ -599,8 +563,8 @@ export function treeResources(
 		return current;
 	};
 	if (isResourceTree(root.node)) {
-		for (const [name, node] of Object.entries(root.node).sort(([left], [right]) =>
-			left.localeCompare(right),
+		for (const [name, node] of Object.entries(root.node).sort(
+			([left], [right]) => left.localeCompare(right),
 		)) {
 			const current = visit(node, resourcePath(root.path, name), name, 1);
 			if (current) entries.push(current);
@@ -628,7 +592,8 @@ export function searchResources(
 		throw new Error(`搜索上下文必须是非负整数：${context}`);
 	validateLimit(limit);
 	nonNegativeInteger(offset, "搜索偏移");
-	if (maxDepth !== Number.POSITIVE_INFINITY) nonNegativeInteger(maxDepth, "最大深度");
+	if (maxDepth !== Number.POSITIVE_INFINITY)
+		nonNegativeInteger(maxDepth, "最大深度");
 	if (options.extensions?.some((extension) => !extension))
 		throw new Error("扩展名不能为空。");
 	const matcher = searchMatcher(query, options);
@@ -636,7 +601,11 @@ export function searchResources(
 	let skipped = 0;
 	let truncated = false;
 	const root = resolveNode(data.tree, path);
-	const visit = (node: ResourceNode, currentPath: ResourcePath, depth: number) => {
+	const visit = (
+		node: ResourceNode,
+		currentPath: ResourcePath,
+		depth: number,
+	) => {
 		if (truncated) return;
 		if (typeof node !== "string") {
 			if (depth === maxDepth) return;
@@ -668,5 +637,9 @@ export function searchResources(
 		}
 	};
 	visit(root.node, root.path, 0);
-	return { matches, truncated, nextOffset: truncated ? offset + matches.length : null };
+	return {
+		matches,
+		truncated,
+		nextOffset: truncated ? offset + matches.length : null,
+	};
 }

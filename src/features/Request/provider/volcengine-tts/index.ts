@@ -1,6 +1,5 @@
 import type { SpeechModelV4 } from "@ai-sdk/provider";
-import { emptyModels, param, secret } from "../shared/definition";
-import type { ProviderRegistration } from "../shared/registration";
+import { emptyModels, param, secret, type ProviderRegistration } from "../definition";
 import { synthesizeWithVolcengineTts } from "./client";
 
 function model(modelId: string): SpeechModelV4 {
