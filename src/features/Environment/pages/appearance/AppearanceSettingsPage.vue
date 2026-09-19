@@ -35,7 +35,7 @@ import {
 	Moon,
 	Sun,
 	Upload,
-} from "@/lib/phosphor-icons";
+} from "@/lib/remix-icons";
 
 const store = useEnvironmentStore();
 const appearance = store.appearance;

@@ -13,7 +13,7 @@
 
 - `motion-v`（已安装）— 动画引擎
 - `@fontsource-variable/inter`（已安装）— 字重过渡动画依赖 Inter Variable
-- `reka-ui`、`@phosphor-icons/vue`、`clsx`、`tailwind-merge` — 宿主已有
+- `reka-ui`、`@remixicon/vue`、`clsx`、`tailwind-merge` — 宿主已有
 
 ## 样式
 

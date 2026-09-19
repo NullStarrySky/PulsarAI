@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { PrimitiveProps } from 'reka-ui'
 
-import { MinusIcon } from '@/lib/phosphor-icons'
+import { MinusIcon } from '@/lib/remix-icons'
 import { Primitive, useForwardProps } from 'reka-ui'
 
 const props = defineProps<PrimitiveProps>()

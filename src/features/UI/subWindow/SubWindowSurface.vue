@@ -6,7 +6,7 @@ import Surface from "@/features/Conversation/components/Surface.vue";
 import { initConversationVersions } from "@/features/Conversation/dataflow/conversations";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import { host } from "@/host";
-import { History, X } from "@/lib/phosphor-icons";
+import { History, X } from "@/lib/remix-icons";
 import { useUIStore } from "../store";
 import type { SubWindowParams } from "./sub-window-protocol";
 

@@ -2,7 +2,7 @@
 import type { TagsInputItemDeleteProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { XIcon } from '@/lib/phosphor-icons'
+import { XIcon } from '@/lib/remix-icons'
 import { reactiveOmit } from '@vueuse/core'
 import { TagsInputItemDelete, useForwardProps } from 'reka-ui'
 import { cn } from '@/lib/utils.ts'

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { Button } from "@/components/fluid";
-import { Pencil } from "@/lib/phosphor-icons";
+import { Pencil } from "@/lib/remix-icons";
 import { useRequestStore } from "../request-store";
 import type { ParamDefinition, ParamGroup } from "../types";
 import ParamDefinitionEditor from "./ParamDefinitionEditor.vue";

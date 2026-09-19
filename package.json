@@ -58,7 +58,7 @@
 		"@lezer/highlight": "^1.2.3",
 		"@milkdown/crepe": "^7.22.1",
 		"@milkdown/kit": "^7.22.1",
-		"@phosphor-icons/vue": "^2.2.1",
+		"@remixicon/vue": "^4.9.0",
 		"@surrealdb/node": "2.4.0",
 		"@tailwindcss/vite": "^4.3.3",
 		"@tanstack/vue-table": "^9.2.4",

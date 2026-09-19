@@ -2,7 +2,7 @@
 import type { NumberFieldIncrementProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { PlusIcon } from '@/lib/phosphor-icons'
+import { PlusIcon } from '@/lib/remix-icons'
 import { reactiveOmit } from '@vueuse/core'
 import { NumberFieldIncrement, useForwardProps } from 'reka-ui'
 import { cn } from '@/lib/utils.ts'

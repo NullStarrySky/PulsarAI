@@ -18,7 +18,7 @@ import {
 	Languages,
 	Palette,
 	Settings,
-} from "@/lib/phosphor-icons";
+} from "@/lib/remix-icons";
 
 export interface UISettingPage {
 	meta: { id: string; icon: Component; title: string };

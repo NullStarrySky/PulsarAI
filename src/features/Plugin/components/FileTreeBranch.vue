@@ -32,7 +32,7 @@ import {
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Input } from "@/components/ui/input";
-import * as PhosphorIcons from "@/lib/phosphor-icons";
+import * as PhosphorIcons from "@/lib/remix-icons";
 import {
 	Check,
 	ChevronRight,
@@ -42,7 +42,7 @@ import {
 	FolderOpen,
 	MoreHorizontal,
 	Plus,
-} from "@/lib/phosphor-icons";
+} from "@/lib/remix-icons";
 import type { FileTreeAction, FileTreeNode } from "./FileTree.vue";
 import FileTreeBranch from "./FileTreeBranch.vue";
 

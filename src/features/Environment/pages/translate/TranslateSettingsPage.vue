@@ -16,7 +16,7 @@ import SettingItem from "@/features/Environment/setting/SettingItem.vue";
 import SettingPage from "@/features/Environment/setting/SettingPage.vue";
 import DefaultPicker from "@/features/Request/components/DefaultPicker.vue";
 import { useRequestDefaults } from "@/features/Request/defaults";
-import { ArrowLeftRight, Languages } from "@/lib/phosphor-icons";
+import { ArrowLeftRight, Languages } from "@/lib/remix-icons";
 import { translateLanguages } from "../../defaults";
 import { useEnvironmentStore } from "../../store";
 

@@ -10,7 +10,7 @@ import {
 } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import JavaScriptCodeMirrorEditor from "@/features/Plugin/resources/types/javascript/JavaScriptCodeMirrorEditor.vue";
-import { Plus, Trash2 } from "@/lib/phosphor-icons";
+import { Plus, Trash2 } from "@/lib/remix-icons";
 import type { ResourceCondition } from "../dataflow/types";
 import {
 	createResourceCondition,

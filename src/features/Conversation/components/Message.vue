@@ -17,7 +17,7 @@ import {
 	RefreshCw,
 	Trash2,
 	Volume2,
-} from "@/lib/phosphor-icons";
+} from "@/lib/remix-icons";
 import { useContainerComposable } from "../dataflow/containerComposable";
 import Markdown from "./Markdown.vue";
 import Steps from "./Steps.vue";

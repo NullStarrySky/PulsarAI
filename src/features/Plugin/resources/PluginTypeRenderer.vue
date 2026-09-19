@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { PhWarningCircle as WarningCircle } from "@phosphor-icons/vue";
 import { type Component, computed, onErrorCaptured, ref, watch } from "vue";
+import { AlertCircle as WarningCircle } from "@/lib/remix-icons";
 import type { ResourceFile } from "../dataflow/types";
 import { compilePluginVueFile } from "./types/vue/plugin-vue-runtime";
 

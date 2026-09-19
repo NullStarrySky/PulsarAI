@@ -2,7 +2,7 @@
 import type { ListboxItemEmits, ListboxItemProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { CheckIcon } from '@/lib/phosphor-icons'
+import { CheckIcon } from '@/lib/remix-icons'
 import { reactiveOmit, useCurrentElement } from '@vueuse/core'
 import { ListboxItem, useForwardPropsEmits, useId } from 'reka-ui'
 import { computed, onMounted, onUnmounted, ref } from 'vue'

@@ -1,6 +1,6 @@
 <script setup lang="ts" generic="T">
 import { computed, ref, watch } from "vue";
-import { ChevronLeft, ChevronRight } from "@/lib/phosphor-icons";
+import { ChevronLeft, ChevronRight } from "@/lib/remix-icons";
 import { Button } from "@/components/ui/button";
 
 const props = withDefaults(

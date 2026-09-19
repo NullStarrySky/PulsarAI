@@ -2,7 +2,7 @@
 import type { ComboboxInputEmits, ComboboxInputProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { SearchIcon } from '@/lib/phosphor-icons'
+import { SearchIcon } from '@/lib/remix-icons'
 import { reactiveOmit } from '@vueuse/core'
 import { ComboboxInput, useForwardPropsEmits } from 'reka-ui'
 import { cn } from '@/lib/utils.ts'

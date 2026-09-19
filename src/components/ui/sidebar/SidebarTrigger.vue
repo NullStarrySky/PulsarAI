@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { HTMLAttributes } from 'vue'
 
-import { PanelLeftIcon } from '@/lib/phosphor-icons'
+import { PanelLeftIcon } from '@/lib/remix-icons'
 import { cn } from '@/lib/utils.ts'
 import { Button } from '@/components/ui/button'
 import { useSidebar } from './utils'

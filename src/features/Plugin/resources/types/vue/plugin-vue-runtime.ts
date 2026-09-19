@@ -3,7 +3,7 @@ import { type Component, defineAsyncComponent, markRaw } from "vue";
 import { loadModule } from "vue3-sfc-loader";
 import * as FluidComponents from "@/components/fluid";
 import { host } from "@/host";
-import * as PhosphorIcons from "@/lib/phosphor-icons";
+import * as PhosphorIcons from "@/lib/remix-icons";
 import type { ResourceFile } from "../../../dataflow/types";
 
 export interface PluginVueRuntimeResult {
@@ -15,7 +15,7 @@ async function loadPluginVueModule(source: string, filename = "component.vue") {
 	return loadModule(filename, {
 		moduleCache: {
 			vue: Vue,
-			"@/lib/phosphor-icons": PhosphorIcons,
+			"@/lib/remix-icons": PhosphorIcons,
 			"@/components/fluid": FluidComponents,
 			"@/host": { host },
 		} as Record<string, unknown>,

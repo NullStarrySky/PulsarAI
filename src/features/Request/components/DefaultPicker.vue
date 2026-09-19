@@ -11,7 +11,7 @@ import {
 	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "@/components/fluid";
-import { Check, ChevronDown } from "@/lib/phosphor-icons";
+import { Check, ChevronDown } from "@/lib/remix-icons";
 import { useRequestStore } from "../request-store";
 import type { ModelSelection, RequestKind } from "../types";
 import ParamDefinitionRenderer from "./ParamDefinitionRenderer.vue";

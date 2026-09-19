@@ -18,7 +18,7 @@ import {
 	Settings,
 	Sliders,
 	Trash2,
-} from "@/lib/phosphor-icons";
+} from "@/lib/remix-icons";
 
 const props = defineProps<{
 	modelValue: string;

@@ -58,7 +58,7 @@ import {
   Calendar,
   Folder,
   SlidersHorizontal,
-} from "@/lib/phosphor-icons";
+} from "@/lib/remix-icons";
 
 export interface IconComponentProps {
   size?: number;

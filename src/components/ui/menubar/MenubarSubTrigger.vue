@@ -2,7 +2,7 @@
 import type { MenubarSubTriggerProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { ChevronRightIcon } from '@/lib/phosphor-icons'
+import { ChevronRightIcon } from '@/lib/remix-icons'
 import { reactiveOmit } from '@vueuse/core'
 import { MenubarSubTrigger, useForwardProps } from 'reka-ui'
 import { cn } from '@/lib/utils.ts'

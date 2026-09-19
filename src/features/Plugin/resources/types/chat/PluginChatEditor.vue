@@ -11,7 +11,7 @@ import {
 } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "@/lib/phosphor-icons";
+import { ArrowDown, ArrowUp, Plus, Trash2 } from "@/lib/remix-icons";
 import type { ResourcePath } from "../../../dataflow/types";
 import type { FileApiOptions } from "../../../dataflow/use-file-api";
 import { useFileApi } from "../../../dataflow/use-file-api";

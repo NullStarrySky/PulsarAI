@@ -2,7 +2,7 @@
 import type { RadioGroupItemProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { CircleIcon } from '@/lib/phosphor-icons'
+import { CircleIcon } from '@/lib/remix-icons'
 import { reactiveOmit } from '@vueuse/core'
 import {
   RadioGroupIndicator,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch, useSlots, type HTMLAttributes } from "vue";
 import { DropdownMenuSubTrigger } from "reka-ui";
-import { ChevronRight } from "@/lib/phosphor-icons";
+import { ChevronRight } from "@/lib/remix-icons";
 import { cn } from "../../../lib/utils";
 import { shapeMap } from "../../../lib/shape-context";
 import { useSize } from "../../../lib/size-context";

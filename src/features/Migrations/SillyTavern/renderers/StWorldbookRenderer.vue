@@ -11,7 +11,7 @@ import {
 } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { BookOpen, Plus, Search, Tag, Trash2 } from "@/lib/phosphor-icons";
+import { BookOpen, Plus, Search, Tag, Trash2 } from "@/lib/remix-icons";
 
 export interface StWorldbookEntry {
 	uid?: number | string;

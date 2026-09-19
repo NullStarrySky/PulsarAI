@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import SettingGroup from "@/features/Environment/setting/SettingGroup.vue";
 import SettingItem from "@/features/Environment/setting/SettingItem.vue";
-import { ArrowDown, ArrowUp, Plus, X } from "@/lib/phosphor-icons";
+import { ArrowDown, ArrowUp, Plus, X } from "@/lib/remix-icons";
 import type { ResourcePath } from "../../../dataflow/types";
 import type { FileApiOptions } from "../../../dataflow/use-file-api";
 import { useFileApi } from "../../../dataflow/use-file-api";

@@ -2,7 +2,7 @@
 import type { DropdownMenuCheckboxItemEmits, DropdownMenuCheckboxItemProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { CheckIcon } from '@/lib/phosphor-icons'
+import { CheckIcon } from '@/lib/remix-icons'
 import { reactiveOmit } from '@vueuse/core'
 import {
   DropdownMenuCheckboxItem,

@@ -56,7 +56,7 @@
 ```vue
 <script setup>
 import { Button } from "fluid-vue";
-import { Plus } from "@/lib/phosphor-icons";
+import { Plus } from "@/lib/remix-icons";
 </script>
 
 <template>

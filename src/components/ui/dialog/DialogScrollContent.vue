@@ -2,7 +2,7 @@
 import type { DialogContentEmits, DialogContentProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { XIcon } from '@/lib/phosphor-icons'
+import { XIcon } from '@/lib/remix-icons'
 import { reactiveOmit } from '@vueuse/core'
 import {
   DialogClose,

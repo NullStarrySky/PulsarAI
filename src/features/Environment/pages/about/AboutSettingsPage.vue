@@ -4,7 +4,7 @@ import { Button, Switch } from "@/components/fluid";
 import SettingPage from "@/features/Environment/setting/SettingPage.vue";
 import AppIcon from "@/features/UI/AppIcon.vue";
 import { useUIStore } from "@/features/UI/store";
-import { Info, RefreshCcw } from "@/lib/phosphor-icons";
+import { Info, RefreshCcw } from "@/lib/remix-icons";
 
 const version = "0.1.0";
 const autoCheckUpdates = ref(

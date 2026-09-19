@@ -42,7 +42,7 @@
         "@lezer/highlight": "^1.2.3",
         "@milkdown/crepe": "^7.22.1",
         "@milkdown/kit": "^7.22.1",
-        "@phosphor-icons/vue": "^2.2.1",
+        "@remixicon/vue": "^4.9.0",
         "@surrealdb/node": "2.4.0",
         "@tailwindcss/vite": "^4.3.3",
         "@tanstack/vue-table": "^9.2.4",
@@ -591,13 +591,13 @@
 
     "@oxc-resolver/binding-win32-x64-msvc": ["@oxc-resolver/binding-win32-x64-msvc@11.24.2", "https://registry.npmmirror.com/@oxc-resolver/binding-win32-x64-msvc/-/binding-win32-x64-msvc-11.24.2.tgz", { "os": "win32", "cpu": "x64" }, "sha512-UqGPmo56KDfLlfXFAFIrNflHT8tFxWGEivWg3Zeyp4Uy2NlKN1FGPr6/BxcLGG3+kZ6Wp14g5Uj+n71boqZfiw=="],
 
-    "@phosphor-icons/vue": ["@phosphor-icons/vue@2.2.1", "https://registry.npmmirror.com/@phosphor-icons/vue/-/vue-2.2.1.tgz", { "peerDependencies": { "vue": ">=3.2.39" } }, "sha512-3RNg1utc2Z5RwPKWFkW3eXI/0BfQAwXgtFxPUPeSzi55jGYUq16b+UqcgbKLazWFlwg5R92OCLKjDiJjeiJcnA=="],
-
     "@pierre/diffs": ["@pierre/diffs@1.3.5", "https://registry.npmmirror.com/@pierre/diffs/-/diffs-1.3.5.tgz", { "dependencies": { "@pierre/theme": "2.0.0", "@pierre/theming": "1.0.1", "@shikijs/transformers": "^3.0.0 || ^4.0.0", "diff": "9.0.0", "hast-util-to-html": "9.0.5", "lru_map": "0.4.1", "shiki": "^3.0.0 || ^4.0.0" }, "peerDependencies": { "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0" } }, "sha512-BhaLEiUvR+BdIyOYdogA4JLQjluWPubuwySmmIqEkcE0FwIWRbgJgHNC/r884dlxEr89fO4hTk/sBln0a7NSOw=="],
 
     "@pierre/theme": ["@pierre/theme@2.0.0", "https://registry.npmmirror.com/@pierre/theme/-/theme-2.0.0.tgz", {}, "sha512-yNDd9GYLQl1mEUJR8AneJ5e4ohLIHQd/wZLWr4fagt78vS2RwwZNW530vVgHqXFAyFVcFlRmGUD5ramXH46OXw=="],
 
     "@pierre/theming": ["@pierre/theming@1.0.1", "https://registry.npmmirror.com/@pierre/theming/-/theming-1.0.1.tgz", { "peerDependencies": { "@pierre/theme": "^1.1.0 || ^2.0.0", "@shikijs/themes": "^3.0.0 || ^4.0.0", "react": "^18.3.1 || ^19.0.0", "react-dom": "^18.3.1 || ^19.0.0", "shiki": "^3.0.0 || ^4.0.0" }, "optionalPeers": ["@pierre/theme", "@shikijs/themes", "react", "react-dom", "shiki"] }, "sha512-WCI5Qd7iprDpISL9fBYOLe8RV53+b7mFNA3bPzl60/2CKCSrsKN8zEcep6Y3BAzvARlmca50zGjDodqPGiTUKA=="],
+
+    "@remixicon/vue": ["@remixicon/vue@4.9.0", "https://registry.npmmirror.com/@remixicon/vue/-/vue-4.9.0.tgz", { "peerDependencies": { "vue": ">= 3" } }, "sha512-4P0MY5ScL+MRLnHu1iT3xHAsliBwOGDIgSgHCZhSj2wkLa5NzqiQ4SGD/04VoHM+BRr8+xjmF7ZemkOUlMDJ3A=="],
 
     "@rolldown/binding-android-arm-eabi": ["@rolldown/binding-android-arm-eabi@1.2.6", "https://registry.npmmirror.com/@rolldown/binding-android-arm-eabi/-/binding-android-arm-eabi-1.2.6.tgz", { "os": "android", "cpu": "arm" }, "sha512-b+jTcARdTiFLI6jB4a5XjTm0RWd6KcRfQj/I2356fxUZemiho9zQLxo0RtCuMDAyKcLo6cEltkgbQp6d1+sjjQ=="],
 

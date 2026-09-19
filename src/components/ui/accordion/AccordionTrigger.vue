@@ -2,7 +2,7 @@
 import type { AccordionTriggerProps } from 'reka-ui'
 
 import type { HTMLAttributes } from 'vue'
-import { ChevronDownIcon, ChevronUpIcon } from '@/lib/phosphor-icons'
+import { ChevronDownIcon, ChevronUpIcon } from '@/lib/remix-icons'
 import { reactiveOmit } from '@vueuse/core'
 import {
   AccordionHeader,

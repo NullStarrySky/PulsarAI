@@ -9,7 +9,7 @@ import {
 } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Plus, Trash2 } from "@/lib/phosphor-icons";
+import { Plus, Trash2 } from "@/lib/remix-icons";
 import { useRequestStore } from "../request-store";
 import type {
 	ParamDefinition,

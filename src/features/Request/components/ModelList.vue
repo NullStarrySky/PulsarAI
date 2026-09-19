@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import { Button, Switch } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
-import { Plus, RefreshCw, Trash2 } from "@/lib/phosphor-icons";
+import { Plus, RefreshCw, Trash2 } from "@/lib/remix-icons";
 import { invokeRequestFunction } from "../provider";
 import ProviderAvatar from "../provider/shared/components/ProviderAvatar.vue";
 import type { ModelDefinition, Provider, RequestKind } from "../types";

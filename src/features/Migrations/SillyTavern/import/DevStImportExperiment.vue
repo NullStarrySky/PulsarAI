@@ -12,7 +12,7 @@ import {
 	useEditablePluginData,
 } from "@/features/Plugin/dataflow/use-plugin-data";
 import { host } from "@/host";
-import { Code, Eye, FilePlus2, Play, Upload } from "@/lib/phosphor-icons";
+import { Code, Eye, FilePlus2, Play, Upload } from "@/lib/remix-icons";
 import StPresetRenderer from "../renderers/StPresetRenderer.vue";
 import StWorldbookRenderer from "../renderers/StWorldbookRenderer.vue";
 import { applyStImportPlan } from "./st-import-apply";

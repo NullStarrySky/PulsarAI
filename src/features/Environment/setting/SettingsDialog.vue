@@ -21,7 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useFloatingSurface } from "@/features/Environment/floating-surface";
 import { useResponsiveStore } from "@/features/Environment/responsive-store";
 import { useUIStore } from "@/features/UI/store";
-import { ChevronDown, X } from "@/lib/phosphor-icons";
+import { ChevronDown, X } from "@/lib/remix-icons";
 
 const layout = useUIStore();
 const responsive = useResponsiveStore();
