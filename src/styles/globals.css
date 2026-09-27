@@ -176,47 +176,6 @@ html.native-window-dragging #app {
 	}
 }
 
-.milkdown {
-	--crepe-base-font-size: var(--editor-font-size, 14px);
-	background-color: transparent;
-	--crepe-color-background: transparent;
-	max-width: 100%;
-	width: 100%;
-	overflow-x: hidden;
-	--crepe-color-on-background: var(--foreground);
-	--crepe-color-surface: transparent;
-	--crepe-color-surface-low: var(--muted);
-	--crepe-color-on-surface: var(--foreground);
-	--crepe-color-on-surface-variant: var(--muted-foreground);
-	--crepe-color-outline: var(--border);
-	--crepe-color-primary: var(--primary);
-	--crepe-color-secondary: var(--secondary);
-	--crepe-color-on-secondary: var(--secondary-foreground);
-	--crepe-color-inverse: var(--foreground);
-	--crepe-color-on-inverse: var(--background);
-	--crepe-color-inline-code: var(--destructive);
-	--crepe-color-error: var(--destructive);
-	--crepe-color-hover: var(--accent);
-	--crepe-color-selected: color-mix(in srgb, var(--primary), transparent 82%);
-	--crepe-color-inline-area: var(--muted);
-	--crepe-font-title: var(
-		--font-sans,
-		-apple-system,
-		BlinkMacSystemFont,
-		"Segoe UI",
-		sans-serif
-	);
-	--crepe-font-default: var(
-		--font-sans,
-		-apple-system,
-		BlinkMacSystemFont,
-		"Segoe UI",
-		sans-serif
-	);
-	--crepe-font-code: var(--font-code);
-	color: var(--foreground);
-}
-
 *:focus,
 *:focus-visible {
 	outline: none;
