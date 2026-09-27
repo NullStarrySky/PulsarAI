@@ -1,4 +1,5 @@
-import type { PluginData } from "./types";
+import { replayPluginData } from "./recalculate";
+import type { PluginData, ReplayGroups } from "./types";
 
 export type GlobalPluginData = Record<string, PluginData>;
 
@@ -44,4 +45,28 @@ export function mergePluginData(
 		mountMeta(merged.meta, data, mount);
 	}
 	return merged;
+}
+
+/** Replays and mounts every source, including inactive sources visible to resource UI. */
+export function replayAndMergePluginData(
+	local: PluginData,
+	global: GlobalPluginData,
+	groups: ReplayGroups,
+) {
+	const replayedLocal = replayPluginData(
+		local,
+		groups.map((group) => group.self),
+	);
+	const replayedGlobal: GlobalPluginData = {};
+	for (const [folder, source] of Object.entries(global))
+		Object.defineProperty(replayedGlobal, folder, {
+			value: replayPluginData(
+				source,
+				groups.map((group) =>
+					Object.hasOwn(group.global, folder) ? group.global[folder]! : {},
+				),
+			),
+			enumerable: true,
+		});
+	return mergePluginData(replayedLocal, replayedGlobal);
 }

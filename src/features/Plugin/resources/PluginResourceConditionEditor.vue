@@ -88,7 +88,7 @@ function removeCondition(condition: ResourceCondition) {
   <div class="overflow-hidden bg-popover">
     <div class="border-b bg-muted/25 px-3 py-2.5 text-xs font-medium text-muted-foreground">全部条件满足时导入</div>
     <div class="grid gap-2 px-3 py-3">
-      <div v-for="(condition, index) in conditions" :key="condition" class="grid grid-cols-[6.5rem_minmax(0,1fr)_4rem_2rem] items-start gap-2">
+      <div v-for="(condition, index) in conditions" :key="index" class="grid grid-cols-[6.5rem_minmax(0,1fr)_4rem_2rem] items-start gap-2">
         <Select :model-value="condition.type" @update:model-value="changeType(condition, $event)"><SelectTrigger class="h-8 w-full text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem v-for="item in resourceConditionDefinitions" :key="item.id" :value="item.id">{{ item.label }}</SelectItem></SelectContent></Select>
         <JavaScriptCodeMirrorEditor v-if="condition.type === 'custom'" :model-value="String(condition.param.code ?? '')" language="javascript" frameless class="h-20 overflow-hidden rounded-lg border bg-background" @update:model-value="updateParam(condition, 'code', $event)" />
         <div v-else class="flex min-w-0 gap-2">

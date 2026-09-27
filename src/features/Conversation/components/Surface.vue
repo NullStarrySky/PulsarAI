@@ -37,7 +37,7 @@ watch(
 
 const filetree = usePluginData(
 	() => conversation.value?.conversation.value?.localPluginId ?? "",
-	computed(() => conversation.value?.replayPulses.value ?? []),
+	computed(() => conversation.value?.replayRecals.value ?? []),
 	() => conversation.value?.conversation.value?.pluginVersionId ?? "",
 );
 const activeFiletree = useActivePluginData(filetree);

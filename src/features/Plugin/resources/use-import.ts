@@ -32,11 +32,12 @@ export function useImport(
 		const environment = options.environment
 			? (toValue(options.environment) ?? {})
 			: {};
-		const imported = Array.isArray(request)
-			? Promise.all(
-					request.map((item) => importResource(data, item, environment)),
-				)
-			: importResource(data, request, environment);
+		const imported =
+			typeof request !== "string"
+				? Promise.all(
+						request.map((item) => importResource(data, item, environment)),
+					)
+				: importResource(data, request, environment);
 		void Promise.resolve(imported).then((result) => {
 			if (!stale) value.value = result;
 		});

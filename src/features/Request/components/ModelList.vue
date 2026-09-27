@@ -40,8 +40,9 @@ function merge(provider: Provider, kind: RequestKind, models: ModelDefinition[])
 }
 
 async function refresh() {
-	if (!props.provider.modelGetter) return;
 	const provider = props.provider;
+	const modelGetter = provider.modelGetter;
+	if (!modelGetter) return;
 	const requestKind = props.kind;
 	const generation = ++refreshGeneration;
 	refreshing.value = true;
@@ -49,7 +50,7 @@ async function refresh() {
 	try {
 		const result = await invokeRequestFunction<
 			Partial<Record<RequestKind, ModelDefinition[]>> | ModelDefinition[]
-		>(provider.modelGetter, { provider });
+		>(modelGetter, { provider });
 		if (Array.isArray(result)) merge(provider, requestKind, result);
 		else {
 			for (const resultKind of [

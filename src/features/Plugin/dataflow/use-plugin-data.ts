@@ -31,9 +31,12 @@ import {
 	replayPluginVersion,
 	usePluginVersion,
 } from "./plugin-version";
-import { applyPulse, parsePluginPath, replayPluginData } from "./pulse";
+import { applyPulse } from "./pulse";
 import type { PluginData, PluginDocument, Pulse, ReplayGroups } from "./types";
-import { type GlobalPluginData, mergePluginData } from "./use-tree-merge";
+import {
+	type GlobalPluginData,
+	replayAndMergePluginData,
+} from "./use-tree-merge";
 
 const builtinPlugins = importBuiltinPlugins();
 export function refreshCharacter(id: CharacterData["id"]) {
@@ -91,61 +94,6 @@ export function usePurePluginData(
 /** Static built-ins are ordinary global source trees; callers may provide a different set later. */
 function useGlobalPluginData() {
 	return computed<GlobalPluginData>(() => builtinPlugins);
-}
-
-function routePulse(pulse: Pulse): { folder: string | null; pulse: Pulse } {
-	if (pulse.kind === "node.move" || pulse.kind === "node.copy") {
-		const from = parsePluginPath(pulse.from);
-		const to = parsePluginPath(pulse.to);
-		if (
-			from.scope !== to.scope ||
-			(from.scope === "global" &&
-				to.scope === "global" &&
-				from.folder !== to.folder)
-		)
-			throw new Error("一次 Pulse 不能跨 Plugin 来源移动或复制资源。");
-		return {
-			folder: from.scope === "global" ? from.folder : null,
-			pulse: { ...pulse, from: from.path, to: to.path },
-		};
-	}
-	const parsed = parsePluginPath(pulse.path);
-	return {
-		folder: parsed.scope === "global" ? parsed.folder : null,
-		pulse: { ...pulse, path: parsed.path },
-	};
-}
-
-/** Replays and mounts every source, including inactive sources visible to resource UI. */
-export function replayAndMergePluginData(
-	local: PluginData,
-	global: GlobalPluginData,
-	groups: ReplayGroups,
-) {
-	const localGroups: Pulse[][] = groups.map(() => []);
-	const globalGroups = new Map<string, Pulse[][]>();
-	groups.forEach((group, groupIndex) => {
-		for (const pulse of group) {
-			const routed = routePulse(pulse);
-			if (routed.folder === null) localGroups[groupIndex]!.push(routed.pulse);
-			else {
-				let target = globalGroups.get(routed.folder);
-				if (!target) {
-					target = groups.map(() => []);
-					globalGroups.set(routed.folder, target);
-				}
-				target[groupIndex]!.push(routed.pulse);
-			}
-		}
-	});
-	const replayedLocal = replayPluginData(local, localGroups);
-	const replayedGlobal: GlobalPluginData = {};
-	for (const [folder, source] of Object.entries(global))
-		Object.defineProperty(replayedGlobal, folder, {
-			value: replayPluginData(source, globalGroups.get(folder) ?? []),
-			enumerable: true,
-		});
-	return mergePluginData(replayedLocal, replayedGlobal);
 }
 
 /** Read-only active projection over the same replay result; no subtree or meta cloning. */
@@ -220,7 +168,7 @@ function applyPluginPulse(id: string, pulse: Pulse) {
 	applyPulse(replayPluginVersion(plugin, version.id), pulse);
 	if (isPluginVersionUsed(id, version.id))
 		plugin.versions.push(createPluginVersion(plugin, [pulse]));
-	else appendPluginVersion(version, pulse);
+	else appendPluginVersion(plugin, version, pulse);
 	store.markDirty({ type: "plugin", id });
 	refreshCharacter(id);
 }
@@ -256,7 +204,7 @@ export function useCharacterList() {
 		const metaMap = store.conversationMeta.get(id);
 		if (metaMap) {
 			for (const convId of Array.from(metaMap.keys())) {
-				await store.load({ type: "containerList", id: convId });
+				await store.load({ type: "conversation", id: convId });
 				removeConversation(convId);
 			}
 			store.conversationMeta.delete(id);

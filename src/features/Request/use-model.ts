@@ -19,13 +19,19 @@ function modelKind(provider: Provider, modelId: string): RequestKind {
 		"speech",
 		"transcribe",
 	] as const) {
-		if (provider.models[kind].some((model) => model.id === modelId && model.enabled))
+		if (
+			provider.models[kind].some(
+				(model) => model.id === modelId && model.enabled,
+			)
+		)
 			return kind;
 	}
 	throw new Error(`模型 ${modelId} 未启用或不属于提供商 ${provider.name}。`);
 }
 
-function params(definitions: Provider["params"][RequestKind | "basic" | "provider"]) {
+function params(
+	definitions: Provider["params"][RequestKind | "basic" | "provider"],
+) {
 	const result: Record<string, unknown> = {};
 	for (const definition of definitions) {
 		if (definition.paramName.trim())
@@ -41,12 +47,17 @@ export function useModel(provider: Provider, modelId: string) {
 
 	const hasOverrides = Object.keys(provider.requestOverride).length > 0;
 	const override: ModelOverride | undefined = hasOverrides
-		? (operation, options, native) => {
-			const source = provider.requestOverride[operation];
-			if (!source) return native(options);
-			const fn = builtInFunctions.get(source) ?? createSandboxFunction(source);
-			return fn({ provider, modelId, options, native }) as T;
-		}
+		? <T>(
+				operation: Operation,
+				options: Record<string, unknown>,
+				native: (next?: Record<string, unknown>) => T,
+			): T => {
+				const source = provider.requestOverride[operation];
+				if (!source) return native(options);
+				const fn =
+					builtInFunctions.get(source) ?? createSandboxFunction(source);
+				return fn({ provider, modelId, options, native }) as T;
+			}
 		: undefined;
 
 	return {

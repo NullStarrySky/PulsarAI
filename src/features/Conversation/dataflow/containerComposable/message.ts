@@ -1,6 +1,7 @@
 import { push } from "notivue";
 import { computed, type MaybeRef, reactive, ref, unref } from "vue";
 import { useEnvironmentStore } from "@/features/Environment/store";
+import { recalSize } from "@/features/Plugin/dataflow/recalculate";
 import { currentMessage } from "../activePathComposable/message-service";
 import { markContainerDirty } from "../containers";
 import type {
@@ -21,10 +22,11 @@ export function useContainerMessage(
 				(step): step is ThinkingStep => step.type === "thinking",
 			) ?? [],
 	);
-	const pulses = computed(() => current.value?.meta.pulses ?? []);
-	const hasPluginChanges = computed(() => pulses.value.length > 0);
+	const recal = computed(() => current.value?.meta.recal);
+	const resourceCount = computed(() => recalSize(recal.value));
+	const hasPluginChanges = computed(() => resourceCount.value > 0);
 	const resourceSummary = computed(() =>
-		hasPluginChanges.value ? `修改了 ${pulses.value.length} 项资源` : "",
+		hasPluginChanges.value ? `修改了 ${resourceCount.value} 项资源` : "",
 	);
 	const edit = reactive({ active: false, content: "" });
 	const translating = ref(false);
@@ -85,7 +87,7 @@ export function useContainerMessage(
 	return {
 		current,
 		thinking,
-		pulses,
+		recal,
 		hasPluginChanges,
 		resourceSummary,
 		edit,

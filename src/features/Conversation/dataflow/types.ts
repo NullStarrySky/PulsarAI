@@ -1,4 +1,4 @@
-import type { Pulse } from "@/features/Plugin/dataflow/types";
+import type { RECAL } from "@/features/Plugin/dataflow/types";
 
 export type Role = "user" | "assistant" | "system";
 
@@ -52,7 +52,7 @@ interface TokenUsage {
 interface MessageMeta {
 	steps: Array<ThinkingStep | ToolCallStep | ToolCallResult>;
 	intervalOperations?: import("./activePathComposable/interval-services").IntervalOperation[];
-	pulses?: Pulse[];
+	recal?: RECAL;
 	generateInfo?: {
 		modelName?: string;
 		startTime?: string;

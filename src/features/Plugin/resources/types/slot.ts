@@ -1,4 +1,6 @@
-export type SlotDef = Record<string, SlotDef | SlotMeta>;
+export interface SlotDef {
+	[name: string]: SlotDef | SlotMeta;
+}
 
 export interface SlotMeta {
 	description?: string;

@@ -22,6 +22,7 @@ export function importJavaScript(
 		) {
 			if (
 				(token.type.label === "string" || token.type.label === "template") &&
+				"value" in token &&
 				typeof token.value === "string" &&
 				/\{\{[\s\S]*?\}\}|\[\[[\s\S]*?\]\]/.test(token.value)
 			)

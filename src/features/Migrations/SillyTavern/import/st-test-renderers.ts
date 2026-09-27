@@ -1,5 +1,7 @@
 import {
 	buildStImportPlan,
+	createImportBundle,
+	type StImportFile,
 	type StImportPlan,
 	type StResourceFile,
 } from "./st-import-plan";
@@ -99,23 +101,25 @@ export const stTestRenderers: StTestRenderer[] = [
 					2,
 				),
 			};
+			const files: StImportFile[] = [
+				{
+					path: "conversation.chat.json",
+					content: {
+						message: [
+							{ role: "user", content: "你好" },
+							{ role: "assistant", content: "你好，有什么可以帮你？" },
+						],
+					},
+				},
+			];
 			return {
 				source,
 				plan: {
 					kind: "conversation",
 					name: "test-conversation",
 					mode: "file",
-					files: [
-						{
-							path: "conversation.chat.json",
-							content: {
-								message: [
-									{ role: "user", content: "你好" },
-									{ role: "assistant", content: "你好，有什么可以帮你？" },
-								],
-							},
-						},
-					],
+					files,
+					...createImportBundle(files, "test-conversation", "file"),
 					diagnostics: [],
 				},
 			};

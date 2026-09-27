@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { recalSize } from "@/features/Plugin/dataflow/recalculate";
 import { MarkstreamVirtualTimeline } from "markstream-vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useActivePathComposable } from "../dataflow/activePathComposable";
@@ -74,7 +75,7 @@ const visibleRows = computed<ThreadRow[]>(() => {
 			row.container.role !== "system" ||
 			Boolean(row.intervalSummary) ||
 			row.container.content.some(
-				(message) => message.content || message.meta.pulses?.length,
+				(message) => message.content || recalSize(message.meta.recal),
 			),
 	);
 });

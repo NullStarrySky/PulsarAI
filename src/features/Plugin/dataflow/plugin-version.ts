@@ -1,6 +1,6 @@
 import { computed, type MaybeRefOrGetter, toRaw, toValue, watch } from "vue";
 import { useSyncStore } from "@/features/Database/dbsync-store";
-import { compactPulses, replayPluginData } from "./pulse";
+import { replayRecalculate, updateRecalculate } from "./recalculate";
 import type { PluginData, PluginDocument, PluginVersion, Pulse } from "./types";
 import { refreshCharacter } from "./use-plugin-data";
 
@@ -61,14 +61,13 @@ export function preparePluginDocument(
 export function replayPluginVersion(
 	document: PluginDocument,
 	versionId: string,
-	additionalPulses: readonly Pulse[] = [],
 ): PluginData {
 	const version = document.versions.find((item) => item.id === versionId);
 	if (!version) throw new Error(`Plugin 版本不存在：${versionId}`);
 	const original = toRaw(document);
-	return replayPluginData(
+	return replayRecalculate(
 		{ id: original.id, tree: original.tree, meta: original.meta },
-		[version.pulses, additionalPulses],
+		version.recal,
 	);
 }
 
@@ -86,19 +85,20 @@ export function createPluginVersion(
 	const previous =
 		"versions" in document ? latestPluginVersion(document) : null;
 	const createdAt = new Date().toISOString();
-	const pulses = compactPulses([
-		...(previous?.pulses ?? []),
-		...pending.map((pulse) => structuredClone(toRaw(pulse))),
-	]);
+	const recal = pending.reduce(
+		(delta, pulse) => updateRecalculate(document, delta, pulse),
+		previous?.recal ?? {},
+	);
 	const parentId = previous?.id ?? null;
-	return { id: versionId(), parentId, createdAt, pulses };
+	return { id: versionId(), parentId, createdAt, recal };
 }
 
-/** Appends and compacts one unreferenced head without changing its identity. */
-export function appendPluginVersion(version: PluginVersion, pulse: Pulse) {
-	version.pulses = compactPulses([
-		...version.pulses,
-		structuredClone(toRaw(pulse)),
-	]);
+/** Update one unreferenced head against the immutable original source. */
+export function appendPluginVersion(
+	document: PluginData,
+	version: PluginVersion,
+	pulse: Pulse,
+) {
+	version.recal = updateRecalculate(document, version.recal, pulse);
 	return version;
 }

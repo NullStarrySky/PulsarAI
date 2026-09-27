@@ -1,7 +1,10 @@
 import { computed, effectScope } from "vue";
 import { useSyncStore } from "@/features/Database/dbsync-store";
-import { compactPulses } from "@/features/Plugin/dataflow/pulse";
-import type { Pulse } from "@/features/Plugin/dataflow/types";
+import {
+	emptyRecal,
+	updateRecal,
+} from "@/features/Plugin/dataflow/recalculate";
+import type { PluginData, Pulse } from "@/features/Plugin/dataflow/types";
 import { usePluginData } from "@/features/Plugin/dataflow/use-plugin-data";
 import {
 	mediaLinks,
@@ -37,16 +40,20 @@ import {
 	pathForTail,
 } from "./message-service";
 
-/** A message version is the sole durable owner of its resource Pulses. */
+/** A message version owns one final delta against its preceding path. */
 function applyVersionPulse(
 	container: ConversationContainer,
 	version: ConversationMessage,
 	pulse: Pulse,
+	base: PluginData,
 ) {
 	if (!container.content.some((candidate) => candidate.id === version.id))
 		throw new Error("Pulse 必须绑定到消息容器中的具体版本。");
-	version.meta.pulses ??= [];
-	version.meta.pulses = compactPulses([...version.meta.pulses, pulse]);
+	version.meta.recal = updateRecal(
+		base,
+		version.meta.recal ?? emptyRecal(),
+		pulse,
+	);
 	markContainerDirty(container.conversationId, container.id);
 }
 
@@ -61,7 +68,7 @@ export function useActivePathComposable(conversationId: string) {
 	const store = useSyncStore();
 	const conversation = useConversation(conversationId);
 	const collection = usePureContainers(conversationId);
-	const { activePath, replayGroups, replayPulses } = usePathProjection(
+	const { activePath, replayGroups, replayRecals } = usePathProjection(
 		collection.containers,
 		() => conversation.value?.lastContainerId,
 	);
@@ -76,7 +83,7 @@ export function useActivePathComposable(conversationId: string) {
 			pathForTail(collection.containers.value, container.id).map((item) => {
 				const message =
 					item.id === container.id ? version : currentMessage(item);
-				return message?.meta.pulses ?? [];
+				return message?.meta.recal ?? emptyRecal();
 			}),
 		);
 		const filetree = usePluginData(
@@ -84,10 +91,18 @@ export function useActivePathComposable(conversationId: string) {
 			groups,
 			() => conversation.value?.pluginVersionId ?? "",
 		);
+		const baseline = usePluginData(
+			() => conversation.value?.localPluginId ?? "",
+			computed(() => groups.value.slice(0, -1)),
+			() => conversation.value?.pluginVersionId ?? "",
+		);
 		return {
 			filetree,
-			applyPulse: (pulse: Pulse) =>
-				applyVersionPulse(container, version, pulse),
+			applyPulse: (pulse: Pulse) => {
+				const base = baseline.value;
+				if (!base) throw new Error("Plugin 资源尚未加载。");
+				applyVersionPulse(container, version, pulse, base);
+			},
 		};
 	}
 	const editMode = computed(
@@ -356,7 +371,7 @@ export function useActivePathComposable(conversationId: string) {
 		activePath,
 		intervals,
 		replayGroups,
-		replayPulses,
+		replayRecals,
 		forVersion,
 		editMode: { active: editMode, toggle: toggleEditMode },
 		draft,

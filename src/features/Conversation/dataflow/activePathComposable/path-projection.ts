@@ -6,6 +6,7 @@ import {
 	toValue,
 	watch,
 } from "vue";
+import { emptyRecal } from "@/features/Plugin/dataflow/recalculate";
 import { containerChanges } from "../containers";
 import type { ConversationContainer, ConversationMessage } from "../types";
 import { currentMessage } from "./message-service";
@@ -13,7 +14,7 @@ import { currentMessage } from "./message-service";
 export interface ReplayGroup {
 	container: ConversationContainer;
 	version: ConversationMessage;
-	pulses: NonNullable<ConversationMessage["meta"]["pulses"]>;
+	recal: NonNullable<ConversationMessage["meta"]["recal"]>;
 }
 
 /** Lazy per-consumer projection: notifications accumulate until its next read. */
@@ -91,11 +92,11 @@ export function usePathProjection(
 
 	let previousPath: ConversationContainer[] | undefined;
 	let groupPositions = new Map<string, number>();
-	const emptyPulses: ReplayGroup["pulses"] = [];
+	const emptyDelta: ReplayGroup["recal"] = emptyRecal();
 	const makeGroup = (container: ConversationContainer): ReplayGroup | null => {
 		const version = currentMessage(container);
 		return version
-			? { container, version, pulses: version.meta.pulses ?? emptyPulses }
+			? { container, version, recal: version.meta.recal ?? emptyDelta }
 			: null;
 	};
 	const replayGroups = computed<ReplayGroup[]>((previous) => {
@@ -153,7 +154,7 @@ export function usePathProjection(
 				const old = groups[index]!;
 				if (
 					old.version === replacement.version &&
-					old.pulses === replacement.pulses
+					old.recal === replacement.recal
 				)
 					continue;
 				if (!copied) {
@@ -166,8 +167,8 @@ export function usePathProjection(
 		versions.clear();
 		return groups;
 	});
-	const replayPulses = computed(() =>
-		replayGroups.value.map((group) => group.pulses),
+	const replayRecals = computed(() =>
+		replayGroups.value.map((group) => group.recal),
 	);
-	return { activePath, replayGroups, replayPulses };
+	return { activePath, replayGroups, replayRecals };
 }

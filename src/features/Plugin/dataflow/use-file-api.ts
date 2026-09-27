@@ -190,7 +190,9 @@ export function useFileApi(options: FileApiOptions) {
 		};
 		try {
 			const result = run();
-			return result instanceof Promise ? result.then(commit, rollback) : commit(result);
+			return result instanceof Promise
+				? result.then(commit, rollback)
+				: commit(result);
 		} catch (error) {
 			return rollback(error);
 		}
@@ -224,13 +226,7 @@ export function useFileApi(options: FileApiOptions) {
 			query: string,
 			path: ResourcePath = "/",
 			options: FileApiSearchOptions = {},
-		) =>
-			searchResources(
-				current(),
-				query,
-				path,
-				options,
-			),
+		) => searchResources(current(), query, path, options),
 		tree: (path: ResourcePath = "/", options: FileApiTreeOptions = {}) =>
 			treeResources(current(), path, options),
 		readLines(
@@ -279,17 +275,21 @@ export function useFileApi(options: FileApiOptions) {
 			const content = readFile(current(), path);
 			if (!find) throw new Error(`待替换文本不能为空：${path}`);
 			const matches = countMatches(content, find);
-			if (!matches)
-				throw new Error(`文件中未找到待替换文本：${path}`);
+			if (!matches) throw new Error(`文件中未找到待替换文本：${path}`);
 			if (options.expectedMatches !== undefined) {
-				if (!Number.isInteger(options.expectedMatches) || options.expectedMatches < 0)
-					throw new Error(`预期匹配数必须是非负整数：${options.expectedMatches}`);
+				if (
+					!Number.isInteger(options.expectedMatches) ||
+					options.expectedMatches < 0
+				)
+					throw new Error(
+						`预期匹配数必须是非负整数：${options.expectedMatches}`,
+					);
 				if (matches !== options.expectedMatches)
 					throw new Error(
 						`待替换文本匹配数不符：期望 ${options.expectedMatches}，实际 ${matches}：${path}`,
 					);
 			}
-			// Persist the resulting field value so repeated edits can be compacted.
+			// The owning version derives its final delta from the resulting content.
 			apply({
 				kind: "file.write",
 				path,

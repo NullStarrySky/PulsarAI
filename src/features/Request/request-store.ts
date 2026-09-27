@@ -7,12 +7,7 @@ import {
 	type ModelApiType,
 	type ModelProviderDefinition,
 } from "./provider/shared/model-catalog";
-import type {
-	ModelDefinition,
-	ParamDefinition,
-	Provider,
-	RequestKind,
-} from "./types";
+import type { ParamDefinition, Provider, RequestKind } from "./types";
 
 const table = "request_providers";
 
@@ -75,10 +70,7 @@ function fromModelProvider(source: ModelProviderDefinition): Provider {
 		iconUrl: source.iconUrl,
 		enabled: source.enabled,
 		params: {
-			basic: [
-				param("baseURL", source.baseUrl),
-				secret(source.apiKeyName),
-			],
+			basic: [param("baseURL", source.baseUrl), secret(source.apiKeyName)],
 			text: [],
 			image: [],
 			video: [],

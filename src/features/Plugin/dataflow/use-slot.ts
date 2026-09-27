@@ -96,11 +96,8 @@ export function useSlot(options: UseSlotOptions) {
 	const fileApi = useFileApi(options);
 	const definition = computed(() => {
 		const data = toValue(options.filetree);
-		return parseSlotDef(
-			typeof data?.tree[globalSlotDefinitionFile.slice(1)] === "string"
-				? data.tree[globalSlotDefinitionFile.slice(1)]
-				: undefined,
-		);
+		const source = data?.tree[globalSlotDefinitionFile.slice(1)];
+		return parseSlotDef(typeof source === "string" ? source : undefined);
 	});
 	const slots = computed<PluginSlot[]>(() => {
 		const data = toValue(options.filetree);
@@ -123,7 +120,7 @@ export function useSlot(options: UseSlotOptions) {
 				.map(([name, child]) => {
 					const path = `${prefix}/${name}`;
 					const meta = isSlotMeta(child) ? child : null;
-					const children = meta ? [] : build(child, path);
+					const children = isSlotMeta(child) ? [] : build(child, path);
 					const allResources = (resources.get(path) ?? []).sort(
 						(left, right) =>
 							left.meta.priority - right.meta.priority ||

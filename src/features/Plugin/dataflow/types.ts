@@ -91,8 +91,8 @@ export interface PluginVersion {
 	id: string;
 	parentId: string | null;
 	createdAt: string;
-	/** Compacted cumulative Pulses replayed directly over the original source. */
-	pulses: Pulse[];
+	/** Final path delta relative to the immutable original source. */
+	recal: Recalculate;
 }
 
 /** The on-disk Plugin record: immutable original content plus saved versions. */
@@ -110,9 +110,30 @@ type Atom =
 	| { kind: "node.move"; from: ResourcePath; to: ResourcePath }
 	| { kind: "node.copy"; from: ResourcePath; to: ResourcePath };
 
-/** A Pulse is intentionally one primitive; a message version owns Pulse[]. */
+/** A transient file operation; never persisted as an action log. */
 export type Pulse = Atom;
-export type ReplayGroups = Pulse[][];
+/** Plain diff-match-patch tuples, retaining the exact baseline for validation. */
+export type Edit = Array<[number, string]>;
+export interface MetaEdit {
+	set: Partial<FileMeta>;
+	unset: Array<keyof FileMeta>;
+}
+export type Recalculate = Record<
+	ResourcePath,
+	| { delete: true }
+	| {
+			kind: "file";
+			from: ResourcePath | null;
+			edit: Edit | null;
+			meta_edit: MetaEdit | null;
+	  }
+	| { kind: "folder"; from: ResourcePath | null }
+>;
+export interface RECAL {
+	self: Recalculate;
+	global: Record<string, Recalculate>;
+}
+export type ReplayGroups = RECAL[];
 
 export type PluginResourceType =
 	| "markdown"

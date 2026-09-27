@@ -6,66 +6,61 @@ trees identified at runtime by their source folder names. The role's root
 `definition.package.json` stores the enabled folders as `globalPlugins: string[]`;
 the array is both the enable set and merge order.
 
-Every document is a folder tree. Folder and file keys are stable node IDs;
-`name` is only display text and ordinary sibling files/folders may share it. A
-name path is a convenience lookup and must resolve exactly one node; use
-`/self/$<id>` or `/global/$<source-id>/$<id>` when a stable reference is
-needed. A file owns its content, slot reference, selection
-state, priority and optional condition. The local source's `global.slot.json`
-defines the complete slot tree. Every source root owns a `local.slot.json`
-whose leaf paths declare which of those slots that source may contribute to.
-A file stores one logical slot path such as `/chat`; there is no slot folder or
-folder metadata.
+Every document is a name-keyed folder tree whose files contain authored strings.
+Paths are the sole resource addresses. File metadata (slot, selection, priority,
+and conditions) is stored in a source-local path map. The local source's
+`global.slot.json` defines the shared slots; each source's `local.slot.json`
+declares its contributions.
 
-`usePluginData()` routes the active message path's Pulses to their owning local
-or global source, replays every source independently, and mounts all global
-folders so resource UI can inspect and edit inactive sources too.
-`useActivePluginData(filetree)` derives the enabled sources in role-definition
-order without another replay or deep copy. Runtime slots, panels and custom
-tools use this active projection; explicit file access uses the complete tree.
-Neither projection is stored separately.
+`usePluginData()` replays every available source independently, then mounts all
+global folders, including inactive sources. `useActivePluginData(filetree)`
+filters the runtime projection in the role definition's enabled-source order.
+Neither projection is persisted.
 
 ## Updates and replay
 
-Business calls (`write`, `edit`, `mkdir`, `move`, `copy`, `remove`,
-`updateFile`) first translates input into one logical `Pulse`. Each Pulse
-stores a target node ID plus a short local path. It either writes a value,
-removes a value with `none`, replaces a unique substring, copies from an ID
-reference with a deterministic ID map, or moves an ID reference. Persistent
-edits update the owning version's replay projection synchronously; their owner
-controls persistence. Move and copy reject a destination below the source folder; move
-keeps IDs while copy regenerates every copied subtree ID.
+File API operations are synchronous transient commands (`Pulse`), not a stored
+action log. Each message version owns `meta.recal = { self, global }`, where
+`global` is keyed by source folder name. Each source delta is a map from final
+source-local absolute paths to delete, file, or folder entries. Missing paths
+inherit the baseline; explicit children override inherited folder contents.
+Record enumeration order does not affect replay.
 
-The on-disk local Plugin is `PluginDocument { id, tree, meta, versions }`.
-`tree/meta` retain the original authored source. Source editing synchronously
-appends a Pulse to the latest version and compacts that version before marking
-the Plugin dirty for normal database sync. A version is mutable only until a
-conversation references its ID; the next edit then creates a child version
-with a new Git-style 40-character ID and appends there. Each version keeps a
-history-only `parentId` and cumulative Pulses that replay directly over the
-original source.
+A file entry stores `from`, `edit`, and `meta_edit`; a folder stores `from`.
+`from` always reads the immutable baseline, including during swaps and deletes.
+`null` means a newly created file/empty directory; in-place modifications use
+an explicit original path. Moving adds a deletion at the old position; copying
+retains it. A moved folder inherits its whole original subtree, with explicit
+child changes only where needed. Copying a modified subtree preserves its
+content and metadata at copy time, independently of subsequent source edits.
 
-New conversations persist the latest saved `pluginVersionId`. Loading replays
-that version over the original source before applying the conversation path;
-later Plugin edits do not alter existing conversations.
+The builder first applies the operation to an isolated in-memory tree, tracks
+original provenance, then derives its final delta. Text changes are plain
+serializable diff-match-patch tuples against that fixed original content;
+unchanged text has `edit: null`. Equal text is retained in the tuples so replay
+can validate the entire old content exactly, rather than fuzzily applying a
+patch. This favors exactness over minimal serialized text size. Metadata uses
+`set` and `unset`. Empty net changes are omitted. There is no action compactor.
+Failed operations do not publish a delta.
 
-Conversation edits append updates to the current message version. Replay only
-applies those updates to cloned source trees; it never writes the database.
-Moves and copies cannot cross source roots because one Pulse has exactly one
-replay owner. Editing `definition.package.json.globalPlugins` dynamically adds,
-removes, or reorders global mounts in the resulting World.
-If the active tail is already a pure Pulse-only system container, later edits
-reuse that container instead of extending the conversation path.
+The on-disk `PluginDocument { id, tree, meta, versions }` retains its original
+source. Each saved version owns a cumulative `recal` against that original,
+plus a history-only `parentId`. A head stays mutable until a conversation pins
+its ID, after which editing forks a new saved version. Conversation replay
+starts from its pinned Plugin version. Each message version's delta is relative
+to the preceding selected message path, never its sibling alternative or its
+last editing operation. Message groups replay sequentially. A changed text
+baseline is reported as a conflict rather than silently rebasing that edit.
 
-`compactPulses()` is shared by Plugin version appends and Conversation message-version
-persistence. It keeps the last direct content write and merges metadata fields
-within one group, retaining structural dependency order. File API `edit`
-records the resulting content as `file.write`. Different versions and message
-groups are never compacted together.
+Moves and copies cannot cross source roots. Disabling a global source affects
+runtime selection, not its replay. If a source is unavailable, its delta remains
+stored but is skipped, so other sources still replay. This does not reconstruct
+a deleted source or retain its original content; replaying it later requires a
+compatible baseline. A source folder name alone is not a version snapshot.
 
 ## Paths and source scope
 
-`/self/...` addresses the role's local source. `/global/<source-folder>/...`
+`/...` addresses the role's local source. `/global/<source-folder>/...`
 addresses one global source. In authored resources `@/...` resolves to the
 resource's own source root. There is no `@pluginId/...` syntax.
 
