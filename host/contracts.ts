@@ -73,7 +73,11 @@ interface HostDesktopWindow {
 	isConversationOpen(id: string): Promise<boolean>;
 	minimize(): Promise<void>;
 	toggleMaximize(): Promise<void>;
-	setBackgroundMaterial(material: "mica" | "none"): Promise<void>;
+	isMaximized(): Promise<boolean>;
+	onMaximizeChange(listener: (isMaximized: boolean) => void): () => void;
+	setBackgroundMaterial(
+		material: "acrylic" | "mica" | "tabbed" | "none",
+	): Promise<void>;
 	close(): Promise<void>;
 	hide(): Promise<void>;
 	onCloseRequest(listener: () => void): () => void;

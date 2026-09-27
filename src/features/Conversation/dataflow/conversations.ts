@@ -1,16 +1,8 @@
 import { computed, reactive, shallowReactive, watch } from "vue";
-import {
-	registerSyncHandler,
-	useSyncStore,
-} from "@/features/Database/dbsync-store";
+import { useSyncStore } from "@/features/Database/dbsync-store";
 import { latestPluginVersion } from "@/features/Plugin/dataflow/plugin-version";
 import { host } from "@/host";
-import {
-	type ConversationGenerationState,
-	type ConversationMeta,
-	createConversationMeta,
-	type PersistedConversationMeta,
-} from "./types";
+import { type ConversationMeta, createConversationMeta } from "./types";
 
 function conversationsForPlugin(pluginId: string) {
 	return useSyncStore().conversationMeta.get(pluginId) as
@@ -131,6 +123,7 @@ export function removeConversation(conversationId: ConversationMeta["id"]) {
 		store.markDirty({ type: "container", id: container.id });
 	if (conversation) store.markDirty({ type: "meta", id: conversation.id });
 	store.containers.delete(conversationId);
+	store.generation.delete(conversationId);
 	if (conversation) {
 		untrackConversationPluginVersion(conversation.id);
 		store.conversationMeta
@@ -143,37 +136,6 @@ export function clearConversationCache() {
 	conversationPluginVersions.clear();
 	pluginVersionUses.clear();
 	initialized = false;
-}
-
-registerSyncHandler<ConversationMeta, PersistedConversationMeta>("meta", {
-	table: "conversations",
-	value: findConversation,
-	hydrate: addConversation,
-	serialize(conversation) {
-		const { generation: _generation, ...record } = conversation;
-		return record;
-	},
-});
-
-/** Read only persistent fields, without subscribing to runtime generation. */
-export function conversationRecord(
-	value: ConversationMeta,
-): PersistedConversationMeta {
-	return {
-		id: value.id,
-		localPluginId: value.localPluginId,
-		pluginVersionId: value.pluginVersionId,
-		title: value.title,
-		rootContainerId: value.rootContainerId,
-		lastContainerId: value.lastContainerId,
-		lastMessagePreview: value.lastMessagePreview,
-		composerDraft: value.composerDraft,
-		createdAt: value.createdAt,
-		updatedAt: value.updatedAt,
-		lifetime: value.lifetime,
-		pinned: value.pinned,
-		isTemplate: value.isTemplate,
-	};
 }
 
 /** A loaded set of a role's conversations. Its actions are the only mutations. */
@@ -216,10 +178,10 @@ export function useConversation(
 	if (loadEnvironment) void loadConversationEnvironment(conversationId);
 	const conversation = computed(() => findConversation(conversationId) ?? null);
 	watch(
-		() => (conversation.value ? conversationRecord(conversation.value) : null),
-		(record) => {
-			if (!record || !conversation.value) return;
-			trackConversationPluginVersion(conversation.value);
+		conversation,
+		(value) => {
+			if (!value) return;
+			trackConversationPluginVersion(value);
 			store.markDirty({ type: "meta", id: conversationId });
 		},
 		{ deep: true, flush: "sync" },
@@ -230,14 +192,16 @@ export function useConversation(
 /** Generation is runtime state; changing it must not cause a persistence write. */
 export function setConversationGeneration(
 	conversationId: string,
-	value?: ConversationGenerationState,
+	value?: { messageId?: string },
 ) {
-	const conversation = findConversation(conversationId);
-	if (conversation) conversation.generation = value;
+	if (!findConversation(conversationId)) return;
+	const generation = useSyncStore().generation;
+	if (value) generation.set(conversationId, value);
+	else generation.delete(conversationId);
 }
 
 export function isConversationGenerating(conversationId: string) {
-	return computed(() => Boolean(findConversation(conversationId)?.generation));
+	return computed(() => useSyncStore().generation.has(conversationId));
 }
 
 /** Removes app-lifetime conversations left by a previous process, including their containers. */
@@ -247,7 +211,8 @@ export async function cleanupAppLifetimeConversations() {
 		.map((record) => record.value)
 		.filter((conversation) => conversation.lifetime === "app");
 	for (const conversation of conversations) {
-		if (await host.desktop?.window.isConversationOpen(conversation.id)) continue;
+		if (await host.desktop?.window.isConversationOpen(conversation.id))
+			continue;
 		await store.load({
 			type: "conversationList",
 			id: conversation.localPluginId,

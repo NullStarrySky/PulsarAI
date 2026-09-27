@@ -126,7 +126,7 @@ function handleKeyDown(e: KeyboardEvent) {
     "
   >
     <SearchIcon
-      :size="sizeClasses.icon"
+      :size="String(sizeClasses.icon)"
       :stroke-width="1.5"
       class="shrink-0 text-muted-foreground transition-[color,stroke-width] duration-80 group-focus-within/search:text-foreground group-focus-within/search:stroke-[2]"
     />

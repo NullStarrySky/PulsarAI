@@ -1,67 +1,103 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Button } from "@/components/fluid";
 import { useResponsiveStore } from "@/features/Environment/responsive-store";
 import { useEnvironmentStore } from "@/features/Environment/store";
 import { host } from "@/host";
-import {
-	ExternalLink,
-	History,
-	Home,
-	Maximize2,
-	Minus,
-	Settings,
-	X,
-} from "@/lib/phosphor-icons";
+import { UserRound } from "@/lib/remix-icons";
 import { useUIStore } from "./store";
-import { useWindowLifecycleStore } from "./window-lifecycle-store";
 
 const props = defineProps<{
-	title: string;
-	hasConversation: boolean;
-	managerOpen: boolean;
+	sidebarOpen: boolean;
+	isBlank: boolean;
+	conversationTitle?: string;
+	characterName?: string;
+	avatarUrl?: string;
+	isSettingsOpen?: boolean;
 }>();
-const emit = defineEmits<{
-	"update:managerOpen": [open: boolean];
-	home: [];
-	newWindow: [];
-}>();
+
 const environment = useEnvironmentStore();
 const ui = useUIStore();
-const windowLifecycle = useWindowLifecycleStore();
 const responsive = useResponsiveStore();
-const appWindow = host.desktop?.window;
-const topBarClass = computed(() =>
-	!environment.appearance.zenFrameEnabled
-		? "bg-background text-foreground border-b border-border/80"
+
+const topBarClass = computed(() => {
+	if (
+		environment.appearance.backgroundImage || environment.glassEnabled
+	) {
+		return "bg-transparent text-foreground";
+	}
+	return !environment.appearance.zenFrameEnabled
+		? "bg-background text-foreground"
 		: environment.zenFrameIsDark
 			? "bg-zen-frame-bg text-white"
-			: "bg-zen-frame-bg text-slate-900",
+			: "bg-zen-frame-bg text-slate-900";
+});
+
+const actionsWidth = computed(() =>
+	!props.isBlank && !props.isSettingsOpen ? 134 : 100,
 );
-const buttonClass = computed(() =>
-	!environment.appearance.zenFrameEnabled
-		? "text-muted-foreground hover:bg-muted hover:text-foreground"
-		: environment.zenFrameIsDark
-			? "text-white/80 hover:bg-white/15 hover:text-white"
-			: "text-slate-700 hover:bg-black/10 hover:text-slate-950",
-);
+
+const headerSpacerStyle = computed(() => ({
+	width: props.sidebarOpen ? "12px" : `${actionsWidth.value}px`,
+	transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
+}));
+
+const rightSpacerWidth = computed(() => {
+	const desktopControls = host.desktop && !responsive.isMobileLayout;
+	const fullWidth = desktopControls ? 134 : 40;
+	return ui.rightSidebarOpen ? 12 : fullWidth;
+});
+
+const rightSpacerStyle = computed(() => ({
+	width: `${rightSpacerWidth.value}px`,
+	transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)",
+}));
+
 </script>
 
 <template>
-  <header class="relative z-30 flex h-10 shrink-0 select-none items-center gap-1 px-3 mobile:h-12 mobile:px-2" :class="[topBarClass, host.desktop && 'electron-window-drag-region']">
-    <div class="flex min-w-0 flex-1 items-center gap-1" data-window-drag-block>
-      <Button v-if="props.hasConversation" variant="ghost" size="icon-sm" :class="buttonClass" title="角色" @click="emit('home')"><Home class="size-4" /></Button>
-      <span class="truncate px-1 text-sm font-medium">{{ props.title }}</span>
+  <header
+    class="relative z-20 flex h-11 w-full shrink-0 select-none items-center justify-between mobile:h-12"
+    :class="topBarClass"
+  >
+    <!-- Left Spacer matching fixed actions -->
+    <div
+      class="header-spacer shrink-0 transition-[width] duration-300 pointer-events-none"
+      :style="headerSpacerStyle"
+    />
+
+    <!-- Title Group (Hidden if blank conversation or settings open) -->
+    <div
+      v-if="!isBlank && !isSettingsOpen && conversationTitle"
+      class="flex min-w-0 max-w-[min(36rem,calc(100vw-20rem))] items-center gap-2 truncate"
+      data-window-drag-block
+    >
+      <!-- Avatar -->
+      <div class="grid size-5 shrink-0 place-items-center overflow-hidden rounded-full border border-border/60 bg-muted">
+        <img
+          v-if="avatarUrl"
+          :src="avatarUrl"
+          :alt="characterName || conversationTitle"
+          class="size-full object-cover"
+        />
+        <UserRound v-else class="size-3 text-muted-foreground" />
+      </div>
+
+      <!-- Title & Subtitle -->
+      <span class="truncate text-xs font-semibold text-foreground">
+        {{ conversationTitle }}
+      </span>
+      <span v-if="characterName" class="truncate text-[11px] text-muted-foreground/80">
+        ~ @ {{ characterName }}
+      </span>
     </div>
-    <div class="flex shrink-0 items-center gap-0.5" data-window-drag-block>
-      <Button v-if="props.hasConversation && host.desktop" variant="ghost" size="icon-sm" :class="buttonClass" title="在新窗口打开" @click="emit('newWindow')"><ExternalLink class="size-4" /></Button>
-      <Button v-if="props.hasConversation" variant="ghost" size="icon-sm" :class="buttonClass" title="会话列表" @click="emit('update:managerOpen', !props.managerOpen)"><History class="size-4" /></Button>
-      <Button variant="ghost" size="icon-sm" :class="buttonClass" title="设置" @click="ui.settingsOpen = true"><Settings class="size-4" /></Button>
-    </div>
-    <div v-if="host.desktop && !responsive.isMobileLayout" class="ml-1 flex shrink-0 items-center gap-0.5 border-l pl-1" data-window-drag-block>
-      <Button variant="ghost" size="icon-sm" :class="buttonClass" title="最小化" @click="appWindow?.minimize()"><Minus class="size-4" /></Button>
-      <Button variant="ghost" size="icon-sm" :class="buttonClass" title="最大化或还原" @click="appWindow?.toggleMaximize()"><Maximize2 class="size-4" /></Button>
-      <Button variant="ghost" size="icon-sm" class="hover:bg-destructive hover:text-destructive-foreground" title="关闭" @click="windowLifecycle.handleCloseRequest"><X class="size-4" /></Button>
-    </div>
+
+    <!-- Center Drag Region -->
+    <div class="h-full min-w-0 flex-1 electron-window-drag-region" />
+
+    <!-- Right Spacer matching fixed right actions -->
+    <div
+      class="header-spacer-right shrink-0 transition-[width] duration-300 pointer-events-none"
+      :style="rightSpacerStyle"
+    />
   </header>
 </template>

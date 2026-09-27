@@ -13,38 +13,11 @@ export type DirtyTarget =
 	| { type: "container"; id: ConversationContainer["id"] }
 	| { type: "plugin"; id: CharacterData["id"] }
 	| { type: "character"; id: CharacterData["id"] };
-export type SyncKind = DirtyTarget["type"];
 export type SyncTarget =
 	| { type: "conversationList"; id: ConversationMeta["localPluginId"] }
 	| { type: "conversation"; id: ConversationMeta["id"] }
 	| { type: "plugin"; id: CharacterData["id"] }
 	| { type: "conversationVersionIndex" };
-
-export interface SyncHandler<TMemory, TPersisted = TMemory> {
-	table: string;
-	value(id: string): TMemory | undefined;
-	recordId?: (id: string) => string;
-	serialize?: (value: TMemory) => TPersisted;
-	hydrate?: (value: TMemory) => void;
-}
-
-const handlers = new Map<SyncKind, SyncHandler<unknown, unknown>>();
-
-export function registerSyncHandler<TMemory, TPersisted = TMemory>(
-	kind: SyncKind,
-	handler: SyncHandler<TMemory, TPersisted>,
-) {
-	handlers.set(kind, handler as SyncHandler<unknown, unknown>);
-}
-
-function dirtyKey(target: DirtyTarget) {
-	return `${target.type}:${target.id}`;
-}
-
-function parseDirtyKey(key: string): DirtyTarget {
-	const index = key.indexOf(":");
-	return { type: key.slice(0, index) as SyncKind, id: key.slice(index + 1) };
-}
 
 /** Shared record containers and batched persistence. Feature code owns mutations. */
 export const useSyncStore = defineStore("dbsync", () => {
@@ -66,12 +39,45 @@ export const useSyncStore = defineStore("dbsync", () => {
 			Map<ConversationContainer["id"], ConversationContainer>
 		>(),
 	);
-	const dirty = new Set<string>();
+	const generation = shallowReactive(
+		new Map<ConversationMeta["id"], { messageId?: string }>(),
+	);
+	const dirty: DirtyTarget[] = [];
 	const loadedConversationLists = new Set<ConversationMeta["localPluginId"]>();
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let pendingFlush = Promise.resolve();
 	let initPromise: Promise<void> | undefined;
 	let initGeneration = 0;
+
+	function findConversation(id: ConversationMeta["id"]) {
+		for (const list of conversationMeta.values()) {
+			const conversation = list.get(id);
+			if (conversation) return conversation;
+		}
+	}
+
+	function findContainer(id: ConversationContainer["id"]) {
+		for (const list of containers.values()) {
+			const container = list.get(id);
+			if (container) return container;
+		}
+	}
+
+	function loadConversation(value: ConversationMeta) {
+		let list = conversationMeta.get(value.localPluginId);
+		if (!list) {
+			list = shallowReactive(
+				new Map<ConversationMeta["id"], ConversationMeta>(),
+			);
+			conversationMeta.set(value.localPluginId, list);
+		}
+		const current = list.get(value.id);
+		if (current) return current;
+		for (const message of value.composerDraft.content) message.final ??= true;
+		const conversation = reactive(value) as ConversationMeta;
+		list.set(value.id, conversation);
+		return conversation;
+	}
 
 	function init() {
 		const generation = initGeneration;
@@ -89,7 +95,10 @@ export const useSyncStore = defineStore("dbsync", () => {
 	}
 
 	function markDirty(target: DirtyTarget) {
-		dirty.add(dirtyKey(target));
+		if (
+			!dirty.some((item) => item.type === target.type && item.id === target.id)
+		)
+			dirty.push(target);
 		if (timer) return;
 		timer = setTimeout(() => {
 			timer = undefined;
@@ -98,24 +107,48 @@ export const useSyncStore = defineStore("dbsync", () => {
 	}
 
 	async function syncTarget(target: DirtyTarget) {
-		const key = dirtyKey(target);
-		if (!dirty.has(key)) return;
-		const handler = handlers.get(target.type);
-		if (!handler) throw new Error(`syncStore 缺少 ${target.type} 的同步实现。`);
-		const recordId = handler.recordId?.(target.id) ?? target.id;
-		const value = handler.value(target.id);
-		dirty.delete(key);
+		const index = dirty.findIndex(
+			(item) => item.type === target.type && item.id === target.id,
+		);
+		if (index < 0) return;
+		let table: string;
+		let recordId = target.id;
+		let value: unknown;
+		switch (target.type) {
+			case "plugin":
+				table = "resource_worlds";
+				recordId = `local:${target.id}`;
+				value = plugins.get(target.id);
+				break;
+			case "character":
+				table = "resource_characters";
+				value = characters.get(target.id);
+				break;
+			case "meta":
+				table = "conversations";
+				value = findConversation(target.id);
+				break;
+			case "container":
+				table = "message_containers";
+				value = findContainer(target.id);
+				break;
+		}
+		dirty.splice(index, 1);
 		try {
-			if (value === undefined)
-				await host.database.remove(handler.table, recordId);
+			if (value === undefined) await host.database.remove(table, recordId);
 			else
 				await host.database.upsert(
-					handler.table,
+					table,
 					recordId,
-					JSON.parse(JSON.stringify(handler.serialize?.(value) ?? value)),
+					JSON.parse(JSON.stringify(value)),
 				);
 		} catch (error) {
-			dirty.add(key);
+			if (
+				!dirty.some(
+					(item) => item.type === target.type && item.id === target.id,
+				)
+			)
+				dirty.push(target);
 			throw error;
 		}
 	}
@@ -124,7 +157,7 @@ export const useSyncStore = defineStore("dbsync", () => {
 		if (timer) clearTimeout(timer);
 		timer = undefined;
 		const flush = pendingFlush.then(async () => {
-			for (const entry of target ? [target] : [...dirty].map(parseDirtyKey))
+			for (const entry of target ? [target] : [...dirty])
 				await syncTarget(entry);
 		});
 		pendingFlush = flush.catch(() => {});
@@ -154,41 +187,31 @@ export const useSyncStore = defineStore("dbsync", () => {
 			plugins.set(target.id, reactive(value) as PluginDocument);
 			return;
 		}
-		if (!handlers.get("meta")?.hydrate)
-			await import("@/features/Conversation/dataflow/conversations");
 		if (target.type === "conversationList") {
 			if (loadedConversationLists.has(target.id)) return;
-			const hydrate = handlers.get("meta")?.hydrate;
-			if (!hydrate) throw new Error("syncStore 缺少 meta 的加载实现。");
 			const rows = await host.database.selectByField<ConversationMeta>(
 				"conversations",
 				"localPluginId",
 				target.id,
 			);
-			for (const { value } of rows)
-				if (!conversationMeta.get(target.id)?.has(value.id)) hydrate(value);
+			for (const { value } of rows) loadConversation(value);
 			loadedConversationLists.add(target.id);
 			return;
 		}
 		if (containers.has(target.id)) return;
-		let conversation = [...conversationMeta.values()]
-			.map((list) => list.get(target.id))
-			.find(Boolean);
+		let conversation = findConversation(target.id);
 		if (!conversation) {
-			const hydrate = handlers.get("meta")?.hydrate;
-			if (!hydrate) throw new Error("syncStore 缺少 meta 的加载实现。");
 			const value = await host.database.selectOne<ConversationMeta>(
 				"conversations",
 				target.id,
 			);
 			if (!value) return;
-			hydrate(value);
-			conversation = value;
+			conversation = loadConversation(value);
 		}
 		if (!containers.has(target.id)) {
 			const rows = await host.database.selectByField<ConversationContainer>(
 				"message_containers",
-				"conversationId",
+				"conversationid",
 				target.id,
 			);
 			containers.set(
@@ -223,12 +246,14 @@ export const useSyncStore = defineStore("dbsync", () => {
 			}
 			return;
 		}
-		if (!containers.has(target.id)) return;
+		if (!containers.has(target.id)) {
+			generation.delete(target.id);
+			return;
+		}
 		await _sync();
-		const conversation = [...conversationMeta.values()]
-			.map((list) => list.get(target.id))
-			.find(Boolean);
+		const conversation = findConversation(target.id);
 		containers.delete(target.id);
+		generation.delete(target.id);
 		if (
 			conversation &&
 			!loadedConversationLists.has(conversation.localPluginId)
@@ -243,8 +268,9 @@ export const useSyncStore = defineStore("dbsync", () => {
 		characters.clear();
 		conversationMeta.clear();
 		containers.clear();
+		generation.clear();
 		loadedConversationLists.clear();
-		dirty.clear();
+		dirty.length = 0;
 		initGeneration++;
 		initPromise = undefined;
 	}
@@ -254,6 +280,7 @@ export const useSyncStore = defineStore("dbsync", () => {
 		characters,
 		conversationMeta,
 		containers,
+		generation,
 		init,
 		load,
 		unload,

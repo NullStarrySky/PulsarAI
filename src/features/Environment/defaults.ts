@@ -5,6 +5,8 @@ export type AgentLoadingStyle = "drive" | "dots" | "orbit";
 export type WindowCloseBehavior = "ask" | "exit" | "tray";
 export type WebSearchProviderId = "playwright" | "exa";
 export type TranslationProvider = "microsoft" | "google";
+export type WindowMaterial = "none" | "acrylic" | "mica" | "tabbed";
+export type BackgroundScope = "blank" | "conversation" | "settings";
 
 export interface FontDefinition {
 	id: string;
@@ -28,13 +30,17 @@ export interface AppearanceSettings {
 	interactiveCodePreview: boolean;
 	agentLoadingStyle: AgentLoadingStyle;
 	zenFrameEnabled: boolean;
-	glassEffectEnabled: boolean;
+	windowMaterial: WindowMaterial;
 	zenFrameWidth: number;
 	frameColorMode: "auto" | "custom";
 	frameCustomColor: string;
 	editorFontSize: number;
 	editorLineHeight: number;
 	shapeVariant: "square" | "rounded" | "pill";
+	backgroundImage?: string;
+	backgroundOpacity?: number;
+	backgroundBlur?: number;
+	backgroundScope?: BackgroundScope[];
 }
 
 export interface WebSearchSettings {
@@ -88,13 +94,17 @@ export function getDefaultAppearance(): AppearanceSettings {
 		interactiveCodePreview: false,
 		agentLoadingStyle: "drive",
 		zenFrameEnabled: true,
-		glassEffectEnabled: true,
 		zenFrameWidth: 6,
 		frameColorMode: "auto",
 		frameCustomColor: "#1e1e24",
 		editorFontSize: 14,
 		editorLineHeight: 16,
 		shapeVariant: "rounded",
+		windowMaterial: "acrylic",
+		backgroundImage: "",
+		backgroundOpacity: 0.85,
+		backgroundBlur: 0,
+		backgroundScope: ["blank", "conversation", "settings"],
 	};
 }
 

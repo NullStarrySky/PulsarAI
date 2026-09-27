@@ -242,3 +242,7 @@ export type {
   InputCopyVariant,
   InputCopyAlign,
 } from "./components/ui/input-copy/InputCopy.vue";
+
+// ── fluid-list ──
+export { FluidList, FluidListItem } from "./components/ui/list";
+

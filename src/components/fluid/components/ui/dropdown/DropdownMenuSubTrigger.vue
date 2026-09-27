@@ -82,7 +82,7 @@ const itemClass = computed(() =>
     >
       <MenuRowContent :icon="icon" :label="resolvedLabel" :active="isActive" />
       <ChevronRight
-        :size="sizeClasses.icon"
+        :size="String(sizeClasses.icon)"
         class="shrink-0 text-muted-foreground ml-auto -mr-0.5"
       />
     </div>

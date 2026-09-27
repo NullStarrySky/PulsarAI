@@ -44,6 +44,28 @@ const themeImportOpen = ref(false);
 const themeCss = ref("");
 const themeFileName = ref("");
 const fontFileInput = ref<HTMLInputElement | null>(null);
+const bgFileInput = ref<HTMLInputElement | null>(null);
+
+function handleBgUpload(event: Event) {
+	const input = event.target as HTMLInputElement;
+	const file = input.files?.[0];
+	if (!file) return;
+	const reader = new FileReader();
+	reader.onload = () => {
+		appearance.backgroundImage = reader.result as string;
+		if (appearance.backgroundOpacity === undefined || appearance.backgroundOpacity <= 0.35) {
+			appearance.backgroundOpacity = 0.85;
+		}
+		push.success("已设置背景图片");
+	};
+	reader.readAsDataURL(file);
+	input.value = "";
+}
+
+function clearBg() {
+	appearance.backgroundImage = "";
+	push.info("已清除背景图片");
+}
 
 const activeAccent = computed(() => store.activeTheme.accent);
 const themeModeOptions = [
@@ -149,6 +171,90 @@ async function importFont(event: Event) {
     </section>
 
     <section class="flex flex-col gap-3">
+      <div class="flex items-center justify-between gap-4">
+        <div>
+          <h3 class="text-sm font-semibold">背景壁纸</h3>
+          <p class="mt-0.5 text-xs text-muted-foreground">上传图片作为应用背景，可调节透明度与模糊度。</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <Button
+            v-if="appearance.backgroundImage"
+            variant="ghost"
+            size="sm"
+            class="text-destructive hover:bg-destructive/10"
+            @click="clearBg"
+          >
+            清除背景
+          </Button>
+          <Button variant="outline" size="sm" @click="bgFileInput?.click()">
+            <Upload class="mr-1.5 size-3.5" />
+            {{ appearance.backgroundImage ? '更换背景' : '上传图片' }}
+          </Button>
+          <input
+            ref="bgFileInput"
+            type="file"
+            accept="image/*"
+            class="hidden"
+            @change="handleBgUpload"
+          />
+        </div>
+      </div>
+
+      <div v-if="appearance.backgroundImage" class="flex flex-col gap-4 rounded-xl border border-border/70 bg-muted/30 p-4">
+        <div class="relative h-28 w-full overflow-hidden rounded-lg border border-border/50 bg-background/50">
+          <img
+            :src="appearance.backgroundImage"
+            alt="背景预览"
+            class="size-full object-cover"
+            :style="{
+              opacity: appearance.backgroundOpacity ?? 0.85,
+              filter: appearance.backgroundBlur ? `blur(${appearance.backgroundBlur}px)` : undefined,
+            }"
+          />
+          <div class="absolute bottom-2 right-2 rounded bg-background/80 px-2 py-0.5 text-[10px] text-muted-foreground backdrop-blur-xs">
+            实时预览
+          </div>
+        </div>
+
+        <SettingForm class="gap-3">
+          <SettingFormField
+            title="透明度"
+            description="控制背景图片的不透明度。"
+          >
+            <div class="ml-auto flex w-52 items-center gap-3">
+              <Slider
+                v-model="appearance.backgroundOpacity"
+                :min="0.05"
+                :max="1"
+                :step="0.05"
+              />
+              <span class="w-12 text-right text-xs tabular-nums text-muted-foreground">
+                {{ Math.round((appearance.backgroundOpacity ?? 0.85) * 100) }}%
+              </span>
+            </div>
+          </SettingFormField>
+
+          <SettingFormField
+            title="模糊度"
+            description="为背景图片添加高斯模糊。"
+          >
+            <div class="ml-auto flex w-52 items-center gap-3">
+              <Slider
+                v-model="appearance.backgroundBlur"
+                :min="0"
+                :max="30"
+                :step="1"
+              />
+              <span class="w-12 text-right text-xs tabular-nums text-muted-foreground">
+                {{ appearance.backgroundBlur ?? 0 }} px
+              </span>
+            </div>
+          </SettingFormField>
+        </SettingForm>
+      </div>
+    </section>
+
+    <section class="flex flex-col gap-3">
       <div class="flex items-center gap-2">
         <span class="size-3 rounded-full" :style="{ backgroundColor: activeAccent }" />
         <h3 class="text-sm font-semibold">自定义</h3>
@@ -214,7 +320,7 @@ async function importFont(event: Event) {
         </div>
       </SettingFormField>
 
-      <SettingFormField title="编辑器段落字号" description="Milkdown 编辑器与消息渲染段落 (.milkdown .ProseMirror p) 的字体大小。">
+      <SettingFormField title="编辑器段落字号" description="控制编辑器与消息段落的字体大小。">
         <div class="ml-auto grid w-full max-w-xl grid-cols-[minmax(0,1fr)_5rem] items-center gap-3">
           <Slider v-model="appearance.editorFontSize" :min="10" :max="40" :step="1" />
           <div class="flex items-center gap-1">
@@ -230,7 +336,7 @@ async function importFont(event: Event) {
         </div>
       </SettingFormField>
 
-      <SettingFormField title="编辑器段落行高" description="Milkdown 编辑器与消息渲染段落 (.milkdown .ProseMirror p) 的行高。">
+      <SettingFormField title="编辑器段落行高" description="控制编辑器与消息段落的行高。">
         <div class="ml-auto grid w-full max-w-xl grid-cols-[minmax(0,1fr)_5rem] items-center gap-3">
           <Slider v-model="appearance.editorLineHeight" :min="10" :max="60" :step="1" />
           <div class="flex items-center gap-1">
@@ -282,12 +388,16 @@ async function importFont(event: Event) {
 
       <SettingFormField
         title="玻璃化效果"
-        description="为主界面加入半透明背景和模糊效果。"
+        description="选择窗口的系统背景材质。"
       >
-        <Switch
-          v-model="appearance.glassEffectEnabled"
-          aria-label="启用玻璃化效果"
-        />
+        <Select v-model="appearance.windowMaterial">
+          <SelectTrigger class="ml-auto w-36"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">关闭</SelectItem>
+            <SelectItem value="mica">Mica</SelectItem>
+            <SelectItem value="acrylic">Acrylic</SelectItem>
+          </SelectContent>
+        </Select>
       </SettingFormField>
 
       <SettingFormField

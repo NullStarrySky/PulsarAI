@@ -37,6 +37,9 @@ import {
 export const useEnvironmentStore = defineStore("environment", () => {
 	/* Group 1: 外观 (Appearance) */
 	const appearance = ref<AppearanceSettings>(getDefaultAppearance());
+	const glassEnabled = computed(
+		() => Boolean(host.desktop) && host.platform.platform() !== "linux" && appearance.value.windowMaterial !== "none",
+	);
 	const zenFrameIsDark = ref(true);
 
 	const themes = computed(() => [
@@ -64,9 +67,8 @@ export const useEnvironmentStore = defineStore("environment", () => {
 		id: "pulsarai-appearance-vars",
 	});
 	watch(
-		() => appearance.value.glassEffectEnabled,
-		(enabled) =>
-			void host.desktop?.window.setBackgroundMaterial(enabled ? "mica" : "none"),
+		() => appearance.value.windowMaterial,
+		(material) => void host.desktop?.window.setBackgroundMaterial(material),
 		{ immediate: true },
 	);
 
@@ -224,7 +226,19 @@ body {
 			host.config.get<RuntimePreferences>("runtime"),
 		]);
 
-		if (storedAppearance) Object.assign(appearance.value, storedAppearance);
+		if (storedAppearance) {
+			Object.assign(appearance.value, storedAppearance);
+			if (
+				!appearance.value.backgroundScope ||
+				!Array.isArray(appearance.value.backgroundScope)
+			) {
+				appearance.value.backgroundScope = [
+					"blank",
+					"conversation",
+					"settings",
+				];
+			}
+		}
 		if (storedHotkeys) applyHotkeyBindings(hotkeys.value, storedHotkeys);
 		if (storedWebSearch)
 			Object.assign(webSearchSettings.value, storedWebSearch);
@@ -239,6 +253,7 @@ body {
 	return {
 		/* State Groups */
 		appearance,
+		glassEnabled,
 		hotkeys,
 		webSearchSettings,
 		translateSettings,

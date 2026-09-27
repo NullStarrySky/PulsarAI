@@ -45,11 +45,13 @@ function embeddedNodeEngines() {
 }
 
 function sortRecords(records) {
-	return records.filter(
-		(record) => record && typeof record === "object" && "value" in record,
-	).sort((a, b) =>
-		String(a.resource_key).localeCompare(String(b.resource_key)),
-	);
+	return records
+		.filter(
+			(record) => record && typeof record === "object" && "value" in record,
+		)
+		.sort((a, b) =>
+			String(a.resource_key).localeCompare(String(b.resource_key)),
+		);
 }
 
 export async function createDatabase(userDataPath) {
@@ -68,11 +70,17 @@ export async function createDatabase(userDataPath) {
 				try {
 					return await operation();
 				} catch (error) {
-					const message = error instanceof Error ? error.message : String(error);
-					if (attempt >= 2 || !/failed transaction|read or write conflict/i.test(message)) {
+					const message =
+						error instanceof Error ? error.message : String(error);
+					if (
+						attempt >= 2 ||
+						!/failed transaction|read or write conflict/i.test(message)
+					) {
 						throw error;
 					}
-					await new Promise((resolve) => setTimeout(resolve, 8 * (attempt + 1)));
+					await new Promise((resolve) =>
+						setTimeout(resolve, 8 * (attempt + 1)),
+					);
 				}
 			}
 		});
@@ -93,7 +101,9 @@ export async function createDatabase(userDataPath) {
 		if (field !== "localPluginId" && field !== "conversationid")
 			throw new Error("Unsupported resource field.");
 		return (await selectAll(table)).filter(
-			(record) => record.value?.[field] === value,
+			(record) =>
+				record.value?.[field] === value ||
+				(field === "conversationid" && record.value?.conversationId === value),
 		);
 	}
 
@@ -109,7 +119,9 @@ export async function createDatabase(userDataPath) {
 	}
 
 	async function update(table, id, patches) {
-		await enqueueWrite(() => database.update(recordId(table, id)).patch(patches));
+		await enqueueWrite(() =>
+			database.update(recordId(table, id)).patch(patches),
+		);
 	}
 
 	async function remove(table, id) {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AnimatePresence, motion } from "motion-v";
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import SelectionBackgrounds from "../../../hooks/SelectionBackgrounds.vue";
 import { useFluidHover } from "../../../hooks/use-fluid-hover";
 import {
@@ -31,6 +31,8 @@ const props = withDefaults(
 		 *  省略时跟随外围 SizeProvider。 */
 		size?: SizeVariant;
 		class?: string;
+		/** 自定义单选选中高亮样式，默认 'bg-active' */
+		activeClass?: string;
 	}>(),
 	{},
 );
@@ -81,7 +83,19 @@ provideDropdownContext({
 
 provideSize({ size: () => props.size });
 
-onMounted(() => measureItems());
+watch(
+	() => props.checkedIndex,
+	() => {
+		measureItems();
+	},
+	{ immediate: true, flush: "post" },
+);
+
+onMounted(() => {
+	measureItems();
+	setTimeout(() => measureItems(), 60);
+	setTimeout(() => measureItems(), 180);
+});
 
 function handleFocus(e: FocusEvent) {
 	const target = e.target as HTMLElement;
@@ -158,7 +172,7 @@ const panelClass = computed(() =>
     <AnimatePresence v-else>
       <motion.div
         v-if="checkedRect"
-        :class="`absolute ${shape.bg} bg-active pointer-events-none`"
+        :class="cn(`absolute z-0 ${shape.bg} pointer-events-none`, props.activeClass || 'bg-active')"
         :initial="false"
         :animate="{
           top: checkedRect.top,

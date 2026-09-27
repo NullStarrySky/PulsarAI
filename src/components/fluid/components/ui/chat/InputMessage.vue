@@ -798,7 +798,7 @@ defineExpose({
               <span v-if="buttonMode === 'stop'" class="h-3 w-3 rounded-[3px] bg-current" />
               <ArrowUpIcon
                 v-else
-                :size="compactStep ? 15 : 19"
+                :size="compactStep ? '15' : '19'"
                 :class="cn('block', compactStep ? '!h-[15px] !w-[15px]' : '!h-[19px] !w-[19px]')"
               />
             </motion.span>

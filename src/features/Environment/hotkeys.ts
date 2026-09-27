@@ -37,7 +37,9 @@ export function createEnvironmentHotkeys(): EnvironmentHotkeys {
 		settings: {
 			title: "打开设置",
 			description: "打开应用设置。",
-			action: () => (useUIStore().settingsOpen = true),
+			action: () => {
+				useUIStore().settingsOpen = true;
+			},
 			keyBinding: "Ctrl+,",
 		},
 		toggleEditMode: {

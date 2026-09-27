@@ -90,8 +90,7 @@ export interface ConversationContainer {
 	previousContainer?: string | null;
 }
 
-/** Fields that are permitted to reach the conversations table. */
-export interface PersistedConversationMeta {
+export interface ConversationMeta {
 	id: string;
 	localPluginId: string;
 	pluginVersionId: string;
@@ -105,15 +104,6 @@ export interface PersistedConversationMeta {
 	lifetime: "persistent" | "app";
 	pinned?: boolean;
 	isTemplate?: boolean;
-}
-
-/** Runtime-only generation progress. It deliberately has no database shape. */
-export interface ConversationGenerationState {
-	messageId?: string;
-}
-
-export interface ConversationMeta extends PersistedConversationMeta {
-	generation?: ConversationGenerationState;
 }
 
 export function createDraft(conversationId = ""): ConversationContainer {

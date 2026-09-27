@@ -23,6 +23,8 @@ import {
   type SearchHandle,
 } from "./dropdown-context";
 
+defineOptions({ inheritAttrs: false });
+
 const shape = shapeMap.rounded;
 
 const props = withDefaults(
@@ -35,6 +37,7 @@ const props = withDefaults(
     align?: "start" | "center" | "end";
     sideOffset?: number;
     class?: string;
+    style?: any;
   }>(),
   { side: "bottom", align: "start", sideOffset: 6 }
 );
@@ -66,16 +69,16 @@ watch(
   { immediate: true }
 );
 
-watch(open, (o) => {
+watch(open, (o, _previous, onCleanup) => {
   if (o) return;
   const id = setTimeout(() => (mounted.value = false), exitFallbackMs(spring.fast));
-  return () => clearTimeout(id);
+  onCleanup(() => clearTimeout(id));
 });
 
 // popup 挂载后测量项
 watch(
   [open, mounted] as const,
-  ([o, m]) => {
+  ([o, m], _previous, onCleanup) => {
     if (!o || !m) return;
     let inner = 0;
     const outer = requestAnimationFrame(() => {
@@ -83,10 +86,10 @@ watch(
         measureItems();
       });
     });
-    return () => {
+    onCleanup(() => {
       cancelAnimationFrame(outer);
       cancelAnimationFrame(inner);
-    };
+    });
   },
   { immediate: true }
 );
@@ -208,6 +211,7 @@ onUnmounted(() => {
             ref="elevatedRef"
             :offset="2"
             :shadow-level="3"
+            :style="props.style"
             :class="
               cn(
                 'relative flex flex-col gap-0.5 overflow-y-auto p-1 select-none outline-none',

@@ -17,6 +17,12 @@ import { surfaceClasses } from "../../../lib/surface-classes";
 import { useDialogOpen } from "./dialog-context";
 import Button from "../button/Button.vue";
 
+defineOptions({ inheritAttrs: false });
+
+const emit = defineEmits<{
+  openAutoFocus: [event: Event];
+}>();
+
 const DIALOG_OFFSET = 4;
 
 const props = withDefaults(
@@ -72,6 +78,10 @@ function handleExitComplete() {
   if (!open.value) mounted.value = false;
 }
 
+function handleOpenAutoFocus(event: Event) {
+  emit("openAutoFocus", event);
+}
+
 const overlayClass = computed(() =>
   cn(props.container ? "absolute" : "fixed", "inset-0 z-40 bg-black/40 dark:bg-black/80")
 );
@@ -121,7 +131,7 @@ provideSurface(dialogLevel);
           :transition="transition"
         />
       </DialogOverlay>
-      <DialogContent as-child force-mount>
+      <DialogContent as-child force-mount @open-auto-focus="handleOpenAutoFocus">
         <motion.div
           v-bind="$attrs"
           :class="contentClass"

@@ -238,6 +238,13 @@ export const host: Host = {
 			isConversationOpen: (id) => invoke("window", "isConversationOpen", { id }),
 			minimize: () => invoke("window", "minimize"),
 			toggleMaximize: () => invoke("window", "toggleMaximize"),
+			isMaximized: () => invoke("window", "isMaximized"),
+			onMaximizeChange: (listener) =>
+				bridge
+					? bridge.listen("window:maximize-change", (val) =>
+							listener(Boolean(val)),
+						)
+					: () => {},
 			setBackgroundMaterial: (material) =>
 				invoke("window", "setBackgroundMaterial", { material }),
 			close: () => invoke("window", "close"),

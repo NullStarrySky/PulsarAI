@@ -6,11 +6,7 @@ import {
 	shallowRef,
 	watch,
 } from "vue";
-import {
-	registerSyncHandler,
-	useSyncStore,
-} from "@/features/Database/dbsync-store";
-import { compactPulses } from "@/features/Plugin/dataflow/pulse";
+import { useSyncStore } from "@/features/Database/dbsync-store";
 import type { ConversationContainer } from "./types";
 
 export interface ContainerChange {
@@ -48,32 +44,6 @@ export function markContainerDirty(
 function containersForChat(conversationId: string) {
 	return useSyncStore().containers.get(conversationId);
 }
-
-function findContainerById(containerId: string) {
-	for (const items of useSyncStore().containers.values()) {
-		const container = items.get(containerId);
-		if (container) return container;
-	}
-}
-
-registerSyncHandler<ConversationContainer>("container", {
-	table: "message_containers",
-	value: findContainerById,
-	serialize(container) {
-		return {
-			...container,
-			content: container.content.map((message) => ({
-				...message,
-				meta: {
-					...message.meta,
-					...(message.meta.pulses
-						? { pulses: compactPulses(message.meta.pulses) }
-						: {}),
-				},
-			})),
-		};
-	},
-});
 
 export function addContainers(
 	conversationId: string,

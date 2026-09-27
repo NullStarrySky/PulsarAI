@@ -1,21 +1,25 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
 import { AnimatePresence, motion } from "motion-v";
-import { cn } from "../../../lib/utils";
+import { computed, ref } from "vue";
 import { fontWeights } from "../../../lib/font-weight";
-import { useSize } from "../../../lib/size-context";
 import type { IconComponent } from "../../../lib/icon-context";
+import { useSize } from "../../../lib/size-context";
+import { cn } from "../../../lib/utils";
 
-const props = defineProps<{
-  icon?: IconComponent;
-  label?: string;
-  active?: boolean;
-  checked?: boolean;
-}>();
+const props = withDefaults(
+	defineProps<{
+		icon?: IconComponent;
+		label?: string;
+		active?: boolean;
+		checked?: boolean;
+		showCheck?: boolean;
+	}>(),
+	{ showCheck: true },
+);
 
 const hasMounted = ref(false);
 queueMicrotask(() => {
-  hasMounted.value = true;
+	hasMounted.value = true;
 });
 
 const sizeClasses = useSize();
@@ -65,7 +69,7 @@ const skipAnimation = computed(() => !hasMounted.value);
   </slot>
   <AnimatePresence>
     <motion.svg
-      v-if="checked"
+      v-if="checked && showCheck"
       key="check"
       :width="sizeClasses.icon"
       :height="sizeClasses.icon"

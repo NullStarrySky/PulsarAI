@@ -12,9 +12,9 @@ import {
 } from "@/components/fluid";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import SettingGroup from "@/features/Environment/setting/SettingGroup.vue";
+import SettingItem from "@/features/Environment/setting/SettingItem.vue";
 import DefaultPicker from "@/features/Request/components/DefaultPicker.vue";
-import SettingGroup from "@/features/Environment/setting/components/SettingGroup.vue";
-import SettingItem from "@/features/Environment/setting/components/SettingItem.vue";
 import type { ResourcePath } from "../../../dataflow/types";
 import type { FileApiOptions } from "../../../dataflow/use-file-api";
 import { useFileApi } from "../../../dataflow/use-file-api";

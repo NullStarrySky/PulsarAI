@@ -12,11 +12,13 @@ import type { WindowCloseBehavior } from "@/features/Environment/defaults";
 import SettingGroup from "@/features/Environment/setting/SettingGroup.vue";
 import SettingItem from "@/features/Environment/setting/SettingItem.vue";
 import SettingPage from "@/features/Environment/setting/SettingPage.vue";
+import { useEnvironmentStore } from "@/features/Environment/store";
 import { useWindowLifecycleStore } from "@/features/UI/window-lifecycle-store";
 
 const compactMode = ref(false);
 const enableAnimations = ref(true);
 const store = useWindowLifecycleStore();
+const appearance = useEnvironmentStore().appearance;
 
 function setCloseBehavior(value: unknown) {
 	if (value === "ask" || value === "exit" || value === "tray") {

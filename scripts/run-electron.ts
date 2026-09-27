@@ -27,13 +27,14 @@ async function rendererIsReady() {
 }
 
 let vite: ReturnType<typeof Bun.spawn> | undefined;
+let exitCode = 1;
 
 try {
 	if (!(await rendererIsReady())) {
 		vite = Bun.spawn(
 			["bun", "run", "renderer:dev", "--", "--host", "127.0.0.1"],
 			{
-				stdin: "inherit",
+				stdin: "ignore",
 				stdout: "inherit",
 				stderr: "inherit",
 			},
@@ -53,7 +54,7 @@ try {
 	const electron = Bun.spawn(
 		["bunx", "electron", "host/desktop-electron/main.mjs"],
 		{
-			stdin: "inherit",
+			stdin: "ignore",
 			stdout: "inherit",
 			stderr: "pipe",
 			env: {
@@ -64,12 +65,13 @@ try {
 		},
 	);
 	const stderr = forwardElectronStderr(electron.stderr);
-	const exitCode = await electron.exited;
+	exitCode = await electron.exited;
 	await stderr;
-	process.exit(exitCode);
 } finally {
 	if (vite) {
 		vite.kill();
 		await vite.exited;
 	}
 }
+
+process.exit(exitCode);

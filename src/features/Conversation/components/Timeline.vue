@@ -5,7 +5,7 @@ import { useActivePathComposable } from "../dataflow/activePathComposable";
 import type { ConversationContainer } from "../dataflow/types";
 import Message from "./Message.vue";
 
-const props = defineProps<{ conversationId: string }>();
+const props = defineProps<{ conversationId: string; bottomInset?: number }>();
 const conversation = useActivePathComposable(props.conversationId);
 const expandedIntervals = ref(new Set<string>());
 
@@ -151,6 +151,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleKeyDown));
     stick-to-bottom="auto"
     markdown-mode="chat"
     class="absolute inset-0 min-h-0 min-w-0"
+    :style="{ paddingBottom: `${props.bottomInset ?? 0}px` }"
   >
     <template #default="{ item, measureRef }">
       <div :ref="measureRef" class="mx-auto w-full max-w-[724px] px-4 pb-4 pt-5 mobile:px-3">
@@ -158,5 +159,4 @@ onBeforeUnmount(() => window.removeEventListener("keydown", handleKeyDown));
       </div>
     </template>
   </MarkstreamVirtualTimeline>
-  <div v-else class="absolute inset-0 m-auto grid place-content-center text-center"><h1 class="text-lg font-medium">开始新的会话</h1><p class="mt-1 text-sm text-muted-foreground">输入一条消息开始。</p></div>
 </template>

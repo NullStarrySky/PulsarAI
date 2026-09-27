@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sidebar Push & Header Test</title>
+  <style>
+    :root {
+      --bg-main: #212121;
+      --bg-sidebar: #18181b;
+      --border-color: #2f2f32;
+      --text-main: #ececec;
+      --text-muted: #8e8ea0;
+      --hover-bg: #2f2f32;
+
+      --sidebar-width: 260px;
+      --actions-width: 140px; /* 左上角4个按钮区域的总宽度 */
+      --header-height: 48px;
+      --anim-timing: cubic-bezier(0.16, 1, 0.3, 1);
+      --anim-duration: 0.32s;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* 整个视口布局容器 */
+    .app-container {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
+
+    /* ====================================================
+       1. 左上角常驻固定图标区（不被推动，层级最高，背景透明）
+       ==================================================== */
+    .fixed-actions {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: var(--actions-width);
+      height: var(--header-height);
+      display: flex;
+      align-items: center;
+      padding-left: 12px;
+      gap: 6px;
+      z-index: 50;
+      pointer-events: auto;
+    }
+
+    .icon-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 15px;
+      transition: background-color 0.15s, color 0.15s;
+    }
+
+    .icon-btn:hover {
+      background-color: var(--hover-bg);
+      color: var(--text-main);
+    }
+
+    /* ====================================================
+       2. 侧边栏（宽度从 0 到 260px，从左侧平滑滑出）
+       ==================================================== */
+    .sidebar {
+      height: 100%;
+      width: 0;
+      background-color: var(--bg-sidebar);
+      border-right: 1px solid transparent;
+      overflow: hidden;
+      flex-shrink: 0;
+      position: relative;
+      z-index: 20;
+      transition: width var(--anim-duration) var(--anim-timing),
+                  border-color var(--anim-duration) var(--anim-timing);
+    }
+
+    /* 内部固定宽度，防止文字挤压换行，保证从左侧滑入感 */
+    .sidebar-inner {
+      width: var(--sidebar-width);
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 顶部 Spacer：高度与 Header 保持一致，侧栏展开时它自然垫在图标下，赋予侧栏背景色 */
+    .sidebar-top-spacer {
+      height: var(--header-height);
+      flex-shrink: 0;
+    }
+
+    .sidebar-content {
+      flex: 1;
+      padding: 12px;
+      overflow-y: auto;
+      font-size: 13px;
+    }
+
+    .sidebar-item {
+      padding: 8px 10px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--text-main);
+      cursor: pointer;
+    }
+    .sidebar-item:hover {
+      background-color: var(--hover-bg);
+    }
+
+    /* 激活/展开状态 */
+    .app-container.expanded .sidebar {
+      width: var(--sidebar-width);
+      border-color: var(--border-color);
+    }
+
+    /* ====================================================
+       3. 主内容区（被侧边栏向右推走）
+       ==================================================== */
+    .main-wrapper {
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      background-color: var(--bg-main);
+    }
+
+    /* 主 Header */
+    .main-header {
+      height: var(--header-height);
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      padding-right: 16px;
+    }
+
+    /*
+      关键点：主 Header 的左占位元素
+      - 侧栏折叠时：占位宽度 = 图标组宽度 (var(--actions-width))，标题正好紧挨在图标右侧
+      - 侧栏展开时：占位宽度平滑缩小为 12px，因为侧栏自身已经把主区域向右推了！
+    */
+    .header-spacer {
+      width: var(--actions-width);
+      flex-shrink: 0;
+      transition: width var(--anim-duration) var(--anim-timing);
+    }
+
+    .app-container.expanded .header-spacer {
+      width: 12px; /* 展开时标题与侧栏分界线保持一点微小边距 */
+    }
+
+    /* 标题区域 */
+    .header-title-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .title-logo {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+
+    .title-text {
+      font-weight: 500;
+      color: var(--text-main);
+    }
+
+    .title-sub {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    /* 主体内容正文 */
+    .main-body {
+      flex: 1;
+      padding: 30px;
+      overflow-y: auto;
+    }
+
+    .chat-card {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #2b2b2f;
+      border-radius: 12px;
+      line-height: 1.6;
+      color: #d1d1d6;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-container" id="app">
+
+  <!-- 1. 左上角常驻工具栏（永不移动） -->
+  <div class="fixed-actions">
+    <button class="icon-btn" id="toggleBtn" title="切换侧边栏">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect width="18" height="18" x="3" y="3" rx="2"/>
+        <path d="M9 3v18"/>
+      </svg>
+    </button>
+    <button class="icon-btn" title="后退">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m15 18-6-6 6-6"/>
+      </svg>
+    </button>
+    <button class="icon-btn" title="前进">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m9 18 6-6-6-6"/>
+      </svg>
+    </button>
+    <button class="icon-btn" title="新建">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12h14"/>
+        <path d="M12 5v14"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- 2. 侧边栏（宽度 0 -> 260px，从左侧滑出） -->
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+      <!-- 顶部 Spacer，提供与侧栏同色的背景垫层 -->
+      <div class="sidebar-top-spacer"></div>
+
+      <div class="sidebar-content">
+        <div class="sidebar-item">
+          <span>📁 All projects</span>
+          <span style="font-size: 10px; color: var(--text-muted)">▼</span>
+        </div>
+        <div style="font-size: 12px; color: var(--text-muted); margin: 12px 10px 4px;">Sessions</div>
+        <div class="sidebar-item">
+          <span>💬 Friendly Evening Greeting</span>
+        </div>
+        <div class="sidebar-item">
+          <span>💬 Component Architecture</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 3. 主内容区（被侧边栏整体向右推动） -->
+  <div class="main-wrapper">
+    <header class="main-header">
+      <!-- 动态弹性 Spacer：未展开时等于按钮宽度，展开时缩至0，保证标题被推走且紧贴边缘 -->
+      <div class="header-spacer"></div>
+
+      <div class="header-title-group">
+        <svg class="title-logo" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none"/>
+          <path d="M12 8v8M8 12h8" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        <span class="title-text">Friendly Evening Greeting</span>
+        <span class="title-sub">~ @ NULLSTARRYSKY</span>
+      </div>
+    </header>
+
+    <main class="main-body">
+      <div class="chat-card">
+        <h3 style="margin-bottom: 10px; color: #fff;">效果测试说明：</h3>
+        <p>1. 点击左上角第一个图标（展开/收起）。</p>
+        <p>2. <strong>左侧图标组</strong>：固定在左上角不动，收起时与主区同色，展开时自动融合侧栏背景色。</p>
+        <p>3. <strong>侧边栏</strong>：从最左侧边缘从 0 宽度平滑拉出，绝不从半空变宽。</p>
+        <p>4. <strong>主标题</strong>：收起时紧贴图标，展开时被侧栏自然向右推走。</p>
+      </div>
+    </main>
+  </div>
+
+</div>
+
+<script>
+  const app = document.getElementById('app');
+  const toggleBtn = document.getElementById('toggleBtn');
+
+  toggleBtn.addEventListener('click', () => {
+    app.classList.toggle('expanded');
+  });
+</script>
+
+</body>
+</html>

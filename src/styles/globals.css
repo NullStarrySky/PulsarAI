@@ -26,22 +26,25 @@ html.native-window-dragging #app {
 .electron-window-drag-region [role="button"],
 .electron-window-drag-region input,
 .electron-window-drag-region select,
-.electron-window-drag-region textarea {
-	-webkit-app-region: no-drag;
-}
-
-.electron-window-drag-region [data-window-drag-block] {
-	-webkit-app-region: no-drag;
+.electron-window-drag-region textarea,
+.electron-window-no-drag,
+.electron-window-no-drag *,
+[data-window-drag-block],
+[data-window-drag-block] * {
+	-webkit-app-region: no-drag !important;
 }
 
 .glass-effect-frame {
-	background-color: color-mix(in srgb, var(--zen-frame-bg, var(--background)) 94%, transparent);
+	background-color: color-mix(
+		in srgb,
+		var(--zen-frame-bg, var(--background)) 20%,
+		transparent
+	);
 }
 
 .glass-effect-surface,
 .glass-effect-surface .app-content-surface {
-	background-color: color-mix(in srgb, var(--background) 92%, transparent);
-	backdrop-filter: blur(28px) saturate(140%);
+	background-color: color-mix(in srgb, var(--background) 65%, transparent);
 }
 
 @font-face {
@@ -77,6 +80,14 @@ html.native-window-dragging #app {
 	--color-ring: var(--ring);
 	--color-zen-frame-bg: var(--zen-frame-bg);
 	--color-zen-frame-border: var(--zen-frame-border);
+	--color-sidebar: var(--sidebar);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-ring: var(--sidebar-ring);
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);
@@ -110,30 +121,58 @@ html.native-window-dragging #app {
 	--ring: oklch(0.7 0 0);
 	--zen-frame-bg: oklch(0.94 0 0);
 	--zen-frame-border: oklch(0.88 0 0);
+	--sidebar: oklch(0.965 0 0);
+	--sidebar-foreground: oklch(0.16 0 0);
+	--sidebar-primary: oklch(0.21 0 0);
+	--sidebar-primary-foreground: oklch(0.98 0 0);
+	--sidebar-accent: oklch(0.967 0.001 286.375);
+	--sidebar-accent-foreground: oklch(0.21 0.006 285.885);
+	--sidebar-border: oklch(0.92 0.004 286.32);
+	--sidebar-ring: oklch(0.705 0.015 286.067);
+	--hover: rgba(0, 0, 0, 0.05);
+	--active: rgba(0, 0, 0, 0.08);
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	text-wrap: pretty
 }
 
 .dark {
-	--background: oklch(0.15 0 0);
-	--foreground: oklch(0.96 0 0);
-	--card: oklch(0.19 0 0);
-	--card-foreground: oklch(0.96 0 0);
-	--popover: oklch(0.19 0 0);
-	--popover-foreground: oklch(0.96 0 0);
-	--primary: oklch(0.92 0 0);
-	--primary-foreground: oklch(0.2 0 0);
-	--secondary: oklch(0.25 0 0);
-	--secondary-foreground: oklch(0.96 0 0);
-	--muted: oklch(0.25 0 0);
-	--muted-foreground: oklch(0.72 0 0);
-	--accent: oklch(0.28 0.04 250);
-	--accent-foreground: oklch(0.92 0.02 250);
-	--destructive: oklch(0.7 0.19 22);
-	--border: oklch(1 0 0 / 12%);
-	--input: oklch(1 0 0 / 16%);
-	--zen-frame-bg: oklch(0.11 0 0);
-	--zen-frame-border: oklch(0.22 0 0 / 80%);
-	--ring: oklch(0.56 0 0);
+	--background: oklch(0.141 0.005 285.823);
+	--foreground: oklch(0.985 0 0);
+	--card: oklch(0.165 0.006 285.885);
+	--card-foreground: oklch(0.985 0 0);
+	--popover: oklch(0.165 0.006 285.885);
+	--popover-foreground: oklch(0.985 0 0);
+	--primary: oklch(0.985 0 0);
+	--primary-foreground: oklch(0.21 0.006 285.885);
+	--secondary: oklch(0.274 0.006 286.033);
+	--secondary-foreground: oklch(0.985 0 0);
+	--muted: oklch(0.274 0.006 286.033);
+	--muted-foreground: oklch(0.705 0.015 286.067);
+	--accent: oklch(0.274 0.006 286.033);
+	--accent-foreground: oklch(0.985 0 0);
+	--destructive: oklch(0.396 0.141 25.723);
+	--destructive-foreground: oklch(0.637 0.237 25.331);
+	--border: oklch(0.274 0.006 286.033);
+	--input: oklch(0.274 0.006 286.033);
+	--ring: oklch(0.442 0.017 285.786);
+	--sidebar: oklch(0.165 0.006 285.885);
+	--sidebar-foreground: oklch(0.985 0 0);
+	--sidebar-primary: oklch(0.488 0.243 264.376);
+	--sidebar-primary-foreground: oklch(0.985 0 0);
+	--sidebar-accent: oklch(0.274 0.006 286.033);
+	--sidebar-accent-foreground: oklch(0.985 0 0);
+	--sidebar-border: oklch(0.274 0.006 286.033);
+	--sidebar-ring: oklch(0.442 0.017 285.786);
+	--hover: rgba(255, 255, 255, 0.07);
+	--active: rgba(255, 255, 255, 0.12);
+}
+
+.bg-hover {
+	background-color: var(--hover);
+}
+
+.bg-active {
+	background-color: var(--active);
 }
 
 @layer base {
@@ -141,8 +180,13 @@ html.native-window-dragging #app {
 		@apply border-border outline-ring/50;
 	}
 
+	html,
 	body {
-		@apply bg-background text-foreground;
+		background: transparent;
+	}
+
+	body {
+		@apply text-foreground;
 		margin: 0;
 		min-width: 320px;
 		min-height: 100dvh;
@@ -176,6 +220,47 @@ html.native-window-dragging #app {
 	}
 }
 
+.milkdown {
+	--crepe-base-font-size: var(--editor-font-size, 14px);
+	background-color: transparent;
+	--crepe-color-background: transparent;
+	max-width: 100%;
+	width: 100%;
+	overflow-x: hidden;
+	--crepe-color-on-background: var(--foreground);
+	--crepe-color-surface: transparent;
+	--crepe-color-surface-low: var(--muted);
+	--crepe-color-on-surface: var(--foreground);
+	--crepe-color-on-surface-variant: var(--muted-foreground);
+	--crepe-color-outline: var(--border);
+	--crepe-color-primary: var(--primary);
+	--crepe-color-secondary: var(--secondary);
+	--crepe-color-on-secondary: var(--secondary-foreground);
+	--crepe-color-inverse: var(--foreground);
+	--crepe-color-on-inverse: var(--background);
+	--crepe-color-inline-code: var(--destructive);
+	--crepe-color-error: var(--destructive);
+	--crepe-color-hover: var(--accent);
+	--crepe-color-selected: color-mix(in srgb, var(--primary), transparent 82%);
+	--crepe-color-inline-area: var(--muted);
+	--crepe-font-title: var(
+		--font-sans,
+		-apple-system,
+		BlinkMacSystemFont,
+		"Segoe UI",
+		sans-serif
+	);
+	--crepe-font-default: var(
+		--font-sans,
+		-apple-system,
+		BlinkMacSystemFont,
+		"Segoe UI",
+		sans-serif
+	);
+	--crepe-font-code: var(--font-code);
+	color: var(--foreground);
+}
+
 *:focus,
 *:focus-visible {
 	outline: none;
@@ -193,6 +278,279 @@ html.native-window-dragging #app {
 		"zero" 1;
 	font-variant-ligatures: common-ligatures contextual;
 	font-variant-numeric: tabular-nums slashed-zero;
+}
+
+.milkdown .ProseMirror-focused {
+	--prosemirror-virtual-cursor-color: var(--foreground);
+	caret-color: var(--foreground);
+}
+
+.milkdown .pulsar-plugin-reference {
+	border-radius: calc(var(--radius) - 4px);
+	background: color-mix(in oklab, var(--primary) 12%, transparent);
+	box-shadow: inset 0 0 0 1px
+		color-mix(in oklab, var(--primary) 24%, transparent);
+	color: var(--primary);
+	font-family: var(
+		--font-mono,
+		ui-monospace,
+		SFMono-Regular,
+		Consolas,
+		monospace
+	);
+	font-size: 0.92em;
+	font-weight: 600;
+	padding-inline: 0.12rem;
+}
+
+.milkdown .pulsar-macro-expression,
+.pulsar-macro-expression {
+	border-radius: calc(var(--radius) - 4px);
+	background: color-mix(in oklab, var(--primary) 14%, transparent);
+	box-shadow: inset 0 0 0 1px
+		color-mix(in oklab, var(--primary) 28%, transparent);
+	color: var(--primary);
+	font-family: var(
+		--font-mono,
+		ui-monospace,
+		SFMono-Regular,
+		Consolas,
+		monospace
+	);
+	font-size: 0.9em;
+	font-weight: 600;
+	padding: 0.05em 0.3em;
+	display: inline-block;
+	vertical-align: baseline;
+}
+
+.milkdown .pulsar-macro-reference,
+.pulsar-macro-reference {
+	border-radius: calc(var(--radius) - 4px);
+	background: color-mix(in oklab, var(--accent) 75%, transparent);
+	box-shadow: inset 0 0 0 1px
+		color-mix(in oklab, var(--foreground) 20%, transparent);
+	color: var(--accent-foreground);
+	font-family: var(
+		--font-mono,
+		ui-monospace,
+		SFMono-Regular,
+		Consolas,
+		monospace
+	);
+	font-size: 0.9em;
+	font-weight: 600;
+	padding: 0.05em 0.3em;
+	display: inline-block;
+	vertical-align: baseline;
+}
+
+.milkdown .pulsar-plugin-reference[data-reference-kind="local"] {
+	background: color-mix(in oklab, var(--accent) 72%, transparent);
+	box-shadow: inset 0 0 0 1px
+		color-mix(in oklab, var(--foreground) 15%, transparent);
+	color: var(--accent-foreground);
+}
+
+.milkdown .pulsar-plugin-reference[data-reference-kind="container"] {
+	background: color-mix(in oklab, var(--secondary) 80%, transparent);
+	color: var(--secondary-foreground);
+}
+
+.milkdown .pulsar-plugin-reference-suggestions {
+	position: absolute;
+	z-index: 50;
+	display: grid;
+	width: min(24rem, calc(100vw - 2rem));
+	margin-top: 1.7rem;
+	overflow: hidden;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	background: var(--popover);
+	color: var(--popover-foreground);
+	box-shadow: 0 12px 32px
+		color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+
+.milkdown .pulsar-plugin-reference-suggestion {
+	display: grid;
+	gap: 0.18rem;
+	width: 100%;
+	padding: 0.55rem 0.7rem;
+	border: 0;
+	border-bottom: 1px solid var(--border);
+	background: transparent;
+	color: inherit;
+	text-align: left;
+}
+
+.milkdown .pulsar-plugin-reference-suggestion:last-child {
+	border-bottom: 0;
+}
+
+.milkdown .pulsar-plugin-reference-suggestion:hover,
+.milkdown .pulsar-plugin-reference-suggestion[data-active="true"] {
+	background: var(--accent);
+	color: var(--accent-foreground);
+}
+
+.milkdown .pulsar-plugin-reference-suggestion-heading {
+	display: flex;
+	min-width: 0;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.75rem;
+}
+
+.milkdown .pulsar-plugin-reference-suggestion-heading strong {
+	overflow: hidden;
+	font-size: 0.8rem;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.milkdown .pulsar-plugin-reference-suggestion-heading small {
+	flex: none;
+	color: var(--muted-foreground);
+	font-family: var(
+		--font-mono,
+		ui-monospace,
+		SFMono-Regular,
+		Consolas,
+		monospace
+	);
+	font-size: 0.66rem;
+}
+
+.milkdown .pulsar-plugin-reference-suggestion-description {
+	display: -webkit-box;
+	overflow: hidden;
+	color: var(--muted-foreground);
+	font-size: 0.72rem;
+	line-height: 1.35;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+
+.milkdown .crepe-drop-cursor {
+	background-color: var(--foreground);
+	opacity: 0.7;
+}
+
+.milkdown .milkdown-block-handle {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	color: color-mix(in srgb, var(--foreground), transparent 36%);
+	opacity: 0.95;
+}
+
+.milkdown .milkdown-block-handle .operation-item {
+	display: grid;
+	place-items: center;
+	width: 1.45rem;
+	height: 1.45rem;
+	border-radius: 0.35rem;
+	color: color-mix(in srgb, var(--foreground), transparent 36%);
+	background: transparent;
+}
+
+.milkdown .milkdown-block-handle .operation-item:hover,
+.milkdown .milkdown-block-handle .operation-item.active {
+	color: var(--foreground);
+	background: color-mix(in srgb, var(--accent), transparent 28%);
+}
+
+.milkdown .milkdown-block-handle svg,
+.milkdown .milkdown-table-handle svg,
+.milkdown .milkdown-table-tooltip svg {
+	fill: currentColor;
+}
+
+.milkdown .milkdown-slash-menu,
+.milkdown .milkdown-link-tooltip,
+.milkdown .milkdown-toolbar,
+.milkdown .milkdown-table-tooltip {
+	color: var(--foreground);
+	background: color-mix(in srgb, var(--card), black 4%);
+	border-color: color-mix(in srgb, var(--border), var(--foreground) 18%);
+}
+
+.milkdown .milkdown-toolbar {
+	/* Restored default styling; removed flex-wrap and auto height to prevent infinite layout loops */
+}
+
+.milkdown .editor,
+.milkdown .crepe-editor {
+	max-width: 100%;
+	width: 100%;
+	margin: 0;
+}
+
+.milkdown .ProseMirror {
+	max-width: 100%;
+	width: 100%;
+	box-sizing: border-box;
+}
+
+.milkdown .ProseMirror,
+.milkdown .ProseMirror p {
+	font-size: var(--editor-font-size, 14px);
+	line-height: var(--editor-line-height, 16px);
+}
+
+.milkdown .ProseMirror p {
+	padding: 4px 0;
+}
+
+.dark .milkdown-toolbar button {
+	color: var(--foreground);
+}
+
+.dark .milkdown-toolbar button svg {
+	stroke: var(--foreground);
+	opacity: 0.9;
+}
+
+.dark .milkdown-toolbar button:hover svg {
+	opacity: 1;
+}
+
+.milkdown .milkdown-table-handle {
+	color: color-mix(in srgb, var(--foreground), transparent 18%);
+	background: color-mix(in srgb, var(--card), var(--foreground) 6%);
+}
+
+.milkdown table,
+.milkdown th,
+.milkdown td {
+	border-color: color-mix(in srgb, var(--border), var(--foreground) 28%);
+}
+
+.dark .milkdown {
+	background-color: transparent;
+	--crepe-color-background: transparent;
+	--crepe-color-on-background: var(--foreground);
+	--crepe-color-surface: transparent;
+	--crepe-color-surface-low: var(--muted);
+	--crepe-color-on-surface: var(--foreground);
+	--crepe-color-on-surface-variant: color-mix(
+		in srgb,
+		var(--foreground) 85%,
+		transparent
+	);
+	--crepe-color-outline: var(--border);
+	--crepe-color-primary: var(--primary);
+	--crepe-color-secondary: var(--secondary);
+	--crepe-color-on-secondary: var(--secondary-foreground);
+	--crepe-color-inverse: var(--foreground);
+	--crepe-color-on-inverse: var(--background);
+	--crepe-color-inline-code: var(--destructive);
+	--crepe-color-error: var(--destructive);
+	--crepe-color-hover: var(--accent);
+	--crepe-color-selected: color-mix(in srgb, var(--primary), transparent 78%);
+	--crepe-color-inline-area: var(--muted);
 }
 
 /* 视窗及界面滚动条：背景色透明，完全屏蔽顶部/底部上滑下滑按钮，只保留浮动滑块本身 */

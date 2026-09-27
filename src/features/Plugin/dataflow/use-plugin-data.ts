@@ -6,16 +6,19 @@ import {
 	toValue,
 	watch,
 } from "vue";
-import { isPluginVersionUsed } from "@/features/Conversation/dataflow/conversations";
 import {
-	registerSyncHandler,
-	useSyncStore,
-} from "@/features/Database/dbsync-store";
+	isPluginVersionUsed,
+	removeConversation,
+} from "@/features/Conversation/dataflow/conversations";
+import { useSyncStore } from "@/features/Database/dbsync-store";
 import {
 	type CharacterData,
 	characterFromPlugin,
 	parseCharacterDefinition,
 } from "../resources/types/character/plugin-character";
+
+export type { CharacterData };
+
 import {
 	createLocalPluginData,
 	importBuiltinPlugins,
@@ -62,16 +65,6 @@ async function loadPluginEnvironment(pluginId: string) {
 	if (!findPlugin(pluginId)) await store.load({ type: "plugin", id: pluginId });
 	await store.load({ type: "conversationList", id: pluginId });
 }
-
-registerSyncHandler<PluginDocument>("plugin", {
-	table: "resource_worlds",
-	value: findPlugin,
-	recordId: (id) => `local:${id}`,
-});
-registerSyncHandler<CharacterData>("character", {
-	table: "resource_characters",
-	value: (id) => useSyncStore().characters.get(id),
-});
 
 /** Replays one saved version, plus unsaved edits only when no version is pinned. */
 export function usePurePluginData(
@@ -260,8 +253,14 @@ export function useCharacterList() {
 	async function remove(id: CharacterData["id"]) {
 		await store.init();
 		await store.load({ type: "conversationList", id });
-		if (store.conversationMeta.get(id)?.size)
-			throw new Error("角色仍有关联会话，不能删除。");
+		const metaMap = store.conversationMeta.get(id);
+		if (metaMap) {
+			for (const convId of Array.from(metaMap.keys())) {
+				await store.load({ type: "containerList", id: convId });
+				removeConversation(convId);
+			}
+			store.conversationMeta.delete(id);
+		}
 		if (!store.characters.has(id)) return;
 		store.plugins.delete(id);
 		store.markDirty({ type: "plugin", id });
@@ -270,9 +269,33 @@ export function useCharacterList() {
 		await store._sync();
 	}
 
+	async function rename(id: CharacterData["id"], name: string) {
+		await store.init();
+		let plugin = findPlugin(id);
+		if (!plugin) {
+			await store.load({ type: "plugin", id });
+			plugin = findPlugin(id);
+		}
+		if (!plugin) throw new Error(`找不到角色数据：${id}`);
+		const version = latestPluginVersion(plugin);
+		if (!version) throw new Error(`角色没有可编辑的版本：${id}`);
+		const replayed = replayPluginVersion(plugin, version.id);
+		const defRaw = replayed.tree["definition.package.json"];
+		const parsed = parseCharacterDefinition(defRaw);
+		parsed.name = name.trim() || "未命名角色";
+		const pulse: Pulse = {
+			kind: "file.write",
+			path: "/definition.package.json",
+			content: JSON.stringify(parsed, null, 2),
+		};
+		applyPluginPulse(id, pulse);
+		await store._sync();
+	}
+
 	return {
 		characters: readonly(characters),
 		create,
 		remove,
+		rename,
 	};
 }

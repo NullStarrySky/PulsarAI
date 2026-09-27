@@ -1,7 +1,14 @@
 import { spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
-import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { createWriteStream } from "node:fs";
+import {
+	mkdir,
+	readdir,
+	readFile,
+	stat,
+	unlink,
+	writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -9,14 +16,18 @@ import {
 	BrowserWindow,
 	dialog,
 	ipcMain,
-	Notification,
 	Menu,
+	Notification,
 	protocol,
+	screen,
 	shell,
 	Tray,
 } from "electron";
+import {
+	claimConversation,
+	releaseConversations,
+} from "./conversation-window-registry.mjs";
 import { createDatabase } from "./database.mjs";
-import { claimConversation, releaseConversations } from "./conversation-window-registry.mjs";
 import { hydrateSecretPlaceholders, secretPreview } from "./secret-utils.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -29,12 +40,77 @@ const applicationIcon = path.join(
 const windows = new Map();
 const openConversations = new Map();
 const closingSubWindows = new WeakSet();
+const windowPreviousBounds = new WeakMap();
+
+function animateWindowBounds(win, targetBounds, duration = 140) {
+	return new Promise((resolve) => {
+		if (!win || win.isDestroyed()) return resolve();
+		const startBounds = win.getBounds();
+		const startTime = Date.now();
+		// Smooth sinusoidal ease-in-out: zero jerk at both start and finish
+		const ease = (t) => 0.5 - 0.5 * Math.cos(Math.PI * t);
+
+		const timer = setInterval(() => {
+			if (!win || win.isDestroyed()) {
+				clearInterval(timer);
+				return resolve();
+			}
+			const elapsed = Date.now() - startTime;
+			const progress = Math.min(1, elapsed / duration);
+			const t = ease(progress);
+
+			const current = {
+				x: Math.round(startBounds.x + (targetBounds.x - startBounds.x) * t),
+				y: Math.round(startBounds.y + (targetBounds.y - startBounds.y) * t),
+				width: Math.round(
+					startBounds.width + (targetBounds.width - startBounds.width) * t,
+				),
+				height: Math.round(
+					startBounds.height + (targetBounds.height - startBounds.height) * t,
+				),
+			};
+			win.setBounds(current);
+
+			if (progress >= 1) {
+				clearInterval(timer);
+				win.setBounds(targetBounds);
+				resolve();
+			}
+		}, 12);
+	});
+}
+
+function trackWindowBounds(win) {
+	const save = () => {
+		if (
+			win &&
+			!win.isDestroyed() &&
+			!win._pulsarIsExpanded &&
+			!win.isMaximized() &&
+			!win.isFullScreen()
+		) {
+			windowPreviousBounds.set(win, win.getBounds());
+		}
+	};
+	win.on("resize", save);
+	win.on("move", save);
+	win.on("maximize", () => notifyMaximizeChange(win));
+	win.on("unmaximize", () => notifyMaximizeChange(win));
+	save();
+}
+
 let mainWindow;
 let database;
 let availableUpdate = null;
 let downloadedUpdatePath = null;
 let tray;
 let mainWindowClosing = false;
+
+function quitApp() {
+	mainWindowClosing = true;
+	for (const window of windows.values()) closingSubWindows.add(window);
+	app.quit();
+}
 
 const windowOptions = {
 	width: 970,
@@ -44,7 +120,7 @@ const windowOptions = {
 	frame: false,
 	center: true,
 	transparent: true,
-	backgroundMaterial: "mica",
+	backgroundMaterial: "none",
 	backgroundColor: "#00000000",
 	icon: applicationIcon,
 	webPreferences: {
@@ -60,7 +136,12 @@ if (process.platform === "win32") app.setAppUserModelId("PulsarAI");
 protocol.registerSchemesAsPrivileged([
 	{
 		scheme: "pulsar-media",
-		privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+		privileges: {
+			standard: true,
+			secure: true,
+			supportFetchAPI: true,
+			stream: true,
+		},
 	},
 ]);
 
@@ -81,6 +162,24 @@ function sendTo(label, event, payload) {
 	target.webContents.send(`pulsar:host:event:${event}`, payload);
 }
 
+function getWindowLabel(win) {
+	if (win === mainWindow) return "main";
+	for (const [label, candidate] of windows.entries()) {
+		if (candidate === win) return label;
+	}
+	return null;
+}
+
+function notifyMaximizeChange(win) {
+	if (!win || win.isDestroyed()) return;
+	const label = getWindowLabel(win);
+	if (!label) return;
+	const isMax = Boolean(win._pulsarIsExpanded || win.isMaximized());
+	try {
+		sendTo(label, "window:maximize-change", isMax);
+	} catch {}
+}
+
 function ensureTray() {
 	if (tray) return tray;
 	tray = new Tray(applicationIcon);
@@ -89,10 +188,7 @@ function ensureTray() {
 		Menu.buildFromTemplate([
 			{
 				label: "退出",
-				click: () => {
-					mainWindowClosing = true;
-					app.quit();
-				},
+				click: quitApp,
 			},
 		]),
 	);
@@ -284,7 +380,10 @@ async function proxyFetch(request) {
 	for (const header of Array.isArray(input.headers) ? input.headers : [])
 		headers.set(String(header.name ?? ""), String(header.value ?? ""));
 	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), proxyFetchTimeout(input.timeout));
+	const timeout = setTimeout(
+		() => controller.abort(),
+		proxyFetchTimeout(input.timeout),
+	);
 	try {
 		const response = await fetch(url, {
 			method: typeof input.method === "string" ? input.method : "GET",
@@ -453,9 +552,18 @@ function extensionForMediaType(mediaType) {
 function mediaTypeForFile(filePath) {
 	const extension = path.extname(filePath).slice(1).toLowerCase();
 	const known = {
-		png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp",
-		gif: "image/gif", avif: "image/avif", mp4: "video/mp4", webm: "video/webm",
-		mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", pdf: "application/pdf",
+		png: "image/png",
+		jpg: "image/jpeg",
+		jpeg: "image/jpeg",
+		webp: "image/webp",
+		gif: "image/gif",
+		avif: "image/avif",
+		mp4: "video/mp4",
+		webm: "video/webm",
+		mp3: "audio/mpeg",
+		wav: "audio/wav",
+		ogg: "audio/ogg",
+		pdf: "application/pdf",
 	};
 	return known[extension] ?? "application/octet-stream";
 }
@@ -474,7 +582,8 @@ async function findMediaFile(id) {
 		for (const entry of entries) {
 			const candidate = path.join(current, entry.name);
 			if (entry.isDirectory()) pending.push(candidate);
-			else if (entry.isFile() && entry.name.startsWith(`${id}.`)) return candidate;
+			else if (entry.isFile() && entry.name.startsWith(`${id}.`))
+				return candidate;
 		}
 	}
 	throw new Error("媒体文件不存在。");
@@ -482,20 +591,33 @@ async function findMediaFile(id) {
 
 async function media(method, payload) {
 	if (method === "write") {
-		const bytes = Array.isArray(payload?.bytes) ? Uint8Array.from(payload.bytes) : null;
+		const bytes = Array.isArray(payload?.bytes)
+			? Uint8Array.from(payload.bytes)
+			: null;
 		if (!bytes) throw new Error("媒体字节无效。");
-		const type = typeof payload?.mediaType === "string" ? payload.mediaType : "application/octet-stream";
+		const type =
+			typeof payload?.mediaType === "string"
+				? payload.mediaType
+				: "application/octet-stream";
 		const id = randomUUID();
 		const directoryPath = mediaDirectory(payload?.path);
 		await mkdir(directoryPath, { recursive: true });
-		await writeFile(path.join(directoryPath, `${id}.${extensionForMediaType(type)}`), bytes);
+		await writeFile(
+			path.join(directoryPath, `${id}.${extensionForMediaType(type)}`),
+			bytes,
+		);
 		return { id, mediaType: type, size: bytes.length };
 	}
 	const id = mediaId(payload?.id);
 	const filePath = await findMediaFile(id);
 	if (method === "read") {
 		const bytes = await readFile(filePath);
-		return { id, mediaType: mediaTypeForFile(filePath), size: bytes.length, bytes: [...bytes] };
+		return {
+			id,
+			mediaType: mediaTypeForFile(filePath),
+			size: bytes.length,
+			bytes: [...bytes],
+		};
 	}
 	if (method === "url") return `pulsar-media://${id}`;
 	if (method === "remove") return unlink(filePath);
@@ -588,18 +710,51 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
 			const owner = openConversations.get(requiredString(payload.id, "id"));
 			return Boolean(owner && !owner.isDestroyed());
 		}
-		if (method === "minimize") return target?.minimize();
-		if (method === "toggleMaximize")
-			return target?.isMaximized() ? target.unmaximize() : target?.maximize();
+		if (method === "minimize") {
+			target?.minimize();
+			return;
+		}
+		if (method === "toggleMaximize" || method === "toggleFullScreen") {
+			if (!target || target.isDestroyed()) return;
+			const isExpanded = Boolean(target._pulsarIsExpanded);
+			if (isExpanded) {
+				target._pulsarIsExpanded = false;
+				const prev = windowPreviousBounds.get(target);
+				if (prev) {
+					await animateWindowBounds(target, prev, 140);
+				} else {
+					target.unmaximize();
+				}
+			} else {
+				const normalBounds = target.getBounds();
+				windowPreviousBounds.set(target, normalBounds);
+				target._pulsarIsExpanded = true;
+				const display = screen.getDisplayMatching(normalBounds);
+				const targetBounds = display.workArea;
+				await animateWindowBounds(target, targetBounds, 140);
+			}
+			notifyMaximizeChange(target);
+			return;
+		}
+		if (method === "isMaximized") {
+			return Boolean(target?._pulsarIsExpanded || target?.isMaximized());
+		}
 		if (method === "setBackgroundMaterial") {
-			if (process.platform === "win32")
-				target?.setBackgroundMaterial(
-					payload.material === "none" ? "none" : "mica",
-				);
+			const valid = ["acrylic", "mica", "tabbed", "none"];
+			const mat = valid.includes(payload.material) ? payload.material : "none";
+			if (process.platform === "win32") {
+				try {
+					target?.setBackgroundMaterial(mat);
+				} catch {}
+			} else if (process.platform === "darwin") {
+				try {
+					target?.setVibrancy(mat === "none" ? null : "under-window");
+				} catch {}
+			}
 			return;
 		}
 		if (method === "close") {
-			if (target === mainWindow) mainWindowClosing = true;
+			if (target === mainWindow) return quitApp();
 			else if (target) closingSubWindows.add(target);
 			return target?.close();
 		}
@@ -659,6 +814,7 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
 				title: payload.title ?? "PulsarAI",
 				show: !payload.hidden,
 			});
+			trackWindowBounds(child);
 			windows.set(label, child);
 			if (conversationId) openConversations.set(conversationId, child);
 			child.on("close", (closeEvent) => {
@@ -680,14 +836,15 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
 			).toString();
 			try {
 				if (rendererUrl) await child.loadURL(url);
-				else await child.loadFile(
-					path.join(directory, "..", "..", "dist", "index.html"),
-					{
-						query: {
-							subwindow: new URL(url).searchParams.get("subwindow") ?? "",
+				else
+					await child.loadFile(
+						path.join(directory, "..", "..", "dist", "index.html"),
+						{
+							query: {
+								subwindow: new URL(url).searchParams.get("subwindow") ?? "",
+							},
 						},
-					},
-				);
+					);
 			} catch (error) {
 				child.destroy();
 				throw error;
@@ -718,6 +875,7 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
 
 async function createMainWindow() {
 	mainWindow = new BrowserWindow(windowOptions);
+	trackWindowBounds(mainWindow);
 	mainWindow.on("close", (event) => {
 		if (mainWindowClosing) return;
 		event.preventDefault();
@@ -742,7 +900,9 @@ app.whenReady().then(async () => {
 	database = await createDatabase(app.getPath("userData"));
 	protocol.handle("pulsar-media", async (request) => {
 		try {
-			const filePath = await findMediaFile(mediaId(new URL(request.url).hostname));
+			const filePath = await findMediaFile(
+				mediaId(new URL(request.url).hostname),
+			);
 			return new Response(await readFile(filePath), {
 				headers: { "content-type": mediaTypeForFile(filePath) },
 			});

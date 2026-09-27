@@ -240,7 +240,7 @@ export function useActivePathComposable(conversationId: string) {
 		} catch (error) {
 			target.message.type = "error";
 			const detail = error instanceof Error ? error.message : String(error);
-			target.message.content = `> [!CAUTION]\n> **生成失败**：${detail}`;
+			target.message.content = `::: error 生成失败\n\`\`\`\n ${detail} \n\`\`\`\n:::`;
 			markContainerDirty(conversationId, target.container.id);
 		} finally {
 			target.message.final = true;
