@@ -58,6 +58,20 @@ export type SchemaItem = BaseSchemaItem & SchemaController;
 
 export type FormSchema = SchemaItem[];
 
+/** Round numeric value to match step precision and avoid 0.7000000000000001 floating point artifacts */
+export function roundStep(value: number, step?: number): number {
+	if (typeof value !== "number" || Number.isNaN(value)) return 0;
+	if (!step || step <= 0) {
+		return Math.round(value * 10000) / 10000;
+	}
+	const stepStr = step.toString();
+	const decimals = stepStr.includes(".")
+		? (stepStr.split(".")[1]?.length ?? 0)
+		: 0;
+	const factor = 10 ** decimals;
+	return Math.round(value * factor) / factor;
+}
+
 /** Create a fresh controller template for the given type */
 export function createDefaultController(
 	type: ControllerType,

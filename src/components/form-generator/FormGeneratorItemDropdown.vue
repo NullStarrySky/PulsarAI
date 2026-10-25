@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { reactive, ref, watch } from "vue";
 import {
 	Button,
 	Select,
@@ -14,8 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
 	Popover,
+	PopoverAnchor,
 	PopoverContent,
-	PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { Check, Plus, X } from "@/lib/remix-icons";
@@ -23,13 +23,16 @@ import {
 	type ControllerType,
 	createDefaultController,
 	createDefaultSchemaItem,
+	roundStep,
 	type SchemaItem,
 } from "./types";
 
 const props = withDefaults(
 	defineProps<{
+		open: boolean;
+		anchor: HTMLElement | null;
 		mode: "add" | "edit";
-		item?: SchemaItem;
+		item: SchemaItem | null;
 		existingIds?: string[];
 	}>(),
 	{
@@ -38,101 +41,270 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-	(e: "add", item: SchemaItem): void;
-	(e: "update", item: SchemaItem): void;
+	(e: "update:open", value: boolean): void;
+	(e: "confirmAdd", item: SchemaItem): void;
+	(e: "change"): void;
 }>();
 
-const isOpen = ref(false);
 const idError = ref("");
 const newOptionInput = ref("");
 
-// Internal draft object for the form item
-const draft = ref<SchemaItem>(
-	props.item
-		? JSON.parse(JSON.stringify(props.item))
-		: createDefaultSchemaItem("", "", "switch"),
-);
-
-// Reset / initialize draft when popover opens or prop changes
-watch(
-	() => props.item,
-	(newItem) => {
-		if (newItem && props.mode === "edit") {
-			draft.value = JSON.parse(JSON.stringify(newItem));
-		}
-	},
-	{ deep: true },
-);
-
-watch(isOpen, (open) => {
-	if (open) {
-		idError.value = "";
-		if (props.mode === "edit" && props.item) {
-			draft.value = JSON.parse(JSON.stringify(props.item));
-		} else if (props.mode === "add") {
-			draft.value = createDefaultSchemaItem("", "", "switch");
-			newOptionInput.value = "";
-		}
-	}
+// Internal form state for decoupled editing and draft creation
+const form = reactive({
+	id: "",
+	name: "",
+	description: "",
+	type: "switch" as ControllerType,
+	// Switch
+	switchDefault: false,
+	// Select
+	selectOptions: [] as string[],
+	selectDefault: "",
+	// Slider
+	sliderMin: 0,
+	sliderMax: 100,
+	sliderStep: 1,
+	sliderDefault: 0,
+	// Textarea
+	textareaPlaceholder: "",
+	textareaDefault: "",
+	// Input
+	inputPlaceholder: "",
+	inputDefault: "",
 });
 
-// Watch draft in edit mode to auto-sync changes
-watch(
-	draft,
-	(val) => {
-		if (props.mode === "edit" && isOpen.value) {
-			emit("update", JSON.parse(JSON.stringify(val)));
-		}
-	},
-	{ deep: true },
-);
+function syncFormFromItem(target: SchemaItem) {
+	form.id = target.id;
+	form.name = target.name;
+	form.description = target.description ?? "";
+	form.type = target.type;
 
-function handleTypeChange(newType: string) {
-	const targetType = newType as ControllerType;
-	const controller = createDefaultController(targetType);
-	const currentBase = {
-		id: draft.value.id,
-		name: draft.value.name,
-		description: draft.value.description,
-	};
-	draft.value = {
-		...currentBase,
-		...controller,
-	} as SchemaItem;
-
-	if (props.mode === "edit") {
-		emit("update", JSON.parse(JSON.stringify(draft.value)));
+	if (target.type === "switch") {
+		form.switchDefault = target.default;
+	} else if (target.type === "select") {
+		form.selectOptions = [...target.options];
+		form.selectDefault = target.default;
+	} else if (target.type === "slider") {
+		form.sliderMin = target.min;
+		form.sliderMax = target.max;
+		form.sliderStep = target.step ?? 1;
+		form.sliderDefault = roundStep(target.default, target.step);
+	} else if (target.type === "textarea") {
+		form.textareaPlaceholder = target.placeholder ?? "";
+		form.textareaDefault = target.default;
+	} else if (target.type === "input") {
+		form.inputPlaceholder = target.placeholder ?? "";
+		form.inputDefault = target.default;
 	}
 }
 
+function resetFormToAddDefaults() {
+	form.id = "";
+	form.name = "";
+	form.description = "";
+	form.type = "switch";
+	form.switchDefault = false;
+	form.selectOptions = ["option1", "option2"];
+	form.selectDefault = "option1";
+	form.sliderMin = 0;
+	form.sliderMax = 100;
+	form.sliderStep = 1;
+	form.sliderDefault = 0;
+	form.textareaPlaceholder = "请输入内容...";
+	form.textareaDefault = "";
+	form.inputPlaceholder = "请输入...";
+	form.inputDefault = "";
+}
+
+// When dropdown opens or item changes, reinitialize the form fields
+watch(
+	() => [props.open, props.item],
+	([isOpen]) => {
+		if (isOpen) {
+			idError.value = "";
+			newOptionInput.value = "";
+			if (props.mode === "edit" && props.item) {
+				syncFormFromItem(props.item);
+			} else {
+				resetFormToAddDefaults();
+			}
+		}
+	},
+	{ immediate: true },
+);
+
+function handleIdInput(val: string | number) {
+	const str = String(val);
+	form.id = str;
+	const trimmed = str.trim();
+
+	if (!trimmed) {
+		idError.value = "ID 不能为空";
+		return;
+	}
+	if (props.existingIds.includes(trimmed)) {
+		idError.value = "该 ID 已存在，请更换";
+		return;
+	}
+
+	idError.value = "";
+	if (props.mode === "edit" && props.item) {
+		props.item.id = trimmed;
+		emit("change");
+	}
+}
+
+function handleNameInput(val: string | number) {
+	form.name = String(val);
+	if (props.mode === "edit" && props.item) {
+		props.item.name = form.name;
+		emit("change");
+	}
+}
+
+function handleDescriptionInput(val: string | number) {
+	form.description = String(val);
+	if (props.mode === "edit" && props.item) {
+		props.item.description = form.description;
+		emit("change");
+	}
+}
+
+function handleTypeChange(newTypeStr: string) {
+	const newType = newTypeStr as ControllerType;
+	form.type = newType;
+
+	if (props.mode === "edit" && props.item) {
+		const newController = createDefaultController(newType);
+		// Assign controller properties while preserving id, name, description
+		Object.assign(props.item, newController);
+		syncFormFromItem(props.item);
+		emit("change");
+	}
+}
+
+// Switch handlers
+function handleSwitchDefaultChange(val: boolean) {
+	form.switchDefault = val;
+	if (props.mode === "edit" && props.item && props.item.type === "switch") {
+		props.item.default = val;
+		emit("change");
+	}
+}
+
+// Select handlers
 function addOption() {
 	const opt = newOptionInput.value.trim();
 	if (!opt) return;
-	if (draft.value.type === "select") {
-		if (!draft.value.options.includes(opt)) {
-			draft.value.options.push(opt);
-			if (!draft.value.default) {
-				draft.value.default = opt;
-				draft.value.value = opt;
-			}
+	if (!form.selectOptions.includes(opt)) {
+		form.selectOptions.push(opt);
+		if (!form.selectDefault) {
+			form.selectDefault = opt;
 		}
-		newOptionInput.value = "";
+		if (props.mode === "edit" && props.item && props.item.type === "select") {
+			props.item.options = [...form.selectOptions];
+			props.item.default = form.selectDefault;
+			emit("change");
+		}
+	}
+	newOptionInput.value = "";
+}
+
+function removeOption(idx: number) {
+	const removed = form.selectOptions[idx];
+	form.selectOptions.splice(idx, 1);
+	if (form.selectDefault === removed) {
+		form.selectDefault = form.selectOptions[0] ?? "";
+	}
+	if (props.mode === "edit" && props.item && props.item.type === "select") {
+		props.item.options = [...form.selectOptions];
+		props.item.default = form.selectDefault;
+		emit("change");
 	}
 }
 
-function removeOption(index: number) {
-	if (draft.value.type === "select") {
-		const removed = draft.value.options[index];
-		draft.value.options.splice(index, 1);
-		if (draft.value.default === removed) {
-			draft.value.default = draft.value.options[0] ?? "";
-			draft.value.value = draft.value.default;
-		}
+function handleSelectDefaultChange(val: string) {
+	form.selectDefault = val;
+	if (props.mode === "edit" && props.item && props.item.type === "select") {
+		props.item.default = val;
+		emit("change");
 	}
 }
 
+// Slider handlers
+function handleSliderMinChange(val: string | number) {
+	form.sliderMin = Number(val);
+	if (props.mode === "edit" && props.item && props.item.type === "slider") {
+		props.item.min = form.sliderMin;
+		emit("change");
+	}
+}
+
+function handleSliderMaxChange(val: string | number) {
+	form.sliderMax = Number(val);
+	if (props.mode === "edit" && props.item && props.item.type === "slider") {
+		props.item.max = form.sliderMax;
+		emit("change");
+	}
+}
+
+function handleSliderStepChange(val: string | number) {
+	form.sliderStep = Number(val) || 1;
+	form.sliderDefault = roundStep(form.sliderDefault, form.sliderStep);
+	if (props.mode === "edit" && props.item && props.item.type === "slider") {
+		props.item.step = form.sliderStep;
+		props.item.default = form.sliderDefault;
+		emit("change");
+	}
+}
+
+function handleSliderDefaultChange(val: number | number[]) {
+	const raw = Array.isArray(val) ? (val[0] ?? 0) : val;
+	const rounded = roundStep(raw, form.sliderStep);
+	form.sliderDefault = rounded;
+	if (props.mode === "edit" && props.item && props.item.type === "slider") {
+		props.item.default = rounded;
+		emit("change");
+	}
+}
+
+// Textarea handlers
+function handleTextareaPlaceholderChange(val: string | number) {
+	form.textareaPlaceholder = String(val);
+	if (props.mode === "edit" && props.item && props.item.type === "textarea") {
+		props.item.placeholder = form.textareaPlaceholder;
+		emit("change");
+	}
+}
+
+function handleTextareaDefaultChange(val: string | number) {
+	form.textareaDefault = String(val);
+	if (props.mode === "edit" && props.item && props.item.type === "textarea") {
+		props.item.default = form.textareaDefault;
+		emit("change");
+	}
+}
+
+// Input handlers
+function handleInputPlaceholderChange(val: string | number) {
+	form.inputPlaceholder = String(val);
+	if (props.mode === "edit" && props.item && props.item.type === "input") {
+		props.item.placeholder = form.inputPlaceholder;
+		emit("change");
+	}
+}
+
+function handleInputDefaultChange(val: string | number) {
+	form.inputDefault = String(val);
+	if (props.mode === "edit" && props.item && props.item.type === "input") {
+		props.item.default = form.inputDefault;
+		emit("change");
+	}
+}
+
+// Confirm Add (ONLY for add mode)
 function handleConfirmAdd() {
-	const trimmedId = draft.value.id.trim();
+	const trimmedId = form.id.trim();
 	if (!trimmedId) {
 		idError.value = "请输入唯一标识 ID";
 		return;
@@ -142,32 +314,56 @@ function handleConfirmAdd() {
 		return;
 	}
 
-	const finalItem: SchemaItem = {
-		...draft.value,
-		id: trimmedId,
-		name: draft.value.name.trim() || trimmedId,
-		description: draft.value.description?.trim() || "",
-		value: draft.value.default,
-	} as SchemaItem;
+	const baseItem = createDefaultSchemaItem(
+		trimmedId,
+		form.name.trim() || trimmedId,
+		form.type,
+	);
+	baseItem.description = form.description.trim();
 
-	emit("add", finalItem);
-	isOpen.value = false;
+	if (form.type === "switch") {
+		baseItem.default = form.switchDefault;
+		baseItem.value = form.switchDefault;
+	} else if (form.type === "select") {
+		(baseItem as unknown as { options: string[] }).options = [
+			...form.selectOptions,
+		];
+		baseItem.default = form.selectDefault;
+		baseItem.value = form.selectDefault;
+	} else if (form.type === "slider") {
+		const s = baseItem as unknown as {
+			min: number;
+			max: number;
+			step: number;
+			default: number;
+			value: number;
+		};
+		s.min = form.sliderMin;
+		s.max = form.sliderMax;
+		s.step = form.sliderStep;
+		s.default = roundStep(form.sliderDefault, form.sliderStep);
+		s.value = s.default;
+	} else if (form.type === "textarea") {
+		(baseItem as unknown as { placeholder: string }).placeholder =
+			form.textareaPlaceholder;
+		baseItem.default = form.textareaDefault;
+		baseItem.value = form.textareaDefault;
+	} else if (form.type === "input") {
+		(baseItem as unknown as { placeholder: string }).placeholder =
+			form.inputPlaceholder;
+		baseItem.default = form.inputDefault;
+		baseItem.value = form.inputDefault;
+	}
+
+	emit("confirmAdd", baseItem);
+	emit("update:open", false);
 }
 </script>
 
 <template>
-  <Popover v-model:open="isOpen">
-    <PopoverTrigger as-child>
-      <slot name="trigger">
-        <Button v-if="mode === 'add'" size="sm" class="gap-1.5">
-          <Plus class="size-4" />
-          <span>新增配置项</span>
-        </Button>
-        <Button v-else size="icon" variant="ghost" class="size-8">
-          <Pencil class="size-3.5" />
-        </Button>
-      </slot>
-    </PopoverTrigger>
+  <Popover :open="open" @update:open="(val) => emit('update:open', val)">
+    <!-- Anchor decoupled to target element -->
+    <PopoverAnchor v-if="anchor" :reference="anchor" />
 
     <PopoverContent
       align="end"
@@ -179,9 +375,19 @@ function handleConfirmAdd() {
         <h4 class="text-sm font-semibold text-foreground/90">
           {{ mode === 'add' ? '新增表单配置项' : '编辑表单配置项' }}
         </h4>
-        <span class="text-[11px] text-muted-foreground font-mono">
-          {{ draft.type }}
-        </span>
+        <div class="flex items-center gap-1.5">
+          <span class="text-[11px] text-muted-foreground font-mono">
+            {{ form.type }}
+          </span>
+          <button
+            type="button"
+            class="text-muted-foreground hover:text-foreground p-0.5 rounded transition-colors"
+            title="关闭浮窗"
+            @click="emit('update:open', false)"
+          >
+            <X class="size-3.5" />
+          </button>
+        </div>
       </div>
 
       <!-- ID field -->
@@ -191,10 +397,10 @@ function handleConfirmAdd() {
           <span v-if="idError" class="text-[11px] text-destructive">{{ idError }}</span>
         </div>
         <Input
-          v-model="draft.id"
+          :model-value="form.id"
           placeholder="例如: temperature, max_tokens"
           class="h-8 text-xs font-mono"
-          @input="idError = ''"
+          @update:model-value="handleIdInput"
         />
         <p class="text-[10px] text-muted-foreground">用于映射配置结果对象的唯一键名</p>
       </div>
@@ -203,9 +409,10 @@ function handleConfirmAdd() {
       <div class="flex flex-col gap-1.5">
         <Label class="text-xs font-medium">显示名称 (Name)</Label>
         <Input
-          v-model="draft.name"
+          :model-value="form.name"
           placeholder="例如: 采样温度"
           class="h-8 text-xs"
+          @update:model-value="handleNameInput"
         />
       </div>
 
@@ -213,9 +420,10 @@ function handleConfirmAdd() {
       <div class="flex flex-col gap-1.5">
         <Label class="text-xs font-medium">描述信息 (Description)</Label>
         <Textarea
-          v-model="draft.description"
+          :model-value="form.description"
           placeholder="关于该参数作用的提示说明..."
           class="min-h-14 text-xs py-1.5 resize-none"
+          @update:model-value="handleDescriptionInput"
         />
       </div>
 
@@ -223,7 +431,7 @@ function handleConfirmAdd() {
       <div class="flex flex-col gap-1.5">
         <Label class="text-xs font-medium">控件类型 (Type)</Label>
         <Select
-          :model-value="draft.type"
+          :model-value="form.type"
           @update:model-value="handleTypeChange"
         >
           <SelectTrigger class="h-8 text-xs">
@@ -246,15 +454,18 @@ function handleConfirmAdd() {
         </span>
 
         <!-- Switch Sub-controls -->
-        <template v-if="draft.type === 'switch'">
+        <template v-if="form.type === 'switch'">
           <div class="flex items-center justify-between py-1">
             <Label class="text-xs">默认状态 (Default)</Label>
-            <Switch v-model="draft.default" />
+            <Switch
+              :model-value="form.switchDefault"
+              @update:model-value="handleSwitchDefaultChange"
+            />
           </div>
         </template>
 
         <!-- Select Sub-controls -->
-        <template v-else-if="draft.type === 'select'">
+        <template v-else-if="form.type === 'select'">
           <div class="flex flex-col gap-2">
             <Label class="text-xs">候选项列表 (Options)</Label>
             <div class="flex gap-1.5">
@@ -270,7 +481,7 @@ function handleConfirmAdd() {
             </div>
             <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-1">
               <div
-                v-for="(opt, idx) in draft.options"
+                v-for="(opt, idx) in form.selectOptions"
                 :key="opt + idx"
                 class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-muted/80 text-[11px] border border-border/50"
               >
@@ -286,13 +497,16 @@ function handleConfirmAdd() {
             </div>
             <div class="flex flex-col gap-1 mt-1">
               <Label class="text-xs">默认选中项</Label>
-              <Select v-model="draft.default">
+              <Select
+                :model-value="form.selectDefault"
+                @update:model-value="handleSelectDefaultChange"
+              >
                 <SelectTrigger class="h-7 text-xs">
                   <SelectValue placeholder="选择默认选项" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem
-                    v-for="opt in draft.options"
+                    v-for="opt in form.selectOptions"
                     :key="opt"
                     :value="opt"
                   >
@@ -305,83 +519,92 @@ function handleConfirmAdd() {
         </template>
 
         <!-- Slider Sub-controls -->
-        <template v-else-if="draft.type === 'slider'">
+        <template v-else-if="form.type === 'slider'">
           <div class="grid grid-cols-3 gap-2">
             <div class="flex flex-col gap-1">
               <Label class="text-[11px] text-muted-foreground">最小值 (Min)</Label>
               <Input
-                v-model.number="draft.min"
+                :model-value="form.sliderMin"
                 type="number"
                 class="h-7 text-xs"
+                @update:model-value="handleSliderMinChange"
               />
             </div>
             <div class="flex flex-col gap-1">
               <Label class="text-[11px] text-muted-foreground">最大值 (Max)</Label>
               <Input
-                v-model.number="draft.max"
+                :model-value="form.sliderMax"
                 type="number"
                 class="h-7 text-xs"
+                @update:model-value="handleSliderMaxChange"
               />
             </div>
             <div class="flex flex-col gap-1">
               <Label class="text-[11px] text-muted-foreground">步长 (Step)</Label>
               <Input
-                v-model.number="draft.step"
+                :model-value="form.sliderStep"
                 type="number"
                 class="h-7 text-xs"
+                @update:model-value="handleSliderStepChange"
               />
             </div>
           </div>
           <div class="flex flex-col gap-1.5 mt-1">
             <div class="flex items-center justify-between">
-              <Label class="text-xs">默认数值 (Default): {{ draft.default }}</Label>
+              <Label class="text-xs">默认数值 (Default): {{ form.sliderDefault }}</Label>
             </div>
             <Slider
-              v-model="draft.default"
-              :min="draft.min"
-              :max="draft.max"
-              :step="draft.step ?? 1"
+              :model-value="form.sliderDefault"
+              :min="form.sliderMin"
+              :max="form.sliderMax"
+              :step="form.sliderStep || 1"
               show-value
+              :format-value="(val) => String(roundStep(val, form.sliderStep))"
+              @update:model-value="handleSliderDefaultChange"
             />
           </div>
         </template>
 
         <!-- Textarea Sub-controls -->
-        <template v-else-if="draft.type === 'textarea'">
+        <template v-else-if="form.type === 'textarea'">
           <div class="flex flex-col gap-1.5">
             <Label class="text-xs">占位提示 (Placeholder)</Label>
             <Input
-              v-model="draft.placeholder"
+              :model-value="form.textareaPlaceholder"
               placeholder="例如: 请输入提示词..."
               class="h-7 text-xs"
+              @update:model-value="handleTextareaPlaceholderChange"
             />
           </div>
           <div class="flex flex-col gap-1.5">
             <Label class="text-xs">默认文本 (Default)</Label>
             <Textarea
-              v-model="draft.default"
+              :model-value="form.textareaDefault"
               placeholder="默认初始内容..."
               class="min-h-16 text-xs resize-none"
+              @update:model-value="handleTextareaDefaultChange"
             />
           </div>
         </template>
 
         <!-- Input Sub-controls -->
-        <template v-else-if="draft.type === 'input'">
+        <template v-else-if="form.type === 'input'">
           <div class="flex flex-col gap-1.5">
             <Label class="text-xs">占位提示 (Placeholder)</Label>
             <Input
-              v-model="draft.placeholder"
+              :model-value="form.inputPlaceholder"
               placeholder="例如: https://api.openai.com/v1"
               class="h-7 text-xs"
+              @update:model-value="handleInputPlaceholderChange"
             />
           </div>
           <div class="flex flex-col gap-1.5">
             <Label class="text-xs">默认文本 (Default)</Label>
             <Input
-              v-model="draft.default"
+              :model-value="form.inputDefault"
               placeholder="默认初始内容..."
               class="h-7 text-xs"
+              @update:model-value="handleInputDefaultChange"
             />
           </div>
         </template>
@@ -389,7 +612,7 @@ function handleConfirmAdd() {
 
       <!-- Footer: Confirm button ONLY for 'add' mode -->
       <div v-if="mode === 'add'" class="pt-2 border-t border-border/70 flex justify-end gap-2">
-        <Button variant="ghost" size="sm" class="h-8 text-xs" @click="isOpen = false">
+        <Button variant="ghost" size="sm" class="h-8 text-xs" @click="emit('update:open', false)">
           取消
         </Button>
         <Button size="sm" class="h-8 text-xs gap-1" @click="handleConfirmAdd">

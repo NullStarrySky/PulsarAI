@@ -4,9 +4,20 @@ import {
 	cloneSchema,
 	createDefaultController,
 	createDefaultSchemaItem,
+	roundStep,
 } from "./types";
 
 describe("Form Generator Types & Helpers", () => {
+	it("correctly rounds floating point values according to step", () => {
+		expect(roundStep(0.7000000000000001, 0.05)).toBe(0.7);
+		expect(roundStep(0.7000000000000001, 0.1)).toBe(0.7);
+		expect(roundStep(0.9500000000000001, 0.01)).toBe(0.95);
+		expect(roundStep(0.30000000000000004, 0.1)).toBe(0.3);
+		expect(roundStep(4096.000000001, 256)).toBe(4096);
+		expect(roundStep(0.1 + 0.2, 0.1)).toBe(0.3);
+		expect(roundStep(0.005, 0.001)).toBe(0.005);
+	});
+
 	it("creates default controllers for each supported type", () => {
 		const switchCtrl = createDefaultController("switch");
 		expect(switchCtrl.type).toBe("switch");

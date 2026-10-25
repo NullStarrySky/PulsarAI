@@ -24,7 +24,12 @@ import {
 	Trash2,
 } from "@/lib/remix-icons";
 import FormGeneratorItemDropdown from "./FormGeneratorItemDropdown.vue";
-import type { FormSchema, SchemaItem } from "./types";
+import {
+	type FormSchema,
+	roundStep,
+	type SchemaItem,
+	type SliderController,
+} from "./types";
 
 const props = withDefaults(
 	defineProps<{
@@ -49,9 +54,29 @@ const emit = defineEmits<{
 
 const isEditing = ref(props.initialEditMode);
 
-/**
- * Normalize input: support either FormSchema array or empty object/record
- */
+// Decoupled Dropdown State (owned at the top container level)
+const isDropdownOpen = ref(false);
+const dropdownAnchor = ref<HTMLElement | null>(null);
+const dropdownMode = ref<"add" | "edit">("add");
+const activeEditIndex = ref<number>(-1);
+
+// Stable UID map so item row DOM nodes are not destroyed when item.id is edited
+const itemUidMap = new WeakMap<object, number>();
+let nextUid = 1;
+
+function getItemKey(item: SchemaItem, index: number): number {
+	if (item && typeof item === "object") {
+		let uid = itemUidMap.get(item);
+		if (!uid) {
+			uid = nextUid++;
+			itemUidMap.set(item, uid);
+		}
+		return uid;
+	}
+	return index;
+}
+
+/** Normalize input: support either FormSchema array or empty object/record */
 function normalizeSchema(val: unknown): FormSchema {
 	if (Array.isArray(val)) {
 		return val as FormSchema;
@@ -61,19 +86,47 @@ function normalizeSchema(val: unknown): FormSchema {
 
 const items = ref<FormSchema>(normalizeSchema(props.modelValue));
 
+// Flag to differentiate internal edits from external prop replacements (prevents lag & loops)
+let isInternalUpdate = false;
+
+function emitUpdate() {
+	isInternalUpdate = true;
+	emit("update:modelValue", items.value);
+	emit("change", valuesMap.value);
+	Promise.resolve().then(() => {
+		isInternalUpdate = false;
+	});
+}
+
 watch(
 	() => props.modelValue,
 	(newVal) => {
+		if (isInternalUpdate) return;
 		const normalized = normalizeSchema(newVal);
-		if (JSON.stringify(normalized) !== JSON.stringify(items.value)) {
+		if (normalized !== items.value) {
 			items.value = normalized;
 		}
 	},
-	{ deep: true },
+	{ deep: false },
 );
 
-// Collect existing IDs to prevent duplicates during add
-const existingIds = computed(() => items.value.map((i) => i.id));
+// Collect existing IDs excluding the active editing item to check duplicates
+const existingIdsExceptActive = computed(() => {
+	return items.value
+		.filter((_, idx) => idx !== activeEditIndex.value)
+		.map((i) => i.id);
+});
+
+// Currently active item being edited in dropdown
+const activeItem = computed<SchemaItem | null>(() => {
+	if (
+		activeEditIndex.value >= 0 &&
+		activeEditIndex.value < items.value.length
+	) {
+		return items.value[activeEditIndex.value] ?? null;
+	}
+	return null;
+});
 
 // Computed key-value pair of all active form values
 const valuesMap = computed<Record<string, unknown>>(() => {
@@ -84,26 +137,43 @@ const valuesMap = computed<Record<string, unknown>>(() => {
 	return result;
 });
 
-function emitUpdate() {
-	emit("update:modelValue", items.value);
-	emit("change", valuesMap.value);
+function handleSliderChange(item: SliderController, rawVal: number | number[]) {
+	const num = Array.isArray(rawVal) ? (rawVal[0] ?? 0) : rawVal;
+	item.value = roundStep(num, item.step);
+	emitUpdate();
 }
 
 function handleValueChange() {
 	emitUpdate();
 }
 
-function handleAddItem(newItem: SchemaItem) {
+function openEditDropdown(index: number, event: MouseEvent) {
+	dropdownAnchor.value = (event.currentTarget as HTMLElement) ?? null;
+	dropdownMode.value = "edit";
+	activeEditIndex.value = index;
+	isDropdownOpen.value = true;
+}
+
+function openAddDropdown(event: MouseEvent) {
+	dropdownAnchor.value = (event.currentTarget as HTMLElement) ?? null;
+	dropdownMode.value = "add";
+	activeEditIndex.value = -1;
+	isDropdownOpen.value = true;
+}
+
+function handleConfirmAdd(newItem: SchemaItem) {
 	items.value.push(newItem);
 	emitUpdate();
 }
 
-function handleUpdateItem(index: number, updatedItem: SchemaItem) {
-	items.value[index] = updatedItem;
+function handleDropdownChange() {
 	emitUpdate();
 }
 
 function removeItem(index: number) {
+	if (activeEditIndex.value === index) {
+		isDropdownOpen.value = false;
+	}
 	items.value.splice(index, 1);
 	emitUpdate();
 }
@@ -114,6 +184,9 @@ function moveItem(index: number, direction: -1 | 1) {
 	const temp = items.value[index];
 	items.value[index] = items.value[targetIndex]!;
 	items.value[targetIndex] = temp!;
+	if (activeEditIndex.value === index) {
+		activeEditIndex.value = targetIndex;
+	}
 	emitUpdate();
 }
 
@@ -156,7 +229,18 @@ defineExpose({
 </script>
 
 <template>
-  <div class="flex flex-col gap-4" :class="props.class">
+  <div class="relative flex flex-col gap-4" :class="props.class">
+    <!-- Top-Level Decoupled Item Dropdown/Popover -->
+    <FormGeneratorItemDropdown
+      v-model:open="isDropdownOpen"
+      :anchor="dropdownAnchor"
+      :mode="dropdownMode"
+      :item="activeItem"
+      :existing-ids="existingIdsExceptActive"
+      @confirm-add="handleConfirmAdd"
+      @change="handleDropdownChange"
+    />
+
     <!-- Header: Title, Description, and Edit Mode Switcher -->
     <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between pb-3 border-b border-border/70">
       <div class="min-w-0">
@@ -209,11 +293,10 @@ defineExpose({
         {{ isEditing ? '点击下方按钮新增参数配置项' : '当前 Schema 为空，可点击右上角进入编辑模式添加' }}
       </p>
       <div v-if="isEditing" class="mt-4">
-        <FormGeneratorItemDropdown
-          mode="add"
-          :existing-ids="existingIds"
-          @add="handleAddItem"
-        />
+        <Button size="sm" class="gap-1.5" @click="openAddDropdown($event)">
+          <Plus class="size-4" />
+          <span>新增配置项</span>
+        </Button>
       </div>
     </div>
 
@@ -221,7 +304,7 @@ defineExpose({
     <div v-else class="divide-y divide-border/60">
       <div
         v-for="(item, index) in items"
-        :key="item.id"
+        :key="getItemKey(item, index)"
         class="grid min-h-16 gap-3 py-4 sm:grid-cols-[minmax(12rem,1fr)_minmax(14rem,auto)] sm:items-center transition-colors group"
       >
         <!-- Left Column: Title, ID badge, and Description -->
@@ -290,17 +373,18 @@ defineExpose({
               </Select>
             </template>
 
-            <!-- Slider Controller -->
+            <!-- Slider Controller: rounded to step to avoid 0.7000000000000001 -->
             <template v-else-if="item.type === 'slider'">
               <div class="flex items-center gap-2.5 w-48 sm:w-60">
                 <Slider
-                  v-model="item.value"
+                  :model-value="item.value"
                   :min="item.min"
                   :max="item.max"
                   :step="item.step ?? 1"
                   show-value
                   class="flex-1"
-                  @update:model-value="handleValueChange"
+                  :format-value="(val) => String(roundStep(val, item.step))"
+                  @update:model-value="(val) => handleSliderChange(item, val)"
                 />
               </div>
             </template>
@@ -324,20 +408,9 @@ defineExpose({
                 @input="handleValueChange"
               />
             </template>
-
-            <!-- Quick Reset to default button (shown when value differs from default in normal mode) -->
-            <button
-              v-if="!isEditing && item.value !== item.default"
-              type="button"
-              class="text-muted-foreground/60 hover:text-foreground transition-colors p-1 rounded hover:bg-muted"
-              title="还原此项为默认值"
-              @click="resetSingleItem(item)"
-            >
-              <RotateCcw class="size-3.5" />
-            </button>
           </div>
 
-          <!-- Edit Mode Actions: Reorder, Edit Popover, Delete -->
+          <!-- Edit Mode Actions: Reorder, Edit Popover, Reset to default, Delete -->
           <div
             v-if="isEditing"
             class="flex items-center gap-1 pl-2 border-l border-border/60"
@@ -366,13 +439,29 @@ defineExpose({
               <ArrowDown class="size-3.5" />
             </Button>
 
-            <!-- Edit Item Popover (Uses the shared FormGeneratorItemDropdown) -->
-            <FormGeneratorItemDropdown
-              mode="edit"
-              :item="item"
-              :existing-ids="existingIds.filter((id) => id !== item.id)"
-              @update="handleUpdateItem(index, $event)"
-            />
+            <!-- Edit Item Popover (anchored to this button, decoupled from row) -->
+            <Button
+              size="icon"
+              variant="ghost"
+              class="size-7"
+              title="编辑此项配置"
+              @click="openEditDropdown(index, $event)"
+            >
+              <Pencil class="size-3.5" />
+            </Button>
+
+            <!-- Reset to Default (ONLY appears in edit mode) -->
+            <Button
+              size="icon"
+              variant="ghost"
+              class="size-7 text-muted-foreground hover:text-foreground"
+              :class="item.value !== item.default ? 'text-amber-500 hover:text-amber-600' : ''"
+              title="还原此项为默认值"
+              :disabled="item.value === item.default"
+              @click="resetSingleItem(item)"
+            >
+              <RotateCcw class="size-3.5" />
+            </Button>
 
             <!-- Delete Item -->
             <Button
@@ -390,21 +479,14 @@ defineExpose({
 
       <!-- Bottom Add Button in Edit Mode -->
       <div v-if="isEditing" class="pt-4">
-        <FormGeneratorItemDropdown
-          mode="add"
-          :existing-ids="existingIds"
-          @add="handleAddItem"
+        <Button
+          variant="outline"
+          class="w-full border-dashed py-5 gap-2 text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
+          @click="openAddDropdown($event)"
         >
-          <template #trigger>
-            <Button
-              variant="outline"
-              class="w-full border-dashed py-5 gap-2 text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
-            >
-              <Plus class="size-4" />
-              <span>新增配置项</span>
-            </Button>
-          </template>
-        </FormGeneratorItemDropdown>
+          <Plus class="size-4" />
+          <span>新增配置项</span>
+        </Button>
       </div>
     </div>
   </div>
