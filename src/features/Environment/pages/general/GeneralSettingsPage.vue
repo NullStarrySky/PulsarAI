@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { Switch } from "@/components/fluid";
 import {
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-	Switch,
-} from "@/components/fluid";
+} from "@/components/ui/select";
 import type { WindowCloseBehavior } from "@/features/Environment/defaults";
 import SettingGroup from "@/features/Environment/setting/SettingGroup.vue";
 import SettingItem from "@/features/Environment/setting/SettingItem.vue";

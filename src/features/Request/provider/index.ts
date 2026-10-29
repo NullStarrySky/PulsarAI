@@ -1,26 +1,17 @@
-import { createSandboxFunction } from "@/features/Plugin/runtime/sandbox";
 import type { Component } from "vue";
+import { createSandboxFunction } from "@/features/Plugin/runtime/sandbox";
 import type { Provider } from "../types";
-import { automatic1111 } from "./automatic1111";
-import { comfyui } from "./comfyui";
+import type { ProviderRegistration } from "./definition";
 import { edgeTts } from "./edge-tts";
 import { novelai } from "./novelai";
-import { piper } from "./piper";
-import LocalModelDownload from "./shared/components/LocalModelDownload.vue";
 import SecretInput from "./shared/components/SecretInput.vue";
-import type { ProviderRegistration } from "./definition";
 import { stability } from "./stability";
 import { volcengineTts } from "./volcengine-tts";
-import { whisperCandle } from "./whisper-candle";
 
 const registrations: ProviderRegistration[] = [
-	automatic1111,
-	comfyui,
 	novelai,
 	stability,
 	edgeTts,
-	piper,
-	whisperCandle,
 	volcengineTts,
 ];
 export const localRequestProviders: Provider[] = registrations.map(
@@ -32,8 +23,6 @@ export const builtInFunctions = new Map<string, Function>([
 ]);
 export const builtInComponents = new Map<string, Component>([
 	["SecretInput", SecretInput],
-	["PiperModelDownload", LocalModelDownload],
-	["WhisperModelDownload", LocalModelDownload],
 	...registrations.flatMap(({ components = {} }) => Object.entries(components)),
 ]);
 export async function invokeRequestFunction<T>(
@@ -54,9 +43,12 @@ async function listOpenAIModels({ provider }: { provider: Provider }) {
 	if (!baseURL || !apiKeyName)
 		throw new Error(`提供商 ${provider.name} 缺少 baseURL 或 apiKeyName。`);
 	const { modelProxyFetch } = await import("./shared/custom-fetch");
-	const response = await modelProxyFetch(`${baseURL.replace(/\/+$/, "")}/models`, {
-		headers: { Authorization: `Bearer <<${apiKeyName}>>` },
-	});
+	const response = await modelProxyFetch(
+		`${baseURL.replace(/\/+$/, "")}/models`,
+		{
+			headers: { Authorization: `Bearer <<${apiKeyName}>>` },
+		},
+	);
 	if (!response.ok)
 		throw new Error(`获取 ${provider.name} 模型失败 (${response.status})。`);
 	const payload = (await response.json()) as { data?: unknown };

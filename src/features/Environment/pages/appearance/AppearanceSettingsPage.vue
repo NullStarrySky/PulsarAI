@@ -10,15 +10,10 @@ import {
 	DialogFooter,
 	DialogHeader,
 	DialogTitle,
-	Select,
-	SelectContent,
-	SelectGroup,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-	Slider,
 	Switch,
 } from "@/components/fluid";
+import { Slider } from "@/components/common/Slider";
+import { GlideSelect } from "@/components/common/glide";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
@@ -276,16 +271,13 @@ async function importFont(event: Event) {
       </SettingFormField>
 
       <SettingFormField title="字体" description="选择界面字体；上传后的字体也会在这里出现。">
-        <Select v-model="appearance.fontId">
-          <SelectTrigger class="ml-auto w-40"><SelectValue placeholder="选择字体" /></SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem v-for="font in store.fonts" :key="font.id" :value="font.id">
-                {{ font.name }}
-              </SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <GlideSelect
+          v-model="appearance.fontId"
+          :items="store.fonts.map(font => ({ value: font.id, label: font.name }))"
+          placeholder="选择字体"
+          menu-width="160"
+          class="ml-auto w-40"
+        />
       </SettingFormField>
 
       <SettingFormField title="上传字体" description="支持 WOFF、WOFF2、TTF 和 OTF；字体会保存在本机，可随时重新选择。">
@@ -366,14 +358,16 @@ async function importFont(event: Event) {
         title="Agent 加载动画"
         description="Agent 正在思考或调用工具时，过程栏使用的像素加载样式。"
       >
-        <Select v-model="appearance.agentLoadingStyle">
-          <SelectTrigger class="ml-auto w-36"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="drive">Drive</SelectItem>
-            <SelectItem value="dots">Dots</SelectItem>
-            <SelectItem value="orbit">Orbit</SelectItem>
-          </SelectContent>
-        </Select>
+        <GlideSelect
+          v-model="appearance.agentLoadingStyle"
+          :items="[
+            { value: 'drive', label: 'Drive' },
+            { value: 'dots', label: 'Dots' },
+            { value: 'orbit', label: 'Orbit' }
+          ]"
+          menu-width="144"
+          class="ml-auto w-36"
+        />
       </SettingFormField>
 
       <SettingFormField
@@ -390,14 +384,16 @@ async function importFont(event: Event) {
         title="玻璃化效果"
         description="选择窗口的系统背景材质。"
       >
-        <Select v-model="appearance.windowMaterial">
-          <SelectTrigger class="ml-auto w-36"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">关闭</SelectItem>
-            <SelectItem value="mica">Mica</SelectItem>
-            <SelectItem value="acrylic">Acrylic</SelectItem>
-          </SelectContent>
-        </Select>
+        <GlideSelect
+          v-model="appearance.windowMaterial"
+          :items="[
+            { value: 'none', label: '关闭' },
+            { value: 'mica', label: 'Mica' },
+            { value: 'acrylic', label: 'Acrylic' }
+          ]"
+          menu-width="144"
+          class="ml-auto w-36"
+        />
       </SettingFormField>
 
       <SettingFormField
@@ -417,13 +413,15 @@ async function importFont(event: Event) {
         description="应用整体包裹边框与顶栏基础底色。默认基于颜色主题自动推断，也可自定义指定。"
       >
         <div class="ml-auto flex items-center gap-2">
-          <Select v-model="appearance.frameColorMode">
-            <SelectTrigger class="w-32"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="auto">自动推断</SelectItem>
-              <SelectItem value="custom">自定义</SelectItem>
-            </SelectContent>
-          </Select>
+          <GlideSelect
+            v-model="appearance.frameColorMode"
+            :items="[
+              { value: 'auto', label: '自动推断' },
+              { value: 'custom', label: '自定义' }
+            ]"
+            menu-width="128"
+            class="w-32"
+          />
           <ColorPickerPopover
             v-if="appearance.frameColorMode === 'custom'"
             :value="appearance.frameCustomColor"

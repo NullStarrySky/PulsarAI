@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
+import { Button } from "@/components/fluid";
 import {
-	Button,
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-} from "@/components/fluid";
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import JavaScriptCodeMirrorEditor from "@/features/Plugin/resources/types/javascript/JavaScriptCodeMirrorEditor.vue";
 import { Plus, Trash2 } from "@/lib/remix-icons";

@@ -10,10 +10,7 @@ import { motion } from "motion-v";
 import { cn } from "../../../lib/utils";
 import { useIcon } from "../../../lib/icon-context";
 import { spring, exitFallbackMs } from "../../../lib/springs";
-import { useShape } from "../../../lib/shape-context";
 import { useSizeVariant } from "../../../lib/size-context";
-import { provideSurface, useSurface } from "../../../lib/surface-context";
-import { surfaceClasses } from "../../../lib/surface-classes";
 import { useDialogOpen } from "./dialog-context";
 import Button from "../button/Button.vue";
 
@@ -22,8 +19,6 @@ defineOptions({ inheritAttrs: false });
 const emit = defineEmits<{
   openAutoFocus: [event: Event];
 }>();
-
-const DIALOG_OFFSET = 4;
 
 const props = withDefaults(
   defineProps<{
@@ -45,9 +40,6 @@ const props = withDefaults(
 
 const XIcon = useIcon("x");
 const open = useDialogOpen();
-const shape = useShape();
-const substrate = useSurface();
-const dialogLevel = computed(() => Math.min(substrate.value + DIALOG_OFFSET, 8));
 // 尺寸阶梯在紧凑区域把对话框收窄一档——只影响宽度，内边距不动（见 /docs/sizes）。
 const compact = computed(() => useSizeVariant().value === "compact");
 const mounted = ref(false);
@@ -91,11 +83,11 @@ const contentClass = computed(() =>
     props.container ? "absolute" : "fixed",
     "z-50 pointer-events-auto",
     !props.customPosition && "left-1/2 top-1/2 w-[calc(100%-2rem)]",
-    surfaceClasses(dialogLevel.value),
+    "bg-background border border-border shadow-lg",
     "p-6 focus:outline-none",
     !props.customPosition && props.size === "sm" && (compact.value ? "max-w-[360px]" : "max-w-[400px]"),
     !props.customPosition && props.size === "lg" && (compact.value ? "max-w-[480px]" : "max-w-[540px]"),
-    shape.value.container,
+    "rounded-xl",
     props.class
   )
 );
@@ -117,7 +109,6 @@ const mergedStyle = computed<Record<string, any>>(() => {
 });
 
 // 面板内部的表面层级抬升 DIALOG_OFFSET。
-provideSurface(dialogLevel);
 </script>
 
 <template>

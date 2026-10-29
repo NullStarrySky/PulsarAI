@@ -42,6 +42,8 @@ export default defineConfig(async () => ({
 		port: 1420,
 		strictPort: true,
 		host: devHost || false,
+		allowedHosts: true,
+		cors: true,
 		hmr: devHost
 			? {
 					protocol: "ws",

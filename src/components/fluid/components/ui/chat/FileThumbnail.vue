@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { cn } from "../../../lib/utils";
-import { useShape } from "../../../lib/shape-context";
 
 // ─── File thumbnail ───────────────────────────────────────────────────────
 // 只读的方形文件预览。图片用 `URL.createObjectURL` 的 object-cover；
@@ -17,7 +16,6 @@ const props = defineProps<{
   class?: string;
 }>();
 
-const shape = useShape();
 const isImage = computed(() => props.file.type.startsWith("image/"));
 const isPdf = computed(() => props.file.type === "application/pdf");
 
@@ -90,7 +88,7 @@ const isPending = computed(
 const glyphSize = computed(() => Math.max(16, props.size * 0.35));
 
 const rootClass = computed(() =>
-  cn("relative shrink-0 overflow-hidden bg-accent border border-border", shape.value.bg, props.class)
+  cn("relative shrink-0 overflow-hidden bg-accent border border-border", "rounded-lg", props.class)
 );
 </script>
 

@@ -1,0 +1,103 @@
+# Conversation generation：世界快照与并发闸门
+
+状态：未开始（暂不实施，2026-02 记录）
+来源：code review of `src/features/Conversation/dataflow`
+
+## 问题陈述
+
+一次 generation 开始时，agent 的"世界"应当被冻结到结束为止。当前实现没有这个边界：
+`chat` 在调用 `runWorld` 前一次性 resolve，而 `filetree` 是一个 `MaybeRefOrGetter`，
+每次 `fs.read/write` 都现场 `toValue()` 重算。同一个 generation 里，
+历史消息是快照、文件系统是直播，两者可能描述同一时刻的两个不同状态。
+
+不变量应当是一句话：**一次 generation 的 path / groups / filetree / baseline 在开始时物化，直到结束不再变。**
+
+## 发现 1：并发闸门在 UI 层，且判改顺序有问题
+
+`generating` 是会话级单标志：`conversations.ts:203-205`（`isConversationGenerating`）。
+
+`generate()` 的顺序是"先判后改"，这点没问题（`activePathComposable/index.ts:200-217`）：
+
+```ts
+const target = versionAt(containerId, messageId);
+if (!target?.message || !current || target.container.role !== "assistant" || generating.value)
+  return null;
+target.message.final = false;
+```
+
+真正的问题在调用方：
+
+| 入口 | 副作用是否早于闸门 |
+| --- | --- |
+| `send()` `index.ts:357-359` | 否，闸门在 `push` 之前，OK |
+| `regenerate()` `index.ts:268-274` | **是**：`target.version.create()` 先 push 一条空版本，`generate` 才返回 null |
+| `Message.vue:78` 重新生成按钮 | 无 disabled，依赖 `generate` 内部返回 null |
+| `Timeline.vue:126-133` / `selectVersion` `index.ts:275-280` | `selectVersion` 完全无 guard |
+| `Message.vue:71-73` 版本左右箭头 | 生成中可用 |
+| `Timeline.vue:130` | 有 `else if (!conversation.generating.value)`，这是目前唯一挡住并发生成的地方 |
+| `deleteContainer` `index.ts:281-356` | 无 guard，生成中可删 |
+
+结论："生成中不能再发"这个数据不变量，目前由 `Composer` + `Timeline` 两个组件撑着。
+新增 surface、快捷键或重构时容易破。
+
+## 发现 2：切分支会改掉进行中 generation 的世界
+
+`forVersion` 的闭包捕获的是**身份**（`container`、`version`），但 `groups` 是 `computed`，
+每次读 `baseline.value` / `filetree.value` 都当场重算。依赖链一路通到实时状态：
+
+```
+filetree (computed)                      index.ts:82-93
+ └─ usePluginData(pluginId, groups, pluginVersionId)
+     ├─ groups (computed)                index.ts:82-88
+     │   └─ pathForTail(containers, container.previousContainer)
+     │       └─ all.get(current.previousContainer) × N
+     │           message-service.ts:65-80
+     │           每跳一次读一次 previousContainer，
+     │           而读哪个由上级的 activeNextContainer 决定
+     └─ conversation.localPluginId / pluginVersionId   实时
+```
+
+具体后果：
+
+- **A. 切祖先的兄弟分支改世界。** `branch.ts:38` `parent.activeNextContainer = branchId`
+  -> `activeNextContainer` 变 -> 从 `container.previousContainer` 往上走的链整个换
+  -> `groups` 长度和内容都变。下一次 `codeAct` 的 `fs.read()` 读到另一个分支的世界。
+- **B. `applyPulse` 的基线会漂。** `index.ts:101-105` 的 `const base = baseline.value;`
+  在每次 `applyPulse` 时读实时值；`updateRecal(base, ...)` 的 base 变了，
+  同一 pulse 算出的增量就变了。而 `version.meta.recal` 是累加的，已算过的部分不重算，
+  于是产出**新旧世界混血的 recal**。
+- **C. 切自身容器的版本号改基线。** `message-service.ts:55-63` 的 `currentMessage`
+  实时读 `activeMessage`（对生成中的容器本身被 `version` 替换，这点正确；
+  但父链上的容器用的是它的 `activeMessage`）。
+- **D. 版本指针可能被换掉。** 生成中在生成中的容器上 `goto` 到旧版本，
+  UI 渲染旧版本，流式增量仍往闭包捕获的 `version` 上写。用户看不见，内容却在长。
+- **E. pluginVersionId 也是实时依赖**（`index.ts:92`、`index.ts:96`）。
+- **F. 媒体是全局的。** `deleteContainer` 调 `removeMediaLink`（`index.ts:338-351`），
+  生成中删容器可能连带删掉进行中那次的附件。
+
+`generationScope`（`index.ts:213-216`）只保证容器对象活着、脏通知有订阅者，
+**它不冻结任何东西**。
+
+## 修法（三处，按性价比排序）
+
+1. **把 `filetree` 从 getter 变成值（唯一有实际正确性收益、且改动面可控）。**
+   `useFileApi.current()`（`use-file-api.ts:101-106`）改成读一个在 `runWorld` 时注入的
+   `PluginData` 快照；agent 自己的写入仍要生效，所以快照 mutable、由 `applyPulse` 就地推进。
+   这跟现有 `transaction` 里的 `transactionData`（`use-file-api.ts:98-118`、`175-199`）是同一模式，照抄。
+2. **`groups` / `baseline` 物化一次。** 进 generation 时算一次固定值（按 `container.id` + `version.id`），
+   不要在 `applyPulse` 时重读 `baseline.value`。
+3. **闸门移进数据层，并统一"先判后改"。** `regenerate` 在 `version.create()` 之前判；
+   `selectVersion`、`deleteContainer` 也判。生成中允许切分支是合理 UX，
+   但必须让它改的是**视图**而不是进行中的世界。
+
+## 开放问题
+
+- 生成中切分支，UI 应该怎么办？（继续显示原分支 / 提示"该回复正在另一分支生成" / 允许但标记）
+- 快照模式下 `transaction` 与 pending pulse 的交互需要重新过一遍。
+- 是否要顺带把 `generating` 从会话级单标志扩展为按 container 的集合？当前不需要，但影响闸门写法。
+
+## 验收
+
+- 生成中切换祖先分支或版本后，agent 后续 `fs.read()` 仍返回生成开始时的世界。
+- 生成中调用 `regenerate` / `selectVersion` / `deleteContainer` 不产生无主空版本或半写状态。
+- `path-projection.test.ts` 之外补一条：生成中改 `activeNextContainer`，断言 `forVersion` 的基线不变。

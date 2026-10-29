@@ -2,12 +2,14 @@
 import { computed } from "vue";
 import {
 	Button,
+	ChatMessage as FluidChatMessage,
+} from "@/components/fluid";
+import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
-	ChatMessage as FluidChatMessage,
-} from "@/components/fluid";
+} from "@/components/ui/dropdown-menu";
 import {
 	Check,
 	ChevronLeft,

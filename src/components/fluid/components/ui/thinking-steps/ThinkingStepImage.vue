@@ -2,7 +2,6 @@
 import { computed } from "vue";
 import { motion } from "motion-v";
 import { cn } from "../../../lib/utils";
-import { useShape } from "../../../lib/shape-context";
 import { useSize } from "../../../lib/size-context";
 
 // ─── ThinkingStepImage ───────────────────────────────────────────────────
@@ -21,7 +20,6 @@ const props = withDefaults(
 
 defineOptions({ name: "ThinkingStepImage" });
 
-const shape = useShape();
 const compact = computed(() => useSize().value.variant === "compact");
 </script>
 
@@ -38,7 +36,7 @@ const compact = computed(() => useSize().value.variant === "compact");
     <img
       :src="src"
       :alt="alt"
-      :class="cn('w-full max-w-[200px] object-cover', shape.container)"
+      :class="cn('w-full max-w-[200px] object-cover', 'rounded-lg')"
     />
     <span
       v-if="caption"

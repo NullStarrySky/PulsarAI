@@ -1,12 +1,9 @@
 <script setup lang="ts">
-import {
-	Button,
-	DropdownSearch,
-	FluidList,
-	FluidListItem,
-} from "@/components/fluid";
+import { Button } from "@/components/fluid";
+import { GlideList } from "@/components/common/glide";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ArrowLeft } from "@/lib/remix-icons";
+import { ArrowLeft, Search } from "@/lib/remix-icons";
 import { useSettingsState } from "./use-settings-state";
 
 const { settingsSearch, activePage, filteredPages, selectPage, closeSettings } =
@@ -49,42 +46,43 @@ function handlePageWheel(event: WheelEvent) {
 
     <!-- Sidebar Search Header -->
     <div class="px-3 pb-2 pt-1">
-      <DropdownSearch
-        v-model="settingsSearch"
-        placeholder="搜索设置项…"
-        class="w-full"
-      />
+      <div class="relative w-full">
+        <Search class="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+        <Input
+          v-model="settingsSearch"
+          placeholder="搜索设置项…"
+          class="h-8 pl-8 pr-2 text-xs bg-muted/40 border-border/60"
+        />
+      </div>
     </div>
 
-    <!-- Setting Pages List using FluidList with gliding spring highlight -->
+    <!-- Setting Pages List using GlideList with gliding highlight -->
     <ScrollArea class="min-h-0 flex-1 px-2 py-1">
-      <FluidList
+      <GlideList
         :model-value="activePage?.meta.id"
+        :items="filteredPages.map(page => ({ value: page.meta.id, label: page.meta.title, icon: page.meta.icon, meta: page.meta }))"
+        size="md"
         active-class="bg-accent text-accent-foreground font-medium shadow-xs"
         class="w-full gap-0.5"
         @update:model-value="(val) => selectPage(String(val))"
         @wheel="handlePageWheel"
       >
-        <FluidListItem
-          v-for="(page, index) in filteredPages"
-          :key="page.meta.id"
-          :value="page.meta.id"
-          :index="index"
-          class="h-9 w-full rounded-md px-2.5 text-xs font-medium gap-2.5"
-        >
-          <component
-            :is="page.meta.icon"
-            v-if="page.meta.icon"
-            class="size-4 shrink-0 transition-opacity"
-            :class="activePage?.meta.id === page.meta.id ? 'opacity-100 text-foreground' : 'opacity-70 text-muted-foreground'"
-          />
-          <span class="truncate">{{ page.meta.title }}</span>
-        </FluidListItem>
+        <template #default="{ item, isSelected }">
+          <div class="flex items-center gap-2.5 px-2.5 w-full">
+            <component
+              :is="item.icon"
+              v-if="item.icon"
+              class="size-4 shrink-0 transition-opacity"
+              :class="isSelected ? 'opacity-100 text-foreground' : 'opacity-70 text-muted-foreground'"
+            />
+            <span class="truncate text-xs font-medium">{{ item.label }}</span>
+          </div>
+        </template>
+      </GlideList>
 
-        <div v-if="filteredPages.length === 0" class="py-8 text-center text-xs text-muted-foreground">
-          未找到匹配的设置
-        </div>
-      </FluidList>
+      <div v-if="filteredPages.length === 0" class="py-8 text-center text-xs text-muted-foreground">
+        未找到匹配的设置
+      </div>
     </ScrollArea>
 
     <!-- Bottom Return Button (Strictly matches Manager.vue bottom height and padding, no border-t) -->

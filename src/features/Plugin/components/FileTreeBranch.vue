@@ -6,10 +6,8 @@ import {
 	nextTick,
 	ref,
 } from "vue";
+import { Button } from "@/components/fluid";
 import {
-	Button,
-	CheckboxGroup,
-	CheckboxItem,
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
@@ -18,9 +16,8 @@ import {
 	DropdownMenuSubContent,
 	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
-	RadioGroup,
-	RadioItem,
-} from "@/components/fluid";
+} from "@/components/ui/dropdown-menu";
+import { GlideRadioGroup, GlideCheckboxGroup } from "@/components/common/glide";
 import {
 	ContextMenu,
 	ContextMenuContent,
@@ -271,25 +268,12 @@ const selectedRadioChildId = computed(() => {
 	return selected?.id ?? "";
 });
 
-const checkedIndices = computed(() => {
-	const set = new Set<number>();
-	fileChildren.value.forEach((child, idx) => {
-		if (child.resourceSelected) set.add(idx);
-	});
-	return set;
-});
-
 function handleRadioSelect(childId: string) {
 	const target = fileChildren.value.find((c) => c.id === childId);
 	if (target) {
 		emit("select", target);
 		toggleResource(target, true);
 	}
-}
-
-function handleCheckboxToggle(child: FileTreeNode) {
-	emit("select", child);
-	toggleResource(child, !child.resourceSelected);
 }
 
 function matchesActionFor(node: FileTreeNode, action: FileTreeAction) {
@@ -557,274 +541,307 @@ function runChildAction(
             @action="forwardAction"
           />
 
-          <!-- Single Selection: Fluid RadioGroup & RadioItem -->
-          <RadioGroup
+          <!-- Single Selection: GlideRadioGroup -->
+          <GlideRadioGroup
             v-if="folderSelectionMode === 'single'"
             :model-value="selectedRadioChildId"
+            :items="fileChildren.map(c => ({ value: c.id, label: c.name, child: c }))"
             class="w-full gap-0.5"
-            size="compact"
+            size="sm"
+            :padding="0"
             :hover-highlight="false"
             @update:model-value="handleRadioSelect"
           >
-            <RadioItem
-              :ref="(element) => setHoverRow(`child:${child.id}`, childHoverIndex(child.id), element)"
-              v-for="(child, idx) in fileChildren"
-              :key="child.id"
-              :value="child.id"
-              :index="idx"
-              :selected="child.resourceSelected"
-              class="file-tree-row file-tree-slot-file group/tree-row w-full cursor-pointer select-none"
-              :class="{
-                'is-selected': selectedId === child.id,
-                'is-resource-selected': child.resourceSelected,
-              }"
-              @click="emit('select', child)"
-              @dblclick="emit('open', child)"
-            >
-              <ContextMenu>
-                <ContextMenuTrigger as-child>
-                  <div class="flex h-full min-w-0 flex-1 items-center justify-between gap-1.5 text-left">
-                    <div class="flex min-w-0 flex-1 items-center gap-1.5">
-                      <span v-if="child.prefix" class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">{{ child.prefix }}</span>
-                      <span class="min-w-0 truncate text-xs">{{ child.name }}</span>
-                      <span v-if="child.suffix" class="shrink-0 text-[10px] text-muted-foreground">· {{ child.suffix }}</span>
-                    </div>
+            <template #default="{ item, isSelected }">
+              <div
+                :ref="(element) => setHoverRow(`child:${item.child.id}`, childHoverIndex(item.child.id), element as HTMLElement)"
+                class="file-tree-row file-tree-slot-file group/tree-row flex size-full cursor-pointer select-none items-center"
+                :class="{
+                  'is-selected': selectedId === item.child.id,
+                  'is-resource-selected': item.child.resourceSelected,
+                }"
+                @click="emit('select', item.child)"
+                @dblclick="emit('open', item.child)"
+              >
+                <!-- Radio Bullet -->
+                <div class="mr-2 grid size-4 shrink-0 place-items-center">
+                  <span
+                    class="size-2 rounded-full bg-foreground transition-all duration-160 origin-center"
+                    :class="isSelected ? 'scale-100 opacity-100 animate-dot-pop' : 'scale-0 opacity-0 pointer-events-none'"
+                  />
+                </div>
 
-                    <div class="flex items-center gap-0.5 shrink-0" @click.stop>
-                      <button
-                        v-if="child.selectableResource || child.disableRowOpen"
-                        type="button"
-                        class="file-tree-open-button shrink-0 grid size-5 place-items-center rounded text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors"
-                        title="在编辑器中打开"
-                        aria-label="在编辑器中打开"
-                        @click.stop="emit('open', child)"
-                      >
-                        <ExternalLink class="size-3.5" />
-                      </button>
+                <ContextMenu>
+                  <ContextMenuTrigger as-child>
+                    <div class="flex h-full min-w-0 flex-1 items-center justify-between gap-1.5 text-left">
+                      <div class="flex min-w-0 flex-1 items-center gap-1.5">
+                        <span v-if="item.child.prefix" class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">{{ item.child.prefix }}</span>
+                        <span class="min-w-0 truncate text-xs">{{ item.child.name }}</span>
+                        <span v-if="item.child.suffix" class="shrink-0 text-[10px] text-muted-foreground">· {{ item.child.suffix }}</span>
+                      </div>
 
-                      <div v-if="actionsFor(child).length" class="file-tree-actions shrink-0">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger as-child>
-                            <button type="button" class="file-tree-action-button" aria-label="更多操作" title="更多操作" @click.stop><MoreHorizontal class="size-4" /></button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <template v-for="(act, aIdx) in actionsFor(child)" :key="act.id">
-                              <DropdownMenuSeparator v-if="act.separatorBefore && aIdx" />
-                              <DropdownMenuSub v-if="act.subActions?.length">
-                                <DropdownMenuSubTrigger :icon="iconFor(act.icon, Plus)" :label="act.name" />
-                                <DropdownMenuSubContent>
-                                  <DropdownMenuItem
-                                    v-for="subAction in act.subActions.filter((sa) => matchesActionFor(child, sa))"
-                                    :key="subAction.id"
-                                    :icon="iconFor(subAction.icon, Plus)"
-                                    :label="subAction.name"
-                                    @select="runChildAction(child, subAction)"
-                                  />
-                                </DropdownMenuSubContent>
-                              </DropdownMenuSub>
-                              <DropdownMenuSub v-else-if="act.input">
-                                <DropdownMenuSubTrigger :icon="iconFor(act.icon, MoreHorizontal)" :label="act.name" />
-                                <DropdownMenuSubContent class="w-60 p-2">
-                                  <div class="grid gap-2" @click.stop @keydown.stop>
-                                    <Input :model-value="childInputValue(child, act)" :placeholder="act.input.placeholder" @update:model-value="setChildInputValue(child, act, String($event))" @keydown.enter.prevent="runChildAction(child, act, childInputValue(child, act))" />
-                                    <Button size="sm" class="justify-center" @click="runChildAction(child, act, childInputValue(child, act))">{{ act.input.submitLabel ?? '保存' }}</Button>
-                                  </div>
-                                </DropdownMenuSubContent>
-                              </DropdownMenuSub>
-                              <DropdownMenuSub v-else-if="act.choices?.length">
-                                <DropdownMenuSubTrigger :icon="iconFor(act.icon, MoreHorizontal)" :label="act.name" />
-                                <DropdownMenuSubContent>
-                                  <DropdownMenuItem
-                                    v-for="choice in act.choices"
-                                    :key="choice.value"
-                                    :icon="iconFor(choice.icon, MoreHorizontal)"
-                                    :label="choice.name"
-                                    :checked="act.selected?.(child, choice.value)"
-                                    @select="runChildAction(child, act, choice.value)"
-                                  />
-                                </DropdownMenuSubContent>
-                              </DropdownMenuSub>
-                              <DropdownMenuItem
-                                v-else
-                                :class="act.id === 'delete' ? 'text-destructive focus:text-destructive' : ''"
-                                :icon="iconFor(act.icon, MoreHorizontal)"
-                                :label="act.name"
-                                @select="runChildAction(child, act)"
-                              />
-                            </template>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      <div class="flex items-center gap-0.5 shrink-0" @click.stop>
+                        <button
+                          v-if="item.child.selectableResource || item.child.disableRowOpen"
+                          type="button"
+                          class="file-tree-open-button shrink-0 grid size-5 place-items-center rounded text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors"
+                          title="在编辑器中打开"
+                          aria-label="在编辑器中打开"
+                          @click.stop="emit('open', item.child)"
+                        >
+                          <ExternalLink class="size-3.5" />
+                        </button>
+
+                        <div v-if="actionsFor(item.child).length" class="file-tree-actions shrink-0">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                              <button type="button" class="file-tree-action-button" aria-label="更多操作" title="更多操作" @click.stop><MoreHorizontal class="size-4" /></button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <template v-for="(act, aIdx) in actionsFor(item.child)" :key="act.id">
+                                <DropdownMenuSeparator v-if="act.separatorBefore && aIdx" />
+                                <DropdownMenuSub v-if="act.subActions?.length">
+                                  <DropdownMenuSubTrigger :icon="iconFor(act.icon, Plus)" :label="act.name" />
+                                  <DropdownMenuSubContent>
+                                    <DropdownMenuItem
+                                      v-for="subAction in act.subActions.filter((sa) => matchesActionFor(item.child, sa))"
+                                      :key="subAction.id"
+                                      :icon="iconFor(subAction.icon, Plus)"
+                                      :label="subAction.name"
+                                      @select="runChildAction(item.child, subAction)"
+                                    />
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                                <DropdownMenuSub v-else-if="act.input">
+                                  <DropdownMenuSubTrigger :icon="iconFor(act.icon, MoreHorizontal)" :label="act.name" />
+                                  <DropdownMenuSubContent class="w-60 p-2">
+                                    <div class="grid gap-2" @click.stop @keydown.stop>
+                                      <Input :model-value="childInputValue(item.child, act)" :placeholder="act.input.placeholder" @update:model-value="setChildInputValue(item.child, act, String($event))" @keydown.enter.prevent="runChildAction(item.child, act, childInputValue(item.child, act))" />
+                                      <Button size="sm" class="justify-center" @click="runChildAction(item.child, act, childInputValue(item.child, act))">{{ act.input.submitLabel ?? '保存' }}</Button>
+                                    </div>
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                                <DropdownMenuSub v-else-if="act.choices?.length">
+                                  <DropdownMenuSubTrigger :icon="iconFor(act.icon, MoreHorizontal)" :label="act.name" />
+                                  <DropdownMenuSubContent>
+                                    <DropdownMenuItem
+                                      v-for="choice in act.choices"
+                                      :key="choice.value"
+                                      :icon="iconFor(choice.icon, MoreHorizontal)"
+                                      :label="choice.name"
+                                      :checked="act.selected?.(item.child, choice.value)"
+                                      @select="runChildAction(item.child, act, choice.value)"
+                                    />
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                                <DropdownMenuItem
+                                  v-else
+                                  :class="act.id === 'delete' ? 'text-destructive focus:text-destructive' : ''"
+                                  :icon="iconFor(act.icon, MoreHorizontal)"
+                                  :label="act.name"
+                                  @select="runChildAction(item.child, act)"
+                                />
+                              </template>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </ContextMenuTrigger>
-                <ContextMenuContent v-if="actionsFor(child).length">
-                  <template v-for="(act, aIdx) in actionsFor(child)" :key="act.id">
-                    <ContextMenuSeparator v-if="act.separatorBefore && aIdx" />
-                    <ContextMenuSub v-if="act.subActions?.length">
-                      <ContextMenuSubTrigger><component :is="iconFor(act.icon, Plus)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
-                      <ContextMenuSubContent>
-                        <ContextMenuItem v-for="subAction in act.subActions.filter((sa) => matchesActionFor(child, sa))" :key="subAction.id" @select="runChildAction(child, subAction)"><component :is="iconFor(subAction.icon, Plus)" class="mr-2 size-4" />{{ subAction.name }}</ContextMenuItem>
-                      </ContextMenuSubContent>
-                    </ContextMenuSub>
-                    <ContextMenuSub v-else-if="act.input">
-                      <ContextMenuSubTrigger><component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
-                      <ContextMenuSubContent class="w-60 p-2">
-                        <div class="grid gap-2" @click.stop @keydown.stop>
-                          <Input :model-value="childInputValue(child, act)" :placeholder="act.input.placeholder" @update:model-value="setChildInputValue(child, act, String($event))" @keydown.enter.prevent="runChildAction(child, act, childInputValue(child, act))" />
-                          <Button size="sm" class="justify-center" @click="runChildAction(child, act, childInputValue(child, act))">{{ act.input.submitLabel ?? '保存' }}</Button>
-                        </div>
-                      </ContextMenuSubContent>
-                    </ContextMenuSub>
-                    <ContextMenuSub v-else-if="act.choices?.length">
-                      <ContextMenuSubTrigger><component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
-                      <ContextMenuSubContent>
-                        <ContextMenuItem v-for="choice in act.choices" :key="choice.value" @select="runChildAction(child, act, choice.value)"><component :is="iconFor(choice.icon, MoreHorizontal)" class="mr-2 size-4" />{{ choice.name }}<Check v-if="act.selected?.(child, choice.value)" class="ml-auto size-4" /></ContextMenuItem>
-                      </ContextMenuSubContent>
-                    </ContextMenuSub>
-                    <ContextMenuItem v-else :class="act.id === 'delete' ? 'text-destructive focus:text-destructive' : ''" @select="runChildAction(child, act)">
-                      <component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />
-                      <span class="truncate">{{ act.name }}</span>
-                    </ContextMenuItem>
-                  </template>
-                </ContextMenuContent>
-              </ContextMenu>
-            </RadioItem>
-          </RadioGroup>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent v-if="actionsFor(item.child).length">
+                    <template v-for="(act, aIdx) in actionsFor(item.child)" :key="act.id">
+                      <ContextMenuSeparator v-if="act.separatorBefore && aIdx" />
+                      <ContextMenuSub v-if="act.subActions?.length">
+                        <ContextMenuSubTrigger><component :is="iconFor(act.icon, Plus)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
+                        <ContextMenuSubContent>
+                          <ContextMenuItem v-for="subAction in act.subActions.filter((sa) => matchesActionFor(item.child, sa))" :key="subAction.id" @select="runChildAction(item.child, subAction)"><component :is="iconFor(subAction.icon, Plus)" class="mr-2 size-4" />{{ subAction.name }}</ContextMenuItem>
+                        </ContextMenuSubContent>
+                      </ContextMenuSub>
+                      <ContextMenuSub v-else-if="act.input">
+                        <ContextMenuSubTrigger><component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
+                        <ContextMenuSubContent class="w-60 p-2">
+                          <div class="grid gap-2" @click.stop @keydown.stop>
+                            <Input :model-value="childInputValue(item.child, act)" :placeholder="act.input.placeholder" @update:model-value="setChildInputValue(item.child, act, String($event))" @keydown.enter.prevent="runChildAction(item.child, act, childInputValue(item.child, act))" />
+                            <Button size="sm" class="justify-center" @click="runChildAction(item.child, act, childInputValue(item.child, act))">{{ act.input.submitLabel ?? '保存' }}</Button>
+                          </div>
+                        </ContextMenuSubContent>
+                      </ContextMenuSub>
+                      <ContextMenuSub v-else-if="act.choices?.length">
+                        <ContextMenuSubTrigger><component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
+                        <ContextMenuSubContent>
+                          <ContextMenuItem v-for="choice in act.choices" :key="choice.value" @select="runChildAction(item.child, act, choice.value)"><component :is="iconFor(choice.icon, MoreHorizontal)" class="mr-2 size-4" />{{ choice.name }}<Check v-if="act.selected?.(item.child, choice.value)" class="ml-auto size-4" /></ContextMenuItem>
+                        </ContextMenuSubContent>
+                      </ContextMenuSub>
+                      <ContextMenuItem v-else :class="act.id === 'delete' ? 'text-destructive focus:text-destructive' : ''" @select="runChildAction(item.child, act)">
+                        <component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />
+                        <span class="truncate">{{ act.name }}</span>
+                      </ContextMenuItem>
+                    </template>
+                  </ContextMenuContent>
+                </ContextMenu>
+              </div>
+            </template>
+          </GlideRadioGroup>
 
-          <!-- Multiple Selection: Fluid CheckboxGroup & CheckboxItem -->
-          <CheckboxGroup
+          <!-- Multiple Selection: GlideCheckboxGroup -->
+          <GlideCheckboxGroup
             v-else-if="folderSelectionMode === 'multiple'"
-            :checked-indices="checkedIndices"
+            :model-value="fileChildren.filter(c => c.resourceSelected).map(c => c.id)"
+            :items="fileChildren.map(c => ({ value: c.id, label: c.name, child: c }))"
             class="w-full gap-0.5"
-            size="compact"
+            size="sm"
+            :padding="0"
             :hover-highlight="false"
+            @change="(vals) => {
+              fileChildren.forEach(child => {
+                const want = (vals as (string | number)[]).map(String).includes(child.id);
+                if (!!child.resourceSelected !== want) {
+                  toggleResource(child, want);
+                }
+              });
+            }"
           >
-            <CheckboxItem
-			  :ref="(element) => setHoverRow(`child:${child.id}`, childHoverIndex(child.id), element)"
-              v-for="(child, idx) in fileChildren"
-              :key="child.id"
-              :index="idx"
-              :checked="!!child.resourceSelected"
-              class="file-tree-row file-tree-slot-file group/tree-row w-full cursor-pointer select-none"
-              :class="{
-                'is-selected': selectedId === child.id,
-                'is-resource-selected': child.resourceSelected,
-              }"
-              @toggle="handleCheckboxToggle(child)"
-              @click="emit('select', child)"
-              @dblclick="emit('open', child)"
-            >
-              <ContextMenu>
-                <ContextMenuTrigger as-child>
-                  <div class="flex h-full min-w-0 flex-1 items-center justify-between gap-1.5 text-left">
-                    <div class="flex min-w-0 flex-1 items-center gap-1.5">
-                      <span v-if="child.prefix" class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">{{ child.prefix }}</span>
-                      <span class="min-w-0 truncate text-xs">{{ child.name }}</span>
-                      <span v-if="child.suffix" class="shrink-0 text-[10px] text-muted-foreground">· {{ child.suffix }}</span>
-                    </div>
+            <template #default="{ item, isSelected }">
+              <div
+                :ref="(element) => setHoverRow(`child:${item.child.id}`, childHoverIndex(item.child.id), element as HTMLElement)"
+                class="file-tree-row file-tree-slot-file group/tree-row flex size-full cursor-pointer select-none items-center"
+                :class="{
+                  'is-selected': selectedId === item.child.id,
+                  'is-resource-selected': item.child.resourceSelected,
+                }"
+                @click="emit('select', item.child)"
+                @dblclick="emit('open', item.child)"
+              >
+                <!-- Checkbox Icon -->
+                <div class="mr-2 grid size-4 shrink-0 place-items-center">
+                  <svg
+                    class="size-4 shrink-0 text-foreground transition-all duration-160 origin-center"
+                    :class="isSelected ? 'scale-100 opacity-100' : 'scale-0 opacity-0 pointer-events-none'"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <polyline
+                      points="20 6 9 17 4 12"
+                      :class="isSelected ? 'animate-check-stroke' : ''"
+                    />
+                  </svg>
+                </div>
 
-                    <div class="flex items-center gap-0.5 shrink-0" @click.stop>
-                      <button
-                        v-if="child.selectableResource || child.disableRowOpen"
-                        type="button"
-                        class="file-tree-open-button shrink-0 grid size-5 place-items-center rounded text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors"
-                        title="在编辑器中打开"
-                        aria-label="在编辑器中打开"
-                        @click.stop="emit('open', child)"
-                      >
-                        <ExternalLink class="size-3.5" />
-                      </button>
+                <ContextMenu>
+                  <ContextMenuTrigger as-child>
+                    <div class="flex h-full min-w-0 flex-1 items-center justify-between gap-1.5 text-left">
+                      <div class="flex min-w-0 flex-1 items-center gap-1.5">
+                        <span v-if="item.child.prefix" class="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">{{ item.child.prefix }}</span>
+                        <span class="min-w-0 truncate text-xs">{{ item.child.name }}</span>
+                        <span v-if="item.child.suffix" class="shrink-0 text-[10px] text-muted-foreground">· {{ item.child.suffix }}</span>
+                      </div>
 
-                      <div v-if="actionsFor(child).length" class="file-tree-actions shrink-0">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger as-child>
-                            <button type="button" class="file-tree-action-button" aria-label="更多操作" title="更多操作" @click.stop><MoreHorizontal class="size-4" /></button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <template v-for="(act, aIdx) in actionsFor(child)" :key="act.id">
-                              <DropdownMenuSeparator v-if="act.separatorBefore && aIdx" />
-                              <DropdownMenuSub v-if="act.subActions?.length">
-                                <DropdownMenuSubTrigger :icon="iconFor(act.icon, Plus)" :label="act.name" />
-                                <DropdownMenuSubContent>
-                                  <DropdownMenuItem
-                                    v-for="subAction in act.subActions.filter((sa) => matchesActionFor(child, sa))"
-                                    :key="subAction.id"
-                                    :icon="iconFor(subAction.icon, Plus)"
-                                    :label="subAction.name"
-                                    @select="runChildAction(child, subAction)"
-                                  />
-                                </DropdownMenuSubContent>
-                              </DropdownMenuSub>
-                              <DropdownMenuSub v-else-if="act.input">
-                                <DropdownMenuSubTrigger :icon="iconFor(act.icon, MoreHorizontal)" :label="act.name" />
-                                <DropdownMenuSubContent class="w-60 p-2">
-                                  <div class="grid gap-2" @click.stop @keydown.stop>
-                                    <Input :model-value="childInputValue(child, act)" :placeholder="act.input.placeholder" @update:model-value="setChildInputValue(child, act, String($event))" @keydown.enter.prevent="runChildAction(child, act, childInputValue(child, act))" />
-                                    <Button size="sm" class="justify-center" @click="runChildAction(child, act, childInputValue(child, act))">{{ act.input.submitLabel ?? '保存' }}</Button>
-                                  </div>
-                                </DropdownMenuSubContent>
-                              </DropdownMenuSub>
-                              <DropdownMenuSub v-else-if="act.choices?.length">
-                                <DropdownMenuSubTrigger :icon="iconFor(act.icon, MoreHorizontal)" :label="act.name" />
-                                <DropdownMenuSubContent>
-                                  <DropdownMenuItem
-                                    v-for="choice in act.choices"
-                                    :key="choice.value"
-                                    :icon="iconFor(choice.icon, MoreHorizontal)"
-                                    :label="choice.name"
-                                    :checked="act.selected?.(child, choice.value)"
-                                    @select="runChildAction(child, act, choice.value)"
-                                  />
-                                </DropdownMenuSubContent>
-                              </DropdownMenuSub>
-                              <DropdownMenuItem
-                                v-else
-                                :class="act.id === 'delete' ? 'text-destructive focus:text-destructive' : ''"
-                                :icon="iconFor(act.icon, MoreHorizontal)"
-                                :label="act.name"
-                                @select="runChildAction(child, act)"
-                              />
-                            </template>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                      <div class="flex items-center gap-0.5 shrink-0" @click.stop>
+                        <button
+                          v-if="item.child.selectableResource || item.child.disableRowOpen"
+                          type="button"
+                          class="file-tree-open-button shrink-0 grid size-5 place-items-center rounded text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors"
+                          title="在编辑器中打开"
+                          aria-label="在编辑器中打开"
+                          @click.stop="emit('open', item.child)"
+                        >
+                          <ExternalLink class="size-3.5" />
+                        </button>
+
+                        <div v-if="actionsFor(item.child).length" class="file-tree-actions shrink-0">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                              <button type="button" class="file-tree-action-button" aria-label="更多操作" title="更多操作" @click.stop><MoreHorizontal class="size-4" /></button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <template v-for="(act, aIdx) in actionsFor(item.child)" :key="act.id">
+                                <DropdownMenuSeparator v-if="act.separatorBefore && aIdx" />
+                                <DropdownMenuSub v-if="act.subActions?.length">
+                                  <DropdownMenuSubTrigger :icon="iconFor(act.icon, Plus)" :label="act.name" />
+                                  <DropdownMenuSubContent>
+                                    <DropdownMenuItem
+                                      v-for="subAction in act.subActions.filter((sa) => matchesActionFor(item.child, sa))"
+                                      :key="subAction.id"
+                                      :icon="iconFor(subAction.icon, Plus)"
+                                      :label="subAction.name"
+                                      @select="runChildAction(item.child, subAction)"
+                                    />
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                                <DropdownMenuSub v-else-if="act.input">
+                                  <DropdownMenuSubTrigger :icon="iconFor(act.icon, MoreHorizontal)" :label="act.name" />
+                                  <DropdownMenuSubContent class="w-60 p-2">
+                                    <div class="grid gap-2" @click.stop @keydown.stop>
+                                      <Input :model-value="childInputValue(item.child, act)" :placeholder="act.input.placeholder" @update:model-value="setChildInputValue(item.child, act, String($event))" @keydown.enter.prevent="runChildAction(item.child, act, childInputValue(item.child, act))" />
+                                      <Button size="sm" class="justify-center" @click="runChildAction(item.child, act, childInputValue(item.child, act))">{{ act.input.submitLabel ?? '保存' }}</Button>
+                                    </div>
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                                <DropdownMenuSub v-else-if="act.choices?.length">
+                                  <DropdownMenuSubTrigger :icon="iconFor(act.icon, MoreHorizontal)" :label="act.name" />
+                                  <DropdownMenuSubContent>
+                                    <DropdownMenuItem
+                                      v-for="choice in act.choices"
+                                      :key="choice.value"
+                                      :icon="iconFor(choice.icon, MoreHorizontal)"
+                                      :label="choice.name"
+                                      :checked="act.selected?.(item.child, choice.value)"
+                                      @select="runChildAction(item.child, act, choice.value)"
+                                    />
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                                <DropdownMenuItem
+                                  v-else
+                                  :class="act.id === 'delete' ? 'text-destructive focus:text-destructive' : ''"
+                                  :icon="iconFor(act.icon, MoreHorizontal)"
+                                  :label="act.name"
+                                  @select="runChildAction(item.child, act)"
+                                />
+                              </template>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </ContextMenuTrigger>
-                <ContextMenuContent v-if="actionsFor(child).length">
-                  <template v-for="(act, aIdx) in actionsFor(child)" :key="act.id">
-                    <ContextMenuSeparator v-if="act.separatorBefore && aIdx" />
-                    <ContextMenuSub v-if="act.subActions?.length">
-                      <ContextMenuSubTrigger><component :is="iconFor(act.icon, Plus)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
-                      <ContextMenuSubContent>
-                        <ContextMenuItem v-for="subAction in act.subActions.filter((sa) => matchesActionFor(child, sa))" :key="subAction.id" @select="runChildAction(child, subAction)"><component :is="iconFor(subAction.icon, Plus)" class="mr-2 size-4" />{{ subAction.name }}</ContextMenuItem>
-                      </ContextMenuSubContent>
-                    </ContextMenuSub>
-                    <ContextMenuSub v-else-if="act.input">
-                      <ContextMenuSubTrigger><component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
-                      <ContextMenuSubContent class="w-60 p-2">
-                        <div class="grid gap-2" @click.stop @keydown.stop>
-                          <Input :model-value="childInputValue(child, act)" :placeholder="act.input.placeholder" @update:model-value="setChildInputValue(child, act, String($event))" @keydown.enter.prevent="runChildAction(child, act, childInputValue(child, act))" />
-                          <Button size="sm" class="justify-center" @click="runChildAction(child, act, childInputValue(child, act))">{{ act.input.submitLabel ?? '保存' }}</Button>
-                        </div>
-                      </ContextMenuSubContent>
-                    </ContextMenuSub>
-                    <ContextMenuSub v-else-if="act.choices?.length">
-                      <ContextMenuSubTrigger><component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
-                      <ContextMenuSubContent>
-                        <ContextMenuItem v-for="choice in act.choices" :key="choice.value" @select="runChildAction(child, act, choice.value)"><component :is="iconFor(choice.icon, MoreHorizontal)" class="mr-2 size-4" />{{ choice.name }}<Check v-if="act.selected?.(child, choice.value)" class="ml-auto size-4" /></ContextMenuItem>
-                      </ContextMenuSubContent>
-                    </ContextMenuSub>
-                    <ContextMenuItem v-else :class="act.id === 'delete' ? 'text-destructive focus:text-destructive' : ''" @select="runChildAction(child, act)">
-                      <component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />
-                      <span class="truncate">{{ act.name }}</span>
-                    </ContextMenuItem>
-                  </template>
-                </ContextMenuContent>
-              </ContextMenu>
-            </CheckboxItem>
-          </CheckboxGroup>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent v-if="actionsFor(item.child).length">
+                    <template v-for="(act, aIdx) in actionsFor(item.child)" :key="act.id">
+                      <ContextMenuSeparator v-if="act.separatorBefore && aIdx" />
+                      <ContextMenuSub v-if="act.subActions?.length">
+                        <ContextMenuSubTrigger><component :is="iconFor(act.icon, Plus)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
+                        <ContextMenuSubContent>
+                          <ContextMenuItem v-for="subAction in act.subActions.filter((sa) => matchesActionFor(item.child, sa))" :key="subAction.id" @select="runChildAction(item.child, subAction)"><component :is="iconFor(subAction.icon, Plus)" class="mr-2 size-4" />{{ subAction.name }}</ContextMenuItem>
+                        </ContextMenuSubContent>
+                      </ContextMenuSub>
+                      <ContextMenuSub v-else-if="act.input">
+                        <ContextMenuSubTrigger><component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
+                        <ContextMenuSubContent class="w-60 p-2">
+                          <div class="grid gap-2" @click.stop @keydown.stop>
+                            <Input :model-value="childInputValue(item.child, act)" :placeholder="act.input.placeholder" @update:model-value="setChildInputValue(item.child, act, String($event))" @keydown.enter.prevent="runChildAction(item.child, act, childInputValue(item.child, act))" />
+                            <Button size="sm" class="justify-center" @click="runChildAction(item.child, act, childInputValue(item.child, act))">{{ act.input.submitLabel ?? '保存' }}</Button>
+                          </div>
+                        </ContextMenuSubContent>
+                      </ContextMenuSub>
+                      <ContextMenuSub v-else-if="act.choices?.length">
+                        <ContextMenuSubTrigger><component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />{{ act.name }}</ContextMenuSubTrigger>
+                        <ContextMenuSubContent>
+                          <ContextMenuItem v-for="choice in act.choices" :key="choice.value" @select="runChildAction(item.child, act, choice.value)"><component :is="iconFor(choice.icon, MoreHorizontal)" class="mr-2 size-4" />{{ choice.name }}<Check v-if="act.selected?.(item.child, choice.value)" class="ml-auto size-4" /></ContextMenuItem>
+                        </ContextMenuSubContent>
+                      </ContextMenuSub>
+                      <ContextMenuItem v-else :class="act.id === 'delete' ? 'text-destructive focus:text-destructive' : ''" @select="runChildAction(item.child, act)">
+                        <component :is="iconFor(act.icon, MoreHorizontal)" class="mr-2 size-4" />
+                        <span class="truncate">{{ act.name }}</span>
+                      </ContextMenuItem>
+                    </template>
+                  </ContextMenuContent>
+                </ContextMenu>
+              </div>
+            </template>
+          </GlideCheckboxGroup>
         </template>
 
         <!-- Standard / fallback children -->

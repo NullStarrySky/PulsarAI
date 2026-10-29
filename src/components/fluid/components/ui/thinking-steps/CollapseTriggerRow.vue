@@ -5,7 +5,6 @@ import { AnimatePresence, motion } from "motion-v";
 import { cn } from "../../../lib/utils";
 import { spring } from "../../../lib/springs";
 import { fontWeights } from "../../../lib/font-weight";
-import { useShape } from "../../../lib/shape-context";
 import { useSize } from "../../../lib/size-context";
 import { useIcon } from "../../../lib/icon-context";
 
@@ -23,7 +22,6 @@ const slots = defineSlots<{ default?: () => VNode[] }>();
 defineOptions({ name: "CollapseTriggerRow", inheritAttrs: false });
 
 const ChevronRightIcon = useIcon("chevron-right");
-const shape = useShape();
 const sizeClasses = useSize();
 const isHovered = ref(false);
 const highlighted = computed(() => props.open || isHovered.value);
@@ -38,7 +36,7 @@ const highlighted = computed(() => props.open || isHovered.value);
     <AnimatePresence>
       <motion.div
         v-if="isHovered"
-        :class="cn('pointer-events-none absolute inset-0 bg-hover', shape.bg)"
+        :class="cn('pointer-events-none absolute inset-0 bg-hover', 'rounded-md')"
         :initial="{ opacity: 0 }"
         :animate="{ opacity: 1 }"
         :exit="{ opacity: 0, transition: spring.fast.exit }"
@@ -51,7 +49,7 @@ const highlighted = computed(() => props.open || isHovered.value);
         :class="
           cn(
             'relative z-10 flex cursor-pointer select-none items-center gap-2.5 outline-none',
-            shape.item,
+            'rounded-md',
             sizeClasses.px,
             sizeClasses.variant === 'compact' ? 'py-1.5' : 'py-2',
             'focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]',

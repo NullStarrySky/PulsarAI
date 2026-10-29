@@ -1,39 +1,5 @@
 use super::*;
 
-fn default_web_search_limit() -> usize {
-    5
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WebSearchResult {
-    title: String,
-    url: String,
-    snippet: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ExaSearchResponse {
-    #[serde(default)]
-    results: Vec<ExaSearchItem>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ExaSearchItem {
-    #[serde(default)]
-    title: String,
-    #[serde(default)]
-    url: String,
-    #[serde(default)]
-    highlights: Vec<String>,
-    #[serde(default)]
-    summary: String,
-    #[serde(default)]
-    text: String,
-}
-
 pub(crate) async fn select_database_values(
     db: &Surreal<Db>,
     table: &str,
@@ -45,6 +11,7 @@ pub(crate) async fn select_database_values(
     Ok(rows.into_iter().map(|record| record.value).collect())
 }
 
+#[tauri::command]
 pub(crate) async fn model_proxy_fetch(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -100,7 +67,6 @@ pub(crate) async fn model_proxy_fetch(
         .await
         .map_err(|error| error.to_string())?
         .to_vec();
-
     Ok(ProxyFetchResponse {
         url,
         status: status.as_u16(),
@@ -111,54 +77,44 @@ pub(crate) async fn model_proxy_fetch(
     })
 }
 
-fn proxy_fetch_client(request: &ProxyFetchRequest) -> Result<reqwest::Client, String> {
-    let redirect = request.redirect.as_deref().unwrap_or("follow");
-    let policy = match redirect {
-        "follow" => reqwest::redirect::Policy::limited(10),
-        "manual" | "error" => reqwest::redirect::Policy::none(),
-        _ => return Err("request.redirect 必须是 follow、manual 或 error。".to_string()),
-    };
-    let timeout = request.timeout.unwrap_or(30_000);
-    if !(1..=120_000).contains(&timeout) {
-        return Err("request.timeout 必须是 1 到 120000 之间的整数。".to_string());
-    }
-    reqwest::Client::builder()
-        .redirect(policy)
-        .timeout(std::time::Duration::from_millis(timeout))
-        .build()
-        .map_err(|error| error.to_string())
-}
-
 #[tauri::command]
-pub(crate) async fn proxy_fetch(request: ProxyFetchRequest) -> Result<ProxyFetchResponse, String> {
+pub(crate) async fn proxy_fetch(
+    state: State<'_, AppState>,
+    request: ProxyFetchRequest,
+) -> Result<ProxyFetchResponse, String> {
     let method = reqwest::Method::from_bytes(request.method.as_bytes())
-        .map_err(|error| error.to_string())?;
-    let initial_url = reqwest::Url::parse(&request.url).map_err(|error| error.to_string())?;
-    if !matches!(initial_url.scheme(), "http" | "https") {
-        return Err("只允许 HTTP(S) 代理请求。".to_string());
-    }
-    let client = proxy_fetch_client(&request)?;
-    let redirect = request.redirect.clone();
+        .map_err(|error| format!("无效请求方法：{error}"))?;
     let mut headers = HeaderMap::new();
+
     for header in request.headers {
         headers.insert(
-            HeaderName::from_str(&header.name).map_err(|error| error.to_string())?,
-            HeaderValue::from_str(&header.value).map_err(|error| error.to_string())?,
+            HeaderName::from_str(&header.name)
+                .map_err(|error| format!("无效请求头名：{error}"))?,
+            HeaderValue::from_str(&header.value)
+                .map_err(|error| format!("无效请求头值：{error}"))?,
         );
     }
-    let response = client
-        .request(method, initial_url.clone())
-        .headers(headers)
-        .body(request.body.unwrap_or_default())
+
+    let mut builder = state
+        .http
+        .request(method, request.url)
+        .headers(headers);
+
+    if let Some(body) = request.body {
+        builder = builder.body(body);
+    }
+
+    if let Some(timeout_ms) = request.timeout {
+        builder = builder.timeout(std::time::Duration::from_millis(timeout_ms));
+    }
+
+    let response = builder
         .send()
         .await
         .map_err(|error| format!("网络请求失败：{error}"))?;
-    if redirect.as_deref() == Some("error") && response.status().is_redirection() {
-        return Err(format!("网络请求遇到重定向：{}", response.status()));
-    }
     let status = response.status();
-    let redirected = response.url() != &initial_url;
     let url = response.url().to_string();
+    let redirected = response.status().is_redirection();
     let status_text = status.canonical_reason().unwrap_or_default().to_string();
     let headers = response
         .headers()
@@ -183,80 +139,4 @@ pub(crate) async fn proxy_fetch(request: ProxyFetchRequest) -> Result<ProxyFetch
         headers,
         body,
     })
-}
-
-pub(crate) async fn exa_web_search(
-    app: &AppHandle,
-    state: &AppState,
-    query: &str,
-    limit: usize,
-) -> Result<Vec<WebSearchResult>, String> {
-    let db = app_db(app, state).await?;
-    let api_key = get_secret_value(db, "webSearch.exa.apiKey")
-        .await?
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| "请先在网络搜索设置中填写 Exa API Key。".to_string())?;
-    let response = state
-        .http
-        .post("https://api.exa.ai/search")
-        .header("x-api-key", api_key)
-        .json(&serde_json::json!({
-            "query": query,
-            "type": "auto",
-            "numResults": limit,
-            "contents": { "highlights": true },
-        }))
-        .send()
-        .await
-        .map_err(|error| format!("Exa 搜索请求失败：{error}"))?
-        .error_for_status()
-        .map_err(|error| format!("Exa 搜索请求失败：{error}"))?;
-    let response: ExaSearchResponse = response
-        .json()
-        .await
-        .map_err(|error| format!("Exa 搜索响应无效：{error}"))?;
-    Ok(response
-        .results
-        .into_iter()
-        .filter_map(|result| {
-            let title = result.title.trim().to_string();
-            let url = result.url.trim().to_string();
-            if title.is_empty() || url.is_empty() {
-                return None;
-            }
-            let snippet = result
-                .highlights
-                .into_iter()
-                .next()
-                .filter(|value| !value.trim().is_empty())
-                .or_else(|| (!result.summary.trim().is_empty()).then_some(result.summary))
-                .unwrap_or(result.text)
-                .chars()
-                .take(1_200)
-                .collect();
-            Some(WebSearchResult {
-                title,
-                url,
-                snippet,
-            })
-        })
-        .collect())
-}
-
-#[tauri::command]
-pub(crate) async fn web_search(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    request: WebSearchRequest,
-) -> Result<Vec<WebSearchResult>, String> {
-    let query = request.query.trim();
-    if query.is_empty() {
-        return Err("搜索关键词不能为空。".to_string());
-    }
-    let limit = request.limit.clamp(1, 10);
-    match request.provider.as_deref().unwrap_or("exa") {
-        "exa" => exa_web_search(&app, &state, query, limit).await,
-        "playwright" => Err("Playwright 浏览器搜索仅在 Electron 桌面端可用。".to_string()),
-        provider => Err(format!("未知网络搜索提供商：{provider}")),
-    }
 }

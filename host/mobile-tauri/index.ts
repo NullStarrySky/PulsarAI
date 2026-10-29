@@ -58,7 +58,10 @@ export const host: Host = {
 		resetCharacterData: () => command("database_reset_character_data"),
 	},
 	config: {
-		get: (async (key: string, fallback?: unknown) => ((await command("config_get", { key })) ?? fallback ?? null)) as HostConfig["get"],
+		get: (async (key: string, fallback?: unknown) =>
+			(await command("config_get", { key })) ??
+			fallback ??
+			null) as HostConfig["get"],
 		set: (key, value) => command("config_set", { key, value }),
 		remove: (key) => command("config_delete", { key }),
 	},
@@ -96,12 +99,8 @@ export const host: Host = {
 	external: { open: openUrl },
 	migration: { invoke: (name, payload) => command(name, payload) },
 	network: {
-		webSearch: (request) => command("web_search", { request }),
 		modelProxyFetch: (request) => command("model_proxy_fetch", { request }),
 		proxyFetch: (request) => command("proxy_fetch", { request }),
-	},
-	local: {
-		invoke: (area, name, payload) => command(`${area}_${name}`, payload),
 	},
 	speech: {
 		async invoke(name, payload) {

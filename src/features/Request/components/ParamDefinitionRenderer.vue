@@ -28,7 +28,7 @@ const customComponent = computed(() =>
   <component
     v-if="customComponent"
     :is="customComponent"
-    v-bind="definition.customBlockComponent === 'PiperModelDownload' ? { type: 'piper' } : definition.customBlockComponent === 'WhisperModelDownload' ? { type: 'whisper' } : { name: (definition.paramComponent.componentParam as { name?: string }).name || '', title: definition.title }"
+    v-bind="{ name: (definition.paramComponent.componentParam as { name?: string }).name || '', title: definition.title }"
   />
   <div v-else class="flex min-h-11 items-center gap-3">
     <div class="min-w-0 flex-1">

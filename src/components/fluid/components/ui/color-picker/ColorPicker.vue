@@ -1,14 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch, type CSSProperties } from "vue";
 import { cn } from "../../../lib/utils";
-import { useShape } from "../../../lib/shape-context";
 import { provideSize, useSize, type SizeVariant } from "../../../lib/size-context";
-import { useSurface, provideSurface } from "../../../lib/surface-context";
-import { surfaceClasses } from "../../../lib/surface-classes";
 import { useIcon } from "../../../lib/icon-context";
-import Slider from "../slider/Slider.vue";
-import type { SliderValue } from "../slider/SliderCompact.vue";
-import Tooltip from "../tooltip/Tooltip.vue";
+import { Slider } from "@/components/common/Slider";
 import SaturationSquare from "./SaturationSquare.vue";
 import FormatDropdown from "./FormatDropdown.vue";
 import ColorInput from "./ColorInput.vue";
@@ -159,11 +154,7 @@ const solidColorString = computed(
   () => `rgb(${solidR.value}, ${solidG.value}, ${solidB.value})`
 );
 
-const substrate = useSurface();
-const pickerLevel = computed(() => Math.max(substrate.value, 3));
-provideSurface(pickerLevel);
 
-const shape = useShape();
 const sizeClasses = useSize(() => props.size);
 
 // size prop 把整个面板——格式下拉、输入框、取色器——钉在一档。
@@ -250,12 +241,12 @@ async function handleEyedrop() {
   }
 }
 
-function handleHueSlider(v: SliderValue) {
+function handleHueSlider(v: number | number[]) {
   const h = Array.isArray(v) ? (v[0] ?? 0) : v;
   updateHsv({ h });
 }
 
-function handleAlphaSlider(v: SliderValue) {
+function handleAlphaSlider(v: number | number[]) {
   const raw = Array.isArray(v) ? (v[0] ?? 0) : v;
   updateHsv({ a: raw / 100 });
 }
@@ -356,7 +347,7 @@ const channelFields = computed<ChannelField[]>(() => {
 const hueColor = computed(() => `hsl(${hsv.value.h}, 100%, 50%)`);
 
 const panelClass = computed(() =>
-  cn("flex flex-col gap-2 p-3", surfaceClasses(pickerLevel.value, 1), shape.value.container, props.class)
+  cn("flex flex-col gap-2 p-3", "bg-popover text-popover-foreground border border-border shadow-md rounded-xl", props.class)
 );
 </script>
 
@@ -417,7 +408,7 @@ const panelClass = computed(() =>
             'flex cursor-pointer items-center justify-center bg-transparent text-muted-foreground outline-none transition-colors duration-80 hover:bg-hover hover:text-foreground active:bg-active focus-visible:ring-1 focus-visible:ring-[color:var(--focus-ring,#6B97FF)]',
             sizeClasses.control,
             sizeClasses.px,
-            shape.input
+            'rounded-md'
           )
         "
         @click="handleEyedrop"
@@ -428,11 +419,10 @@ const panelClass = computed(() =>
 
     <!-- 通道行：hex 两列；rgb/hsl/oklch 四列 -->
     <div :class="currentFormat === 'hex' ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-4 gap-1'">
-      <Tooltip
+      <div
         v-for="field in channelFields"
         :key="field.key"
-        :content="field.label"
-        :delay-duration="300"
+        :title="field.label"
       >
         <ColorInput
           :value="field.value"
@@ -449,8 +439,8 @@ const panelClass = computed(() =>
           :scrubbable="field.key !== 'hex'"
           @commit="(next: string) => handleChannelChange(field.key, next)"
         />
-      </Tooltip>
-      <Tooltip content="不透明度" :delay-duration="300">
+      </div>
+      <div title="不透明度">
         <ColorInput
           :value="`${alphaPct}%`"
           ariaLabel="不透明度"
@@ -469,7 +459,7 @@ const panelClass = computed(() =>
             }
           "
         />
-      </Tooltip>
+      </div>
     </div>
 
     <!-- 色板 -->
@@ -482,7 +472,7 @@ const panelClass = computed(() =>
         :class="
           cn(
             'relative shrink-0 cursor-pointer overflow-hidden outline-none transition-shadow duration-100',
-            shape.bg
+            'rounded-md'
           )
         "
         :style="{

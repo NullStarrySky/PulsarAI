@@ -2,7 +2,6 @@
 import { computed, ref, watch } from "vue";
 import { cn } from "../../../lib/utils";
 import { fontWeights } from "../../../lib/font-weight";
-import { useShape } from "../../../lib/shape-context";
 import { useSize } from "../../../lib/size-context";
 
 // ─── ColorInput ──────────────────────────────────────────────────────────
@@ -45,7 +44,6 @@ const emit = defineEmits<{
 
 defineOptions({ name: "ColorInput", inheritAttrs: false });
 
-const shape = useShape();
 const sizeClasses = useSize();
 const compact = computed(() => sizeClasses.value.variant === "compact");
 const inputRef = ref<HTMLInputElement | null>(null);
@@ -197,7 +195,7 @@ const wrapperClass = computed(() =>
     "flex select-none items-center bg-transparent px-2 transition-colors duration-80 hover:bg-hover active:bg-active focus-within:ring-1 focus-within:ring-[color:var(--focus-ring,#6B97FF)]",
     sizeClasses.value.control,
     props.scrubbable && !editing.value && "cursor-ew-resize",
-    shape.value.input,
+    "rounded-md",
     props.class
   )
 );

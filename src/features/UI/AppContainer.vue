@@ -16,6 +16,7 @@ import { useResponsiveStore } from "@/features/Environment/responsive-store";
 import SettingsContent from "@/features/Environment/setting/SettingsContent.vue";
 import SettingsSidebar from "@/features/Environment/setting/SettingsSidebar.vue";
 import { useEnvironmentStore } from "@/features/Environment/store";
+import { PluginAssetTreePanel } from "@/features/Plugin/components";
 import { useCharacterList } from "@/features/Plugin/dataflow/use-plugin-data";
 import { resolveMediaUrl } from "@/features/Plugin/media/media-link";
 import { host } from "@/host";
@@ -79,9 +80,16 @@ watch(
 const conversationTitle = computed(() => activeConversation.value?.title || "");
 
 // Active character info & avatar
+const effectivePluginId = computed(
+	() =>
+		activeConversation.value?.localPluginId ||
+		managerPluginId.value ||
+		[...characterList.characters.value][0]?.id ||
+		"",
+);
+
 const activeCharacter = computed(() => {
-	const pluginId =
-		activeConversation.value?.localPluginId || managerPluginId.value;
+	const pluginId = effectivePluginId.value;
 	return [...characterList.characters.value].find((c) => c.id === pluginId);
 });
 
@@ -422,11 +430,13 @@ async function handleToggleMaximize() {
         <aside class="flex h-full w-full flex-col bg-transparent select-none">
           <!-- Top spacer matching header height -->
           <div class="h-11 shrink-0" />
-          <div class="flex h-10 shrink-0 items-center justify-between px-3">
-            <span class="text-xs font-semibold text-muted-foreground">右侧栏</span>
-          </div>
-          <div class="flex flex-1 items-center justify-center p-4 text-xs text-muted-foreground/60">
-            暂无内容
+          <PluginAssetTreePanel
+            v-if="effectivePluginId"
+            class="min-h-0 flex-1"
+            :local-plugin-id="effectivePluginId"
+          />
+          <div v-else class="flex flex-1 flex-col items-center justify-center p-4 text-center text-xs text-muted-foreground/60">
+            暂未选择角色插件
           </div>
         </aside>
       </div>

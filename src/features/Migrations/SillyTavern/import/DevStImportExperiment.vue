@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { Button, TabItem, Tabs, TabsList } from "@/components/fluid";
+import { Button } from "@/components/fluid";
+import { GlideTabs } from "@/components/common/glide";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import FileTree, {
@@ -205,12 +206,16 @@ function handleSelectTreeNode(node: FileTreeNode) {
       <div class="mb-2.5 flex items-center justify-between border-b pb-2">
         <div class="flex items-center gap-2">
           <h2 class="text-xs font-semibold text-foreground">原始资源</h2>
-          <Tabs v-if="sourceKind !== 'other'" v-model="viewMode" size="compact">
-            <TabsList>
-              <TabItem value="render" class="h-6 px-2 text-[11px]"><Eye class="mr-1 size-3" />渲染</TabItem>
-              <TabItem value="source" class="h-6 px-2 text-[11px]"><Code class="mr-1 size-3" />源码</TabItem>
-            </TabsList>
-          </Tabs>
+          <GlideTabs
+            v-if="sourceKind !== 'other'"
+            v-model="viewMode"
+            size="sm"
+            class="w-auto"
+            :items="[
+              { value: 'render', label: '渲染', icon: Eye },
+              { value: 'source', label: '源码', icon: Code }
+            ]"
+          />
         </div>
         <Button size="sm" class="h-7 gap-1 px-2.5 text-xs" @click="choose">
           <Upload class="size-3.5" />上传

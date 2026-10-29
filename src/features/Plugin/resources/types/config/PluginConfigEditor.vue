@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { Button, Switch } from "@/components/fluid";
+import { Slider } from "@/components/common/Slider";
 import {
-	Button,
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-	Slider,
-	Switch,
-} from "@/components/fluid";
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import SettingGroup from "@/features/Environment/setting/SettingGroup.vue";
@@ -68,7 +67,7 @@ function selectOptions(entry: PluginConfigEntry) {
         <SettingItem v-for="([key, entry]) in entries" :key="key" :title="title(key, entry)" :description="entry.renderer.description">
           <Switch v-if="entry.renderer.name === 'Switch' || entry.renderer.name === 'Checkbox'" :model-value="Boolean(entry.value)" @update:model-value="update(key, Boolean($event))" />
           <DefaultPicker v-else-if="entry.renderer.name === 'ModelSelect'" :model-value="entry.value && typeof entry.value === 'object' && !Array.isArray(entry.value) ? entry.value as any : null" :kind="entry.renderer.apiType ?? 'text'" allow-empty empty-label="继承全局默认" @update:model-value="update(key, $event)" />
-          <div v-else-if="entry.renderer.name === 'Slider'" class="flex w-full max-w-sm items-center gap-3"><Slider class="flex-1" :model-value="[numberValue(entry.value, entry.renderer.min ?? 0)]" :min="entry.renderer.min ?? 0" :max="entry.renderer.max ?? 100" :step="entry.renderer.step ?? 1" @update:model-value="update(key, Array.isArray($event) ? Number($event[0] ?? 0) : Number($event ?? 0))" /><span class="w-14 text-right text-xs text-muted-foreground">{{ numberValue(entry.value) }}{{ entry.renderer.suffix }}</span></div>
+          <div v-else-if="entry.renderer.name === 'Slider'" class="flex w-full max-w-sm items-center gap-3"><Slider class="flex-1" :model-value="numberValue(entry.value, entry.renderer.min ?? 0)" :min="entry.renderer.min ?? 0" :max="entry.renderer.max ?? 100" :step="entry.renderer.step ?? 1" @update:model-value="update(key, Array.isArray($event) ? Number($event[0] ?? 0) : Number($event ?? 0))" /><span class="w-14 text-right text-xs text-muted-foreground">{{ numberValue(entry.value) }}{{ entry.renderer.suffix }}</span></div>
           <Select v-else-if="entry.renderer.name === 'Select'" :model-value="JSON.stringify(entry.value)" @update:model-value="value => { const option = selectOptions(entry).find((item) => JSON.stringify(item.value) === value); if (option) update(key, option.value); }"><SelectTrigger class="w-full sm:w-72"><SelectValue :placeholder="entry.renderer.placeholder ?? '请选择'" /></SelectTrigger><SelectContent><SelectItem v-for="option in selectOptions(entry)" :key="JSON.stringify(option.value)" :value="JSON.stringify(option.value)">{{ option.label }}</SelectItem></SelectContent></Select>
           <Textarea v-else-if="entry.renderer.name === 'Textarea'" class="w-full sm:w-96" :model-value="typeof entry.value === 'string' ? entry.value : ''" :placeholder="entry.renderer.placeholder" @update:model-value="update(key, String($event))" />
           <Input v-else :type="entry.renderer.name === 'Input' ? entry.renderer.type ?? 'text' : 'text'" class="w-full sm:w-72" :min="entry.renderer.name === 'Input' ? entry.renderer.min : undefined" :max="entry.renderer.name === 'Input' ? entry.renderer.max : undefined" :step="entry.renderer.name === 'Input' ? entry.renderer.step : undefined" :placeholder="entry.renderer.name === 'Input' ? entry.renderer.placeholder : undefined" :model-value="typeof entry.value === 'string' || typeof entry.value === 'number' ? entry.value : ''" @update:model-value="update(key, entry.renderer.name === 'Input' && entry.renderer.type === 'number' ? Number($event) : String($event))" />

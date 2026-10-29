@@ -4,7 +4,6 @@ import { motion } from "motion-v";
 import { cn } from "../../../lib/utils";
 import { spring } from "../../../lib/springs";
 import { fontWeights } from "../../../lib/font-weight";
-import { useShape } from "../../../lib/shape-context";
 import { useSize } from "../../../lib/size-context";
 import { useIcon } from "../../../lib/icon-context";
 import type { StepStatus } from "./thinking-steps-context";
@@ -34,7 +33,6 @@ const slots = defineSlots<{ default?: () => VNode[] }>();
 defineOptions({ name: "ThinkingStep" });
 
 const Icon = useIcon((props.icon || "dot") as any);
-const shape = useShape();
 const sizeClasses = useSize();
 
 // 步骤展开动画的测量布局高度。height: "auto" 由 motion 从视觉尺寸解析，
@@ -82,7 +80,7 @@ const isActive = computed(() => props.status === "active");
       :animate="{ opacity: 1 }"
       :transition="{ duration: 0.24, delay: props.delay, ease: 'easeOut' }"
     >
-      <div :class="cn('flex gap-2.5 px-2 py-1.5', shape.item)">
+      <div :class="cn('flex gap-2.5 px-2 py-1.5', 'rounded-md')">
         <!-- 图标列 + 连续连接线 -->
         <div class="flex w-[14px] shrink-0 flex-col items-center">
           <div class="pt-0.5">

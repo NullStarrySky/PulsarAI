@@ -13,7 +13,6 @@ import {
   type ButtonVariant,
 } from "./button-variants";
 import { cn } from "../../../lib/utils";
-import { useShape } from "../../../lib/shape-context";
 import { useSizeVariant } from "../../../lib/size-context";
 
 const props = withDefaults(
@@ -34,7 +33,6 @@ const props = withDefaults(
 
 const attrs = useAttrs();
 const slots = useSlots();
-const shape = useShape();
 
 defineOptions({ name: "Button", inheritAttrs: false });
 
@@ -69,7 +67,7 @@ const rootClass = computed(() =>
       variant: props.variant,
       size: resolvedSize.value,
     }),
-    shape.value.button,
+    "rounded-md",
     attrs.class as string | undefined
   )
 );

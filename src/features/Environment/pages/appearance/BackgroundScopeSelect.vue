@@ -7,7 +7,7 @@ import {
 	PopoverTrigger,
 } from "reka-ui";
 import { motion } from "motion-v";
-import { CheckboxGroup, CheckboxItem } from "@/components/fluid";
+import { GlideCheckboxGroup } from "@/components/common/glide";
 import { spring } from "@/components/fluid/lib/springs";
 import type { BackgroundScope } from "@/features/Environment/defaults";
 import { ChevronDown } from "@/lib/remix-icons";
@@ -33,15 +33,6 @@ const scopeOptions: { id: BackgroundScope; label: string }[] = [
 	{ id: "settings", label: "设置" },
 ];
 
-const checkedIndices = computed(() => {
-	const current = props.modelValue ?? [];
-	const indices = new Set<number>();
-	scopeOptions.forEach((opt, idx) => {
-		if (current.includes(opt.id)) indices.add(idx);
-	});
-	return indices;
-});
-
 const summaryText = computed(() => {
 	const current = props.modelValue ?? [];
 	if (current.length === scopeOptions.length) {
@@ -55,17 +46,6 @@ const summaryText = computed(() => {
 		.map((opt) => opt.label)
 		.join("、");
 });
-
-function toggleScope(id: BackgroundScope) {
-	const current = [...(props.modelValue ?? [])];
-	const index = current.indexOf(id);
-	if (index >= 0) {
-		current.splice(index, 1);
-	} else {
-		current.push(id);
-	}
-	emit("update:modelValue", current);
-}
 
 function selectAll() {
 	emit("update:modelValue", ["blank", "conversation", "settings"]);
@@ -112,21 +92,13 @@ function clearAll() {
             勾选背景显示的范围
           </div>
 
-          <CheckboxGroup
-            :checked-indices="checkedIndices"
+          <GlideCheckboxGroup
+            :options="scopeOptions.map(opt => ({ value: opt.id, label: opt.label }))"
+            :model-value="props.modelValue"
+            size="sm"
             class="w-full"
-          >
-            <CheckboxItem
-              v-for="(opt, idx) in scopeOptions"
-              :key="opt.id"
-              :index="idx"
-              :checked="(props.modelValue ?? []).includes(opt.id)"
-              class="w-full text-xs"
-              @toggle="toggleScope(opt.id)"
-            >
-              {{ opt.label }}
-            </CheckboxItem>
-          </CheckboxGroup>
+            @update:model-value="emit('update:modelValue', $event as BackgroundScope[])"
+          />
 
           <div class="mt-1 flex items-center justify-between border-t border-border/60 px-1 pt-1.5 text-[11px]">
             <button

@@ -3,7 +3,6 @@ import { computed, type HTMLAttributes, type VNode } from "vue";
 import { motion } from "motion-v";
 import { cn } from "../../../lib/utils";
 import { spring } from "../../../lib/springs";
-import { useShape } from "../../../lib/shape-context";
 import { useSize, type SizeVariant } from "../../../lib/size-context";
 import { useTouchPrimary } from "../../../hooks/use-touch-primary";
 import FileThumbnail from "./FileThumbnail.vue";
@@ -41,7 +40,6 @@ const slots = defineSlots<{
   actions?: () => VNode[];
 }>();
 
-const shape = useShape();
 const compact = computed(() => useSize(() => props.size).value.variant === "compact");
 const isUser = computed(() => props.from === "user");
 // 悬停显示在触控设备上不可达——meta 行保持常显。
@@ -69,7 +67,7 @@ const bodyClass = computed(() =>
     // 最后一行，逐词生长的文本会明显抖动；默认换行从左到右追加、保持不动。
     isUser.value
       ? cn(
-          shape.value.bg,
+          "rounded-2xl",
           compact.value ? "px-3" : "px-3.5",
           "text-pretty bg-[color-mix(in_oklab,var(--accent),var(--background)_45%)] text-accent-foreground"
         )

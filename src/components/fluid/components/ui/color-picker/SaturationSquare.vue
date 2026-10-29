@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { cn } from "../../../lib/utils";
-import { useShape } from "../../../lib/shape-context";
 import { clamp01, hsvToRgb } from "./color-math";
 
 // ─── SaturationSquare ────────────────────────────────────────────────────
@@ -27,7 +26,6 @@ const dragging = ref(false);
 const focused = ref(false);
 const hovered = ref(false);
 const cursorPos = ref<{ x: number; y: number } | null>(null);
-const shape = useShape();
 
 function updateFromPointer(clientX: number, clientY: number) {
   const rect = refEl.value?.getBoundingClientRect();
@@ -87,7 +85,7 @@ const thumbColor = computed(() => {
 });
 
 const innerRadius = computed(() =>
-  shape.value.bg === "rounded-[20px]" ? "rounded-2xl" : shape.value.bg
+  "rounded-lg"
 );
 
 const gradientStyle = computed(() => ({
@@ -101,7 +99,7 @@ const gradientStyle = computed(() => ({
     role="application"
     aria-label="饱和度与明度"
     tabindex="0"
-    :class="cn('relative w-full cursor-none select-none touch-none outline-none', shape.bg)"
+    :class="cn('relative w-full cursor-none select-none touch-none outline-none', 'rounded-lg')"
     :style="{
       height: `${SQUARE_HEIGHT}px`,
       boxShadow: focused ? '0 0 0 2px var(--focus-ring, #6B97FF)' : undefined,

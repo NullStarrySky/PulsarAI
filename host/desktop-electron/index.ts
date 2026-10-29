@@ -1,5 +1,5 @@
-import type { Host, HostConfig } from "../contracts";
 import { mockHostDatabase } from "@/features/Database/mock-database";
+import type { Host, HostConfig } from "../contracts";
 
 declare global {
 	interface Window {
@@ -44,14 +44,11 @@ const invoke = <T>(
 
 const platform = navigator.userAgent.toLocaleLowerCase().includes("windows")
 	? "windows"
-		: navigator.userAgent.toLocaleLowerCase().includes("mac")
-			? "macos"
-			: "linux";
+	: navigator.userAgent.toLocaleLowerCase().includes("mac")
+		? "macos"
+		: "linux";
 
-const fallbackMedia = new Map<
-	string,
-	{ bytes: number[]; mediaType: string }
->();
+const fallbackMedia = new Map<string, { bytes: number[]; mediaType: string }>();
 
 function fallbackMediaUrl(bytes: number[], mediaType: string) {
 	let binary = "";
@@ -158,7 +155,10 @@ export const host: Host = {
 				: mockHostDatabase.resetCharacterData(),
 	},
 	config: {
-		get: (async (key: string, fallback?: unknown) => ((await invoke("config", "get", { key })) ?? fallback ?? null)) as HostConfig["get"],
+		get: (async (key: string, fallback?: unknown) =>
+			(await invoke("config", "get", { key })) ??
+			fallback ??
+			null) as HostConfig["get"],
 		set: (key, value) => invoke("config", "set", { key, value }),
 		remove: (key) => invoke("config", "remove", { key }),
 	},
@@ -220,22 +220,20 @@ export const host: Host = {
 		invoke: (command, payload) => invoke("migration", command, payload),
 	},
 	network: {
-		webSearch: (request) => invoke("network", "webSearch", { request }),
 		modelProxyFetch: (request) =>
 			invoke("network", "modelProxyFetch", { request }),
 		proxyFetch: (request) => invoke("network", "proxyFetch", { request }),
-	},
-	local: {
-		invoke: (area, command, payload) =>
-			invoke("local", `${area}:${command}`, payload),
 	},
 	speech: { invoke: desktopSpeech },
 	webSocket: DesktopWebSocket,
 	desktop: {
 		window: {
-			switchConversation: (id) => invoke("window", "switchConversation", { id }),
-			releaseConversation: (id) => invoke("window", "releaseConversation", { id }),
-			isConversationOpen: (id) => invoke("window", "isConversationOpen", { id }),
+			switchConversation: (id) =>
+				invoke("window", "switchConversation", { id }),
+			releaseConversation: (id) =>
+				invoke("window", "releaseConversation", { id }),
+			isConversationOpen: (id) =>
+				invoke("window", "isConversationOpen", { id }),
 			minimize: () => invoke("window", "minimize"),
 			toggleMaximize: () => invoke("window", "toggleMaximize"),
 			isMaximized: () => invoke("window", "isMaximized"),

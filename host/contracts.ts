@@ -196,16 +196,8 @@ export interface Host {
 		invoke<T>(command: string, payload: { path: string }): Promise<T>;
 	};
 	network: {
-		webSearch<T>(request: unknown): Promise<T>;
 		modelProxyFetch<T>(request: unknown): Promise<T>;
 		proxyFetch(request: HostProxyFetchRequest): Promise<HostProxyFetchResponse>;
-	};
-	local: {
-		invoke<T>(
-			area: "tts" | "stt",
-			command: string,
-			payload?: Record<string, unknown>,
-		): Promise<T>;
 	};
 	speech: {
 		invoke<T>(command: string, payload?: Record<string, unknown>): Promise<T>;

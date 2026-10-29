@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { Button, Switch } from "@/components/fluid";
 import {
-	Button,
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-	Switch,
-} from "@/components/fluid";
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "@/lib/remix-icons";

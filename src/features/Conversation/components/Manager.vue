@@ -10,14 +10,15 @@ import {
 import {
 	Badge,
 	Button,
+} from "@/components/fluid";
+import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
-	FluidList,
-	FluidListItem,
-} from "@/components/fluid";
+} from "@/components/ui/dropdown-menu";
+import { GlideList } from "@/components/common/glide";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import { useCharacterList } from "@/features/Plugin/dataflow/use-plugin-data";
@@ -267,94 +268,95 @@ async function removeConversation(conversationId: string) {
     <!-- Middle: Conversation List with FluidList gliding highlight -->
     <ScrollArea class="min-h-0 flex-1">
       <div class="p-2">
-        <FluidList
+        <GlideList
           :model-value="props.conversationId"
+          :items="visibleConversations.map(c => ({ value: c.id, label: c.title, conversation: c }))"
+          :item-size="44"
           active-class="bg-primary/10 text-primary font-medium"
           hover-class="bg-muted/70"
-          class="space-y-0.5"
+          class="w-full gap-0.5"
           @update:model-value="(val) => selectConversation(String(val))"
           @wheel="handleConversationWheel"
         >
-          <FluidListItem
-            v-for="(conversation, index) in visibleConversations"
-            :key="conversation.id"
-            :value="conversation.id"
-            :index="index"
-            class="group relative flex w-full cursor-pointer items-center gap-2 rounded-lg p-2 text-left"
-            @contextmenu.prevent="openContextMenu(conversation.id)"
-          >
-            <span class="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
-              <MessageCircle class="size-3.5" />
-            </span>
-
-            <!-- Inline rename input -->
-            <div v-if="editingId === conversation.id" class="flex min-w-0 flex-1 items-center gap-1" @click.stop>
-              <input
-                ref="inlineInputRef"
-                v-model="editingTitle"
-                class="h-7 w-full rounded border border-primary bg-background px-1.5 text-xs text-foreground outline-none shadow-xs"
-                @keydown.enter.prevent="saveRename(conversation.id)"
-                @keydown.esc.prevent="cancelRename"
-                @blur="saveRename(conversation.id)"
-              />
-            </div>
-
-            <!-- Normal title & preview display -->
-            <div v-else class="min-w-0 flex-1">
-              <div class="flex items-center gap-1.5">
-                <span class="truncate text-xs font-medium">{{ conversation.title }}</span>
-                <Badge v-if="conversation.lifetime === 'app'" variant="secondary" class="px-1 text-[9px]">临时</Badge>
-              </div>
-              <span class="block truncate text-[10px] text-muted-foreground">
-                {{ conversation.lastMessagePreview || '暂无消息' }}
-              </span>
-            </div>
-
-            <!-- Pinned icon indicator -->
-            <span v-if="conversation.pinned && editingId !== conversation.id" class="shrink-0 text-primary" title="已置顶">
-              <Pin class="size-3" />
-            </span>
-
-            <!-- Dropdown menu trigger & popup -->
-            <DropdownMenu
-              :open="activeMenuId === conversation.id"
-              @update:open="(val) => { if (val) activeMenuId = conversation.id; else if (activeMenuId === conversation.id) activeMenuId = null; }"
+          <template #default="{ item }">
+            <div
+              class="group relative flex size-full cursor-pointer items-center gap-2 rounded-lg px-2 text-left"
+              @contextmenu.prevent="openContextMenu(item.conversation.id)"
             >
-              <DropdownMenuTrigger as-child>
-                <button
-                  type="button"
-                  class="opacity-0 group-hover:opacity-100 hover:bg-muted/80 rounded p-0.5 text-muted-foreground transition-opacity shrink-0"
-                  :class="{ 'opacity-100': activeMenuId === conversation.id }"
-                  title="操作"
-                >
-                  <MoreHorizontal class="size-3.5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent class="w-40 text-xs shadow-xl">
-                <DropdownMenuItem @select="togglePinned(conversation.id)">
-                  <Pin class="mr-2 size-3.5" />
-                  {{ conversation.pinned ? '取消置顶' : '置顶会话' }}
-                </DropdownMenuItem>
-                <DropdownMenuItem @select="startRename(conversation.id, conversation.title)">
-                  <Pencil class="mr-2 size-3.5" />
-                  重命名
-                </DropdownMenuItem>
-                <template v-if="host.desktop">
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem @select="emit('new-window', conversation.id)">
-                    <ExternalLink class="mr-2 size-3.5" />
-                    在新窗口打开
+              <span class="grid size-7 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+                <MessageCircle class="size-3.5" />
+              </span>
+
+              <!-- Inline rename input -->
+              <div v-if="editingId === item.conversation.id" class="flex min-w-0 flex-1 items-center gap-1" @click.stop>
+                <input
+                  ref="inlineInputRef"
+                  v-model="editingTitle"
+                  class="h-7 w-full rounded border border-primary bg-background px-1.5 text-xs text-foreground outline-none shadow-xs"
+                  @keydown.enter.prevent="saveRename(item.conversation.id)"
+                  @keydown.esc.prevent="cancelRename"
+                  @blur="saveRename(item.conversation.id)"
+                />
+              </div>
+
+              <!-- Normal title & preview display -->
+              <div v-else class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5">
+                  <span class="truncate text-xs font-medium">{{ item.conversation.title }}</span>
+                  <Badge v-if="item.conversation.lifetime === 'app'" variant="secondary" class="px-1 text-[9px]">临时</Badge>
+                </div>
+                <span class="block truncate text-[10px] text-muted-foreground">
+                  {{ item.conversation.lastMessagePreview || '暂无消息' }}
+                </span>
+              </div>
+
+              <!-- Pinned icon indicator -->
+              <span v-if="item.conversation.pinned && editingId !== item.conversation.id" class="shrink-0 text-primary" title="已置顶">
+                <Pin class="size-3" />
+              </span>
+
+              <!-- Dropdown menu trigger & popup -->
+              <DropdownMenu
+                :open="activeMenuId === item.conversation.id"
+                @update:open="(val) => { if (val) activeMenuId = item.conversation.id; else if (activeMenuId === item.conversation.id) activeMenuId = null; }"
+              >
+                <DropdownMenuTrigger as-child>
+                  <button
+                    type="button"
+                    class="opacity-0 group-hover:opacity-100 hover:bg-muted/80 rounded p-0.5 text-muted-foreground transition-opacity shrink-0"
+                    :class="{ 'opacity-100': activeMenuId === item.conversation.id }"
+                    title="操作"
+                    @click.stop
+                  >
+                    <MoreHorizontal class="size-3.5" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent class="w-40 text-xs shadow-xl">
+                  <DropdownMenuItem @select="togglePinned(item.conversation.id)">
+                    <Pin class="mr-2 size-3.5" />
+                    {{ item.conversation.pinned ? '取消置顶' : '置顶会话' }}
                   </DropdownMenuItem>
-                </template>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem class="text-destructive focus:text-destructive" @select="removeConversation(conversation.id)">
-                  <Trash2 class="mr-2 size-3.5" />
-                  删除会话
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </FluidListItem>
-        </FluidList>
+                  <DropdownMenuItem @select="startRename(item.conversation.id, item.conversation.title)">
+                    <Pencil class="mr-2 size-3.5" />
+                    重命名
+                  </DropdownMenuItem>
+                  <template v-if="host.desktop">
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem @select="emit('new-window', item.conversation.id)">
+                      <ExternalLink class="mr-2 size-3.5" />
+                      在新窗口打开
+                    </DropdownMenuItem>
+                  </template>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem class="text-destructive focus:text-destructive" @select="removeConversation(item.conversation.id)">
+                    <Trash2 class="mr-2 size-3.5" />
+                    删除会话
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </template>
+        </GlideList>
 
         <div v-if="!visibleConversations.length" class="py-12 text-center text-xs text-muted-foreground">
           暂无会话

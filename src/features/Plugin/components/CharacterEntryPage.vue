@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
-import { Button, TabItem, Tabs, TabsList } from "@/components/fluid";
+import { Button } from "@/components/fluid";
+import { GlideTabs } from "@/components/common/glide";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCharacterList } from "@/features/Plugin/dataflow/use-plugin-data";
@@ -86,12 +87,16 @@ async function importCharacter() {
         <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input v-model="search" class="h-10 pl-9" placeholder="搜索角色…" />
       </div>
-      <Tabs v-model="mode" size="compact" aria-label="角色视图">
-        <TabsList>
-          <TabItem value="card" title="卡片视图"><Grid2X2 class="size-4" /></TabItem>
-          <TabItem value="list" title="列表视图"><List class="size-4" /></TabItem>
-        </TabsList>
-      </Tabs>
+      <GlideTabs
+        v-model="mode"
+        size="sm"
+        class="w-auto"
+        aria-label="角色视图"
+        :items="[
+          { value: 'card', label: '卡片视图', icon: Grid2X2 },
+          { value: 'list', label: '列表视图', icon: List },
+        ]"
+      />
       <Button variant="outline" :disabled="pending !== null" @click="importCharacter">
         <Upload class="size-4" />{{ pending === 'import' ? '导入中…' : '导入角色' }}
       </Button>

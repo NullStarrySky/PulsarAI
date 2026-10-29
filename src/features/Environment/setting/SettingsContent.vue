@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { TabItem, Tabs, TabsList } from "@/components/fluid";
+import { GlideTabs } from "@/components/common/glide";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSettingsState } from "./use-settings-state";
 
@@ -47,20 +47,13 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- Optional Tabs for pages with multiple tabs -->
-        <Tabs
+        <GlideTabs
           v-if="activeTabs.length > 1"
           v-model="activeTabId"
-          class="mt-2"
-        >
-          <TabsList>
-            <TabItem
-              v-for="tab in activeTabs"
-              :key="tab.id"
-              :value="tab.id"
-              :label="tab.title"
-            />
-          </TabsList>
-        </Tabs>
+          :items="activeTabs.map(tab => ({ value: tab.id, label: tab.title }))"
+          size="sm"
+          class="mt-2 w-auto"
+        />
       </div>
 
     </header>

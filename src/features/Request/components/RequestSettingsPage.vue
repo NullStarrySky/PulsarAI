@@ -3,10 +3,8 @@ import { computed, onMounted, reactive, ref } from "vue";
 import {
 	Button,
 	Switch,
-	Tabs,
-	TabsList,
-	TabsTrigger,
 } from "@/components/fluid";
+import { GlideTabs } from "@/components/common/glide";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, Trash2 } from "@/lib/remix-icons";
@@ -130,7 +128,13 @@ onMounted(async () => {
   <div class="flex min-h-0 gap-4 max-md:flex-col">
     <ScrollArea class="w-52 shrink-0 max-md:w-full"><div class="space-y-2 p-1"><Button v-for="provider in store.providers.values()" :key="provider.id" size="sm" :variant="provider.id === activeProviderId ? 'secondary' : 'ghost'" class="w-full justify-start gap-2" @click="activeProviderId = provider.id"><ProviderAvatar :name="provider.name" :src="provider.iconUrl" :provider-id="provider.id" :icon-id="provider.icon" />{{ provider.name }}</Button><div class="grid gap-2 border-t pt-2"><Input v-model="draft.id" placeholder="提供商 ID" /><Input v-model="draft.name" placeholder="显示名称" /><Button size="sm" @click="addProvider"><Plus class="size-4" />添加提供商</Button></div></div></ScrollArea>
     <section v-if="activeProvider" class="min-w-0 flex-1 space-y-4"><header class="flex flex-wrap items-center gap-3"><ProviderAvatar :name="activeProvider.name" :src="activeProvider.iconUrl" :provider-id="activeProvider.id" :icon-id="activeProvider.icon" /><div class="min-w-0 flex-1"><h2 class="text-base font-semibold">{{ activeProvider.name }}</h2><p v-if="activeProvider.description" class="text-sm text-muted-foreground">{{ activeProvider.description }}</p></div><Switch class="text-sm" :model-value="activeProvider.enabled" label="启用" @update:model-value="activeProvider.enabled = Boolean($event)" /><Button size="icon" variant="ghost" title="删除提供商" @click="deleteProvider"><Trash2 class="size-4" /></Button></header>
-      <Tabs :model-value="activeKind" @update:model-value="activeKind = $event as ParamGroup"><TabsList><TabsTrigger v-for="group in visibleGroups" :key="group.id" :value="group.id">{{ group.label }}</TabsTrigger></TabsList></Tabs>
+      <GlideTabs
+        :model-value="activeKind"
+        :items="visibleGroups.map(group => ({ value: group.id, label: group.label }))"
+        size="sm"
+        class="w-auto"
+        @update:model-value="activeKind = $event as ParamGroup"
+      />
       <div v-if="modelKind" class="space-y-2 rounded-md border p-3"><p class="text-sm font-medium">{{ groups.find((item) => item.id === modelKind)?.label }}模型</p><ModelList :provider="activeProvider" :kind="modelKind" /></div>
       <div class="space-y-2"><ParamDefinitionContainer v-for="(definition, index) in activeProvider.params[activeKind]" :key="`${definition.paramName}:${index}`" :provider-id="activeProvider.id" :group="activeKind" :definition="definition" /><Button size="sm" variant="outline" @click="addParam"><Plus class="size-4" />添加参数</Button></div>
       <details class="rounded-md border p-3"><summary class="cursor-pointer text-sm font-medium">高级函数</summary><div class="mt-3 flex flex-wrap gap-2"><PopableJSEditor title="modelGetter" :model-value="activeProvider.modelGetter || ''" @update:model-value="setModelGetter" /><PopableJSEditor v-for="operation in operations" :key="operation" :title="operation" :model-value="activeProvider.requestOverride[operation] || ''" @update:model-value="setOverride(operation, $event)" /></div></details>

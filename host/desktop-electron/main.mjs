@@ -416,46 +416,6 @@ async function proxyFetch(request) {
 	}
 }
 
-async function exaWebSearch(request) {
-	if (request?.provider === "playwright") {
-		throw new Error(
-			"Playwright 桌面搜索将在 Electron 主进程浏览器服务接入后启用。",
-		);
-	}
-	const apiKey = await database.selectOne(
-		"host_secrets",
-		"webSearch.exa.apiKey",
-	);
-	if (typeof apiKey !== "string" || !apiKey.trim())
-		throw new Error("请先在网络搜索设置中填写 Exa API Key。");
-	const response = await fetch("https://api.exa.ai/search", {
-		method: "POST",
-		headers: { "content-type": "application/json", "x-api-key": apiKey },
-		body: JSON.stringify({
-			query: requiredString(request?.query, "query"),
-			type: "auto",
-			numResults: Math.min(Math.max(Number(request?.limit) || 5, 1), 10),
-			contents: { highlights: true },
-		}),
-	});
-	if (!response.ok) throw new Error(`Exa 搜索请求失败：${response.status}`);
-	const body = await response.json();
-	return Array.isArray(body.results)
-		? body.results
-				.filter(
-					(item) =>
-						item &&
-						typeof item.title === "string" &&
-						typeof item.url === "string",
-				)
-				.map((item) => ({
-					title: item.title,
-					url: item.url,
-					snippet: item.highlights?.[0] ?? item.summary ?? item.text ?? "",
-				}))
-		: [];
-}
-
 async function scanMigrationPath(input) {
 	const root = await stat(input);
 	const collect = async (rootPath, filePath) => {
@@ -858,7 +818,6 @@ async function handleHostInvoke(event, namespace, method, payload = {}) {
 	if (namespace === "network") {
 		if (method === "modelProxyFetch") return modelProxyFetch(payload.request);
 		if (method === "proxyFetch") return proxyFetch(payload.request);
-		if (method === "webSearch") return exaWebSearch(payload.request);
 	}
 	if (namespace === "notifications" && method === "send") {
 		if (Notification.isSupported())

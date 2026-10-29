@@ -11,12 +11,8 @@ import {
 	getDefaultAppearance,
 	getDefaultRuntimePreferences,
 	getDefaultTranslateSettings,
-	getDefaultWebSearchSettings,
 	type RuntimePreferences,
 	type TranslateState,
-	type WebSearchProviderId,
-	type WebSearchResult,
-	type WebSearchSettings,
 } from "./defaults";
 import {
 	applyHotkeyBindings,
@@ -38,7 +34,10 @@ export const useEnvironmentStore = defineStore("environment", () => {
 	/* Group 1: 外观 (Appearance) */
 	const appearance = ref<AppearanceSettings>(getDefaultAppearance());
 	const glassEnabled = computed(
-		() => Boolean(host.desktop) && host.platform.platform() !== "linux" && appearance.value.windowMaterial !== "none",
+		() =>
+			Boolean(host.desktop) &&
+			host.platform.platform() !== "linux" &&
+			appearance.value.windowMaterial !== "none",
 	);
 	const zenFrameIsDark = ref(true);
 
@@ -148,34 +147,6 @@ body {
 	/* Group 2: 快捷键 (Hotkeys) */
 	const hotkeys = ref(createEnvironmentHotkeys());
 
-	/* Group 4: 网络搜索 (WebSearch) */
-	const webSearchSettings = ref<WebSearchSettings>(
-		getDefaultWebSearchSettings(),
-	);
-
-	async function webSearch(
-		query: string,
-		limit?: number,
-		provider?: WebSearchProviderId,
-	): Promise<WebSearchResult[]> {
-		const selectedProvider =
-			provider ?? webSearchSettings.value.activeProviderId;
-		if (
-			selectedProvider === "playwright" &&
-			!webSearchSettings.value.playwrightEnabled
-		) {
-			throw new Error("Playwright 浏览器搜索未启用。");
-		}
-		if (selectedProvider === "exa" && !webSearchSettings.value.exaEnabled) {
-			throw new Error("Exa 搜索未启用。");
-		}
-		return host.network.webSearch<WebSearchResult[]>({
-			query,
-			limit: limit ?? webSearchSettings.value.resultLimit,
-			provider: selectedProvider,
-		});
-	}
-
 	/* Group 5: 翻译 (Translate) */
 	const translateSettings = ref<TranslateState>(getDefaultTranslateSettings());
 
@@ -195,12 +166,11 @@ body {
 
 	/* Unified Auto-persistence Watcher */
 	watch(
-		[appearance, hotkeys, webSearchSettings, translateSettings, runtime],
+		[appearance, hotkeys, translateSettings, runtime],
 		() => {
 			void host.config.set("appearance", appearance.value);
 			applyAppearance();
 			void host.config.set("hotkeys", getHotkeyBindings(hotkeys.value));
-			void host.config.set("webSearch.settings", webSearchSettings.value);
 			void host.config.set("translate", translateSettings.value);
 			void host.config.set("runtime", runtime.value);
 		},
@@ -212,19 +182,13 @@ body {
 
 	/* Global initialization */
 	async function initialize() {
-		const [
-			storedAppearance,
-			storedHotkeys,
-			storedWebSearch,
-			storedTranslate,
-			storedRuntime,
-		] = await Promise.all([
-			host.config.get<AppearanceSettings>("appearance"),
-			host.config.get<Record<string, string | null>>("hotkeys"),
-			host.config.get<WebSearchSettings>("webSearch.settings"),
-			host.config.get<TranslateState>("translate"),
-			host.config.get<RuntimePreferences>("runtime"),
-		]);
+		const [storedAppearance, storedHotkeys, storedTranslate, storedRuntime] =
+			await Promise.all([
+				host.config.get<AppearanceSettings>("appearance"),
+				host.config.get<Record<string, string | null>>("hotkeys"),
+				host.config.get<TranslateState>("translate"),
+				host.config.get<RuntimePreferences>("runtime"),
+			]);
 
 		if (storedAppearance) {
 			Object.assign(appearance.value, storedAppearance);
@@ -240,8 +204,6 @@ body {
 			}
 		}
 		if (storedHotkeys) applyHotkeyBindings(hotkeys.value, storedHotkeys);
-		if (storedWebSearch)
-			Object.assign(webSearchSettings.value, storedWebSearch);
 		if (storedTranslate)
 			Object.assign(translateSettings.value, storedTranslate);
 		if (storedRuntime) Object.assign(runtime.value, storedRuntime);
@@ -255,7 +217,6 @@ body {
 		appearance,
 		glassEnabled,
 		hotkeys,
-		webSearchSettings,
 		translateSettings,
 		runtime,
 
@@ -268,9 +229,6 @@ body {
 		importFont,
 		importThemeCss,
 		applyAppearance,
-
-		/* WebSearch actions */
-		webSearch,
 
 		/* Translate actions */
 		translateText,

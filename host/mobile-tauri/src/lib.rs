@@ -11,13 +11,6 @@ use surrealdb::{
 use tauri::{AppHandle, Manager, State};
 use tokio::sync::OnceCell;
 
-mod migration;
-mod piper_tts;
-mod stt;
-use migration::{
-    migration_read_binary, migration_read_png_character, migration_read_text, migration_scan_path,
-};
-
 struct AppState {
     db: OnceCell<Surreal<Db>>,
     http: reqwest::Client,
@@ -92,11 +85,8 @@ fn app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
 
 mod database;
 mod files;
-
 mod media;
 mod migration;
-mod piper_tts;
-mod stt;
 mod web;
 
 use database::*;
@@ -106,59 +96,6 @@ use migration::{
     migration_read_binary, migration_read_png_character, migration_read_text, migration_scan_path,
 };
 use web::*;
-
-fn stt_whisper_candle_models(app: AppHandle) -> Result<Vec<stt::WhisperModelPack>, String> {
-    stt::list(&app)
-}
-
-#[tauri::command]
-async fn stt_whisper_candle_download(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    request: stt::WhisperDownloadRequest,
-) -> Result<stt::WhisperModelPack, String> {
-    stt::download(&app, &state.http, request).await
-}
-
-#[tauri::command]
-fn stt_whisper_candle_delete(app: AppHandle, id: String) -> Result<(), String> {
-    stt::delete(&app, &id)
-}
-
-#[tauri::command]
-async fn stt_transcribe(
-    app: AppHandle,
-    request: stt::WhisperTranscribeRequest,
-) -> Result<stt::WhisperTranscription, String> {
-    stt::transcribe(&app, request).await
-}
-
-#[tauri::command]
-fn tts_piper_models(app: AppHandle) -> Result<Vec<piper_tts::PiperModelPack>, String> {
-    piper_tts::list(&app)
-}
-
-#[tauri::command]
-async fn tts_piper_download(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    request: piper_tts::PiperDownloadRequest,
-) -> Result<piper_tts::PiperModelPack, String> {
-    piper_tts::download(&app, &state.http, request).await
-}
-
-#[tauri::command]
-fn tts_piper_delete(app: AppHandle, id: String) -> Result<(), String> {
-    piper_tts::delete(&app, &id)
-}
-
-#[tauri::command]
-async fn tts_piper_synthesize(
-    app: AppHandle,
-    request: piper_tts::PiperSynthesizeRequest,
-) -> Result<piper_tts::PiperSynthesis, String> {
-    piper_tts::synthesize(&app, request).await
-}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -210,15 +147,6 @@ pub fn run() {
             media_delete,
             model_proxy_fetch,
             proxy_fetch,
-            web_search,
-            stt_whisper_candle_models,
-            stt_whisper_candle_download,
-            stt_whisper_candle_delete,
-            stt_transcribe,
-            tts_piper_models,
-            tts_piper_download,
-            tts_piper_delete,
-            tts_piper_synthesize,
             migration_scan_path,
             migration_read_text,
             migration_read_binary,

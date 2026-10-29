@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
+import { Button } from "@/components/fluid";
 import {
-	Button,
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuGroup,
@@ -10,7 +10,7 @@ import {
 	DropdownMenuSubContent,
 	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
-} from "@/components/fluid";
+} from "@/components/ui/dropdown-menu";
 import { Check, ChevronDown } from "@/lib/remix-icons";
 import { useRequestStore } from "../request-store";
 import type { ModelSelection, RequestKind } from "../types";

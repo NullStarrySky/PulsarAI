@@ -10,10 +10,7 @@ import { motion } from "motion-v";
 import { cn } from "../../../lib/utils";
 import { spring, exitFallbackMs } from "../../../lib/springs";
 import { fontWeights } from "../../../lib/font-weight";
-import { useShape } from "../../../lib/shape-context";
 import { provideSize, useSize, type SizeVariant } from "../../../lib/size-context";
-import { surfaceClasses } from "../../../lib/surface-classes";
-import { useSurface, provideSurface } from "../../../lib/surface-context";
 import { useIcon } from "../../../lib/icon-context";
 import ColorPicker from "./ColorPicker.vue";
 import { parseColor, rgbToHexStr, type ParsedColor, type ColorFormat } from "./color-math";
@@ -92,13 +89,9 @@ onUnmounted(() => {
   mounted.value = false;
 });
 
-const shape = useShape();
 const sizeClasses = useSize(() => props.size);
 const compact = computed(() => sizeClasses.value.variant === "compact");
 
-const substrate = useSurface();
-const level = computed(() => Math.min(substrate.value + 2, 8));
-provideSurface(level);
 
 provideSize({ size: () => props.size });
 
@@ -133,7 +126,7 @@ const triggerClass = computed(() =>
     sizeClasses.value.gap,
     sizeClasses.value.control,
     compact.value ? "px-1.5" : "px-2",
-    shape.value.input,
+    "rounded-md",
     props.triggerClassName
   )
 );
@@ -151,7 +144,7 @@ const triggerClass = computed(() =>
         </span>
         <!-- 小色块：棋盘格衬底支持半透明色 -->
         <span
-          :class="cn('relative inline-block shrink-0 overflow-hidden', shape.bg)"
+          :class="cn('relative inline-block shrink-0 overflow-hidden', 'rounded-md')"
           :style="{
             width: compact ? '16px' : '20px',
             height: compact ? '16px' : '20px',
@@ -217,7 +210,7 @@ const triggerClass = computed(() =>
               :default-format="props.defaultFormat"
               :swatches="props.swatches"
               :hide-eyedropper="props.hideEyedropper"
-              :class="surfaceClasses(level, 3)"
+              class="bg-popover text-popover-foreground border border-border shadow-lg rounded-xl"
               @update:value="handleValueChange"
               @update:format="emit('update:format', $event)"
             />

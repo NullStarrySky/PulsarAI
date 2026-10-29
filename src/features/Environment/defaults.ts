@@ -3,7 +3,6 @@ import type { ThemeDefinition, ThemeMode } from "./theme/theme-registry";
 
 export type AgentLoadingStyle = "drive" | "dots" | "orbit";
 export type WindowCloseBehavior = "ask" | "exit" | "tray";
-export type WebSearchProviderId = "playwright" | "exa";
 export type TranslationProvider = "microsoft" | "google";
 export type WindowMaterial = "none" | "acrylic" | "mica" | "tabbed";
 export type BackgroundScope = "blank" | "conversation" | "settings";
@@ -43,19 +42,6 @@ export interface AppearanceSettings {
 	backgroundScope?: BackgroundScope[];
 }
 
-export interface WebSearchSettings {
-	activeProviderId: WebSearchProviderId;
-	playwrightEnabled: boolean;
-	exaEnabled: boolean;
-	resultLimit: number;
-}
-
-export interface WebSearchResult {
-	title: string;
-	url: string;
-	snippet: string;
-}
-
 export interface TranslateState {
 	sourceLanguage: string;
 	targetLanguage: string;
@@ -73,8 +59,6 @@ export interface RuntimePreferences {
 	notifyOnReplyComplete: boolean;
 	replyCompletionOnlyWhenBackground: boolean;
 }
-
-export const EXA_API_KEY_SECRET = "webSearch.exa.apiKey";
 
 /* -------------------------------------------------------------------------- */
 /*                                默认值获取函数                              */
@@ -105,15 +89,6 @@ export function getDefaultAppearance(): AppearanceSettings {
 		backgroundOpacity: 0.85,
 		backgroundBlur: 0,
 		backgroundScope: ["blank", "conversation", "settings"],
-	};
-}
-
-export function getDefaultWebSearchSettings(): WebSearchSettings {
-	return {
-		activeProviderId: "playwright",
-		playwrightEnabled: true,
-		exaEnabled: false,
-		resultLimit: 5,
 	};
 }
 

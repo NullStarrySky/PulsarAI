@@ -29,12 +29,6 @@ tokio = { version = "1", features = ["sync"] }
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 urlencoding = "2.1"
-whisper-candle-core = "0.1.2"
-hound = "3.5"
-zip = { version = "2.4", default-features = false, features = ["deflate"] }
-sherpa-onnx = "1.13.5"
-bzip2 = "0.5"
-tar = "0.4"
 tauri-plugin-os = "2.3.2"
 tauri-plugin-dialog = "2.7.2"
 tauri-plugin-notifications = "0.4.6"

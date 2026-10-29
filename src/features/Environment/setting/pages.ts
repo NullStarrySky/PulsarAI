@@ -6,13 +6,11 @@ import RuntimeSettingsPage from "@/features/Environment/pages/general/RuntimeSet
 import HotkeySettingsPage from "@/features/Environment/pages/hotkey/HotkeySettingsPage.vue";
 import StatisticSettingsPage from "@/features/Environment/pages/statistic/StatisticSettingsPage.vue";
 import TranslateSettingsPage from "@/features/Environment/pages/translate/TranslateSettingsPage.vue";
-import WebSearchSettingsPage from "@/features/Environment/pages/web-search/WebSearchSettingsPage.vue";
 import DefaultSettingsPage from "@/features/Request/components/DefaultSettingsPage.vue";
 import RequestSettingsPage from "@/features/Request/components/RequestSettingsPage.vue";
 import {
 	Brain,
 	ChartNoAxesCombined,
-	Globe,
 	Info,
 	Keyboard,
 	Languages,
@@ -59,14 +57,6 @@ export function createBuiltInSettingPages(): UISettingPage[] {
 		{
 			meta: { id: "tools.hotkey", icon: markRaw(Keyboard), title: "快捷键" },
 			component: markRaw(HotkeySettingsPage),
-		},
-		{
-			meta: {
-				id: "provider.web-search",
-				icon: markRaw(Globe),
-				title: "网络搜索",
-			},
-			component: markRaw(WebSearchSettingsPage),
 		},
 		{
 			meta: { id: "tools.translate", icon: markRaw(Languages), title: "翻译" },

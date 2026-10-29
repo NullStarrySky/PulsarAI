@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
-import { InputMessage } from "@/components/fluid";
+import InputMessage from "@/components/common/InputMessage.vue";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import { useCharacterList } from "@/features/Plugin/dataflow/use-plugin-data";
 import { useUIStore } from "@/features/UI/store";

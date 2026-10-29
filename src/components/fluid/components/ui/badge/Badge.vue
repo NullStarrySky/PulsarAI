@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, type HTMLAttributes } from "vue";
 import { cn } from "../../../lib/utils";
-import { useShape } from "../../../lib/shape-context";
 import { useSizeVariant } from "../../../lib/size-context";
 import { badgeColors, type BadgeColor, type BadgeSize, type BadgeSizeCanonical } from "./badge-variants";
 
@@ -30,7 +29,6 @@ const props = withDefaults(
   { variant: "solid", color: "gray" }
 );
 
-const shape = useShape();
 const contextSize = useSizeVariant();
 
 const size = computed<BadgeSizeCanonical>(() => {
@@ -77,7 +75,7 @@ const rootClass = computed(() =>
     "inline-flex items-center font-medium whitespace-nowrap",
     isSolid.value ? "" : "border border-border text-foreground",
     size.value === "compact" ? "h-5 px-2 text-[11px] gap-1" : "h-6 px-2.5 text-[12px] gap-1.5",
-    shape.value.item,
+    "rounded-md",
     props.class
   )
 );

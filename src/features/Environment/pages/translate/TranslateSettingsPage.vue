@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import { Button, Switch } from "@/components/fluid";
 import {
-	Button,
 	Select,
 	SelectContent,
 	SelectItem,
 	SelectTrigger,
 	SelectValue,
-	Switch,
-} from "@/components/fluid";
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import SettingGroup from "@/features/Environment/setting/SettingGroup.vue";

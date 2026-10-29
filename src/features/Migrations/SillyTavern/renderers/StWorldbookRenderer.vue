@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { Badge, Button, Switch } from "@/components/fluid";
 import {
 	Accordion,
 	AccordionContent,
 	AccordionItem,
 	AccordionTrigger,
-	Badge,
-	Button,
-	Switch,
-} from "@/components/fluid";
+} from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { BookOpen, Plus, Search, Tag, Trash2 } from "@/lib/remix-icons";

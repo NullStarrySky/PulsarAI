@@ -1,0 +1,22 @@
+# 待办索引
+
+引用同目录下的聚焦计划。已完成/已跳过条目保留，不删除。
+
+## 未开始
+
+- [ ] Conversation generation 的世界快照与并发闸门
+      -> conversation-generation-world-snapshot.todo
+      一次 generation 期间切换分支/版本会改变 agent 正在操作的文件系统基线；
+      "生成中不能并发"目前只由 UI 组件保证，不在数据层。
+
+## 进行中
+
+（空）
+
+## 已完成
+
+（空）
+
+## 已跳过
+
+（空）

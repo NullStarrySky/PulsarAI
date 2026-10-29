@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import {
-	AskUserQuestions,
 	Dialog,
 	DialogContent,
-	type AskUserAnswer,
 } from "@/components/fluid";
+import {
+	GlideAskUserQuestions,
+	type AskUserAnswer,
+} from "@/components/common/glide";
 import {
 	type AskUserInput,
 	type AskUserResult,
@@ -52,7 +54,7 @@ function handleComplete(answers: Record<string, AskUserAnswer>) {
       :show-close-button="false"
       class="flex w-auto max-w-none items-center justify-center border-0 bg-transparent p-0 shadow-none outline-none"
     >
-      <AskUserQuestions
+      <GlideAskUserQuestions
         v-if="request?.questions.length"
         :questions="request.questions"
         @complete="handleComplete"
