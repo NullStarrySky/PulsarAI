@@ -358,7 +358,7 @@ const isHorizontal = computed(
         -->
         <span
           v-if="activeIndex !== -1 && isExpanded"
-          class="glide-tab-selected-pill absolute rounded-full bg-primary/15 text-primary pointer-events-none z-0"
+          class="glide-tab-selected-pill absolute top-0 left-0 rounded-full bg-primary/20 text-primary pointer-events-none z-0"
           :style="{
             width: `${size}px`,
             height: `${size}px`,

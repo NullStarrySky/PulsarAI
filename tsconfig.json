@@ -34,6 +34,6 @@
 		"src/**/*.vue",
 		"host/**/*.ts"
 	],
-	"exclude": ["src/features/Plugin/builtIn/**/*", "src/components/files/**/*"],
+	"exclude": ["src/features/Plugin/builtIn/**/*"],
 	"references": [{ "path": "./tsconfig.node.json" }]
 }

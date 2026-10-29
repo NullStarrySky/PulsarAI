@@ -57,32 +57,60 @@ const fileIconInfo = computed(() => resolveFileIcon(props.node.name));
 
 const handleRowClick = () => {
   if (props.disabled || props.node.disabled) return;
+  emit('select', props.node);
   if (isFolder.value) {
     emit('toggle', props.node, !isOpen.value);
   } else {
-    emit('select', props.node);
     emit('open', props.node);
   }
+};
+
+// ── 文件夹开关高度与透明度平滑过渡动画 ──
+const onFolderEnter = (el: Element) => {
+  const h = el as HTMLElement;
+  h.style.height = '0px';
+  h.style.opacity = '0';
+  h.style.transform = 'translateY(-4px)';
+  void h.offsetHeight;
+  h.style.transition = 'height 200ms cubic-bezier(0.23, 1, 0.32, 1), opacity 180ms ease, transform 180ms ease';
+  h.style.height = `${h.scrollHeight}px`;
+  h.style.opacity = '1';
+  h.style.transform = 'translateY(0px)';
+};
+
+const onFolderAfterEnter = (el: Element) => {
+  const h = el as HTMLElement;
+  h.style.height = 'auto';
+  h.style.transition = '';
+  h.style.transform = '';
+};
+
+const onFolderLeave = (el: Element) => {
+  const h = el as HTMLElement;
+  h.style.height = `${h.scrollHeight}px`;
+  h.style.opacity = '1';
+  h.style.transform = 'translateY(0px)';
+  void h.offsetHeight;
+  h.style.transition = 'height 200ms cubic-bezier(0.23, 1, 0.32, 1), opacity 160ms ease, transform 160ms ease';
+  h.style.height = '0px';
+  h.style.opacity = '0';
+  h.style.transform = 'translateY(-4px)';
 };
 </script>
 
 <template>
   <div class="glide-file-tree-node select-none">
-    <!-- 行主体 -->
+    <!-- 行主体 (缩进由父级 ml-6 自然形成，使得节点 bounds 与高亮滑块完全对齐) -->
     <div
       :data-tree-node-id="node.id"
       :data-tree-type="node.type"
       class="relative z-[1] flex items-center justify-between gap-2 px-2 rounded-lg cursor-pointer transition-colors duration-100"
       :class="[
         isSelected ? 'text-foreground font-medium' : 'text-foreground/80 hover:text-foreground',
-        node.disabled || disabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : '',
-        node.gitStatus === 'untracked' ? 'text-emerald-500 dark:text-emerald-400' : '',
-        node.gitStatus === 'modified' ? 'text-amber-500 dark:text-amber-400' : '',
-        node.gitStatus === 'deleted' ? 'text-rose-500 dark:text-rose-400 line-through' : '',
+        node.disabled || disabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''
       ]"
       :style="{
-        height: `${rowHeight}px`,
-        paddingLeft: `${depth * 18 + 8}px`
+        height: `${rowHeight}px`
       }"
       @click="handleRowClick"
     >
@@ -101,80 +129,55 @@ const handleRowClick = () => {
         <!-- 文件夹 / 文件主图标 -->
         <div class="shrink-0 flex items-center">
           <template v-if="isFolder">
-            <component
-              :is="node.icon || (isOpen ? FolderOpen : Folder)"
-              class="size-4"
-              :class="isOpen ? 'text-primary' : 'text-muted-foreground'"
-            />
+            <span class="size-4 shrink-0 flex items-center justify-center transition-transform duration-150" :class="isOpen ? 'scale-105' : 'scale-100'">
+              <component
+                :is="node.icon || (isOpen ? FolderOpen : Folder)"
+                class="size-4 transition-colors duration-150"
+                :class="isOpen ? 'text-primary' : 'text-muted-foreground'"
+              />
+            </span>
           </template>
           <template v-else>
             <component
               :is="node.icon || fileIconInfo.icon"
               class="size-4"
-              :class="node.gitStatus ? '' : fileIconInfo.color"
+              :class="fileIconInfo.color"
             />
           </template>
         </div>
 
-        <!-- 节点名称 -->
-        <span class="truncate text-sm tracking-tight leading-none">
+        <!-- 节点名称 (使用 leading-normal 与 py-0.5 彻底消除 p/g/y 等字母下延 descender 被截断的问题) -->
+        <span class="truncate text-sm tracking-tight leading-normal py-0.5">
           {{ node.name }}
         </span>
-
-        <!-- 额外作者/描述 tag -->
-        <span
-          v-if="node.tag"
-          class="text-[10px] px-1.5 py-0.2 rounded bg-muted/70 text-muted-foreground font-mono shrink-0"
-        >
-          {{ node.tag }}
-        </span>
-      </div>
-
-      <!-- 右侧 Git 状态或自定义 Badge (对齐 components/files) -->
-      <div class="shrink-0 flex items-center gap-1.5">
-        <span
-          v-if="node.badge"
-          class="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-secondary-foreground font-mono"
-        >
-          {{ node.badge }}
-        </span>
-
-        <!-- Git 状态标签 -->
-        <template v-if="node.gitStatus">
-          <span
-            class="size-2 rounded-full shrink-0"
-            :class="{
-              'bg-emerald-500 ring-2 ring-emerald-500/20': node.gitStatus === 'untracked',
-              'bg-amber-500 ring-2 ring-amber-500/20': node.gitStatus === 'modified',
-              'bg-rose-500 ring-2 ring-rose-500/20': node.gitStatus === 'deleted'
-            }"
-            :title="node.gitStatus"
-          />
-          <span class="text-xs font-mono font-bold uppercase shrink-0">
-            {{ node.gitStatus === 'untracked' ? 'U' : node.gitStatus === 'modified' ? 'M' : 'D' }}
-          </span>
-        </template>
       </div>
     </div>
 
-    <!-- 子目录渲染 (对齐 components/files 的层级参考线) -->
-    <div
-      v-if="isFolder && isOpen && node.children && node.children.length > 0"
-      class="glide-file-tree-children relative ml-6 before:absolute before:-left-2 before:inset-y-0 before:w-px before:h-full before:bg-border"
+    <!-- 子目录渲染 (带有层级参考线与展开折叠高度过渡动效) -->
+    <Transition
+      name="tree-folder"
+      @enter="onFolderEnter"
+      @after-enter="onFolderAfterEnter"
+      @leave="onFolderLeave"
     >
-      <GlideFileTreeItem
-        v-for="child in node.children"
-        :key="child.id"
-        :node="child"
-        :depth="depth + 1"
-        :row-height="rowHeight"
-        :selected-id="selectedId"
-        :expanded-set="expandedSet"
-        :disabled="disabled"
-        @select="emit('select', $event)"
-        @toggle="(n, exp) => emit('toggle', n, exp)"
-        @open="emit('open', $event)"
-      />
-    </div>
+      <div
+        v-if="isFolder && isOpen && node.children && node.children.length > 0"
+        class="glide-file-tree-children relative ml-6 before:absolute before:-left-2 before:inset-y-0 before:w-px before:h-full before:bg-border overflow-hidden"
+      >
+        <GlideFileTreeItem
+          v-for="child in node.children"
+          :key="child.id"
+          :node="child"
+          :depth="depth + 1"
+          :row-height="rowHeight"
+          :selected-id="selectedId"
+          :expanded-set="expandedSet"
+          :disabled="disabled"
+          @select="emit('select', $event)"
+          @toggle="(n, exp) => emit('toggle', n, exp)"
+          @open="emit('open', $event)"
+        />
+      </div>
+    </Transition>
   </div>
 </template>

@@ -43,6 +43,9 @@ export interface GlideFileTreeNode {
   disabled?: boolean;
   tag?: string;
   badge?: string;
+  content?: string;
+  size?: string;
+  lines?: number;
   data?: any;
 }
 
