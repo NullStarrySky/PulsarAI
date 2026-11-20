@@ -1,7 +1,7 @@
 import * as Vue from "vue";
 import { type Component, defineAsyncComponent, markRaw } from "vue";
 import { loadModule } from "vue3-sfc-loader";
-import * as FluidComponents from "@/components/fluid";
+import * as FluidComponents from "@/components/common";
 import { host } from "@/host";
 import * as PhosphorIcons from "@/lib/remix-icons";
 import type { ResourceFile } from "../../../dataflow/types";
@@ -16,6 +16,7 @@ async function loadPluginVueModule(source: string, filename = "component.vue") {
 		moduleCache: {
 			vue: Vue,
 			"@/lib/remix-icons": PhosphorIcons,
+			"@/components/common": FluidComponents,
 			"@/components/fluid": FluidComponents,
 			"@/host": { host },
 		} as Record<string, unknown>,

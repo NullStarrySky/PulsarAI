@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref } from "vue";
-import { Button } from "@/components/fluid";
+import { Button } from "@/components/common";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import SettingGroup from "@/features/Environment/setting/SettingGroup.vue";

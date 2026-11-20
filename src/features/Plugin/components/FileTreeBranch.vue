@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import {
 	type Component,
 	type ComponentPublicInstance,
@@ -6,7 +6,7 @@ import {
 	nextTick,
 	ref,
 } from "vue";
-import { Button } from "@/components/fluid";
+import { Button } from "@/components/common";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -17,7 +17,7 @@ import {
 	DropdownMenuSubTrigger,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { GlideRadioGroup, GlideCheckboxGroup } from "@/components/common/glide";
+import { GlideRadioGroup, GlideCheckboxGroup } from "@/components/common";
 import {
 	ContextMenu,
 	ContextMenuContent,

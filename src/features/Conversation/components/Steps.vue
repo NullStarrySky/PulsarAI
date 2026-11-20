@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import {
 	ThinkingIndicator,
@@ -6,7 +6,7 @@ import {
 	ThinkingSteps,
 	ThinkingStepsContent,
 	ThinkingStepsHeader,
-} from "@/components/fluid";
+} from "@/components/common";
 import type {
 	ThinkingStep as MessageThinkingStep,
 	ToolCallResult,

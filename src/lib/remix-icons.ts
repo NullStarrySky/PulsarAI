@@ -113,6 +113,7 @@ export {
 	RiPlayLine as Play,
 	RiPriceTag3Line as Tag,
 	RiPushpinLine as Pin,
+	RiPushpinFill as PinFilled,
 	RiRectangleLine as RectangleHorizontal,
 	RiRefreshLine as ArrowsClockwise,
 	RiRefreshLine as RefreshCw,

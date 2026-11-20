@@ -1,10 +1,10 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
 import {
 	Button,
 	Switch,
-} from "@/components/fluid";
-import { GlideTabs } from "@/components/common/glide";
+} from "@/components/common";
+import { GlideTabs } from "@/components/common";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, Trash2 } from "@/lib/remix-icons";

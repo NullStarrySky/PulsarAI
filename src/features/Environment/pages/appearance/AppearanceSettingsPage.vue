@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { push } from "notivue";
 import { computed, ref } from "vue";
 import {
@@ -11,9 +11,9 @@ import {
 	DialogHeader,
 	DialogTitle,
 	Switch,
-} from "@/components/fluid";
+} from "@/components/common";
 import { Slider } from "@/components/common/Slider";
-import { GlideSelect } from "@/components/common/glide";
+import { GlideSelect } from "@/components/common";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";

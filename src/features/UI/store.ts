@@ -60,6 +60,7 @@ export const useUIStore = defineStore("ui", () => {
 		() => historyIndex.value < history.value.length - 1,
 	);
 	const settingsOpen = ref(false);
+	const settingsPinned = ref(false);
 	const settingsSidebarOpen = ref(true);
 	const settingsSearch = ref("");
 	const settingsPageId = ref("");
@@ -266,6 +267,7 @@ export const useUIStore = defineStore("ui", () => {
 		goBack,
 		goForward,
 		settingsOpen,
+		settingsPinned,
 		settingsSidebarOpen,
 		settingsSearch,
 		settingsPageId,

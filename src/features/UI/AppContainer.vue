@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { Button } from "@/components/fluid";
+import { Button, CollapsibleButtonGroup } from "@/components/common";
 import Manager from "@/features/Conversation/components/Manager.vue";
 import Surface from "@/features/Conversation/components/Surface.vue";
 import {
@@ -13,8 +13,7 @@ import {
 } from "@/features/Conversation/dataflow/conversations";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import { useResponsiveStore } from "@/features/Environment/responsive-store";
-import SettingsContent from "@/features/Environment/setting/SettingsContent.vue";
-import SettingsSidebar from "@/features/Environment/setting/SettingsSidebar.vue";
+import SettingsCard from "@/features/Environment/setting/SettingsCard.vue";
 import { useEnvironmentStore } from "@/features/Environment/store";
 import { PluginAssetTreePanel } from "@/features/Plugin/components";
 import { useCharacterList } from "@/features/Plugin/dataflow/use-plugin-data";
@@ -41,6 +40,25 @@ const responsive = useResponsiveStore();
 const environment = useEnvironmentStore();
 const windowLifecycle = useWindowLifecycleStore();
 const appWindow = host.desktop?.window;
+
+const settingsCollapsibleItems = computed(() =>
+	ui.settingPages.map((page) => ({
+		value: page.meta.id,
+		label: page.meta.title,
+		icon: page.meta.icon,
+	})),
+);
+
+function handleSettingsOpenToggle(open: boolean) {
+	ui.settingsOpen = open;
+}
+
+function handleSettingsSelect(pageId: string) {
+	ui.settingsPageId = pageId;
+	const page = ui.settingPages.find((p) => p.meta.id === pageId);
+	ui.settingsTabId = page?.tabs?.[0]?.id ?? "";
+	ui.settingsOpen = true;
+}
 
 const activeConversationId = computed(() =>
 	ui.page.type === "conversation" ? ui.page.id : "",
@@ -286,10 +304,25 @@ async function handleToggleMaximize() {
 
     <!-- 1b. Top-Right Fixed Actions (Permanent, never pushed away by right sidebar) -->
     <div
-      class="absolute right-0 top-0 z-50 flex h-11 items-center gap-0.5 px-2 electron-window-no-drag pointer-events-auto"
+      class="absolute right-0 top-0 z-50 flex h-11 items-center gap-1 px-2.5 electron-window-no-drag pointer-events-auto"
       data-window-drag-block
       style="-webkit-app-region: no-drag;"
     >
+      <!-- Settings Entry: Collapsible button group expanding to the left -->
+      <CollapsibleButtonGroup
+        :items="settingsCollapsibleItems"
+        :model-value="ui.settingsPageId"
+        :open="ui.settingsOpen"
+        expand-direction="left"
+        :size="28"
+        :gap="3"
+        trigger-label="设置"
+        class="settings-entry-collapsible mr-1"
+        data-settings-trigger
+        @update:open="handleSettingsOpenToggle"
+        @select="(val) => handleSettingsSelect(val)"
+      />
+
       <Button
         variant="ghost"
         size="icon-sm"
@@ -344,10 +377,7 @@ async function handleToggleMaximize() {
       }"
     >
       <div class="h-full overflow-hidden" :style="{ width: `${ui.sidebarWidth}px` }">
-        <!-- In-place Settings Sidebar covers Left Sidebar when settingsOpen is true -->
-        <SettingsSidebar v-if="ui.settingsOpen" class="h-full" />
         <Manager
-          v-else
           class="h-full border-r-0"
           :sidebar-width="ui.sidebarWidth"
           :local-plugin-id="managerPluginId"
@@ -392,11 +422,8 @@ async function handleToggleMaximize() {
       />
 
       <main class="relative flex min-w-0 flex-1 h-full overflow-hidden">
-        <!-- In-place Settings Content covers Main Area when settingsOpen is true -->
-        <SettingsContent v-if="ui.settingsOpen" class="size-full" />
         <!-- Main conversation surface (persisted across switches to allow smooth composer animations) -->
         <Surface
-          v-else
           class="size-full"
           :conversation-id="activeConversationId"
           :default-plugin-id="managerPluginId"
@@ -453,5 +480,8 @@ async function handleToggleMaximize() {
     >
       <PanelLeft class="size-5" />
     </Button>
+
+    <!-- Floating Settings Card expanding from the top right to the left -->
+    <SettingsCard />
   </div>
 </template>

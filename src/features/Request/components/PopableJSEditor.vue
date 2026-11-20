@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from "vue";
 import {
 	Button,
@@ -7,7 +7,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 	DialogTrigger,
-} from "@/components/fluid";
+} from "@/components/common";
 import { Textarea } from "@/components/ui/textarea";
 
 const props = defineProps<{ modelValue: string; title?: string }>();

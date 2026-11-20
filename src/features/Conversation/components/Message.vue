@@ -1,9 +1,9 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from "vue";
 import {
 	Button,
 	ChatMessage as FluidChatMessage,
-} from "@/components/fluid";
+} from "@/components/common";
 import {
 	DropdownMenu,
 	DropdownMenuContent,

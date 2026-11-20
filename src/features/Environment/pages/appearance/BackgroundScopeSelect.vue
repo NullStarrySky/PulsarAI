@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref } from "vue";
 import {
 	PopoverContent,
@@ -7,8 +7,8 @@ import {
 	PopoverTrigger,
 } from "reka-ui";
 import { motion } from "motion-v";
-import { GlideCheckboxGroup } from "@/components/common/glide";
-import { spring } from "@/components/fluid/lib/springs";
+import { GlideCheckboxGroup } from "@/components/common";
+import { spring } from "@/components/lib/springs";
 import type { BackgroundScope } from "@/features/Environment/defaults";
 import { ChevronDown } from "@/lib/remix-icons";
 

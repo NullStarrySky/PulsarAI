@@ -1,7 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { push } from "notivue";
 import { computed, onMounted, ref } from "vue";
-import { Button, Switch } from "@/components/fluid";
+import { Button, Switch } from "@/components/common";
 import SettingGroup from "@/features/Environment/setting/SettingGroup.vue";
 import SettingItem from "@/features/Environment/setting/SettingItem.vue";
 import SettingPage from "@/features/Environment/setting/SettingPage.vue";

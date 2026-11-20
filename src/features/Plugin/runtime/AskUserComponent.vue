@@ -1,13 +1,13 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import {
 	Dialog,
 	DialogContent,
-} from "@/components/fluid";
+} from "@/components/common";
 import {
 	GlideAskUserQuestions,
 	type AskUserAnswer,
-} from "@/components/common/glide";
+} from "@/components/common";
 import {
 	type AskUserInput,
 	type AskUserResult,

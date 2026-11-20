@@ -1,4 +1,4 @@
-import type { AskUserAnswer, AskUserQuestion } from "@/components/common/glide";
+﻿import type { AskUserAnswer, AskUserQuestion } from "@/components/common";
 
 export interface AskUserInput {
 	questions: AskUserQuestion[];

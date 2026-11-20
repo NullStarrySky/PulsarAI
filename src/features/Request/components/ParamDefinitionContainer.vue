@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from "vue";
-import { Button } from "@/components/fluid";
+import { Button } from "@/components/common";
 import { Pencil } from "@/lib/remix-icons";
 import { useRequestStore } from "../request-store";
 import type { ParamDefinition, ParamGroup } from "../types";

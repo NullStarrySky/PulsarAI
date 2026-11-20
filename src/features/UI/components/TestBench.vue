@@ -1,9 +1,9 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from "vue";
 import {
   GlideFileTree,
   type GlideFileTreeNode,
-} from "@/components/common/glide";
+} from "@/components/common";
 import SettingsSidebar from "@/features/Environment/setting/SettingsSidebar.vue";
 import { useEnvironmentStore } from "@/features/Environment/store";
 import {

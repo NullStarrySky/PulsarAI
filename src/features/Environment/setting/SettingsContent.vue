@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { GlideTabs } from "@/components/common/glide";
+import { GlideTabs } from "@/components/common";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSettingsState } from "./use-settings-state";
 

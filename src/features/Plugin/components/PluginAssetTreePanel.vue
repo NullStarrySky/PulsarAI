@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { GlideTabs } from "@/components/common/glide";
+import { GlideTabs } from "@/components/common";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Box, Folder, Globe } from "@/lib/remix-icons";
 import type { Pulse, ReplayGroups } from "../dataflow/types";

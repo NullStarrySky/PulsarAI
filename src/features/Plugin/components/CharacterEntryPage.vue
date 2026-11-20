@@ -1,7 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
-import { Button } from "@/components/fluid";
-import { GlideTabs } from "@/components/common/glide";
+import { Button } from "@/components/common";
+import { GlideTabs } from "@/components/common";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCharacterList } from "@/features/Plugin/dataflow/use-plugin-data";

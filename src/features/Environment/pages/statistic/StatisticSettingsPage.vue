@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, ref, shallowRef } from "vue";
-import { Button } from "@/components/fluid";
+import { Button } from "@/components/common";
 import type {
 	ConversationMeta as Conversation,
 	ConversationContainer as ConversationMessageContainer,

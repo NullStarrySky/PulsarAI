@@ -1,5 +1,5 @@
-<script setup lang="ts">
-import { Button } from "@/components/fluid";
+﻿<script setup lang="ts">
+import { Button } from "@/components/common";
 import { Input } from "@/components/ui/input";
 import { RotateCcw, X } from "@/lib/remix-icons";
 

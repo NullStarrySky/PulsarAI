@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { push } from "notivue";
 import {
 	computed,
@@ -10,7 +10,7 @@ import {
 import {
 	Badge,
 	Button,
-} from "@/components/fluid";
+} from "@/components/common";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -18,7 +18,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { GlideList } from "@/components/common/glide";
+import { GlideList } from "@/components/common";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import { useCharacterList } from "@/features/Plugin/dataflow/use-plugin-data";

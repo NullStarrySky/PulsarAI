@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from "vue";
-import { Switch } from "@/components/fluid";
+import { Switch } from "@/components/common";
 import { Input } from "@/components/ui/input";
 import { builtInComponents } from "../provider";
 import type { ParamDefinition } from "../types";

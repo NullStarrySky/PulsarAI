@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { Button } from "@/components/fluid";
+import { Button } from "@/components/common";
 import Manager from "@/features/Conversation/components/Manager.vue";
 import Surface from "@/features/Conversation/components/Surface.vue";
 import { initConversationVersions } from "@/features/Conversation/dataflow/conversations";

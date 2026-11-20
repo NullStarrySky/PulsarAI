@@ -1,7 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { Button } from "@/components/fluid";
-import { GlideTabs } from "@/components/common/glide";
+import { Button } from "@/components/common";
+import { GlideTabs } from "@/components/common";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useSyncStore } from "@/features/Database/dbsync-store";
 import FileTree, {

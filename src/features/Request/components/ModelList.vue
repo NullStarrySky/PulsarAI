@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from "vue";
-import { Button, Switch } from "@/components/fluid";
+import { Button, Switch } from "@/components/common";
 import { Input } from "@/components/ui/input";
 import { Plus, RefreshCw, Trash2 } from "@/lib/remix-icons";
 import { invokeRequestFunction } from "../provider";

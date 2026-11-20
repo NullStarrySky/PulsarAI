@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { Badge, Button, Switch } from "@/components/fluid";
+import { Badge, Button, Switch } from "@/components/common";
 import {
 	Accordion,
 	AccordionContent,

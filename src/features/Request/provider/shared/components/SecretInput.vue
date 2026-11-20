@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { Button } from "@/components/fluid";
+import { Button } from "@/components/common";
 import { Input } from "@/components/ui/input";
 import { host } from "@/host";
 

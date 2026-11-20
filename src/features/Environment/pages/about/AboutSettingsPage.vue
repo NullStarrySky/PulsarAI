@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, watch } from "vue";
-import { Button, Switch } from "@/components/fluid";
+import { Button, Switch } from "@/components/common";
 import SettingPage from "@/features/Environment/setting/SettingPage.vue";
 import AppIcon from "@/features/UI/AppIcon.vue";
 import { useUIStore } from "@/features/UI/store";

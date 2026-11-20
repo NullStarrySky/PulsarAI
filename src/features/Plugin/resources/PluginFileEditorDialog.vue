@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref, toValue } from "vue";
-import { Button } from "@/components/fluid";
+import { Button } from "@/components/common";
 import { useFloatingSurface } from "@/features/Environment/floating-surface";
 import type {
 	FileMeta,

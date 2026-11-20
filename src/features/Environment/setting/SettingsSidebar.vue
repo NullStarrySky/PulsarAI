@@ -1,6 +1,6 @@
-<script setup lang="ts">
-import { Button } from "@/components/fluid";
-import { GlideList } from "@/components/common/glide";
+﻿<script setup lang="ts">
+import { Button } from "@/components/common";
+import { GlideList } from "@/components/common";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ArrowLeft, Search } from "@/lib/remix-icons";

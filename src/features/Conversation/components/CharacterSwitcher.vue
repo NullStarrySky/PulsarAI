@@ -1,7 +1,7 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { push } from "notivue";
 import { computed, reactive, ref, watch } from "vue";
-import { Button } from "@/components/fluid";
+import { Button } from "@/components/common";
 import {
 	DropdownMenu,
 	DropdownMenuContent,

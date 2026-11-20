@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { Notification, Notivue } from "notivue";
 import { onBeforeUnmount, onMounted } from "vue";
 import {
@@ -10,7 +10,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 	Switch,
-} from "@/components/fluid";
+} from "@/components/common";
 import { useResponsiveStore } from "@/features/Environment/responsive-store";
 import {
 	useEnvironmentHotkeys,

@@ -1,6 +1,6 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from "vue";
-import { Button, Switch } from "@/components/fluid";
+import { Button, Switch } from "@/components/common";
 import {
 	Select,
 	SelectContent,
